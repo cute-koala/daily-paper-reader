@@ -1,0 +1,575 @@
+Title: FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking
+
+URL Source: https://arxiv.org/pdf/2602.24133v1
+
+Published Time: Mon, 02 Mar 2026 02:06:20 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking 
+
+# Sifan Zhou 
+
+School of Automation Southeast University, Key Laboratory of Measurement and Control of Complex Systems of Engineering, Ministry of Education Nanjing, China sifanjay@gmail.com 
+
+# Jiahao Nie 
+
+School of Information Technology and Artificial Intelligence, Zhejiang University of Finance and Economics Hangzhou, China jhnie@zufe.edu.cn 
+
+# Ziyu Zhao 
+
+School of Automation Southeast University, Key Laboratory of Measurement and Control of Complex Systems of Engineering, Ministry of Education Nanjing, China zhaoziyu.950207@gmail.com 
+
+# Yichao Cao 
+
+Big Data Institute Central South University Changsha, China caoyichao@csu.edu.cn 
+
+# Xiaobo Lu ∗
+
+School of Automation Southeast University, Key Laboratory of Measurement and Control of Complex Systems of Engineering, Ministry of Education Nanjing, China xblu2013@126.com 
+
+## Abstract 
+
+In 3D point cloud object tracking, the motion-centric methods have emerged as a promising avenue due to its superior performance in modeling inter-frame motion. However, existing two-stage motion-based approaches suffer from fundamental limitations: (1) error ac-cumulation due to decoupled optimization caused by explicit fore-ground segmentation prior to motion estimation, and (2) computa-tional bottlenecks from sequential processing. To address these challenges, we propose FocusTrack , a novel one-stage paradigms tracking framework that unifies motion-semantics co-modeling through two core innovations: Inter-frame Motion Modeling (IMM) and Focus-and-Suppress Attention . The IMM module employs a temp-oral-difference siamese encoder to capture global motion patterns between adjacent frames. The Focus-and-Suppress attention that enhance the foreground semantics via motion-salient feature gating and suppress the background noise based on the temporal-aware motion context from IMM without explicit segmen-tation. Based on above two designs, FocusTrack enables end-to-end training with compact one-stage pipeline. Extensive experiments on prominent 3D tracking benchmarks, such as KITTI, nuScenes, and Waymo, demonstrate that the FocusTrack achieves new SOTA performance while running at a high speed with 105 FPS.  
+
+> ∗Corresponding Author. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> MM ’25, Dublin, Ireland
+> ©2025 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 979-8-4007-2035-2/2025/10 https://doi.org/10.1145/3746027.3754781
+
+## CCS Concepts 
+
+• Computing methodologies → Vision for robotics ; Scene understanding .
+
+## Keywords 
+
+Single object tracking, LiDAR point clouds, One-Stage Framework; Transformer, Motion Modeling 
+
+ACM Reference Format: 
+
+Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, and Xiaobo Lu. 2025. Fo-cusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking. In Proceedings of the 33rd ACM International Conference on Multimedia (MM ’25), October 27–31, 2025, Dublin, Ireland. ACM, New York, NY, USA, 12 pages. https://doi.org/10.1145/3746027.3754781 
+
+## 1 Introduction 
+
+Environments perception is important for autonomous driving and mobile robots[ 17 , 29 , 30 , 34 , 38 , 39 , 67 , 74 , 75 ]. Among them, Single object tracking (SOT) plays a key role in various computer vision applications, such as autonomous driving, visual surveillance and robotics [ 6, 23 , 69 ]. Early efforts have predominantly focused on RGB images obtained by cameras [ 2 , 7, 71 ]. In recent years, with the development of LiDAR sensors, many techniques [ 21 , 43 , 51 , 63 , 77 ]for 3D SOT have been presented. Current prevailing 3D SOT methods [ 6 , 12 , 15 , 22 , 51 , 65 , 76 ]primarily follow an appearance matching-based framework. This framework consists of two key modules: 1) a Siamese-like backbone to extract features of template and search region and 2) a feature interaction module to enhance correlation. Despite the advanced performance of this matching-based paradigm, it often neglects the local motion information of the target across frames. Additionally, point clouds inherent sparsity and occlusion present significant challenges for appearance matching.  
+
+> arXiv:2602.24133v1 [cs.CV] 27 Feb 2026 MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu
+
+Previous 
+
+Frame & 
+
+Foreground 
+
+Segmentation 
+
+Stage I 
+
+(a) Two -stage Tracking Method (M2Track) 
+
+(b) One -stage Tracking Method ( FocusTrack )
+
+Stage I 
+
+Stage II 
+
+Unified Motion -Foreground Modeling 
+
+Motion 
+
+Tracking 
+
+Current 
+
+Frame 
+
+Previous 
+
+Frame & 
+
+Current 
+
+Frame       
+
+> Joint Inter -Frame Motion Modeling and Foreground Focus
+> Estimate inter -frame
+> global motion difference
+> Focus on semantic -rich
+> foreground points
+> important
+> scores
+> 0.0
+> 1.0
+> 0.5
+
+Figure 1: Comparison between two-stage motion-based track-ing methods (a) and our two-stage motion-based track-ing method (b). The two-stage motion-based methods M2Track [ 77 , 78 ] series models motion relation for tracking in a two-stage manner. In contrast, our FocusTrack explores unified motion-foreground modeling for one-stage tracking. 
+
+Recently, motion-centric tracking framework has emerged as a promising solution in 3D SOT [ 77 , 78 ], demonstrating superior accuracy. This framework reformulates the object tracking problem as relative motion regression across successive frames. Benefiting from it, the model can reduce its severe reliance on the appearance of point clouds, enabling more robust tracking results in sparse or occluded environments. However, existing motion-centric meth-ods [ 28 , 45 , 77 ] generally treat all inter-frame motion differences uniformly, overlooking the fact that points in different spatial loca-tions exhibit distinct motion patterns. Foreground targets typically exhibit more pronounced dynamics changes and inherent motion patterns, whereas background points tend to remain relatively static. This discrepancy highlights a critical gap in current motion-centric approaches: they inadequately account for the varying significance of motion differences across frames. Furthermore, background noise can interfere with the modeling of foreground motion, complicating the tracking process. Even for M2Track [ 77 , 78 ], which employs a "segmentation-and-motion prediction" pipeline, a refinement mod-ule is still needed to compensate the errors caused by background noise. Besides, their separated two-stage manner with decoupled optimization further limited the performance and efficiency. Above limitations stem from a core oversight: Motion model-ing should discriminate semantically meaningful movements from static noise, rather than treating all points equally. As shown in Fig. 1, we propose FocusTrack , a novel one-stage motion-based tracking framework that jointly optimize motion and geometry semantics based on the point clouds from the previous and current frames. Specifically, FocusTrack is composed of FocusTrack blocks, 80   
+
+> 75
+> 70
+> 65
+> 60
+> 20 40 60
+
+FPS           
+
+> Precision
+> 55
+> 50
+> 85
+> 50 10 30
+> 45
+> SC3D
+> 70 80 90 100 110 120
+> 90
+> P2B
+> PTT
+> LTTR MLVSNet
+> BAT
+> V2B
+> PTTR
+> STNet
+> CMT
+> GLT -T
+> OSP2B
+> CXTrack MBPTrack
+> SyncTrack
+> SCVTrack MoCUT
+> PTTR++
+> SiamDisst FocusTrack
+> (Ours)
+> M2Track
+> M2Track++
+> Appearance Match -based Method
+> One -stage Motion -centric Method
+> Two -stage Motion -centric Method
+> Real Time
+
+Figure 2: Comparison with state-of-the-art methods. We visualize mean precision across all categories on KITTI dataset [ 14 ] with respect to running speed (FPS). FocusTrack shows the new SOTA in terms of both accuracy and speed. 
+
+which incorporate two key designs:(1) Inter-frame Motion Mod-eling (IMM) module and (2) Focus-and-Suppress attention. In IMM module, we employs a temporal-difference siamese network to capture the inter-frmae global motion differences. The Focus-and-Suppress Attention aims to extract the intra-frame spatial geometric information based on the temporal-aware motion context from IMM without explicit segmentation. In detail, the output of IMM is formulated as a weighted map, providing a temporal-aware motion context for the attention mechanism, enabling it to weight the spatial semantics for enhancing the foreground and suppress-ing the background noise. Extensive experiments on KITTI [ 14 ], nuScenes [ 3] and WOD [ 55 ] datasets demonstrate that FocusTrack sets a new state-of-the-art (SOTA) performance, achieving a high speed of 105 FPS on a single RTX3090 GPU. FocusTrack significantly outperforms the previous top-performing match-based method [ 64 ]across all datasets and surpasses the current SOTA motion-based method [45] by ∼ 2% on large-scale nuScenes and WOD datasets. Notably, while previous studies [ 44 , 53 , 54 ] have also explored the transformer for 3D SOT, they typically are stuck in the performance-limited matching paradigms. In contrast, our FocusTrack aims to effectively leverage inter-frame differential motion information within a motion-centric framework to enhance the semantics of foreground objects. As shown in Fig. 2, our approach demonstrates greater efficiency while maintaining SOTA performance. The main contributions are summarized as follows: (1) Inter-frame Motion Modeling (IMM): IMM models the inter-frame global motion differences, enabling the effective capture and utilization of inter-frame motion. (2) Focus-and-Suppress Attention: Focus-and-Suppress At-tention focuses on enhancing the foreground semantics based on the temporal-aware motion context. (3) One-Stage Co-optimization Framework: The FocusTrack unifies motion-semantics co-optimization into an one-stage paradigm, significantly improving performance and compu-tational efficiency. FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking MM ’25, October 27–31, 2025, Dublin, Ireland 
+
+(4) SOTA Performance and Speed: Extensive experiments on prominent 3D tracking benchmarks, such as KITTI, nuScenes, and Waymo, demonstrate that the FocusTrack achieves new SOTA performance while running at 105 FPS. 
+
+## 2 Related Work 2.1 Siamese-based 3D Single Object Tracking 
+
+Early 3D SOT methods regard object tracking as appearance match-ing issue. They use the Siamese network for feature extraction and reveal the local tracking cues based on the similarity match-ing. As a pioneer, SC3D [ 15 ] introduces the first work to integrate the Siamese network to extract features from template and can-didates and then compute the feature distances to select suitable tracking result. Subsequently, 3D-SiamRPN [12] employs a region proposal network (RPN) into the 3D Siamese paradigm. P2B [ 51 ]utilizes VoteNet [ 48 ] to generate a batch of high-quality candidates with an end-to-end framework. Inspired by P2B, numerous net-works [ 10 , 16 , 19 , 42 , 43 ] have been adopted the same Siamese paradigm. For instance, BAT [ 76 ] encodes the object’s size priors to augment correlation learning between the template and search areas. PTT [ 53 , 54 ], LTTR [ 5], CMT [ 16 ], and STNet [ 22 ] explore different attention mechanisms to improve feature propagation and correlation. CAT [ 13 ], STTracker [ 8 ] and SCVTrack [ 70 ] ex-plore the temporal and completion to improve the accuracy on sparse scenes. Recently, CXTrack [ 63 ] emphasizes the importance of context for tracking performance by a target-centric transformer. MBPTrack [ 64 ] designs an external memory to enhance the spatial and temporal information aggregation. Despite the superior per-formance, the matching-based paradigm often overlooks the local motion information of the target across frames. Furthermore, point clouds are typically incomplete and lack texture, their inherent sparsity and occlusion present challenges to appearance matching. 
+
+## 2.2 Motion-based 3D Single Object Tracking 
+
+In addition to appearance matching-based trackers, there are efforts to model inter-frame motion. M 2Track [ 77 , 78 ] proposes a motion-centric tracking framework that first segments the foreground points of the target from the search regions, and then infers the target’s 4-DOF relative motion offset. Furthermore, M 2Track++ [ 78 ]further explore the promising potential of the motion-based par-adigm in semi-supervised application. Similarly, VoxelTrack [ 35 ]explore the 3D spatial information from multi-level voxel represen-tation. P2P [ 45 ] demonstrate the superiority of motion-centric ap-proach by transforming the complicated appearance matching into the estimation of relative offset between adjacent frames. DMT [ 61 ]introduces a motion prediction module that estimates the potential center of the target based on historical bbox and further refines it. Unlike the instance-level modeling in DMT, FlowTrack [ 28 ] pro-poses point-level flow to capture the fine-grained motion details based on multiple historical frames. Although achieving promising results, these methods tend to uniformly rely on global motion differences when modeling relative motion, neglecting significant noise disturbances introduced by background. Therefore, in this paper, we propose a new one-stage focus-and-suppress framework that mitigates background noise while enhancing the local motion cues of foreground based on the global motion differences. 
+
+## 3 Methodology 3.1 Task Definition 
+
+We define the task of LiDAR-based 3D Single Object Tracking (3D SOT) as follows: given an initial template point cloud P𝑡 = {𝑝 𝑡 𝑖 }𝑁 𝑡 
+
+> 𝑖 =1
+
+and its 3D bounding box (BBox) B𝑡 (𝑥 𝑡 , 𝑦 𝑡 , 𝑧 𝑡 , 𝑤 𝑡 , ℎ 𝑡 , 𝑙 𝑡 , 𝜃 𝑡 ), where 
+
+(𝑥, 𝑦, 𝑧 ) and (𝑤, ℎ, 𝑙 ) denotes the center and size, 𝜃 is the rotation angle around 𝑢𝑝 -axis. The goal of 3D SOT is to locate the object in the search region P𝑠 = {𝑝 𝑠 𝑖 }𝑁 𝑠  
+
+> 𝑖 =1
+
+and output a 3D BBox B𝑠 frame by frame, with 𝑁 𝑡 and 𝑁 𝑠 as the number of points in the tem-plate and search region. Following [ 54 , 64 , 76 ], for both rigid or non-rigid objects, since the size of target remains approximately un-changed in 3D SOT across all frames, predicting only 4 parameters 
+
+(𝑥 𝑠 , 𝑦 𝑠 , 𝑧 𝑠 , 𝜃 𝑠 ) to represent B𝑠 .
+
+Input and Tracking Process. Following [ 45 , 63 ], we use the target and its surrounding context as a template to guide localization in the search region. Similar to[ 64 , 77 ], we crop point cloud from the previous frame 𝑡 − 1 and current frame 𝑡 , centered on the previous prediction B𝑡 −1, with an extended spatial range [( 𝑥 𝑚𝑖𝑛 , 𝑥 𝑚𝑎𝑥 ), ( 𝑦 𝑚𝑖𝑛 ,
+
+𝑦 𝑚𝑎𝑥 ), ( 𝑧 𝑚𝑖𝑛 , 𝑧 𝑚𝑎𝑥 )] to obtain P𝑡 −1 and P𝑡 . The FocusTrack then predict the relative motion between frames to determine the current 3D BBox. This process is formulated as: 
+
+(Δ𝑥 𝑡 , Δ𝑦 𝑡 , Δ𝑧 𝑡 , Δ𝜃 𝑡 ) = FocusTrack (P 𝑡 −1, P𝑡 ) (1) 
+
+(𝑥 𝑡 , 𝑦 𝑡 , 𝑧 𝑡 , 𝜃 𝑡 ) = (𝑥 𝑡 −1, 𝑦 𝑡 −1, 𝑧 𝑡 −1, 𝜃 𝑡 −1)+( Δ𝑥 𝑡 , Δ𝑦 𝑡 , Δ𝑧 𝑡 , Δ𝜃 𝑡 ) (2) where FocusTrack, detailed in Fig.3, includes pillar feature embed-ding, an inter-frame motion-based backbone for enhancing fore-ground semantics, and a prediction head. 
+
+## 3.2 One-Stage Focus-and-Suppress Framework 
+
+Pillar Feature Embedding . We use the pillar feature encoder from PointPillars [ 27 ] to transform sparse input points into dense bird’s eye view (BEV) features. Notably, other pillar feature en-coding methods [ 82 , 83 ] can also be utilized. After pillar feature embedding, the input points P𝑡 −1 and P𝑡 are converted into dense BEV features F𝑡 −1 and F𝑡 with dimensions 𝐻 × 𝑊 × 𝐶 , encoding the sparse points into a structured grid. This choice is supported by recent research[ 22 , 45 , 64 ], which show that grid-based meth-ods outperform point-based approaches [ 37 , 54 , 79 ] in accuracy and speed, offering a more compact and efficient representation compared to point-based encoders [49, 50]. The BEV features F𝑡 −1 and F𝑡 through multiple FocusTrack blocks, each followed by a convolution layer with a stride 2, halv-ing spatial resolution and doubling channel count. This process is repeated 3 times, resulting in final features of size 𝐻  
+
+> 8
+
+× 𝑊  
+
+> 8
+
+×8𝐶 , which are then input to the motion prediction head. Similar to [ 37 , 42 ], fea-ture extraction and interaction occur simultaneously in our method, enabling direct motion prediction. 
+
+3.2.1 Inter-frame Motion Modeling (IMM) . In object tracking, the motion of targets generates significant feature changes between adjacent frames. Effectively capturing and leveraging these changes enbales the model to focus on moving foreground objects, enhanc-ing its semantics understanding across diverse scenes. If inter-frame variations are overlooked, the model risks distributing attention uniformly across global differences, encompassing both foreground MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu Current Frame 
+
+Previous Frame 
+
+> Down -sample
+
+FocusTrack 
+
+Block 
+
+H/4  × W/4  × 4C 
+
+Stage2  Stage3 
+
+One -Stage Focus and Suppress Framework  Head 
+
+(1)  Inter -frame  Motion Modeling 
+
+> Down -sample
+
+FocusTrack 
+
+Block 
+
+> Down -sample
+
+FocusTrack 
+
+Block 
+
+H/2  × W/2  × 2C  H/8  × W/8  × 8C 
+
+Stage1 
+
+> Prediction Head
+
+(2) Focus and Suppress  Attention 
+
+> Linear -Attention
+> Linear
+
+Kt
+
+> Pillar Feature Embedding
+
+Ft-1: H ×W×C
+
+Ft: H ×W×C
+
+> Flatten
+
+Qt
+
+> Linear Linear
+> DWC DWC
+> BEV tokens in t
+> Shared
+> BEV tokens in t -1
+
+Kt-1
+
+Qt-1
+
+> Position
+> Embedding
+> Linear
+
+Vt
+
+Focus Foreground, 
+
+Suppress Background 
+
+> Linear Linear
+
+Qt
+
+Kt
+
+> Motion Weights
+> LN  LN
+> Shared
+
+Inter -frame 
+
+Motion 
+
+Difference  output for 
+
+> next block
+
+Figure 3: One-stage focus-and-suppress framework (FocusTrack): This framework consists of a backbone that capture inter-frame differences for motion modeling. Then, it features a Focus-and-Suppress attention mechanism designed to suppress background noise while enhancing foreground semantics based on motion weights. 
+
+and background elements. However, backgrounds often introduce excessive noise, obscuring critical targets. By modeling these tem-poral changes, the model can inferthe velocity or position offset of targets, facilitating predictions of their future states. The similar insights have also been discussed in methods [ 45 , 77 , 78 ]. There-fore, we aim to leverage the motion differences between adjacent frames effectively, integrating them into the feature extraction and interaction processes to develop an efficient tracking framework. To achieve this, we introduce an Inter-frame Motion Model-ing (IMM) module into the attention mechanism to estimate global motion difference between consecutive frames. Our approach is inspired by the frame differencing algorithm [ 9, 52 , 73 ], a well-established technique in video processing for detecting moving objects. In 2D video analysis, frame differencing calculates pixel-wise differences between adjacent frames to highlight regions of significant change, effectively isolating dynamic objects from static backgrounds. We hypothesize that this principle can be adapted to 3D point cloud data, where object motion manifests as spatial and feature displacements across frames. However, directly applying frame differencing to point clouds poses challenges due to their sparse and irregular structure, unlike the dense, grid-like nature of video frames. To address this, we innovate by transferring the concept of frame differencing into a high-dimensional feature space within the attention mechanism, enabling the capture of complex inter-frame relationships tailored to point cloud characteristics. As shown in Fig.3, the BEV features F𝑡 −1 and F𝑡 , derived from Pillar feature embedding, are processed through a shared CNN and flattened into BEV tokens X𝑡 −1 ∈ R𝑁 ×𝐶 and X𝑡 ∈ R𝑁 ×𝐶 . This is expressed as: 
+
+(X 𝑡 −1, X𝑡 ) = 𝑓 (CNN (F t−1, Ft)) (3) where CNN is a shared convolution layer to enhance the spatial semantics information of the BEV feature and 𝑓 is the flatten oper-ation to convert to sequential BEV tokens for the attention block. Follwoing [ 40 ], we adopt a Pre-LN design for the BEV tokens with a layer normalization [ 1 ] operation LN before modeling the global motion difference. Specifically, we also employ a shared linear layer 
+
+ℓ and a shared depth-wise convolution (DWC) to enhance the spa-tial and local feature interactions while preserving feature diversity. This process is written as: 
+
+( ¯X𝑡 −1, ¯X𝑡 ) = ℓ (DWC (LN (X t−1, Xt))) (4) Positional embeddings are added before the normalization (omitted for brevity). These tokens are then mapping to queries and keys: 
+
+𝑄 𝑡 −1 = ¯X𝑡 −1𝑊 𝑄 , 𝐾 𝑡 −1 = ¯X𝑡 −1𝑊 𝐾 ,𝑄 𝑡 = ¯X𝑡 𝑊 𝑄 , 𝐾 𝑡 = ¯X𝑡 𝑊 𝐾 , (5) where 𝑊 𝑄 /𝐾 ∈ R𝐶 ×𝑑 are projection matrices. The core innovation of IMM lies in modeling motion differences using the attention mechanism, inspired by frame differencing. In traditional attention, 
+
+𝑄𝐾 𝑇 computes feature similarity, reflecting alignment between to-ken representations. Drawing from frame differencing, we propose FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking MM ’25, October 27–31, 2025, Dublin, Ireland 
+
+computing the difference 𝑄 𝑡 𝐾 𝑇 𝑡 − 𝛼𝑄 𝑡 −1𝐾 𝑇 𝑡 −1 to capture the evolu-tion of feature alignments across frames. Here, 𝑄 𝑡 𝐾 𝑇 𝑡 represents the current frame’s feature relationships, while 𝑄 𝑡 −1𝐾 𝑇 𝑡 −1 encodes the previous frame’s state. Subtracting these terms highlights changes in feature similarity, mirroring how frame differencing isolates pixel variations to detect motion. This difference intuitively reflects global motion patterns in the feature space, emphasizing regions with sig-nificant shifts—typically moving objects. The learnable parameter 
+
+𝛼 adaptively scales the previous frame’s contribution, accommodat-ing varying motion dynamics (e.g., slow vs. fast-moving objects). To enhance the model’s capacity to learn complex motion patterns, we apply SiLu activation function, introducing non-linearity. The resulting motion-aware weights 𝑊 𝑚 are formulated as: 
+
+𝑊 𝑚 = SiLU (𝑄 𝑡 𝐾 𝑇 𝑡 − 𝛼𝑄 𝑡 −1𝐾 𝑇 𝑡 −1), (6) where 𝛼 is trainable, SiLu ensures robust feature modulation. The weights 𝑊 𝑚 could regard as a motion-aware weights, which dy-namically adjust the attention output, amplifying focus on dynamic objects while suppressing static background noise. This design is intuitive and effective for point cloud tracking. In point clouds, an object’s motion between frames manifests as coordinate off-sets, which, after high-dimensional mapping, translate into feature space shifts. Subtracting previous frame features from current ones captures these global motion differences, akin to frame differenc-ing’s pixel subtraction. By embedding this within the attention mechanism, IMM leverages the model’s ability to learn contextual relationships, overcoming the sparsity and irregularity of point clouds that render direct frame differencing impractical. This ap-proach not only enhances performance by prioritizing dynamic targets but also introduces a novel bridge between classical video processing techniques and modern 3D perception, underscoring the originality of our method. 
+
+3.2.2 Hierarchical Focus-and-Suppress Attention . By intro-ducing inter-frame motion differences in IMM module, we are able to capture the motion characteristics of target objects across consec-utive frames, thereby to better represent rich semantics of dynamic targets. This approach not only aligns with the natural tendency of human visual systems to focus on moving objects, but it also improves the model’s attention to foreground dynamic entities. Next, we formulate above process. With an input of 𝑁 BEV tokens represented as X ∈ R𝑁 ×𝐶 , a generalized attention can be formulated as follows in each head: 
+
+𝑄 = X𝑊 𝑄 , 𝐾 = X𝑊 𝐾 , 𝑉 = X𝑊 𝑉 ,𝑂 𝑖 =
+
+> 𝑁
+
+∑︁ 
+
+> 𝑗 =1
+
+Sim  𝑄 𝑖 , 𝐾 𝑗 
+
+Í𝑁 𝑗 =1 Sim  𝑄 𝑖 , 𝐾 𝑗 
+
+ 𝑉 𝑗 , (7) where Sim (· , ·) denotes the similarity function. When Sim (𝑄, 𝐾 ) =
+
+exp (𝑄𝐾 𝑇 /√𝑑 ) in Eq.7, it becomes self-attention [ 56 ], which has been highly successful in much previous 3D SOT methods [ 37 ,63 , 64 ]. However, self-attention requires computing the similarity between all query-key pairs, means (𝑄𝐾 𝑇 ) leading to O( 𝑁 2) com-plexity with 𝑄 /𝐾 ∈ R𝑁 ×𝑑 . Comparatively, linear attention [ 25 ]efficiently addresses the computation challenge with a linear com-plexity of O( 𝑁 ). Then in our FocusTrack, the motion differences weighted linear attention as follows: 
+
+F 𝐹𝑜𝑐𝑢𝑠𝑇 𝑡 = ℓ (FocusT (F 𝑡 −1, F𝑡 )) 
+
+= ℓ (SiLU (𝑄 )( SiLU (𝐾 𝑡 )𝑇 𝑉 𝑡 ) · 𝜎 (ℓ (𝑊 𝑚 ))) (8) where ℓ is a linear layer. After then, the features 𝐹 𝐹𝑜𝑐𝑢𝑠𝑇 𝑡 are added by the original current frame features F𝑡 with residual design, and then are fed into a feed-forward network. Therefore, the whole MLA block is formulated as: 
+
+ˆF𝑡 = (F 𝐹𝑜𝑐𝑢𝑠𝑇 𝑡 + (F 𝑡 )) ,
+
+F 𝑜𝑢𝑡 𝑡 = FFN (LN ( ˆFt)) + ˆFt
+
+(9) where 𝐿𝑁 denotes a layer normalization function to increase the fitting ability of the network and FFN is a linear layer, F 𝑜𝑢𝑡 𝑡 is the output of the current blocks. Notably, the design of our Fo-cusTrack block preserves the computational efficiency inherent in linear attention while enabling effective modeling of important foreground targets, showcasing a commendable balance between computational efficiency and perceptual performance. Furthermore, we visualize the corresponding visualized BEV features in Fig. 4, the empirical validation demonstrates the efficacy of this dynamic weighting mechanism in modeling inter-frame motion support the interpretability of our approach in 3D SOT task. 
+
+Motion Prediction Head . We employ a multi-subtask prediction head similar to works [ 37 , 45 ] to predict the target’s center offset 
+
+(𝑥, 𝑦 ), height 𝑧 , and rotation angle 𝜃 independently. Unlike previous trackers [ 42 , 72 ], we do not apply a multi-scale feature aggregation strategy. Instead, we directly use the final features from the multi-stage backbone for these prediction tasks. The training loss is the same as [21]: 
+
+L = 𝜆 1 L(𝑥,𝑦 ) + 𝜆 2 L𝑧 + 𝜆 3 L𝑟𝑜𝑡 (10) where 𝜆 1, 𝜆 2 and 𝜆 3 are hyper-parameters to balance different losses. Training loss details can be referred to [21]. 
+
+## 4 Experiments 4.1 Experiment Setting 
+
+Implementation Details . The extended ranges of input point cloud regions are defined as extended range [(-4.8,4.8),(-4.8,4.8),(-1.5,1.5)] and [(-1.92,1.92),(-1.92,1.92),(-1.5,1.5)] to contain relevant points for cars and humans, respectively. We first crop out point cloud regions from consecutive point clouds P𝑡 −1 and P𝑡 that have the same aspect ratio as the target and are 2 times the target box size. Then, a resolution-consistent pillarization operation with spa-tial resolution of 128 × 128 is applied to structurally normalize the cropped point cloud. The spatial resolution after pillar feature en-coder is 128 × 128 × 1. After the FocusTrack backbone, the spatial resolution of BEV features 𝐹 𝑏𝑒𝑣 𝑡 −1 are downsampling to 16 × 16 × 128 .
+
+Datasets and Evaluation Metrics . To evaluate our proposed FocusTrack, we conduct extensive experiments on KITTI [ 14 ], nuScene-s [ 3] and Waymo Open Dataset (WOD) [ 55 ]. To be fair, we follow common setup [ 41 , 44 , 51 , 54 , 64 , 76 , 77 , 79 ] of training and testing models on the KITTI and nuScenes datasets. Besides, we also follow previous methods [ 21 , 22 , 41 , 59 , 63 ] and apply pre-trained KITTI model to the nuScene and WOD dataset for testing to evaluate the generalization ability. Note that, nuScenes and WOD are more challenging than KITTI due to large data volume and complex scenes. In addition, KITTI and WOD data are collected MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu 
+
+Table 1: Comparisons with state-of-the-art methods on KITTI dataset [ 14 ]. The upper and lower parts include two-stream and one-stream trackers, respectively. Success / Precision are used for evaluation. Bold and underline denote the best result and the second-best one, respectively. † means the methods was pre-trained on large-scale images and point cloud dataset [ 11 , 20 , 46 ]. 
+
+Mean Car Pedestrian Van Cyclist Paradigm Tracker Source (14,068) (6,424) (6,088) (1,248) (308) FPS Device Match SC3D [15] CVPR’19 31.2 / 48.5 41.3 / 57.9 18.2 / 37.8 40.4 / 47.0 41.5 / 70.4 2 GTX 1080Ti P2B [51] CVPR’20 42.4 / 60.0 56.2 / 72.8 28.7 / 49.6 40.8 / 48.4 32.1 / 44.7 40 GTX 1080Ti PTT [54] IROS’21 55.1 / 74.2 67.8 / 81.8 44.9 / 72.0 43.6 / 52.5 37.2 / 47.3 40 GTX 1080Ti LTTR [5] BMVC’21 48.7 / 65.8 65.0 / 77.1 33.2 / 56.8 35.8 / 45.6 66.2 / 89.9 23 GTX 1080Ti MLVSNet [58] ICCV’21 45.7 / 66.6 56.0 / 74.0 34.1 / 61.1 52.0 / 61.4 34.4 / 44.5 70 GTX 1080Ti BAT [76] ICCV’21 51.2 / 72.8 60.5 / 77.7 42.1 / 70.1 52.4 / 67.0 33.7 / 45.4 57 RTX 2080 V2B [21] NeurIPS’21 58.4 / 75.2 70.5 / 81.3 48.3 / 73.5 50.1 / 58.0 40.8 / 49.7 37 TITAN RTX PTTR [79] CVPR’22 57.9 / 78.2 65.2 / 77.4 50.9 / 81.6 52.5 / 61.8 65.1 / 90.5 50 Tesla V100 STNet [22] ECCV’22 61.3 / 80.1 72.1 / 84.0 49.9 / 77.2 58.0 / 70.6 73.5 / 93.7 35 TITAN RTX CMT [16] ECCV’22 59.4 / 77.6 70.5 / 81.9 49.1 / 75.5 54.1 / 64.1 55.1 / 82.4 32 GTX 1080Ti GLT-T [43] AAAI’23 60.1 / 79.3 68.2 / 82.1 52.4 / 78.8 52.6 / 62.9 68.9 / 92.1 30 GTX 1080Ti OSP2B [42] IJCAI’23 60.5 / 82.3 67.5 / 82.3 53.6 / 85.1 56.3 / 66.2 65.6 / 90.5 34 GTX 1080Ti CXTrack [63] CVPR’23 67.5 / 85.3 69.1 / 81.6 67.0 / 91.5 60.0 / 71.8 74.2 / 94.3 34 RTX 3090 MBPTrack [64] ICCV’23 70.3 / 87.9 73.4 / 84.8 68.6 / 93.9 61.3 / 72.7 76.7 / 94.3 50 RTX 3090 SyncTrack [37] ICCV’23 64.1 / 81.9 73.3 / 85.0 54.7 / 80.5 60.3 / 70.0 73.1 / 93.8 45 TITAN RTX MoCUT [41] ICLR’24 65.8 / 85.0 67.6 / 80.5 63.3 / 90.0 64.5 / 78.8 76.7 / 94.2 48 RTX 3070Ti Motion M2Track [77] CVPR’22 62.9 / 83.4 65.5 / 80.8 61.5 / 88.2 53.8 / 70.7 73.2 / 93.5 57 Tesla V100 M2Track++ [78] TPAMI’23 66.5 / 85.2 71.1 / 82.7 61.8 / 88.7 62.8 / 78.5 75.9 / 94.0 57 Tesla V100 VoxelTrack [35] ACM MM’24 70.4 / 88.3 72.5 / 84.7 67.8 / 92.6 69.8 / 83.6 75.1 / 94.7 36 TITAN RTX 
+
+FocusTrack Ours 71.3 / 89.4 74.1 / 85.9 69.3 / 94.1 68.4 / 83.5 75.9 / 94.7 105 RTX 3090 
+
+Table 2: Comparisons with state-of-the-art methods on nuScenes dataset [ 3 ]. Success / Precision are used for evaluation. Bold and underline denote the best result and the second-best one, respectively. 
+
+Tracker Mean Mean Car Pedestrian Truck Trailer Bus (117,278) Category (64,159) (33,227) (13,587) (3,352) (2,953) SC3D [15] 20.70 / 20.20 25.78 / 22.90 22.31 / 21.93 11.29 / 12.65 30.67 / 27.73 35.28 / 28.12 29.35 / 24.08 P2B [51] 36.48 / 45.08 38.41 / 40.90 38.81 / 43.18 28.39 / 52.24 42.95 / 41.59 48.96 / 40.05 32.95 / 27.41 PTT [54] 36.33 / 41.72 40.38 / 41.81 41.22 / 45.26 19.33 / 32.03 50.23 / 48.56 51.70 / 46.50 39.40 / 36.70 BAT [76] 38.10 / 45.71 40.59 / 42.42 40.73 / 43.29 28.83 / 53.32 45.34 / 42.58 52.59 / 44.89 35.44 / 28.01 PTTR [79] 44.50 / 52.07 43.22 / 44.91 51.89 / 58.61 29.90 / 45.09 45.30 / 44.74 45.87 / 38.36 43.14 / 37.74 GLT-T [43] 44.42 / 54.33 47.03 / 50.98 48.52 / 54.29 31.74 / 56.49 52.74 / 51.43 57.60 / 52.01 44.55 / 40.69 MoCUT [41] 51.19 / 64.63 54.17 / 62.28 57.32 / 66.01 33.47 / 63.12 61.75 / 64.38 60.90 / 61.84 57.39 / 56.07 MBPTrack [64] 57.48 / 69.88 58.10 / 64.19 62.47 / 70.41 45.32 / 74.03 62.18 / 63.31 65.14 / 61.33 55.41 / 51.76 M2Track [77] 49.23 / 62.73 50.86 / 59.05 55.85 / 65.09 32.10 / 60.92 57.36 / 59.54 57.61 / 58.26 51.39 / 51.44 P2P-voxel [45] 59.84 / 72.13 61.04 / 67.44 65.15 / 72.90 46.43 / 75.08 64.96 / 65.96 70.46 / 66.86 59.02 / 56.56 
+
+FocusTrack (Ours) 61.72 / 74.35 64.50 / 70.95 66.50 / 74.37 47.85 / 77.53 69.34 / 69.98 74.76 / 71.20 64.02 / 61.67 
+
+by 64-beam LiDAR sensors, while nuScenes data are captured by 32-beam LiDARs. Therefore, point cloud data of nuScenes are more sparse than KITTI and WOD. For evaluation metrics, we employ one pass evaluation (OPE) [ 26 , 60 ] to evaluate tracking perfor-mance in terms of Success and Precision, which is the common setup [ 43 , 51 , 54 , 64 , 76 , 77 , 79 ]. Please refer to appendix for more implementation details. 
+
+## 4.2 Comparison with State-of-the-art Trackers 
+
+Results on KITTI . We present comprehensive comparisons of tracking performance on KITTI [ 14 ] dataset, as well as computation efficiency. As shown in Tab. 1, FocusTrack exhibits superior perfor-mance across various categories, achieving the highest mean Suc-cess and Precision rates of 71.3% and 89.4%, respectively. Moreover, FocusTrack outperforms the previous leading match based method, i.e., MBPTrack [64] by 1.0% and 1.5%, while demonstrating signifi-cant advantages in terms of computation efficiency, achieving 2.24X faster running speed of 105 FPS. Compared to the top-performing FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking MM ’25, October 27–31, 2025, Dublin, Ireland 
+
+Table 3: Generalization comparisons on Waymo Open Dataset (WOD) [ 55 ]. All the model is pre-trained on KITTI and evaluated on WOD val set. Success / Precision are used for evaluation. Bold and underline denote the best result and the second-best one. 
+
+Vehicle Pedestrian Easy Medium Hard Mean Easy Medium Hard Mean Tracker Mean (67,832) (61,252) (56,647) (185,731) (85,280) (82,253) (74,219) (241,752) P2B [51] 33.0 / 43.8 57.1 / 65.4 52.0 / 60.7 47.9 / 58.5 52.6 / 61.7 18.1 / 30.8 17.8 / 30.0 17.7 / 29.3 17.9 / 30.1 BAT [76] 34.1 / 44.4 61.0 / 68.3 53.3 / 60.9 48.9 / 57.8 54.7 / 62.7 19.3 / 32.6 17.8 / 29.8 17.2 / 28.3 18.2 / 30.3 V2B [21] 38.4 / 50.1 64.5 / 71.5 55.1 / 63.2 52.0 / 62.0 57.6 / 65.9 27.9 / 43.9 22.5 / 36.2 20.1 / 33.1 23.7 / 37.9 STNet [22] 40.4 / 52.1 65.9 / 72.7 57.5 / 66.0 54.6 / 64.7 59.7 / 68.0 29.2 / 45.3 24.7 / 38.2 22.2 / 35.8 25.5 / 39.9 CXTrack [63] 42.2 / 56.7 63.9 / 71.1 54.2 / 62.7 52.1 / 63.7 57.1 / 66.1 35.4 / 55.3 29.7 / 47.9 26.3 / 44.4 30.7 / 49.4 MoCUT [41] 45.2 / 58.5 68.3 / 75.0 59.4 / 66.9 57.1 / 66.3 61.9 / 69.7 36.5 / 54.8 30.8 / 48.9 29.5 / 45.4 32.4 / 49.9 MBPTrack [64] 46.0 / 61.0 68.5 / 77.1 58.4 / 68.1 57.6 / 69.7 61.9 / 71.9 37.5 / 57.0 33.0 /51.9 30.0 / 48.8 33.7 /52.7 M2Track [77] 44.6 / 58.2 68.1 / 75.3 58.6 / 66.6 55.4 / 64.9 61.1 / 69.3 35.5 / 54.2 30.7 / 48.4 29.3 / 45.9 32.0 / 49.7 P2P-voxel [45] 47.2 / 62.9 66.2 / 73.8 57.8 / 67.0 56.8 / 68.1 60.0 / 69.1 43.7 / 65.2 36.4 / 57.1 31.3 / 51.0 37.4 /58.1 
+
+FocusTrack (Ours) 49.5 / 65.6 69.2 / 77.9 59.5 / 69.3 58.7 / 70.8 62.8 / 72.9 44.5 / 66.1 38.5 / 59.4 33.9 / 53.5 39.3 / 60.0 
+
+motion tracker M 2Track++ [ 78 ], FocusTrack achieves remarkable performance improvements in all categories, surpassing it by up to 4.8% and 4.2%. This proves the effectiveness of our FocusTrack framework, which effectively explores motion cues for tracking. 
+
+Results on nuScenes . We also conduct experiments on the large-scale nuScenes [ 3 ] dataset. NuScenes contains many complex scenes with sparser point clouds, making it a more challenging benchmark. As shown in Tab. 2, our FocusTrack outperforms all previous match and motion based trackers across all categories. Notably, Focus-Track exhibits considerable leading performance, surpassing the state-of-the-art tracker MBPTrack by 4.24% and 4.47%, respectively. This demonstrates the inherent advantages our proposed Focus-Track framework, which has the capacity to deliver exceptional model performance on large-scale datasets. Furthermore, given the complex scenes and more diverse tracking categories in nuScenes, the superior performance also shows the tremendous potential of our framework for practical applications. 
+
+## 4.3 Generalization Experiments 
+
+Generalization Results on Waymo . To validate the general-ization ability of the proposed method, we follow the previous methods [ 21 , 22 , 45 , 59 , 63 , 64 ] setting and conduct an evaluation by applying the Car and Pedestrian models trained on KITTI dataset to the WOD [ 55 ] dataset, following comment setting [ 21 , 64 ]. As shown in Tab. 3, our FocusTrack outperforms the other compar-ison methods across all categories, particularly in the Pedestrian category where it surpasses SOTA dual-stream tracker MBPTrack by up to 5.6% and 7.3%. This indicates the strong generalization of the proposed framework to unseen scenes. 
+
+## 4.4 Ablation Study 
+
+Overall Ablation Comparison . We conduct an ablation study to investigate the effect of the series of CNN, linear layers and DWC and the proposed IMM module. As shown in Tab. 4, by incorporat-ing all macro architecture design, the model achieves performance improvements across different setting. Specifically, the DWC ((b) to (c)) lead to 1.4%/1.7% and 1.7%/1.7% improvement in car and pedes-trian categories, respectively. Furthermore, when using the IMM module, the model performs substantial accuracy gains of 2.5%/3.8% and 2.9%/3.1%. The results demonstrate that our IMM module effec-tively captures inter-frame motion differences, facilitating for the subsequent attention to model motion offset. 
+
+Table 4: Ablation results of different module on the KITTI 
+
+val set for car and pedestrian.                                   
+
+> Setting CNN Linear DWC IMM Car Pedestrian (a) ✓✗✗✗69.4 / 79.6 63.1 / 87.7 (b) ✓✓✗✗70.2 / 80.4 64.5 / 89.3 (c) ✓✓✓✗71.6 / 82.1 66.2 / 91.0 (d) ✓✓✓✓74.1 /85.9 69.3 /94.1
+
+(a) BEV Feature 
+
+@ t -1 frame 
+
+(b) BEV Feature 
+
+@ t frame 
+
+(c) Feature @ t frame 
+
+After  FocusTrack 
+
+Figure 4: The BEV feature visualization of FocusTrack. 
+
+Feature Visualization of FocusTrack . Fig. 4 shows that the vi-sualizations of the attention feature map with proposed FocusTrack. From Fig. 4 (b) to (c), the background noise in the current frame is effectively suppressed and foreground points are gained more atten-tion. This visualization analysis of the feature map provides salient evidence supporting the key contributions of the FocusTrack. 
+
+Table 5: Ablation of w/o shared setting for CNN and Linear layers in FocusTrack block on the KITTI dataset. 
+
+## Setting Shared Car Pedestrian FPS (a) ✗ 73.2 / 83.8 68.7 / 92.9 91 (b) ✓ 74.1 / 85.9 69.3 / 94.1 105 MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu 
+
+Effectiveness of Weight-Shared Design . We conduct an abla-tion study to investigate whether the series of CNN, linear layers and DWC designs in the IMM module should be weight-shared. As shown in Tab. 5, the shared design results in improved perfor-mance and faster speed. Compared to the non-shared design (a), it achieves performance gains of 0.9%/1.9% and 0.6%/1.2% in car and pedestrian classes, while speed increases from 91 to 105 FPS. We think that this Siamese-like sharing mechanism can better extract salient features from inputs at different time steps under the same weights, benefiting inter-frame motion difference modeling. 
+
+Table 6: Ablation study on downsample ratio. 
+
+## Ratio Resolution Car Pedestrian FPS 2X 64 X 64 71.5 / 82.1 66.1 / 90.1 118 
+
+## 4X 32 X 32 72.4 / 81.9 67.2/ 91.5 112 8X 16 X 16 74.1 / 85.9 69.3 / 94.1 105 16X 8 X 8 73.6 / 83.6 68.4 / 92.5 98 
+
+The Downsample Ratio in Backbone. The backbone needs extract different level discriminative geometrics. Our FocusTrack backbone boosts high-level semantics by adopting downsampling at each stage. Naturally, the stage number also affects the performance. Here, we compare the tracking accuracy when feature extraction is performed under different downsampling ratios. As shown in Tab. 6, the 8 × down-sampling configuration yields the best performance. 
+
+The Learning Parameter 𝛼 . In the Inter-frame Motion Model-ing (IMM) module, the learnable parameter 𝛼 controls the magni-tude of inter-frame motion differences. When 𝛼 approaches 0, the previous frame has minimal influence on the current frame; when 𝛼 
+
+equals 1, the model simplifies to a basic inter-frame difference. We analyze 𝛼 variations across backbone stages for cars and pedestrians in the nuScenes dataset, as shown in the Figure. For cars, 𝛼 values are 0.21, 0.39, and 0.53; for pedestrian, they are 0.24, 0.43, and 0.61. As the network deepens, higher 𝛼 values indicate greater emphasis 
+
+on dynamic motion pat-terns. Pedestrians consis-tently show higher 𝛼 val-ues, reflecting their more variable motion, while cars exhibit lower values, indi-cating more stable motion. This variation highlights the model’s capacity to flexibly adjust its attention to motion cues based on the distinct behaviors of different object categories, thereby enhancing track-ing performance in diverse scenarios. 
+
+## 4.5 Visualization Results 
+
+Success Case . As shown in Fig. 5, we visualize tracking results over the SOTA method M2Track [ 77 ] on nuScenes [ 3] dataset, across diverse trajectories. Whether in dense scenarios (Fig. 5 (a)), or sparse scenarios (Fig. 5 (b)), our FocusTrack is able to track the target, Timeline     
+
+> (a) Success -case
+> (b) Success -case
+> (c) Failure -case
+> Ground Truth M2Track Focus Track (Ours )
+
+Figure 5: Visualization of tracking results compared with state-of-the-art motion-based M2Track [77] method. 
+
+while M2Track performs inaccurate bounding box estimation. This highlights the superior tracking performance of our FocusTrack across a range of conditions, from dense to sparse scenes. 
+
+Failure Case . While our method demonstrates effective perfor-mance, as shown in Fig. 5 (c), our method is inherently presents limitations in sparse scenes. The low resolution of LiDAR point cloud and its focus on capturing geometry-only information re-strict performance in such extreme-sparse scenarios. Naturally, this challenge could be effectively addressed by integrating dense RGB images, which would provide richer textual details. We consider this an open problem for the future work. 
+
+## 5 Conclusion 
+
+In this work, we propose a novel one-stage paradigms tracking framework that unifies motion-semantics co-modeling. The core components of our DiffTrack are the Inter-frame Motion Modeling (IMM) module and the Focus-and-Suppress Attention. The former module capture the global motion differences in successive frames. The later module aims to extract intra-frame spatial geometrics while enhancing the foreground semantics based on the temporal-aware motion context from IMM module. Based on above two designs, FocusTrack enables end-to-end training with compact one-stage pipelin. Extensive experiments on KITTI [ 14 ], nuScenes [ 3 ]and WOD [ 55 ] datasets demonstrate that our FocusTrack sets a new state-of-the-art performance, while running at a high speed of 105 FPS on a single RTX3090 GPU. Finally, our FocusTrack provides a better trade-off between efficiency and accuracy in latency-sensitive tracking tasks based on our "focus-and-suppress" design principle. 
+
+## 6 Limitation and Future Work 
+
+Our FocusTrack framework currently faces a limitation in sparse scenarios, where performance is suboptimal—a challenge that is commonly observed in existing methods [ 45 , 77 , 78 ]. An effective solution would be to integrate temporal information by leverag-ing historical global trajectories over a past duration alongside FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking MM ’25, October 27–31, 2025, Dublin, Ireland 
+
+local differential motion data or fuse dense RGB images [ 19 ] to en-hance the dense semantic representation. In future work, we plan to incorporate multi-frame temporal information to capture the dynamic motion of tracked objects. Besides, we will also explore the quantization-aware method [ 4, 18 , 24 , 57 , 62 , 66 , 68 , 80 , 81 ] to accelerate 3D Tracker for onboard applications and the integration with privacy-preserving federated learning [31–33]. 
+
+## Acknowledgement 
+
+We thank all anonymous reviewers, ACM MM Program Commit-tee, and Area Committee for their kind help of this work. This work was supported by the National Natural Science Foundation of China (No.62271143), Frontier Technologies R&D Program of Jiangsu (No. BF2024060) and the Big Data Computing Center of Southeast University. 
+
+## References 
+
+[1] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton. 2016. Layer Normaliza-tion. arXiv:1607.06450 [2] Luca Bertinetto, Jack Valmadre, Joao F Henriques, Andrea Vedaldi, and Philip HS Torr. 2016. Fully-convolutional siamese networks for object tracking. In Computer Vision–ECCV 2016 Workshops: Amsterdam, The Netherlands, October 8-10 and 15-16, 2016, Proceedings, Part II 14 . Springer, 850–865. [3] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora, Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan, Giancarlo Baldan, and Oscar Beijbom. 2020. nuscenes: A multimodal dataset for autonomous driving. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 11621–11631. [4] Zhixuan Chen, Xing Hu, Dawei Yang, Zukang Xu, Zhihang Yuan, Sifan Zhou, et al . [n. d.]. MoEQuant: Enhancing Quantization for Mixture-of-Experts Large Language Models via Expert-Balanced Sampling and Affinity Guidance. In Forty-second International Conference on Machine Learning .[5] Yubo Cui, Zheng Fang, Jiayao Shan, Zuoxu Gu, and Sifan Zhou. 2021. 3d object tracking with transformer. British Machine Vision Conference (2021), 1445–1458. [6] Yubo Cui, Zheng Fang, and Sifan Zhou. 2019. Point siamese network for person tracking using 3D point clouds. Sensors 20, 1 (2019), 143. [7] Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu. 2022. Mixformer: End-to-end tracking with iterative mixed attention. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 13608–13618. [8] Yubo Cui, Zhiheng Li, and Zheng Fang. 2023. Sttracker: Spatio-temporal tracker for 3d single object tracking. IEEE Robotics and Automation Letters (2023). [9] Marc Ellenfeld, Sebastian Moosbauer, Ruben Cardenes, Ulrich Klauck, and Michael Teutsch. 2021. Deep fusion of appearance and frame differencing for motion segmentation. In proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 4339–4349. [10] BaiChen Fan, Sifan Zhou, Jian Li, Shibo Zhao, Muqing Cao, and Qin Wang. 2026. Beyond Frame-wise Tracking: A Trajectory-Based Paradigm for Efficient Point Cloud Tracking. IEEE Robotics and Automation Letters (2026). [11] Heng Fan, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia Yu, Hexin Bai, Yong Xu, Chunyuan Liao, and Haibin Ling. 2019. Lasot: A high-quality benchmark for large-scale single object tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 5374–5383. [12] Zheng Fang, Sifan Zhou, Yubo Cui, and Sebastian Scherer. 2020. 3d-siamrpn: An end-to-end learning method for real-time 3d single object tracking using raw point cloud. IEEE Sensors Journal 21, 4 (2020), 4995–5011. [13] Jiantao Gao, Xu Yan, Weibing Zhao, Zhen Lyu, Yinghong Liao, and Chaoda Zheng. 2024. Spatio-Temporal Contextual Learning for Single Object Tracking on Point Clouds. IEEE Transactions on Neural Networks and Learning Systems 35, 7 (2024), 9470–9482. https://doi.org/10.1109/TNNLS.2022.3233562 [14] Andreas Geiger, Philip Lenz, and Raquel Urtasun. 2012. Are we ready for au-tonomous driving? the kitti vision benchmark suite. In 2012 IEEE conference on computer vision and pattern recognition . IEEE, 3354–3361. [15] Silvio Giancola, Jesus Zarzar, Bernard Ghanem, Silvio Giancola, and Jesus Zarzar. 2019. Leveraging shape completion for 3d siamese tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 1359–1368. [16] Zhiyang Guo, Yunyao Mao, Wengang Zhou, Min Wang, and Houqiang Li. 2022. CMT: Context-Matching-Guided Transformer for 3D Tracking in Point Clouds. In Computer Vision–ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part XXII . Springer, 95–111. [17] Yuchao Hou, Shuai Zhao, Xiaoyu Xia, Minghui Liwang, Zijian Li, Nan Xu, Di Wu, Youliang Tian, and Tony QS Quek. 2025. FedC-DAC: A Federated Clustering with Dynamic Aggregation and Calibration Method for SAR Image Target Recognition. 
+
+IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 
+
+(2025). [18] Xing Hu, Yuan Cheng, Dawei Yang, Zukang Xu, Zhihang Yuan, Jiangyong Yu, Chen Xu, Zhe Jiang, and Sifan Zhou. 2025. OstQuant: Refining Large Language Model Quantization with Orthogonal and Scaling Transformations for Better Distribution Fitting. The Thirteenth International Conference on Learning Repre-sentations (2025). [19] Zhaofeng Hu, Sifan Zhou, Shibo Zhao, Zhihang Yuan, and Ci-Jyun Liang. 2025. MVCTrack: Boosting 3D Point Cloud Tracking via Multimodal-Guided Virtual Cues. (2025). [20] Lianghua Huang, Xin Zhao, and Kaiqi Huang. 2019. Got-10k: A large high-diversity benchmark for generic object tracking in the wild. IEEE transactions on pattern analysis and machine intelligence 43, 5 (2019), 1562–1577. [21] Le Hui, Lingpeng Wang, Mingmei Cheng, Jin Xie, and Jian Yang. 2021. 3D Siamese voxel-to-BEV tracker for sparse point clouds. Advances in Neural Information Processing Systems 34 (2021), 28714–28727. [22] Le Hui, Lingpeng Wang, Linghua Tang, Kaihao Lan, Jin Xie, and Jian Yang. 2022. 3d siamese transformer network for single object tracking on point clouds. In 
+
+Computer Vision–ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part II . Springer, 293–310. [23] Sajid Javed, Martin Danelljan, Fahad Shahbaz Khan, Muhammad Haris Khan, Michael Felsberg, and Jiri Matas. 2022. Visual object tracking with discriminative filters and siamese networks: a survey and outlook. IEEE Transactions on Pattern Analysis and Machine Intelligence (2022). [24] Xiaoyan Jiang, Hang Yang, Kaiying Zhu, Xihe Qiu, Shibo Zhao, and Sifan Zhou. 2025. Ptq4ris: Post-training quantization for referring image segmentation. In 
+
+2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 12663–12670. [25] Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and François Fleuret. 2020. Transformers are rnns: Fast autoregressive transformers with linear atten-tion. In ICML .[26] Matej Kristan, Jiri Matas, Aleš Leonardis, Tomáš Vojíř, Roman Pflugfelder, Gus-tavo Fernandez, Georg Nebehay, Fatih Porikli, and Luka Čehovin. 2016. A novel performance evaluation methodology for single-target trackers. IEEE transactions on pattern analysis and machine intelligence 38, 11 (2016), 2137–2155. [27] Alex H Lang, Sourabh Vora, Holger Caesar, Lubing Zhou, Jiong Yang, and Os-car Beijbom. 2019. Pointpillars: Fast encoders for object detection from point clouds. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 12697–12705. [28] Shuo Li, Yubo Cui, Zhiheng Li, and Zheng Fang. 2024. FlowTrack: Point-level Flow Network for 3D Single Object Tracking. 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) (2024). [29] Taozhe Li and Wei Sun. 2024. MLP-SLAM: Multilayer Perceptron-Based Simulta-neous Localization and Mapping. arXiv preprint arXiv:2410.10669 (2024). [30] Hao Liu, Xiang Li, Xiang Zhang, Gang Liu, and Mingquan Lu. 2025. In-pipe navigation development environment and a smooth path planning method on pipeline surface. In 2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 128084–128090. [31] Junkang Liu, Yuanyuan Liu, Fanhua Shang, Hongying Liu, Jin Liu, and Wei Feng. 2025. Improving Generalization in Federated Learning with Highly Heteroge-neous Data via Momentum-Based Stochastic Controlled Weight Averaging. In 
+
+Forty-second International Conference on Machine Learning .[32] Junkang Liu, Fanhua Shang, Yuanyuan Liu, Hongying Liu, Yuangang Li, and YunXiang Gong. 2024. Fedbcgd: Communication-efficient accelerated block coordinate gradient descent for federated learning. In Proceedings of the 32nd ACM International Conference on Multimedia . 2955–2963. [33] Junkang Liu, Fanhua Shang, Yuxuan Tian, Hongying Liu, and Yuanyuan Liu. 2025. Consistency of local and global flatness for federated learning. In Proceedings of the 33rd ACM International Conference on Multimedia . 3875–3883. [34] Keyang Lu, Sifan Zhou, Hongbin Xu, Gang Xu, Zhifei Yang, Yikai Wang, Zhen Xiao, Jieyi Long, and Ming Li. 2025. Yo’City: Personalized and Boundless 3D Realistic City Scene Generation via Self-Critic Expansion. arXiv preprint arXiv:2511.18734 (2025). [35] Yuxuan Lu, Jiahao Nie, Zhiwei He, Hongjie Gu, and Xudong Lv. 2024. VoxelTrack: Exploring Multi-level Voxel Representation for 3D Point Cloud Object Tracking. In Proceedings of the 32nd ACM International Conference on Multimedia . 6345– 6354. [36] Zhipeng Luo, Changqing Zhou, Liang Pan, Gongjie Zhang, Tianrui Liu, Yueru Luo, Haiyu Zhao, Ziwei Liu, and Shijian Lu. 2024. Exploring point-bev fusion for 3d point cloud object tracking with transformer. IEEE Transactions on Pattern Analysis and Machine Intelligence (2024). [37] Teli Ma, Mengmeng Wang, Jimin Xiao, Huifeng Wu, and Yong Liu. 2023. Synchro-nize Feature Extracting and Matching: A Single Branch Framework for 3D Object Tracking. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 9953–9963. [38] Zhichao Ma, Yutong Luo, Zheyu Zhang, Aijia Sun, Yinuo Yang, and Hao Liu. 2025. Reinforcement learning approach for highway lane-changing: Ppo-based MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu 
+
+strategy design. In 2025 10th International Conference on Electronic Technology and Information Science (ICETIS) . IEEE, 298–301. [39] Zhichao Ma, Aijia Sun, Zheyu Zhang, Yinuo Yang, Zijun Gao, and Hao Liu. 2025. Energy-Constrained Motion Planning and Scheduling for Autonomous Robots in Complex Environments. In 2025 5th International Conference on Advanced Algorithms and Neural Networks (AANN) . IEEE, 591–594. [40] Ishan Misra, Rohit Girdhar, and Armand Joulin. 2021. An end-to-end trans-former model for 3d object detection. In Proceedings of the IEEE/CVF international conference on computer vision . 2906–2917. [41] Jiahao Nie, Zhiwei He, Xudong Lv, Xueyi Zhou, Dong-Kyu Chae, and Fei Xie. 2024. Towards Category Unification of 3D Single Object Tracking on Point Clouds. In The Twelfth International Conference on Learning Representations .[42] Jiahao Nie, Zhiwei He, Yuxiang Yang, Zhengyi Bao, Mingyu Gao, and Jing Zhang. 2023. OSP2B: One-Stage Point-to-Box Network for 3D Siamese Tracking. In 
+
+Proceedings of the Thirty-Second International Joint Conference on Artificial Intelli-gence . 1285–1293. [43] Jiahao Nie, Zhiwei He, Yuxiang Yang, Mingyu Gao, and Jing Zhang. 2023. GLT-T: Global-Local Transformer Voting for 3D Single Object Tracking in Point Clouds. In Proceedings of the AAAI Conference on Artificial Intelligence . 1957–1965. [44] Jiahao Nie, Zhiwei He, Yuxiang Yang, Xudong Lv, Mingyu Gao, and Jing Zhang. 2023. GLT-T++: Global-Local Transformer for 3D Siamese Tracking with Ranking Loss. arXiv preprint arXiv:2304.00242 (2023). [45] Jiahao Nie, Fei Xie, Sifan Zhou, Xueyi Zhou, Dong-Kyu Chae, and Zhiwei He. 2025. P2P: Part-to-Part Motion Cues Guide a Strong Tracking Framework for LiDAR Point Clouds. International Journal of Computer Vision (2025), 1–17. [46] Yatian Pang, Wenxiao Wang, Francis EH Tay, Wei Liu, Yonghong Tian, and Li Yuan. 2022. Masked autoencoders for point cloud self-supervised learning. In 
+
+European conference on computer vision . Springer, 604–621. [47] Ziqi Pang, Zhichao Li, and Naiyan Wang. 2021. Model-free vehicle tracking and state estimation in point cloud sequences. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 8075–8082. [48] Charles R Qi, Or Litany, Kaiming He, and Leonidas J Guibas. 2019. Deep hough voting for 3d object detection in point clouds. In proceedings of the IEEE/CVF International Conference on Computer Vision . 9277–9286. [49] Charles R Qi, Hao Su, Kaichun Mo, and Leonidas J Guibas. 2017. Pointnet: Deep learning on point sets for 3d classification and segmentation. In Proceedings of the IEEE conference on computer vision and pattern recognition . 652–660. [50] Charles Ruizhongtai Qi, Li Yi, Hao Su, and Leonidas J Guibas. 2017. Pointnet++: Deep hierarchical feature learning on point sets in a metric space. Advances in neural information processing systems 30 (2017). [51] Haozhe Qi, Chen Feng, Zhiguo Cao, Feng Zhao, and Yang Xiao. 2020. P2b: Point-to-box network for 3d object tracking in point clouds. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 6329–6338. [52] Syaimaa Solehah Mohd Radzi, Shahrul Nizam Yaakob, Zulaikha Kadim, and Hon Hock Woon. 2014. Extraction of moving objects using frame differencing, ghost and shadow removal. In 2014 5th International Conference on Intelligent Systems, Modelling and Simulation . IEEE, 229–234. [53] Jiayao Shan, Sifan Zhou, Yubo Cui, and Zheng Fang. 2022. Real-time 3D single object tracking with transformer. IEEE Transactions on Multimedia 25 (2022), 2339–2353. [54] Jiayao Shan, Sifan Zhou, Zheng Fang, and Yubo Cui. 2021. Ptt: Point-track-transformer module for 3d single object tracking in point clouds. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 1310– 1316. [55] Pei Sun, Henrik Kretzschmar, Xerxes Dotiwalla, Aurelien Chouard, Vijaysai Patnaik, Paul Tsui, James Guo, Yin Zhou, Yuning Chai, Benjamin Caine, et al .2020. Scalability in perception for autonomous driving: Waymo open dataset. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .2446–2454. [56] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In NeurIPS .[57] Jianyu Wang, Yu Wang, Shengjie Zhao, and Sifan Zhou. 2025. Point4Bit: Post Training 4-bit Quantization for Point Cloud 3D Detection. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .[58] Zhoutao Wang, Qian Xie, Yu-Kun Lai, Jing Wu, Kun Long, and Jun Wang. 2021. Mlvsnet: Multi-level voting siamese network for 3d visual tracking. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 3101–3110. [59] Qiangqiang Wu, Yan Xia, Jia Wan, and Antoni B Chan. 2024. Boosting 3D Single Object Tracking with 2D Matching Distillation and 3D Pre-training. European Conference on Computer Vision (2024). [60] Yi Wu, Jongwoo Lim, and Ming-Hsuan Yang. 2013. Online object tracking: A benchmark. In Proceedings of the IEEE conference on computer vision and pattern recognition . 2411–2418. [61] Yan Xia, Qiangqiang Wu, Wei Li, Antoni B Chan, and Uwe Stilla. 2023. A Light-weight and Detector-Free 3D Single Object Tracker on Point Clouds. IEEE Transactions on Intelligent Transportation Systems (2023). [62] Chen Xu, Yuxuan Yue, Zukang Xu, Xing Hu, Zhixuan Chen, Sifan Zhou, Zhihang Yuan, Dawei Yang, et al . [n. d.]. RWKVQuant: Quantizing the RWKV Family with Proxy Guided Hybrid of Scalar and Vector Quantization. In Forty-second International Conference on Machine Learning .[63] Tian-Xing Xu, Yuan-Chen Guo, Yu-Kun Lai, and Song-Hai Zhang. 2023. CXTrack: Improving 3D Point Cloud Tracking With Contextual Information. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .1084–1093. [64] Tian-Xing Xu, Yuan-Chen Guo, Yu-Kun Lai, and Song-Hai Zhang. 2023. MBP-Track: Improving 3D Point Cloud Tracking with Memory Networks and Box Priors. Proceedings of the IEEE/CVF International Conference on Computer Vision 
+
+(2023). [65] Weisheng Xu, Sifan Zhou, and Zhihang Yuan. 2024. PillarTrack: Redesigning Pillar-based Transformer Network for Single Object Tracking on Point Clouds. 
+
+arXiv preprint arXiv:2404.07495 (2024). [66] Zukang Xu, Yuxuan Yue, Xing Hu, Dawei Yang, Zhihang Yuan, Zixu Jiang, Zhix-uan Chen, Sifan Zhou, et al . 2025. MambaQuant: Quantizing the Mamba Family with Variance Aligned Rotation Methods. The Thirteenth International Conference on Learning Representations (2025). [67] Shaocheng Yan, Pengcheng Shi, Zhenjun Zhao, Kaixin Wang, Kuang Cao, Ji Wu, and Jiayuan Li. 2025. Turboreg: Turboclique for robust and efficient point cloud registration. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 26371–26381. [68] JiangYong Yu, Sifan Zhou, Dawei Yang, Shuoyu Li, Shuo Wang, Xing Hu, Chen Xu, Zukang Xu, Changyong Shu, and Zhihang Yuan. 2025. MQuant: Unleashing the Inference Potential of Multimodal Large Language Models via Static Quantization. In Proceedings of the 33rd ACM International Conference on Multimedia .[69] Jing Zhang and Dacheng Tao. 2020. Empowering things with intelligence: a survey of the progress, challenges, and opportunities in artificial intelligence of things. IEEE Internet of Things Journal 8, 10 (2020), 7789–7817. [70] Jingwen Zhang, Zikun Zhou, Guangming Lu, Jiandong Tian, and Wenjie Pei. 2024. Robust 3D Tracking with Quality-Aware Shape Completion. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 38. 7160–7168. [71] Zhipeng Zhang, Houwen Peng, Jianlong Fu, Bing Li, and Weiming Hu. 2020. Ocean: Object-aware anchor-free tracking. In Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXI 16 .Springer, 771–787. [72] Xiantong Zhao, Yinan Han, Shengjing Tian, Jian Liu, and Xiuping Liu. 2024. OST: Efficient One-stream Network for 3D Single Object Tracking in Point Clouds. 
+
+IEEE Transactions on Multimedia (2024). [73] Xinyue Zhao, Guangli Wang, Zaixing He, and Huilong Jiang. 2022. A survey of moving object detection methods: A practical perspective. Neurocomputing 503 (2022), 28–48. [74] Zhenjun Zhao. 2024. Balf: Simple and efficient blur aware local feature detector. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision . 3362–3372. [75] Zhenjun Zhao, Heng Yang, Bangyan Liao, Yingping Zeng, Shaocheng Yan, Ying-dong Gu, Peidong Liu, Yi Zhou, Haoang Li, and Javier Civera. 2026. Advances in Global Solvers for 3D Vision. arXiv preprint arXiv:2602.14662 (2026). [76] Chaoda Zheng, Xu Yan, Jiantao Gao, Weibing Zhao, Wei Zhang, Zhen Li, and Shuguang Cui. 2021. Box-aware feature enhancement for single object tracking on point clouds. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 13199–13208. [77] Chaoda Zheng, Xu Yan, Haiming Zhang, Baoyuan Wang, Shenghui Cheng, Shuguang Cui, and Zhen Li. 2022. Beyond 3d siamese tracking: A motion-centric paradigm for 3d single object tracking in point clouds. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 8111–8120. [78] Chaoda Zheng, Xu Yan, Haiming Zhang, Baoyuan Wang, Shenghui Cheng, Shuguang Cui, and Zhen Li. 2023. An Effective Motion-Centric Paradigm for 3D Single Object Tracking in Point Clouds. IEEE Transactions on Pattern Analysis and Machine Intelligence (2023). [79] Changqing Zhou, Zhipeng Luo, Yueru Luo, Tianrui Liu, Liang Pan, Zhongang Cai, Haiyu Zhao, and Shijian Lu. 2022. Pttr: Relational 3d point cloud object tracking with transformer. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 8531–8540. [80] Sifan Zhou, Liang Li, Xinyu Zhang, Bo Zhang, Shipeng Bai, Miao Sun, Ziyu Zhao, Xiaobo Lu, and Xiangxiang Chu. 2024. LiDAR-PTQ: Post-Training Quantization for Point Cloud 3D Object Detection. In The Twelfth International Conference on Learning Representations .[81] Sifan Zhou, Shuo Wang, Zhihang Yuan, Mingjia Shi, Yuzhang Shang, and Dawei Yang. 2025. GSQ-Tuning: Group-Shared Exponents Integer in Fully Quantized Training for LLMs On-Device Fine-tuning. In Findings of the Association for Computational Linguistics: ACL 2025 . Association for Computational Linguistics, Vienna, Austria, 22971–22988. [82] Sifan Zhou, Zhihang Yuan, Dawei Yang, Xing Hu, Jian Qian, and Ziyu Zhao. 2025. Pillarhist: A quantization-aware pillar feature encoder based on height-aware histogram. In Proceedings of the Computer Vision and Pattern Recognition Conference . 27336–27345. FocusTrack: One-Stage Focus-and-Suppress Framework for 3D Point Cloud Object Tracking MM ’25, October 27–31, 2025, Dublin, Ireland     
+
+> [83] Sifan Zhou, Xinyu Zhang, Xiangxiang Chu, Bo Zhang, Ziyu Zhao, and Xiaobo Lu. 2025. Fastpillars: A deployment-friendly pillar-based 3d detector. IEEE Transactions on Circuits and Systems for Video Technology (2025).
+
+## A More Generalization Experiments A.1 Generalization ability on Different Classes. 
+
+To further validate the the generalization of the proposed class-agnostic model, we conduct a series of experiments using KITTI [ 14 ]and nuScenes [3] datasets. Seen Classes → Unseen Classes Van Cyclist Van, Cyclist (Tab. 1) 68.4 / 83.5 75.9 / 94.7 Car,Pedestrian →Van,Cyclist 65.8 / 79.4 73.1 / 91.8 
+
+Table 7: Generalization experiments from seen object classes to unseen ones on KITTI [14] dataset. 
+
+First, we conduct a generalization experiment by training our FocusTrack on certain classes of data and testing it on unseen classes of data. As shown in Tab. 7, FocusTrack is trained on Car and Pedestrian classes, which is applied for Van and Cyclist classes for test. Compared to performance in normal setup in Tab. 1 in the main paper, only a slight degradation in performance is observed. The results demonstrate that our FocusTrack is able to generalize to data of unseen classes. nuScenes →KITTI nuScenes Car Pedestrian KITTI (Tab. 1) 74.1 / 85.9 69.3 / 94.1 nuScenes →KITTI 58.6 / 72.3 63.1 / 88.9 
+
+Table 8: Generalization experiments between KITTI [ 14 ] and nuScenes [3] datasets with distinct point cloud sparsity. 
+
+## A.2 Generalization ability on Different Datasets 
+
+Second, we test the trained model on another dataset. Tab. 8 presents generalization performance under such a setup. Since nuScenes data are more sparse than KITTI data, it is challenging to generalize across the two datasets. Nevertheless, our FocusTrack generalizes well from nuScenes to KITTI, i.e. , sparse point clouds to dense point clouds, obtaining 72.3% and 88.9% mean Precision in terms of Car and Pedestrian classes. 
+
+## B More Implementation Details B.1 Dataset and Evaluation Metrics 
+
+We evaluate our method on KITTI [ 14 ], nuScenes [ 3 ] and Waymo Open Dataset (WOD) [ 55 ]. To be fair, we follow common setup [ 51 ,64 , 77 ] of training and testing models on the KITTI and nuScenes datasets, and applying pre-trained KITTI model to the WOD dataset for testing. Note that, nuScenes and WOD are more challenging than KITTI due to large data volume and complex scenes. In addition, KITTI and WOD data are collected by 64-beam LiDAR sensors, while nuScenes data are captured by 32-beam LiDARs. Therefore, point cloud data of nuScenes are more sparse than KITTI and WOD. 
+
+KITTI. KITTI [ 14 ] contains 21 training sequences and 29 test se-quences. Due to test labels are not available, we split the training sequences into train [0-17), val [17-19) and test [19, 21) sets follow-ing common setting [15, 36, 41, 51, 63, 64, 76, 77, 79]. 
+
+NuScenes. NuScenes [ 3] involves 1000 scenes, which are divided into 700, 150 and 150 scenes for train, val and test, respectively. Following [ 64 , 76 , 77 ], we train our FocusTrack using “train _ track” split and test it on val set. 
+
+Waymo. Waymo Open Dataset (WOD) [ 55 ] comprises 1121 track-lets categorized into easy, medium and hard sub-sets based on the point cloud sparsity. We follow LiDAR-SOT [ 21 , 22 , 47 ] to evaluate our model. 
+
+Evaluation Metrics. Following common practice, we employ One Pass Evaluation (OPE) [ 26 , 60 ] to evaluate tracking performance using both Success and Precision metrics. Success calculates the intersection over union (IOU) between the predicted bounding box and the ground truth one, while Precision assesses the distance between the centers of the two corresponding bounding boxes. 
+
+## B.2 Model Details 
+
+We first crop out point cloud regions from consecutive point clouds 
+
+P𝑡 −1 and P𝑡 that have the same aspect ratio as the target and are 2 times the target box size. Then, we apply a pillar feature encoding to the cropped point cloud regions to obtain BEV features F𝑡 −1 and 
+
+F𝑡 with a spatial resolution of 128 × 128 × 16 , in order to struc-turally normalize the point cloud regions. The spatial resolution after pillar feature encoder is 128 × 128 . These tokens are then fed into 3 sequential FocusTrack blocks, where each FocusTrack block downsample the spatial resolution while doubling the number of channels, to focus on the foreground tracking objects based on the differential motion cues. After the FocusTrack backbone, the spatial resolution are downsampled to 16 × 16 × 128 . In the prediction head, we use 3 convolution blocks to spatially downsample the output features and increase the number of channels to obtain features with a dimension of 1 × 1 × 512 . These features are then flattened and input a MLP to get the final output. 
+
+## B.3 Data Augmentation. 
+
+During training stage, we introduce simulated test errors for consec-utive frames to enhance model’s accuracy. In contrast to previous methods [ 41 , 51 , 64 , 77 ] that crop point cloud regions in 𝑡 − 1 and 
+
+𝑡 frame centered on target boxes in corresponding frame, respec-tively, we use target box in 𝑡 − 1 frame as the center of the cropped point cloud regions in both 𝑡 − 1 and 𝑡 frame. By this way, the model is able to learn tracking errors occurred in testing stage. In addition, we randomly flip target points and box horizontally and rotate it uniformly around its longitudinal axes in the range [-5 ◦,5 ◦]. 
+
+## B.4 Training & Inference 
+
+Training. We train our tracking models using the AdamW opti-mizer on a NVIDIA RTX 4090 GPU, with a batch size of 128. The initial learning rate is set to 1e-4 and is decayed by a factor of 5 every 20 epochs. MM ’25, October 27–31, 2025, Dublin, Ireland Sifan Zhou, Jiahao Nie, Ziyu Zhao, Yichao Cao, & Xiaobo Lu 
+
+Algorithm 1 Inference process of FocusTrack in a point cloud sequence 
+
+Input: 𝑇 -frame sequence {P 𝑡 }𝑇 𝑡 =1; Tracked target 
+
+B = (𝑥, 𝑦, 𝑧, 𝑤, ℎ, 𝑙, 𝜃 ) in the 1st frame. 
+
+Output: Tracking results {B 𝑡 = (𝑥 𝑡 , 𝑦 𝑡 , 𝑧 𝑡 , 𝜃 𝑡 )} 𝑇 𝑡 =2 
+
+> 1:
+
+for 𝑡 = 2 to 𝑇 do  
+
+> 2:
+
+Crop point cloud regions P𝑐𝑟𝑜𝑝 𝑡 −1 and P𝑐𝑟𝑜𝑝 𝑡 . 
+
+> 3:
+
+Pillarize regions in a spatial resolution of R128 ×128 ×16 . 
+
+> 4:
+
+Extract features and interact between 𝐹 𝑡 −1 and 𝐹 𝑡 using the FocusTrack block to obtain the final 𝐹 𝑡 ∈ R16 ×16 ×128 . 
+
+> 5:
+
+Predict relative motion [Δ𝑥, Δ𝑦, Δ𝑧, Δ𝜃 ]𝑡 −1→𝑡 based on the final 𝐹 𝑡 using the prediction head.  
+
+> 6:
+
+Based on [Δ𝑥, Δ𝑦, Δ𝑧, Δ𝜃 ]𝑡 −1→𝑡 to transform the previous 
+
+B𝑡 −1 and output B𝑡 . 
+
+> 7:
+
+end for  
+
+> 8:
+
+Return {B 𝑡 }𝑇 𝑡 =2.
+
+Inference. During inference stage, FocusTrack continuously re-gresses out target relative motion [Δ𝑥, Δ𝑦, Δ𝑧, Δ𝜃 ]𝑡 −1→𝑡 frame-by-frame. The regressed relative motion is then applied to target box 
+
+B𝑡 −1 in previous frame to locate the target box B𝑡 in current frame. Alg. 1 presents the whole inference process of FocusTrack in a point cloud sequence.

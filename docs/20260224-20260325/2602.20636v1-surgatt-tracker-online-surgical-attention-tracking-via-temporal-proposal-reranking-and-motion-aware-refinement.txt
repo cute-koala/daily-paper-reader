@@ -1,0 +1,777 @@
+Title: SurgAtt-Tracker: Online Surgical Attention Tracking via Temporal Proposal Reranking and Motion-Aware Refinement
+
+URL Source: https://arxiv.org/pdf/2602.20636v1
+
+Published Time: Wed, 25 Feb 2026 01:39:13 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# SurgAtt-Tracker: Online Surgical Attention Tracking via Temporal Proposal Reranking and Motion-Aware Refinement 
+
+Rulin Zhou * 1 2 Guankun Wang * 1 An Wang * 1 Yujie Ma 3 Lixin Ouyang 3 Bolin Cui 1 Junyan Li 3
+
+Chaowei Zhu 4 Mingyang Li 2 Ming Chen 3 Xiaopin Zhong 3 Peng Lu 2 Jiankun Wang 5 Xianming Liu 4
+
+Hongliang Ren 1
+
+## Abstract 
+
+Accurate and stable field-of-view (FoV) guidance is critical for safe and efficient minimally inva-sive surgery, yet existing approaches often con-flate visual attention estimation with downstream camera control or rely on direct object-centric as-sumptions. In this work, we formulate surgical attention tracking as a spatio-temporal learning problem and model surgeon focus as a dense at-tention heatmap, enabling continuous and inter-pretable frame-wise FoV guidance. We propose SurgAtt-Tracker, a holistic framework that ro-bustly tracks surgical attention by exploiting tem-poral coherence through proposal-level rerank-ing and motion-aware refinement, rather than di-rect regression. To support systematic training and evaluation, we introduce SurgAtt-1.16M, a large-scale benchmark with a clinically grounded annotation protocol that enables comprehensive heatmap-based attention analysis across proce-dures and institutions. Extensive experiments on multiple surgical datasets demonstrate that SurgAtt-Tracker consistently achieves state-of-the-art performance and strong robustness un-der occlusion, multi-instrument interference, and cross-domain settings. Beyond attention tracking, our approach provides a frame-wise FoV guid-ance signal that can directly support downstream robotic FoV planning and automatic camera con-trol. 
+
+> 1
+
+Department of Electronic Engineering, The Chinese University of Hong Kong, Hong Kong SAR, China 2Department of Mechani-cal Engineering, The University of Hong Kong, Hong Kong SAR, China 3College of Mechatronics and Control Engineering, Shen-zhen University, China 4Division of Gastrointestinal Surgery, Shen-zhen People’s Hospital, China 5Department of Electronic and Elec-trical Engineering, Southern University of Science and Technology. Correspondence to: Hongliang Ren <hlren@ee.cuhk.edu.hk >.
+
+Preprint. February 25, 2026. 
+
+## 1. Introduction 
+
+Figure 1. SurgAtt-Tracker enables AI-guided endoscope control by predicting an attention heatmap from raw endoscopic video. 
+
+Minimally Invasive Surgery (MIS) has revolutionized mod-ern clinical practice across diverse specialties, ranging from general surgery to gynecology and urology (Dupont et al., 2021). By performing sophisticated procedures through small incisions guided by endoscopic imaging, laparoscopic surgery offers profound clinical benefits, including min-imized intraoperative blood loss, reduced post-operative pain, and accelerated patient recovery compared to tradi-tional open surgery (Taylor et al., 2016; Dupont et al., 2022). Centrally, the laparoscope provides the primary perceptual interface between the surgeon and the operative field, mak-ing Field-of-View (FoV) quality critical to surgical safety and precision. However, precise visual guidance remains challenging, as traditional manual control relies on coor-dinated interaction between the surgeon and a dedicated assistant (Merola et al., 2002). Prolonged procedures often lead to physical fatigue for the assistant, which manifests as image instability, unintended drifting of the FoV, or loss of target tracking. Furthermore, communication delays be-1
+
+> arXiv:2602.20636v1 [cs.CV] 24 Feb 2026 Surgical Attention Tracking
+
+tween the surgeon and assistant often lead to misplaced views that do not meet the surgeon’s immediate needs (Fang et al., 2024; Gao et al., 2025). These issues disrupt the surgical flow and increase operative risks, ultimately under-mining the benefits of the minimally invasive approach. To address the limitations of manual control, extensive stud-ies have investigated automated or semi-automated FoV control strategies. Approaches based on explicit external inputs utilize cues such as gaze (Fujii et al., 2018) and voice commands (Sandoval et al., 2021) to directly control camera motion. While intuitive, these interaction-heavy paradigms inevitably increase the surgeon’s cognitive load and may interrupt the surgical workflow. In contrast, some researchers explore internal surgical cues, most notably in-strument motion, as implicit indicators of surgeon intent, en-abling more natural FoV adjustment without additional user interaction (Gruijthuijsen et al., 2022). Prior approaches proposed a cognitive robotic endoscope that integrates a learned camera quality classifier with predefined policies to select optimal viewpoints (Bihlmaier & Woern, 2014). Subsequent strategies include centering the FoV on a sin-gle instrument (Yang et al., 2019), enclosing multiple tools within a predefined region (Huang et al., 2022), or adjusting viewpoints via model-based visual servoing (Zhang et al., 2023). To improve adaptability across surgical phases, prob-abilistic models have been introduced to encode surgeon preferences from historical data (Li et al., 2021). Notably, Li et al. (Li et al., 2024) proposed a heuristic decision frame-work that extracts domain knowledge from clinical videos and formulates FoV control as a constrained optimization problem. Despite their robustness and explainability, these methods typically assume that surgeon attention can be ap-proximated by instrument distributions, which may fail in scenarios involving multiple objects and rapid focus shifts. More recently, data-driven and learning-based approaches have been explored to enhance the intelligence of FoV con-trol. These include imitation learning (Rivas-Blanco et al., 2019; Li et al., 2022) and attention-aware models that as-sociate surgical actions with camera motion (Gao et al., 2022). Parallel to this trend, human–AI collaborative frame-works have been proposed to balance autonomy and surgeon control, combining lightweight commands with scene un-derstanding to infer intent-aligned viewpoints (Gao et al., 2025). Although previous works have explored various cues for guiding automated FoV adjustment, none explicitly formulated the surgeon’s visual attention as a dense, spa-tially distributed heatmap (as shown in Fig. 1), which can be used as a continuous and spatially expressive signal for FoV guidance beyond discrete directional cues. Existing video-level heatmap visualizations (Droste et al., 2020; Xu et al., 2025) are usually used for post-hoc analy-sis or monitoring rather than real-time attention modeling rooted in the surgeon’s latent perceptual priorities. Rather than directly predicting camera motion or prescribing FoV control policies, we argue that a prerequisite for intelligent endoscopic assistance is the ability to reliably track where the surgeon is visually attending over time. In practice, sur-gical attention is not a static object nor a single instrument, but a context-dependent perceptual target that shifts across tissues, tools, and procedural stages (Wang et al., 2026). It may focus on an active instrument during dissection, transi-tion to exposed tissue during inspection, or rapidly relocate in response to bleeding or unexpected events. This obser-vation motivates us to decouple attention modeling from downstream camera control and to treat surgical attention tracking as a learning problem. We represent attention as a dense spatial heatmap that captures graded focus intensity, rather than a single point or bounding box, enabling nu-anced modeling of distributed and smoothly evolving visual priorities. However, learning to track surgical attention in real time presents several unique challenges. First, attention is a latent cognitive state that lacks explicit visual markers, making direct supervision infeasible. Second, frame-wise detectors often rank attention-relevant regions inconsistently due to occlusion, motion blur, and low inter-class separabil-ity, leading to unstable Top-1 predictions. Third, attention exhibits strong temporal coherence yet can undergo abrupt shifts, requiring models to balance short-term consistency with responsiveness. To address these challenges, we introduce SurgAtt-Tracker, a framework that explicitly tracks surgical attention by ex-ploiting temporal coherence among ambiguous detector pro-posals. SurgAtt-Tracker formulates attention tracking as a proposal reranking and refinement problem conditioned on cross-frame consistency, enabling stable dense attention heatmap prediction without relying on direct regression. To support this formulation, we propose SurgAtt-1.16M, a large-scale benchmark for surgical attention tracking span-ning diverse laparoscopic procedures. Built upon a clinically grounded annotation protocol that bridges discrete expert attention regions and continuous heatmap representations, SurgAtt-1.16M enables systematic learning and evaluation of temporally coherent surgical attention. In summary, our contributions are fourfold: (i) We formu-late surgical attention tracking as a spatio-temporal learning problem and propose dense heatmap as its core modeling primitive; (ii) We propose SurgAtt-Tracker, a holistic frame-work that robustly tracks attention by exploiting proposal-level reranking and motion-aware refinement; (iii) We intro-duce SurgAtt-1.16M, a large-scale benchmark that enables systematic heatmap attention evaluation and generalization analysis across procedures and institutions. (iv) Extensive experiments across multiple datasets demonstrate state-of-the-art performance and strong robustness of our SurgAtt-Tracker under occlusion, multi-instrument interference, and 2Surgical Attention Tracking  
+
+> Figure 2. Overview of the SurgAtt-1.16M dataset, illustrating its anatomical coverage, data sources, and unified organization across organs, procedures, and annotation types.
+
+cross-domain settings. 
+
+## 2. Surgical Attention Tracking: Task and Dataset 
+
+To advance surgical FoV control from heuristic instrument tracking to intent alignment, we formalize the task of Surgi-cal Attention Tracking (SAT) and introduce SurgAtt-1.16M ,a large-scale benchmark for systematic training and evaluat-ing SAT under a unified protocol. 
+
+2.1. Task Formulation 
+
+We define SAT as a spatio-temporal density estimation prob-lem. Let V = {I1, I 2, ..., I T } be a surgical video sequence. At each frame It, the primary goal is to predict the primary focus of the surgeon’s operation. Unlike standard object tracking, surgical attention is not a rigid object but a latent cognitive state inferred from visual cues. To bridge the gap between discrete surgical interactions and continuous vi-sual focus, we represent attention using two complementary modalities: First, we define the Latent Attention Center (Bt) as a bounding box localizing the primary interaction (e.g., tissue-tool contact), serving as a discrete anchor for training stability and camera centering. Second, we model 
+
+Attention Density ( Ht) as a dense heatmap to capture the spatial spread and uncertainty of focus; this continuous rep-resentation offers a more nuanced tracking target than binary boxes and serves as the primary output for evaluation. 
+
+2.2. Data Construction: The SurgAtt-SZPH Subset 
+
+Existing public datasets often lack the complexity required to model expert attention shifts. A core contribution of this work is the curation of SurgAtt-SZPH , a high-quality clinical dataset derived from 141 hours of laparoscopic footage across 25 patients (Rectum/Stomach resections). Crucially, valid attention modeling requires high opera-tional density. Randomly sampled surgical frames are often static. We therefore employed a two-stage filtering pipeline: (1) Motion filtering using RAFT to discard static intervals (<20 hours retained), followed by (2) Expert clinical review 
+
+where surgeons screened segments based on four criteria: (i) operational complexity, (ii) coverage of common surgical instruments, (iii) inclusion of representative procedures, and (iv) correctness of surgical operations. This yielded 125 interaction-rich clips (approx. 1.12M frames) lasting 4–8 minutes each. Details are in Appendix A.1 .
+
+2.3. Annotation Protocol: From Discrete Intent to Continuous Attention 
+
+Defining ground truth (GT) for latent attention remains chal-lenging: eye-tracking signals are often noisy and reactive, while raw instrument detections fail to capture surgical in-tent. Thus, we propose a hierarchical annotation strategy that derives continuous attention from discrete expert rules. 
+
+Step 1: Hierarchical Intent Labeling (Bt). Three surgical assistants annotated the primary target box Bt for every frame following a strict clinical hierarchy: (i) Tissue-Tool Interaction: The geometric center of the contact area where the instrument actively engages with tissue (e.g., dissection, suturing) takes highest priority; (ii) Active Effector Domi-nance: In multi-instrument scenes, the tool performing the primary maneuver (e.g., electrocautery) takes precedence over passive retractors or static grippers; (iii) Navigational Centering: During camera movement or global inspection (no active tool action), the attention target defaults to the anatomical center of the FoV. 
+
+Step 2: Modeling Visual Persistence (Ht). Human atten-tion exhibits temporal persistence rather than instantaneous disappearance. To model this, we avoid directly rasterizing 
+
+Bt and instead model attention as a temporally decaying Gaussian process . Each discrete box Bt is mapped to an anisotropic Gaussian kernel and accumulate them over time using exponential decay. This transforms the jittery dis-crete sequence into a smooth, probability-like density map 
+
+Ht. The mathematical derivation and parameters for this conversion are detailed in Appendix A.2 .
+
+2.4. Benchmark Composition 
+
+We integrate SurgAtt-SZPH with two public datasets, Au-toLaparo (Gynecology) (Wang et al., 2022) and Hamlyn 
+
+(Urology) (Giannarou et al.), adapting their labels to our unified heatmap protocol to form the full SurgAtt-1.16M 
+
+benchmark. As detailed in Fig. 2, the benchmark comprises 
+
+1.16 million frames , offering the largest and most diverse testbed for surgical attention tracking to date, spanning mul-tiple organs and procedures. 3Surgical Attention Tracking 
+
+## 3. Method 
+
+3.1. Overview 
+
+We conceptualize Surgical Attention Tracking as a tempo-rally conditioned proposal evolution problem instead of iso-lated frame-wise detection. Standard detectors often fail to maintain tracking stability because surgical attention lacks rigid visual features, leading to jittery confidence scores and frequent ID switches. However, a key observation is that while the Top-1 detection prediction is unstable, the true attention target is consistently present within the Top-K
+
+proposal set (high recall). To exploit this, SurgAtt-Tracker 
+
+decouples localization into three cohesive stages: hypothesis generation, temporal reranking, and geometric refinement. As illustrated in Figure 3-A, the framework operates on a target frame It conditioned on a reference frame It−n
+
+that represents the previous attention state. Initially, a pre-trained, frozen detector acts as a generic region proposer (Sec. 3.2.1), projecting the image into a high-recall discrete search space (Top-K boxes) and and extract multi-scale features with the Multi-Scale ROI Decoder .Subsequently, the Attention Score Rerank module (Sec. 3.2.3) discards noisy detection confidence in favor of temporal consistency through the cross-attention mecha-nism. Finally, to overcome the discretization error of fixed proposals, the Motion-Aware Adaptive Refine module (Sec. 3.2.4) fuses visual cues with geometric motion history to predict continuous corrections, yielding the precise final box Brt .
+
+3.2. Architecture Details 
+
+3.2.1. F ROZEN DETECTOR & P ROPOSAL GENERATION 
+
+Our framework begins by transforming the global localiza-tion problem into a tractable discrete selection task. We employ a detector D(·) pre-trained on SurgAtt-SZPH as a high-recall hypothesis generator . Crucially, we main-tain D(·) in a frozen state throughout tracking training. This decouples feature extraction from tracking dynamics, preventing the model from overfitting to specific detector failure modes while ensuring stable feature distributions for cross-frame matching. Given an input frame It, this module outputs two distinct primitives. First, it defines a Discrete Search Space ( Bt),extracting the Top-K proposals Bt = {Bkt }Kk=1 based on raw detection confidence. While the Top-1 box is often unstable due to visual ambiguity, empirical analysis con-firms that the true attention target is consistently contained within this expanded candidate set (high recall). Second, to handle the varying scale of surgical interactions, we extract 
+
+Multi-Scale Semantics ( Fyt ) in the form of feature pyra-mids Fyt = {F (s) 
+
+> t
+
+}s∈{ 3,4,5} from the detector neck. These embeddings provide the robust visual descriptors required for the subsequent attention-based retrieval. 3.2.2. M ULTI -S CALE ROI D ECODER 
+
+Effective temporal reranking demands a robust proposal-level representation that is discriminative and spatially aligned. In surgical scenes, the scale of attention targets varies drastically, ranging from minute instrument tips dur-ing dissection to large anatomical regions during inspection, which renders single-scale feature extraction insufficient. To address this, the Multi-Scale ROI Decoder (MSR) acts as a feature transducer, mapping the discrete bounding box candidates back into the continuous semantic space of the frozen detector’s feature pyramid Fyt .As shown in Figure 3-B, for each proposal B, we extract se-mantics across spatial resolutions to simultaneously capture fine-grained texture and global context. Specifically, we em-ploy ROIAlign to harvest fixed-size features from each pyra-mid level proportional to the box coordinates. These multi-resolution descriptors are projected via a scale-specific layer 
+
+ϕs(·) with positional encoding and fused via summation to yield a unified, box-aligned embedding ft(B):
+
+ft(B) = X
+
+> s∈{ 3,4,5}
+
+Align 
+
+
+
+ϕs
+
+
+
+F (s)
+
+> t
+
+
+
+, π s(B)
+
+
+
+, (1) where πs(·) maps B from image coordinates to the coordi-nate system of the s-th feature map, and Align( ·) denotes the interpolation-based ROI feature extraction operator. This process ensures that subsequent tracking modules operate on consistent, scale-invariant visual descriptors regardless of the target’s changing size. 3.2.3. A TTENTION SCORE RERANK MODULE 
+
+While the frozen detector provides discriminative feature pyramids, its Top-K proposal ranking relies solely on static, per-frame confidence scores, which are often unstable under surgical conditions such as occlusion, motion blur, and rapid viewpoint changes. To address this, we introduce the At-tention Score Rerank (AS-Rerank) module, which shifts the selection criterion from static detection confidence to dynamic temporal consistency. Given that surgical atten-tion exhibits pronounced trajectory coherence, this module identifies the optimal candidate at time t by measuring its compatibility with a trusted reference state. As illustrated in Figure 3-C, AS-Rerank operates as a cross-frame retrieval mechanism. It takes the trusted reference ROI embedding fr (from frame Ir ) and the set of current proposal embeddings {f kt }Kk=1 (from frame It) as input. We employ a multi-head cross-attention mechanism to compute a scalar reranking logit skt for each proposal: 
+
+skt = Att  fr , f kt
+
+ , (2) 4Surgical Attention Tracking    
+
+> Figure 3. Overview of SurgAtt-Tracker. A frozen detector produces Top-Kproposals and multi-scale pyramid features, which are converted into box-aligned embeddings by the Multi-Scale ROI Decoder (B); the AS-Rerank module performs temporal proposal reranking to select the Top-1 attention region (C), and MAA-Refine further refines it using motion-aware geometry (D) and visual evidence to yield the attention heatmap Ht.
+
+where Att( ·) is a learnable matching function that weighs feature similarity against the historical context. Finally, we select the index ˆkt = arg max k skt that maximizes this temporal affinity, outputting the Top-1 hypothesis proposal 
+
+ˆBt = Bˆkt 
+
+> t
+
+and its corresponding feature ˆft for subsequent geometric refinement. 3.2.4. M OTION -A WARE ADAPTIVE REFINE MODULE 
+
+Although the AS-Rerank module successfully identifies the most plausible candidate from the proposal pool, the se-lected box ˆBt remains quantized by the detector’s anchor grid, often leading to residual misalignment in center po-sitioning and scale. To transcend this discretization limit, the Motion-Aware Adaptive Refine (MAA-Refine) mod-ule performs continuous geometric correction (Figure 3-D). Crucially, visual-only refinement is often ambiguous in low-texture surgical scenes, so we condition the correction on explicit motion prior encoded from the reference state. The module fuses two inputs: the visual semantic embed-ding ˆft of the selected Top-1 proposal, and a geometric motion descriptor gt = Geo( ˆBt, B sr ). Here, Bsr represents the trusted attention state from the reference frame It−n
+
+(using the previous prediction ˆBt−1 during inference). The descriptor gt explicitly encodes the spatial evolution of the target, capturing normalized coordinates, relative center displacement, and log-scale aspect variations. By concate-nating ˆft and gt into a lightweight MLP, the network learns to adjust the box based on both local tissue texture and the momentum of the surgeon’s attention. Unlike standard offset regression, which predicts uncon-strained Cartesian shifts, we adopt a polar-based formu-lation that decouples directionality from magnitude. The network predicts a correction tuple consisting of a displace-ment direction θt, a scalar magnitude dt, and channel-wise scale factors st = ( swt , s ht ). Let ψ( ˆBt) = ( cx, c y , w, h )
+
+denote the parameterization of the coarse proposal. We up-date the center via a directed step dt along the unit vector 
+
+u(θt) = (cos θt, sin θt), and modulate the dimensions via multiplicative scaling: 
+
+(crx, c ry ) = ( cx, c y ) + dt u(θt),
+
+(wr , h r ) = ( w, h ) ⊙ (swt , s ht ), (3) where ⊙ denotes element-wise multiplication. The final refined box Brt is reconstructed from these parameters and serves as the precise anchor for generating the continuous attention heatmap Ht.
+
+3.3. Training Objectives 
+
+To jointly optimize discrete proposal selection and contin-uous geometric refinement, our training objective is com-posed of two hierarchical components: a reranking loss 
+
+that enforces correct ordering within the hypothesis pool, and a refinement loss that regularizes the precise regressors. 5Surgical Attention Tracking 
+
+The total objective is defined as: 
+
+Ltotal = L(t) 
+
+> rerank
+
++ L(t)
+
+> refine
+
+. (4) We compute these losses on the target frame It, isolating valid proposals (those with non-zero overlap) to prevent noise from background outliers. 3.3.1. R ERANKING LOSSES 
+
+The goal of reranking is to assign high scores to proposals that are spatially closest to the GT Bgt  
+
+> t
+
+. Let Bt = {Bkt }Kk=1 
+
+be the set of valid proposals and st = {skt }Kk=1 be the predicted logits. We identify the optimal proposal index k⋆t
+
+as the one minimizing the center distance to the GT: 
+
+k⋆t = arg min  
+
+> k
+
+c(Bkt ) − c(Bgt  
+
+> t
+
+) 2 . (5) To ensure robust ranking, we employ a multi-task objective combining hard classification, soft geometric regularization, and listwise ranking: 
+
+1. Hard Top-1 Classification ( Lce ). We maximize the probability of selecting the single best candidate k⋆t using standard cross-entropy: 
+
+Lce = CE(softmax( st), k ⋆t ) . (6) 
+
+2. Soft Geometric Regularization ( Lgeo ). Hard classifi-cation ignores the spatial distribution of the prediction. To inject geometric awareness, we compute a soft-aggregated box ¯Bt by weighing all proposals using their predicted prob-abilities πkt = exp( skt /τ )    
+
+> P
+> jexp( sjt/τ )
+
+(with temperature τ =0 .15 ). We then minimize the Huber loss between the center of this aggregated box and the GT: 
+
+Lgeo = LHuber 
+
+ ∥c( ¯Bt) − c(Bgt  
+
+> t
+
+)∥2
+
+ , (7) which encourages the probability mass to concentrate around the spatial location of the target, smoothing the deci-sion surface. 
+
+3. Top-M Listwise Ranking ( Lrank ). Standard Top-1 super-vision induces a sharp decision boundary that suppresses all non-target proposals equally, regardless of their geometric utility. However, surgical attention is often spatially smooth; proposals slightly offset from the exact center still capture valid context. To exploit this, we enforce a local ranking constraint: the model’s confidence distribution should mir-ror the geometric error distribution within the elite candidate pool. We select the Top-M (M =5 ) proposals closest to the GT and construct a “geometric teacher” distribution qt that decays with spatial error ϵt:
+
+qkt = exp( −ϵkt /σ )
+
+P 
+
+> j
+
+exp( −ϵjt /σ ) , pkt = exp( skt )
+
+P 
+
+> j
+
+exp( sjt ) . (8) By minimizing the cross-entropy between the predicted dis-tribution pt and this geometric prior qt (with smoothing fac-tor σ = 15 px), i.e., L(t) 
+
+> rank
+
+= − P 
+
+> k
+
+qkt log pkt , we ensure that tracking confidence degrades smoothly rather than abruptly. This provides informative gradients for determining rela-tive quality among high-overlap candidates, preventing the tracker from discarding useful near-miss hypotheses. Overall, the final reranking loss is the weighted sum: 
+
+L(t) 
+
+> rerank
+
+= Lce + λgeo Lgeo + λrank Lrank , (9) where we empirically set λgeo = 0 .1 and λrank = 0 .5 to balance the relative gradient magnitudes across terms. 3.3.2. R EFINEMENT LOSS 
+
+Once the optimal proposal is selected, our goal is to fine-tune its geometry to precisely match the GT Bgt  
+
+> t
+
+. We super-vise the final refined box Brt by decoupling the regression task into two orthogonal components: translation alignment 
+
+and scale calibration .
+
+1. Center Alignment Loss ( Ldist ). To ensure precise lo-calization, we penalize the spatial displacement between the predicted center c(Brt ) and the GT center c(Bgt  
+
+> t
+
+). We employ a normalized Huber loss to be robust against outliers while maintaining sensitivity to small errors: 
+
+L(t) 
+
+> dist
+
+= LHuber 
+
+∥c(Brt ) − c(Bgt  
+
+> t
+
+)∥2
+
+√W 2 + H2
+
+!
+
+, (10) where the diagonal normalization factor √W 2 + H2 en-sures the loss magnitude is invariant to image resolution. 
+
+2. Log-Space Scale Loss ( Lscale ). Direct regression of width and height is sensitive to object scale variance; for instance, a 10-pixel error is negligible for large organs yet catastrophic for small instrument tips. To address this, we regress dimensions in logarithmic space, thereby equalizing relative errors across scales. Let s(B) = ( w, h ) be the size vector of box B. We define: 
+
+L(t) 
+
+> scale
+
+= LHuber 
+
+ log s(Brt ) − log s(Bgt  
+
+> t
+
+) . (11) The total refinement loss is a weighted combination: 
+
+L(t) 
+
+> refine
+
+= λdist L(t) 
+
+> dist
+
++ L(t)
+
+> scale
+
+, (12) where we set λdist =0 .1 to balance the gradients between translation and scaling tasks. 
+
+## 4. Experiments and Result Analysis 
+
+4.1. Implementation Details 
+
+We group baselines into four categories: (i) U-Net-based, (ii) regression-based, (iii) object-tracking-based, and (iv) 6Surgical Attention Tracking 
+
+Table 1. Quantitative comparison of attention heatmap prediction on SurgAtt-SZPH dataset using NSS, CC, SIM, MSE, and MAE. MODEL NSS ↑ CC ↑ SIM ↑ MSE ↓ MAE ↓                                                                                                    
+
+> U-Net–based
+> UNET (R ONNEBERGER ET AL ., 2015) 1.051 0.393 0.490 0.079 0.191 TRANS UN ET (C HEN ET AL ., 2021) 1.947 0.697 0.651 0.033 0.101 UN EXT(V ALANARASU & P ATEL , 2022) 1.964 0.712 0.646 0.029 0.109 EMCAD (R AHMAN ET AL ., 2024) 2.203 0.776 0.711 0.0261 0.089
+> Regression-based
+> SASN ET (S ONG ET AL ., 2021) 1.690 0.669 0.608 0.032 0.138 RCMN ET (X U ET AL ., 2025) 1.763 0.684 0.618 0.036 0.115 SAL FOM (M ORADI ET AL ., 2024) 2.030 0.702 0.647 0.028 0.094
+> Object Tracking–based
+> AQAT RACK (X IE ET AL ., 2024) 1.093 0.397 0.559 0.070 0.199 ODT RACK (Z HENG ET AL ., 2024) 1.343 0.212 0.572 0.068 0.193 SPMT RACK -B (C AI ET AL ., 2025) 1.720 0.571 0.643 0.060 0.149 LORAT-B (L IN ET AL ., 2024) 1.837 0.597 0.669 0.053 0.131 LORAT V2-B (L IN ET AL .) 1.853 0.649 0.676 0.047 0.126 MCIT RACK (K ANG ET AL ., 2025) 1.979 0.691 0.690 0.041 0.107
+> Detection-based
+> YOLO V11 (K HANAM & H USSAIN , 2024) 2.195 0.796 0.721 0.030 0.099 YOLO V12 (T IAN ET AL ., 2025) 2.285 0.793 0.723 0.028 0.090 RT-DETR (Z HAO ET AL ., 2023) 2.359 0.820 0.737 0.025 0.087 RT-DETR V2 (L V ET AL ., 2024) 2.370 0.822 0.739 0.024 0.086
+> SURG ATT -T RACKER (O URS )2.580 0.871 0.829 0.015 0.051
+
+detection-based methods. To enable fair comparison, we convert all model outputs into a normalized attention heatmap under a unified evaluation protocol; model-specific adaptations are deferred to the supplementary material. Fol-lowing prior works (Droste et al., 2020; Xu et al., 2025), we report five metrics: NSS, CC, SIM, MSE and MAE, where the former three assess distributional alignment and the latter two measure pixel errors. All frames are resized to 
+
+960 ×540 . We use AdamW (lr 1×10 −4) and run all experi-ments on a single NVIDIA A100. Additional implementa-tion details, including metrics, model-specific adaptations, training schedules, are provided in the appendix A.3 4.2. Main Results Evaluation and Visualization on SurgAtt-SZPH. We evaluate all baselines and SurgAtt-Tracker on SurgAtt-SZPH, training each model for 4 epochs. SurgAtt-Tracker first pre-trains the YOLOv12 detector for two epochs, then freezes it and optimizes the remaining modules (MSR, AS-Rerank, MAA-Refine) for another 2 epochs under a uni-fied training/inference setting. Table 1 compares attention heatmap prediction on SurgAtt-SZPH across four types of baselines. U-Net/regression baselines often produce dif-fuse attention with unstable peaks and limited temporal coherence, which caps both correlation (NSS/CC/SIM) and pixel-wise errors (MSE/MAE). This behavior is also ev-ident in Figure 4: EMCAD/SalFoM frequently spreads activation over a broad region and shifts the peak away from the GT focus, especially under cluttered tool appear-ances. Tracking-based methods introduce temporal cues but are primarily optimized for appearance/boundary con-sistency and can fail under target disappearance or multi-instrument interference (initialized with GT in our eval-uation), leading to accumulated drift. As shown in Fig-ure 4(B–C), MCITrack is more prone to mis-association when multiple instruments are present, yielding off-target 
+
+Table 2. Zero-shot and fine-tuning performance on the SurgAtt-AutoLaparo and SurgAtt-Hamlyn datasets. MODEL NSS ↑ CC ↑ SIM ↑ MSE ↓ MAE ↓
+
+SURG ATT -A UTO LAPARO 
+
+Zero-shot 
+
+EMCAD 1.378 0.593 0.648 0.077 0.214 SAL FOM 1.408 0.531 0.594 0.078 0.206 MCIT RACK 1.440 0.578 0.503 0.074 0.196 YOLO V12 1.551 0.658 0.520 0.059 0.146 RT-DETR V2 1.864 0.708 0.556 0.053 0.156 
+
+SURG ATT -T RACKER (O URS ) 1.949 0.721 0.575 0.035 0.088 
+
+Fine-tuning 
+
+YOLO V12 2.516 0.756 0.671 0.022 0.065 RT-DETR V2 2.715 0.773 0.708 0.019 0.058 
+
+SURG ATT -T RACKER (O URS ) 2.741 0.837 0.769 0.014 0.048 SURG ATT -H AMLYN 
+
+Zero-shot 
+
+EMCAD 1.098 0.552 0.603 0.211 0.359 SAL FOM 1.133 0.497 0.574 0.164 0.235 MCIT RACK 1.035 0.398 0.533 0.275 0.447 YOLO V12 1.171 0.575 0.640 0.081 0.198 RT-DETR V2 1.269 0.651 0.594 0.178 0.180 
+
+SURG ATT -T RACKER (O URS ) 1.693 0.686 0.711 0.046 0.128 
+
+Fine-tuning 
+
+YOLO V12 1.476 0.685 0.694 0.057 0.162 RT-DETR V2 1.744 0.764 0.740 0.037 0.126 
+
+SURG ATT -T RACKER (O URS ) 2.195 0.890 0.841 0.016 0.071 
+
+or over-smoothed heatmaps. Detection-based baselines are strongest overall; RT-DETRv2 achieves the best prior perfor-mance (NSS=2.370, CC=0.822, SIM=0.739), yet YOLOv12 confidence-driven per-frame ranking remains unreliable under occlusion, blur, and viewpoint changes. Qualita-tively, Figure 4(D) further highlights that smoke interference can disrupt per-frame selection, resulting in peak instability or spatial bias even for strong detectors. In contrast, SurgAtt-Tracker consistently outperforms all competitors, achieving (NSS=2.580, CC=0.871, SIM=0.829) with substantially lower errors (MSE=0.015, MAE=0.051). Compared with RT-DETRv2, our method improves NSS/CC/SIM by 8.9%/6.0%/12.2% and reduces MSE/MAE by 37.5%/40.7%. Consistent with these gains, Figure 4 shows that our predictions remain sharper and better aligned with GT across diverse scenarios (A–D), including multi-instrument clutter and smoke. Importantly, SurgAtt-Tracker runs at 12.5 FPS in an online setting, ap-proaching real-time capability for closed-loop endoscopic control. We further report per-scene performance on five SurgAtt-SZPH subsets in Appendix A.5.2 . Overall, these results validate our formulation of heatmap prediction as temporally consistent retrieval over a high-recall proposal set (AS-Rerank), followed by motion-conditioned continu-ous refinement (MAA-Refine). 
+
+Evaluation on SurgAtt-AutoLaparo and Hamlyn. Ta-ble 2 evaluates robustness under domain and resolution shifts on two surgical scenarios: uterine tumor resec-tion (AutoLaparo, 1920 ×1080 ) and nephrectomy (Ham-lyn, 384 ×192 ). In the zero-shot setting, SurgAtt-Tracker 7Surgical Attention Tracking 
+
+Figure 4. Qualitative comparison of attention heatmaps across diverse surgical scenarios: (A) single-instrument case; (B) multi-instrument without tissue interaction; (C) multi-instrument with tissue interaction; (D) multi-instrument with smoke interference. 
+
+Table 3. Reports detector-only best-case performance under three rules (Conf/MinErr/MaxIoU), serving as oracle baselines; SurgAtt-Tracker further incorporates AS-Rerank and MAA-Refine.                                              
+
+> METHOD RERANK REFINE ERR ↓IOU↑NSS ↑CC ↑MAE ↓
+> Detector-only baselines
+> YOLO V12 (C ONF )––52.192 0.589 2.285 0.793 0.090 YOLO V12 (M IN ERR )––30.408 0.649 2.525 0.857 0.063 YOLO V12 (M AX IOU) ––32.744 0.665 2.437 0.866 0.064
+> SurgAtt-Tracker
+> OURS (W/OREFINE )✓×36.975 0.627 2.313 0.823 0.079 OURS (FULL )✓✓27.525 0.690 2.580 0.871 0.051
+
+Table 4. Ablation on the rerank loss weight (Top-M ). TOP -M NSS ↑ CC ↑ SIM ↑ MSE ↓ MAE ↓
+
+0 1.973 0.729 0.621 0.047 0.144 3 2.379 0.859 0.792 0.024 0.086 5 2.580 0.871 0.829 0.015 0.051 
+
+7 2.195 0.812 0.753 0.033 0.107 
+
+achieves strong transfer on both datasets (AutoLaparo: NSS=1.949, MAE=0.088; Hamlyn: NSS=1.693, MAE =0.128). After fine-tuning , our performance further improves substantially over our zero-shot model, with NSS increasing by +40.6%/+29.7% and MAE reduced by 45.5%/44.5% on SurgAtt-AutoLaparo/Hamlyn, respectively, confirming the robustness and transferability of our frame-work across different pixel videos and scene variations (For more visual results, see the appendix Section A.5.2 ). 
+
+4.3. Ablation Studies Ablation on Reranking and Refinement. Table 3 diag-noses why detector confidence is not sufficient and verifies the complementary roles of our reranking and refinement. Although YOLOv12 is capable of producing high-quality candidates, its confidence-based Top-1 selection is often suboptimal: In contrast, an oracle choice within YOLOv12 proposals (MinErr / MaxIoU) reveals that better boxes al-ready exist in the candidate pool (Err = 30.41; IoU = 0.665). Building on this candidate pool, our AS-Rerank module 
+
+Table 5. Impact of temporal gap sampling during training. SAMPLE GAP NSS ↑ CC ↑ SIM ↑ MSE ↓ MAE ↓
+
+AVG GAP 2.592 0.863 0.788 0.045 0.090 RANDOM GAP 2.339 0.862 0.798 0.034 0.065 ARCHER GAP 2.580 0.871 0.829 0.015 0.051 
+
+effectively recovers better hypotheses by reordering propos-als according to temporal consistency, reducing localization error from 52.192 to 36.975 and improving NSS from 2.285 to 2.313 (see Appendix A.6 for detailed analysis of AS-Rerank). Adding MAA-Refine module reduces Err from 36.98 to 27.53, while consistently boosting heatmap metrics. 
+
+Ablation on Top-M Ranking. We ablate the Top-M set-ting in the Lrank . As shown in Table 4, performance im-proves from M =0 to M =5 but degrades when M is fur-ther increased. Top-5 supervision strikes a good balance between learning meaningful relative orderings and sup-pressing noisy candidates, yielding the best overall results. 
+
+Ablation on Temporal Sample Gap Training solely on adjacent pairs ( n=1 ) may lead to an identity short-cut, encouraging the model to copy the previous prior under slow motion and reducing robustness to rapid tool/camera motion. We therefore sample multi-scale tem-poral gaps during training: for each target frame t, we draw n ∼ Cat( N , P) with N = {1, 2, 4, 8, 16 , 32 } and 
+
+P = {0.4, 0.2, 0.1, 0.1, 0.1, 0.1}, and use r = t − n as the reference. Results in Table 5 confirm consistent gains in heatmap quality and localization stability over uniform and random sampling. 
+
+## 5. Conclusion 
+
+We introduce SurgAtt-1.16M , a large-scale benchmark uni-fied from multiple sources for studying surgical attention tracking across diverse organs and conditions, and propose 
+
+SurgAtt-Tracker , an holistic framework that tracks atten-8Surgical Attention Tracking 
+
+tion via proposal reranking and motion-aware refinement, achieving state-of-the-art results. Limitations include re-liance on detector proposal coverage, potential drift under prolonged occlusions or abrupt camera motion, and a cur-rent focus on attention estimation rather than camera control. Future work will integrate SurgAtt-Tracker into robotic sys-tems for safe, stable, and intent-aware endoscope control. 
+
+## Impact Statement 
+
+This research bridges a critical gap in medical robotics by providing the first large-scale benchmark to enable attention-aware endoscopic control. By open-sourcing SurgAtt-1.16M, we aim to democratize access to high-quality clinical data, accelerating the development of intelligent surgical assistants that can reduce procedural variability and cogni-tive fatigue. While our framework advances surgical auton-omy, we emphasize that attention tracking is probabilistic; clinical deployment requires rigorous “human-in-the-loop” validation to prevent potential misguidance during rare ad-verse events. All patient data in this study was strictly de-identified to safeguard privacy. 
+
+## References 
+
+Bihlmaier, A. and Woern, H. Automated endoscopic cam-era guidance: A knowledge-based system towards robot assisted surgery. In ISR/Robotik 2014; 41st International Symposium on Robotics , pp. 1–6. VDE, 2014. Cai, W., Liu, Q., and Wang, Y. Spmtrack: Spatio-temporal parameter-efficient fine-tuning with mixture of experts for scalable visual tracking. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 16871– 16881, 2025. Chen, J., Lu, Y., Yu, Q., Luo, X., Adeli, E., Wang, Y., Lu, L., Yuille, A. L., and Zhou, Y. Transunet: Transformers make strong encoders for medical image segmentation. 
+
+arXiv preprint arXiv:2102.04306 , 2021. Droste, R., Jiao, J., and Noble, J. A. Unified image and video saliency modeling. In European conference on computer vision , pp. 419–435. Springer, 2020. Dupont, P. E., Nelson, B. J., Goldfarb, M., Hannaford, B., Menciassi, A., O’Malley, M. K., Simaan, N., Valdastri, P., and Yang, G.-Z. A decade retrospective of medical robotics research from 2010 to 2020. Science robotics , 6 (60):eabi8017, 2021. Dupont, P. E., Simaan, N., Choset, H., and Rucker, C. Con-tinuum robots for medical interventions. Proceedings of the IEEE , 110(7):847–870, 2022. Fang, J., Li, L., Li, X., Mo, H., Guo, P., Xiao, X., and Qu, Y. A force-driven and vision-driven hybrid control method of autonomous laparoscope-holding robot. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pp. 5857–5863. IEEE, 2024. Fujii, K., Gras, G., Salerno, A., and Yang, G.-Z. Gaze gesture based human robot interaction for laparoscopic surgery. Medical image analysis , 44:196–214, 2018. Gao, H., Fan, W., Qiu, L., Yang, X., Li, Z., Zuo, X., Li, Y., Meng, M. Q.-H., and Ren, H. Savanet: Surgical action-driven visual attention network for autonomous endoscope control. IEEE Transactions on Automation Science and Engineering , 20(4):2655–2667, 2022. Gao, Y., Li, Z., Zhao, J., Li, J., and Li, J. A human–ai collab-orative framework for surgical field-of-view adjustment: design and experimental validation. Journal of Robotic Surgery , 19(1):259, 2025. Giannarou, S., Stoyanov, D., Noonan, D., Mylonas, G., Clark, J., Visentini-Scarzanella, M., Mountney, P., and Yang, G.-Z. Hamlyn centre laparoscopic / endoscopic video datasets. URL https://hamlyn.doc.ic. ac.uk/vision/ .Gruijthuijsen, C., Garcia-Peraza-Herrera, L. C., Borghesan, G., Reynaerts, D., Deprest, J., Ourselin, S., Vercauteren, T., and Vander Poorten, E. Robotic endoscope control via autonomous instrument tracking. Frontiers in Robotics and AI , 9:832208, 2022. Huang, Y., Li, J., Zhang, X., Xie, K., Li, J., Liu, Y., Ng, C. S. H., Chiu, P. W. Y., and Li, Z. A surgeon preference-guided autonomous instrument tracking method with a robotic flexible endoscope based on dvrk platform. IEEE Robotics and Automation Letters , 7(2):2250–2257, 2022. Kang, B., Chen, X., Lai, S., Liu, Y., Liu, Y., and Wang, D. Exploring enhanced contextual information for video-level object tracking. In Proceedings of the AAAI Confer-ence on Artificial Intelligence , volume 39, pp. 4194–4202, 2025. Khanam, R. and Hussain, M. Yolov11: An overview of the key architectural enhancements. arXiv preprint arXiv:2410.17725 , 2024. Langley, P. Crafting papers on machine learning. In Langley, P. (ed.), Proceedings of the 17th International Conference on Machine Learning (ICML 2000) , pp. 1207–1216, Stan-ford, CA, 2000. Morgan Kaufmann. Li, B., Lu, B., Lu, Y., Dou, Q., and Liu, Y.-H. Data-driven holistic framework for automated laparoscope optimal view control with learning-based depth perception. In 
+
+2021 IEEE International Conference on Robotics and Automation (ICRA) , pp. 12366–12372. IEEE, 2021. 9Surgical Attention Tracking 
+
+Li, B., Wei, R., Xu, J., Lu, B., Yee, C. H., Ng, C. F., Heng, P.-A., Dou, Q., and Liu, Y.-H. 3d perception based imita-tion learning under limited demonstration for laparoscope control in robotic surgery. In 2022 International Confer-ence on Robotics and Automation (ICRA) , pp. 7664–7670. IEEE, 2022. Li, B., Lu, Y., Chen, W., Lu, B., Zhong, F., Dou, Q., and Liu, Y.-H. Gmm-based heuristic decision framework for safe automated laparoscope control. IEEE Robotics and Automation Letters , 9(2):1969–1976, 2024. Lin, L., Fan, H., Zhang, Z., Huang, Y., Wang, Y., Xu, Y., and Ling, H. Loratv2: Enabling low-cost temporal mod-eling in one-stream trackers. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .Lin, L., Fan, H., Zhang, Z., Wang, Y., Xu, Y., and Ling, H. Tracking meets lora: Faster training, larger model, stronger performance. In ECCV , 2024. Lv, W., Zhao, Y., Chang, Q., Huang, K., Wang, G., and Liu, Y. Rt-detrv2: Improved baseline with bag-of-freebies for real-time detection transformer, 2024. URL https: //arxiv.org/abs/2407.17140 .Merola, S., Weber, P., Wasielewski, A., and Ballantyne, G. H. Comparison of laparoscopic colectomy with and without the aid of a robotic camera holder. Surgical Laparoscopy Endoscopy & Percutaneous Techniques , 12 (1):46–51, 2002. Moradi, M., Moradi, M., Rundo, F., Spampinato, C., Borji, A., and Palazzo, S. Salfom: Dynamic saliency prediction with video foundation models. In International Confer-ence on Pattern Recognition , pp. 33–48. Springer, 2024. Rahman, M. M., Munir, M., and Marculescu, R. Emcad: Efficient multi-scale convolutional attention decoding for medical image segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 11769–11779, 2024. Rivas-Blanco, I., Perez-del Pulgar, C. J., L ´opez-Casado, C., Bauzano, E., and Mu ˜noz, V. F. Transferring know-how for an autonomous camera robotic assistant. Electronics ,8(2):224, 2019. Ronneberger, O., Fischer, P., and Brox, T. U-net: Convolu-tional networks for biomedical image segmentation. In In-ternational Conference on Medical image computing and computer-assisted intervention , pp. 234–241. Springer, 2015. Sandoval, J., Laribi, M. A., Faure, J.-P., Br `eque, C., Richer, J.-P., and Zeghloul, S. Towards an autonomous robot-assistant for laparoscopy using exteroceptive sensors: Feasibility study and implementation. IEEE Robotics and Automation Letters , 6(4):6473–6480, 2021. Song, Q., Wang, C., Wang, Y., Tai, Y., Wang, C., Li, J., Wu, J., and Ma, J. To choose or to fuse? scale selection for crowd counting. In Proceedings of the AAAI confer-ence on artificial intelligence , volume 35, pp. 2576–2583, 2021. Taylor, R. H., Menciassi, A., Fichtinger, G., Fiorini, P., and Dario, P. Medical robotics and computer-integrated surgery. In Springer handbook of robotics , pp. 1657–1684. Springer, 2016. Tian, Y., Ye, Q., and Doermann, D. Yolov12: Attention-centric real-time object detectors. arXiv preprint arXiv:2502.12524 , 2025. Valanarasu, J. M. J. and Patel, V. M. Unext: Mlp-based rapid medical image segmentation network. In International conference on medical image computing and computer-assisted intervention , pp. 23–33. Springer, 2022. Wang, B., Zhang, J., Pan, Z., Zhao, S., Li, M., and Liu, H. Automatic field-of-view adjustment for multi-surgical tools of a novel continuum laparoscopic robot. Measure-ment , 257:118544, 2026. Wang, Z., Lu, B., Long, Y., Zhong, F., Cheung, T.-H., Dou, Q., and Liu, Y. Autolaparo: A new dataset of integrated multi-tasks for image-guided surgical automation in la-paroscopic hysterectomy. In International Conference on Medical Image Computing and Computer-Assisted Intervention , pp. 486–496. Springer, 2022. Xie, J., Zhong, B., Mo, Z., Zhang, S., Shi, L., Song, S., and Ji, R. Autoregressive queries for adaptive tracking with spatio-temporal transformers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 19300–19309, 2024. Xu, M., Mo, W., Wang, G., Gao, H., Wang, A., Bai, L., Lyu, C., Yang, X., Li, Z., and Ren, H. Etsm: Automating dis-section trajectory suggestion and confidence map-based safety margin prediction for robot-assisted endoscopic submucosal dissection. In 2025 IEEE International Con-ference on Robotics and Automation (ICRA) , pp. 4513– 4519. IEEE, 2025. Yang, B., Chen, W., Wang, Z., Lu, Y., Mao, J., Wang, H., and Liu, Y.-H. Adaptive fov control of laparoscopes with programmable composed constraints. IEEE Transactions on Medical Robotics and Bionics , 1(4):206–217, 2019. Zhang, C., Zhu, W., Peng, J., Han, Y., and Liu, W. Visual servo control of endoscope-holding robot based on multi-objective optimization: System modeling and instrument tracking. Measurement , 211:112658, 2023. Zhao, Y., Lv, W., Xu, S., Wei, J., Wang, G., Dang, Q., Liu, Y., and Chen, J. Detrs beat yolos on real-time object detection, 2023. 10 Surgical Attention Tracking 
+
+Zheng, Y., Zhong, B., Liang, Q., Mo, Z., Zhang, S., and Li, X. Odtrack: Online dense temporal token learning for visual tracking. In Proceedings of the AAAI conference on artificial intelligence , volume 38, pp. 7588–7596, 2024. 11 Surgical Attention Tracking 
+
+## A. Appendix 
+
+A.1. Dataset Processing and Detailed Supplementation   
+
+> Figure 5. Construction pipeline of the SurgAtt-SZPH dataset. Raw laparoscopic videos are curated into high-quality surgical clips via optical-flow–based operation analysis and expert screening. Videos are sampled at 25 fps and grouped into five representative surgical scenes. During annotation, surgeons mark attention regions with bounding boxes, which are converted into continuous attention heatmaps for supervision. The resulting dataset provides dense, high-fidelity attention annotations across diverse surgical scenarios.
+
+A.1.1. D ATASET ANNOTATION PIPLINE 
+
+The curation process is illustrated in Figure 5 and consists of two stages to efficiently obtain informative and clinically meaningful attention supervision. 
+
+Stage 1 (a1): motion-based mining Starting from 142 hours of raw endoscopic videos, we run RAFT optical flow to estimate frame-to-frame motion and discard temporally static or low-motion segments that typically contain limited viewpoint changes and weak attention transitions. This step narrows the search space to segments with moderate activity, improving annotation efficiency while preserving diverse camera motions and instrument–tissue interactions. 
+
+Stage 2 (a2): clinician screening Candidate segments are reviewed by expert surgeons to ensure clinical relevance and data quality, using four criteria: (1) operational complexity, (2) coverage of common surgical instruments, (3) inclusion of representative procedures, and (4) correctness of surgical operations. We then sample 30 minutes per patient and split them into clips of 4–8 minutes to balance temporal continuity with manageable clip length. The resulting SurgAtt-SZPH subset covers five surgical sites (High/Middle/Low Rectum, Distal/Proximal Stomach) and contains 125 clips with about 1M frames at 25 fps. 
+
+Annotation motivation Rather than exhaustively segmenting objects, surgeons label a single box that captures the clinically attended region (e.g., the active dissection area or target anatomy) per frame, which is then converted into a normalized attention heatmap. This design (i) aligns supervision with surgeon intent and viewpoint control, (ii) yields dense, temporally coherent targets suitable for tracking and heatmap evaluation, and (iii) substantially reduces annotation cost compared with pixel-level labeling while remaining robust to appearance ambiguity in endoscopic scenes. 12 Surgical Attention Tracking 
+
+Table 6. SurgAtt-1.16M forms a complete benchmark by aggregating three subsets under a unified annotation protocol, and summarizes the data source, organ, procedure, image resolution, and the number of frames in the train/test splits.                                          
+
+> DATASET NAME DATA SOURCE SURGICAL ORGAN PROCEDURE IMAGE SIZE TRAIN TEST TOTAL
+> SURG ATT -SZPH ANONYMOUS HOSPITAL RECTUM , S TOMACH RECTAL AND GASTRIC CANCER RESECTIONS 1920 X1080 800,000 200,000 1,000,000 SURG ATT -A UTO LAPARO AUTO LAPARO UTERUS HYSTERECTOMY 1920 X1080 60,000 15,000 75,000 SURG ATT -H AMLYN HAMLYN CENTRE KIDNEY NEPHRECTOMY 384 X192 68,478 14,380 82,858
+> SURG ATT -1.16M AGGREGATED MULTIPLE MULTIPLE LAPAROSCOPIC PROCEDURES MULTIPLE 928,478 229,380 1,157,858
+
+Table 7. Two-stage curation and annotation pipeline for the SurgAtt-SZPH (SurgAtt-1M) subset. We first mine informative surgical segments via optical-flow–based motion filtering (A), then clinicians select high-quality clips under four clinical criteria (B), and finally surgeons annotate attention boxes that are converted into attention heatmaps at 25 fps across five surgical sites (C). CATEGORY DISTAL GASTRIC PROXIMAL GASTRIC HIGH RECTUM MIDDLE RECTUM LOW RECTUM TOTAL 
+
+SPLIT TRAIN TEST TRAIN TEST TRAIN TEST TRAIN TEST TRAIN TEST 
+
+PATIENTS 4 1 4 1 4 1 4 1 4 1 25 VIDEOS 20 5 20 5 20 5 20 5 20 5 125 FRAMES 180K 45K 180K 45K 180K 45K 180K 45K 180K 45K 1.12M 
+
+A.1.2. S URG ATT -1.16M D ATASET DETAILS SUPPLEMENT .
+
+Dataset statistics and composition. Table 7 reports detailed statistics of the SurgAtt-SZPH subset, stratified by five surgical sites (Distal/Proximal Gastric and High/Middle/Low Rectum). We adopt a patient-level split for each site to avoid identity leakage: each site contains 5 patients, with 4 patients for training and 1 patient for testing. In total, SurgAtt-SZPH includes 25 patients and 125 surgical clips. The clips are obtained by sampling comparable-duration segments per patient and segmenting them into multiple shorter videos, yielding a balanced number of clips per site (Train/Test = 20/5) and a near-uniform frame budget per site (Train/Test = 180K/45K), for an overall size of 1.12M frames. These balanced per-site statistics enable controlled evaluation of attention tracking under different anatomical regions and surgical contexts. 
+
+Full benchmark aggregation. Table 6 summarizes the full SurgAtt-1.16M benchmark, which aggregates SurgAtt-SZPH with re-labeled versions of AutoLaparo and Hamlyn . Specifically, AutoLaparo contributes uterus/hysterectomy cases, and Hamlyn provides kidney/nephrectomy cases with different visual characteristics and resolutions. We re-annotate these external sources under the same attention definition and heatmap generation protocol as SurgAtt-SZPH, so that all subsets can be evaluated with a unified metric suite and a consistent preprocessing pipeline. As a result, SurgAtt-1.16M expands organ/procedure coverage while preserving annotation consistency, supporting both in-domain studies on SurgAtt-SZPH and cross-domain generalization evaluation on heterogeneous surgical settings. 
+
+A.2. Heatmap Generation Details 
+
+Given a discrete sequence of per-frame attention boxes, we convert box annotations into dense ground-truth attention maps by (i) mapping each box to a box-aligned anisotropic Gaussian kernel, (ii) temporally accumulating kernels with exponential decay to simulate visual persistence, and (iii) applying smoothing and robust normalization to obtain a bounded heatmap in 
+
+[0 , 1] , as shown in Figure 6. 
+
+Box-to-kernel mapping. For a frame t, each annotated box Bit = ( cx, c y , w, h ) (center, width, height; in pixels after resizing to the evaluation resolution) is mapped to an anisotropic Gaussian kernel G(x; μit, Σit), with mean μit = ( cx, c y ) and diagonal covariance Σit = diag( σ2
+
+> x
+
+, σ 2 
+
+> y
+
+). Following our implementation, we set σx = max(1 , s w ) and σy = max(1 , s h )
+
+with scale factor s (default s = 0 .45 ), and evaluate the kernel within a truncated window of ±3σ along each axis for efficiency. When multiple boxes are present in the same frame, we aggregate them by summation: 
+
+˜Gt(x) = X
+
+> i
+
+a(wi, h i) G(x; μit, Σit), (13) where a(w, h ) is an optional area compensation term to reduce scale bias. By default, we use a(w, h ) = 1 /pmax( wh, 1) 
+
+(“sqrt”), which prevents large boxes from dominating the heatmap solely due to their area. 13 Surgical Attention Tracking  
+
+> Figure 6. Visualization of heatmap generation.
+
+Temporal accumulation (visual persistence). We simulate human visual persistence by exponentially decaying the previous density map and adding the current-frame kernel: 
+
+Mt(x) = (1 − α) Mt−1(x) + ˜Gt(x), M0 = 0, (14) where α ∈ (0 , 1) controls memory length (default α = 0 .22 ). If frame t has no valid annotation, we simply apply the decay term, i.e., ˜Gt ≡ 0.
+
+Post-processing and robust normalization. To reduce high-frequency artifacts and improve spatial coherence, we apply Gaussian smoothing with kernel size k (default k = 9 ): 
+
+St = G(Mt; k). (15) We then normalize by a robust upper bound using the p-th percentile Qp(St) (default p = 99 .5) to suppress outliers and stabilize dynamic range: 
+
+Ht = clip 
+
+ St
+
+max( Qp(St), ϵ ) , 0, 1
+
+
+
+, (16) where ϵ is a small constant. The resulting Ht ∈ [0 , 1] is stored as a grayscale map and optionally visualized by overlaying a colorized heatmap on the resized frame. 
+
+Implementation notes. All boxes are parsed from YOLO-format labels (normalized (cx, c y , w, h )) and converted to pixel coordinates under a fixed output resolution (default 960 × 540 ). The kernel is peak-normalized and truncated to ±3σ, and we optionally inflate the box scale prior to kernel generation (default inflation 0). Unless stated otherwise, we use α = 0 .22 ,
+
+s = 0 .45 , k = 9 , and p = 99 .5 throughout. 
+
+A.3. Evaluation Metric Definitions 
+
+Let P ∈ [0 , 1] H×W be the predicted attention heatmap and G ∈ [0 , 1] H×W the ground-truth heatmap for a frame, both normalized to [0 , 1] . Let N = HW and denote by Pi and Gi the i-th pixel after vectorization. 
+
+MAE. 
+
+MAE( P, G ) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+|Pi − Gi| . (17) 
+
+MSE. 
+
+MSE( P, G ) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+(Pi − Gi)2 . (18) 
+
+CC (Pearson correlation coefficient). Let μP = 1
+
+> N
+
+PNi=1 Pi and μG = 1
+
+> N
+
+PNi=1 Gi. Then 
+
+CC( P, G ) = 
+
+PNi=1 (Pi − μP )( Gi − μG)
+
+qPNi=1 (Pi − μP )2
+
+qPNi=1 (Gi − μG)2 + ϵ, (19) where ϵ is a small constant for numerical stability. 14 Surgical Attention Tracking 
+
+SIM (histogram intersection). We first form ℓ1-normalized non-negative maps: 
+
+ˆPi = max( Pi, 0) 
+
+PNj=1 max( Pj , 0) + ϵ , ˆGi = max( Gi, 0) 
+
+PNj=1 max( Gj , 0) + ϵ . (20) If the denominator is zero (i.e., the map sums to zero), we use a uniform distribution ˆPi = 1 
+
+> N
+
+(and similarly for ˆG). SIM is then defined as 
+
+SIM( P, G ) = 
+
+> N
+
+X
+
+> i=1
+
+min( ˆPi, ˆGi). (21) 
+
+NSS (Normalized Scanpath Saliency). For NSS, we follow a standard saliency protocol by z-normalizing the prediction and averaging scores on ground-truth salient locations, where salient locations are defined as the top 5% pixels of the ground-truth heatmap. We z-normalize the prediction map: 
+
+P zi = Pi − μP
+
+σP + ϵ , σP =
+
+vuut 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+(Pi − μP )2. (22) Since our supervision provides dense heatmaps, we construct a binary salient-location mask F ∈ { 0, 1}H×W from G by thresholding at the per-image top-quantile: 
+
+Fi = I[Gi ≥ Qq (G)] , (23) where Qq (G) denotes the q-quantile of pixel values in G and we use q = 0 .95 (top 5% pixels) in all experiments. Finally, 
+
+NSS( P, G ) = 1
+
+PNi=1 FiNX
+
+> i=1
+
+P zi Fi, (24) with the denominator clamped to at least 1 for numerical stability. 
+
+A.4. Unified Training and Inference Pipeline 
+
+Alg. 1 summarizes the end-to-end pipeline used by SurgAtt-Tracker for both training and online inference. Given a video clip {It}Tt=1 , a frozen detector D(·) is applied to each queried frame to produce (i) a Top-K proposal set Bt = {Bkt }Kk=1 
+
+and (ii) multi-scale neck features Fyt . The tracker then uses a reference frame r and a reference box Bsr to compute a reference ROI embedding fr , which conditions proposal reranking on the target frame t.
+
+Training gap sampling. Using only adjacent pairs ( r = t − 1) during training may over-emphasize near-static transitions and encourage a shortcut where the refiner behaves almost as identity, i.e., simply propagating the previous spatial prior while still achieving low loss. To expose the model to diverse displacements and fast tool motion, we sample the temporal gap n from a categorical distribution n ∼ Cat( N , P) with N = {1, 2, 4, 8, 16 , 32 } and P = {0.4, 0.2, 0.1, 0.1, 0.1, 0.1},and set r = t − n in training. 
+
+Training mode. For each target frame t ≥ 2, we sample a gap n and set r = t − n (clipped to the valid range if necessary). We run the detector on both frames Ir and It to obtain (Br , Fyr ) and (Bt, Fyt ). To avoid teacher-forcing mismatch while keeping the optimization stable, we construct the reference box Bsr via an oracle selection on frame r:
+
+among valid detector proposals, choose the one with minimum center error to the ground-truth box Bgt  
+
+> r
+
+. Then we extract the reference ROI embedding fr = MSR( Fyr , B sr ) and the target proposal embeddings {f kt }Kk=1 = MSR( Fyt , Bt) using the same multi-scale ROI extractor MSR( ·). The reranker AS -Rerank outputs scores {skt }Kk=1 conditioned on fr , from which we select ˆkt = arg max k skt and obtain the Top-1 box ˆBt and its embedding ˆft. Finally, the refiner MAA -Refine 
+
+predicts the refined box Brt using the selected embedding and a motion-geometry descriptor Geo( ˆBt, B sr ). All losses are computed on frame t only (reranking supervision and refinement regression), while r serves as a reference for conditioning. 
+
+Inference mode. At test time, the same modules are executed online with a one-step reference ( n = 1 , r = t − 1), and the reference box is set to the previous prediction, Bsr ← ˆBt−1. This matches the realistic tracking condition where only past predictions are available. We then rerank the Top-K proposals on It, select ˆBt, refine it to Brt , and optionally render the attention heatmap Ht = Heat( Fyt , B rt ).15 Surgical Attention Tracking 
+
+Algorithm 1 Unified Training and Inference of SurgAtt-Tracker  
+
+> 1:
+
+Input: frames {It}Tt=1 ; training only: GT boxes {Bgt  
+
+> t
+
+} 
+
+> 2:
+
+Mode: mode ∈ { TRAIN , INFER } 
+
+> 3:
+
+Train gaps: N = {1, 2, 4, 8, 16 , 32 }, P = {0.4, 0.2, 0.1, 0.1, 0.1, 0.1} 
+
+> 4:
+
+Initialize ˆB1 (e.g., detector Top-1 on I1) 
+
+> 5:
+
+for t = 2 to T do  
+
+> 6:
+
+if mode = TRAIN then  
+
+> 7:
+
+n ← SampleGap( N , P), r ← t − n 
+
+> 8:
+
+else  
+
+> 9:
+
+n ← 1, r ← t − 1 
+
+> 10:
+
+end if  
+
+> 11:
+
+(Br , Fyr ) ← D(Ir ), (Bt, Fyt ) ← D(It) 
+
+> 12:
+
+if mode = TRAIN then  
+
+> 13:
+
+Bsr ← BoxSelection( Br , B gt  
+
+> r
+
+) 
+
+> 14:
+
+else  
+
+> 15:
+
+Bsr ← ˆBt−1 
+
+> 16:
+
+end if  
+
+> 17:
+
+fr ← MSR( Fyr , B sr ) 
+
+> 18:
+
+{f kt }Kk=1 ← MSR( Fyt , Bt) 
+
+> 19:
+
+{skt }Kk=1 ← AS -Rerank( fr , {f kt }Kk=1 ) 
+
+> 20:
+
+ˆkt ← arg max k skt 
+
+> 21:
+
+ˆBt ← Bˆkt 
+
+> t
+
+, ˆft ← f ˆkt 
+
+> t
+> 22:
+
+Brt ← MAA -Refine( ˆft, Geo( ˆBt, B sr ))  
+
+> 23:
+
+Ht ← Heat( Fyt , B rt ) 
+
+> 24:
+
+end for A.5. Additional Experimental Setting and Results 
+
+A.5.1. E XPERIMENTAL SETTING 
+
+Baseline implementation details. To ensure a fair and consistent comparison, we follow a unified evaluation protocol and adopt minimal, task-aligned adaptations for different categories of baselines. 
+
+U-Net–based methods. For U-Net–based attention models, we strictly preserve the original network architectures and do not introduce any structural modifications. The only change is to replace the original loss with a binary cross-entropy (BCE) loss computed against the ground-truth attention heatmaps. All models are trained to directly predict a single-channel, normalized heatmap in [0 , 1] , which is evaluated under the same metric suite as our method. 
+
+Regression-based methods. For regression-based baselines, we do not alter either the network architecture or the original loss formulation. These models are trained and evaluated directly on our dataset following their default settings, with their predicted outputs converted into normalized attention heatmaps when necessary for metric computation. 
+
+Object-tracking–based methods. For object-tracking approaches, we adopt a YOLO-style annotation format to ensure training consistency across datasets. During inference, we provide the ground-truth bounding box of the first frame as initialization, following standard tracking evaluation protocols. The tracker then propagates bounding boxes over time, and the resulting box sequences are converted into attention heatmaps using the same box-to-heatmap generation procedure as described in Section A.2. These heatmaps are evaluated using identical attention metrics. 
+
+Detection-based methods. Detection-based baselines are trained using the YOLO format without architectural modification. At inference time, detected bounding boxes are transformed into attention heatmaps using the same generation strategy as above, enabling direct comparison with tracking- and heatmap-based approaches under a unified evaluation framework. 16 Surgical Attention Tracking  
+
+> Figure 7. Radar plots on five subsets (Distal/Proximal Gastric Cancer, Low/Middle/High Rectum) comparing representative SOTA methods over NSS/CC/SIM (higher better) and MSE/MAE (lower better).
+
+A.5.2. M AIN EXPERIMENT VISUALIZATION AND ANALYSIS 
+
+Per-scene analysis on SurgAtt-SZPH. Figure 7 visualizes a per-scene comparison across five SurgAtt-SZPH subsets, covering two gastric cancer scenes (distal/proximal) and three rectum scenes (low/middle/high). Each radar plot summa-rizes five complementary metrics: NSS, CC, and SIM evaluate alignment between predicted and ground-truth attention distributions (higher is better), while MSE and MAE measure pixel-wise heatmap errors (lower is better). Across all scenes, 
+
+SurgAtt-Tracker consistently forms the outer envelope on NSS/CC/SIM while remaining closest to the optimal low-error region on MSE/MAE, indicating both stronger correlation and sharper localization. Notably, the improvements persist under diverse scene characteristics (e.g., varying anatomy, viewpoint changes, and instrument interactions), suggesting that our temporal-consistent reranking and motion-aware refinement generalize reliably beyond any single surgical condition. 
+
+Qualitative analysis on SurgAtt-SZPH. Figure 4 presents qualitative comparisons of attention heatmap predictions on the SurgAtt-SZPH dataset across five representative surgical scenarios: Low Rectum, Middle Rectum, High Rectum, Distal Gastric Cancer, and Proximal Gastric Cancer. Each row shows the ground-truth attention heatmap and predictions from representative detection-, tracking-, saliency-, and segmentation-based baselines, together with our method. Across all scenarios, SurgAtt-Tracker produces attention maps that are both spatially concentrated and well aligned with clinically relevant regions. In rectal surgery scenes (A–C), where attention often shifts subtly along tissue boundaries or instrument–tissue interaction zones, our predictions closely match the ground truth in both location and extent. In contrast, detection-based methods (e.g., YOLOv12, RT-DETRv2) tend to generate coarse or overly centralized responses that fail to adapt to fine-grained attention shifts, while object-tracking methods (e.g., MCITrack) may drift toward instruments or background regions when visual cues become ambiguous. In gastric cancer scenarios (D–E), which typically involve larger anatomical structures and more pronounced camera motion, saliency- and segmentation-based methods (e.g., SalFoM, EMCAD) often produce diffuse or over-smoothed heatmaps, spreading attention across broad regions and reducing localization precision. Our method maintains compact, single-mode attention distributions that remain centered on the surgical target despite specular highlights, smoke, or partial occlusions. This robustness is attributed to the combination of proposal-level temporal reranking, which stabilizes attention selection over time, and motion-aware refinement, which constrains updates under rapid viewpoint changes. Overall, these qualitative results are consistent with the quantitative improvements reported in the main paper and appendix. 17 Surgical Attention Tracking   
+
+> Figure 8. Qualitative comparison of attention heatmap predictions on SurgAtt-SZPH across five surgical scenarios. SurgAtt-Tracker produces sharper and more stable attention aligned with clinically relevant regions compared with representative SOTA baselines.
+> Figure 9. Qualitative comparison on SurgAtt-Hamlyn under zero-shot and fine-tuning settings. SurgAtt-Tracker shows more stable and better-localized attention than RT-DETRv2 and YOLOv12 across both regimes.
+
+They demonstrate that modeling surgical attention as temporally consistent retrieval over a high-recall proposal set, followed by motion-conditioned continuous refinement, yields attention heatmaps that are sharper, more stable, and more clinically interpretable across diverse surgical scenes. 
+
+Zero-shot and fine-tuning generalization analysis. Figures 9 and 10 present qualitative comparisons on the SurgAtt-Hamlyn and SurgAtt-AutoLaparo datasets, evaluating three representative SOTA methods (RT-DETRv2, YOLOv12, and our approach) under both zero-shot and fine-tuning settings. These datasets differ substantially from SurgAtt-SZPH in organ type, surgical procedure, imaging resolution, and visual appearance, providing a challenging testbed for cross-domain generalization. In the zero-shot setting, SurgAtt-Tracker demonstrates strong robustness to domain shifts. On SurgAtt-Hamlyn, which involves kidney surgery with smaller target regions and frequent instrument occlusions, our method consistently produces compact and well-localized attention heatmaps that remain aligned with the clinically relevant regions. In contrast, detection-based baselines often exhibit either spatial drift or over-smoothed responses, particularly when specular highlights or motion blur dominate the scene. Similar trends are observed on SurgAtt-AutoLaparo, where changes in organ texture and instrument appearance cause competing methods to spread attention across large regions, while our predictions remain stable. 18 Surgical Attention Tracking  
+
+> Figure 10. Qualitative comparison on SurgAtt-AutoLaparo under zero-shot and fine-tuning settings. Our method maintains compact and consistent attention maps under domain shift and further improves after fine-tuning.
+
+Under the fine-tuning setting, all methods benefit from domain-specific supervision; however, notable qualitative differences persist. While RT-DETRv2 and YOLOv12 improve localization accuracy, their predictions often remain sensitive to background clutter or instrument dominance. SurgAtt-Tracker further sharpens attention boundaries and maintains temporal consistency, producing single-mode heatmaps that better match the ground truth across diverse frames. This suggests that the gains of our approach stem not only from fine-tuning but also from its design principles—namely, proposal-level temporal reranking and motion-aware refinement, which explicitly model attention evolution over time. These qualitative results indicate that SurgAtt-Tracker generalizes more effectively across datasets in the zero-shot regime and continues to provide stable, well-aligned attention estimates after fine-tuning. The observed behavior is consistent with our quantitative results and supports the effectiveness of decoupling attention selection from motion-conditioned refinement when transferring across heterogeneous surgical domains. 
+
+A.6. Additional Ablation Study   
+
+> Figure 11. Top-Kanalysis of proposal ranking quality. AS-Rerank reorders the same YOLOv12 candidate pool using temporal consistency, increasing the likelihood that oracle-best proposals (Min-Err / Max-IoU) appear in the first few ranks.
+
+AS-Rerank contributes. We adopt a strong detector (YOLOv12) as a high-recall proposal generator rather than a final decision maker. In surgical scenes, detector confidence is often poorly calibrated to clinical attention quality due to specular highlights, smoke, blood occlusion, and frequent appearance changes of instruments and tissues. As a result, selecting the Top-1 box purely by confidence can miss the most attention-aligned region, even when it is already present in the Top-K
+
+candidate set. Figure 11 provides evidence for this design choice. The plot reports, for each Top-K, the fraction of frames where the best 
+
+proposal (defined by oracle criteria such as minimum center error or maximum IoU w.r.t. the annotated box) appears within the top ranks. We observe that YOLOv12 indeed produces high-quality hypotheses early in the list, but these hypotheses are not consistently ranked as Top-1 under confidence. After applying AS-Rerank, the same candidate pool is reordered by temporal consistency, which increases the likelihood that the oracle-best proposal is promoted into the first few ranks (especially Top-1/Top-2). This directly explains why the reranking-only variant improves both localization quality and 19 Surgical Attention Tracking 
+
+downstream heatmap metrics without changing the detector backbone: AS-Rerank does not create new boxes; it recovers better hypotheses already present in the candidate set by leveraging temporal coherence. Finally, building on the reranked Top-1 hypothesis, MAA-Refine further reduces residual localization error by conditioning the correction on motion cues from the reference state, yielding additional gains beyond reranking alone. Together, these results justify our two-stage design: a high-recall detector to provide diverse candidates, temporal reranking to select the most consistent attention hypothesis, and motion-aware refinement to obtain a precise and stable final prediction. 20

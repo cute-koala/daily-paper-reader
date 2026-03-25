@@ -1,0 +1,1234 @@
+Title: SiamGM: Siamese Geometry-Aware and Motion-Guided Network for Real-Time Satellite Video Object Tracking
+
+URL Source: https://arxiv.org/pdf/2603.07564v1
+
+Published Time: Tue, 10 Mar 2026 01:12:38 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> 1
+
+# SiamGM: Siamese Geometry-Aware and Motion-Guided Network for Real-Time Satellite Video Object Tracking 
+
+Zixiao Wen, Graduate Student Member, IEEE, Zhen Yang, Jiawei Li, Xiantai Xiang, Guangyao Zhou, Yuxin Hu, and Yuhan Liu, Member, IEEE 
+
+Abstract —Single object tracking in satellite videos is inherently challenged by small target, blurred background, large aspect ratio changes, and frequent visual occlusions. These constraints often cause appearance-based trackers to accumulate errors and lose targets irreversibly. To systematically mitigate both spatial ambiguities and temporal information loss, we propose SiamGM, a novel geometry-aware and motion-guided Siamese network. From a spatial perspective, we introduce an Inter-Frame Graph Attention (IFGA) module, closely integrated with an Aspect Ratio-Constrained Label Assignment (LA) method, establishing fine-grained topological correspondences and explicitly prevent-ing surrounding background noise. From a temporal perspective, we introduce the Motion Vector-Guided Online Tracking Opti-mization method. By adopting the Normalized Peak-to-Sidelobe Ratio (nPSR) as a dynamic confidence indicator, we propose an Online Motion Model Refinement (OMMR) strategy to utilize historical trajectory information. Evaluations on two challenging SatSOT and SV248S benchmarks confirm that SiamGM outper-forms most state-of-the-art trackers in both precision and success metrics. Notably, the proposed components of SiamGM introduce virtually no computational overhead, enabling real-time tracking at 130 frames per second (FPS). Codes and tracking results are available at https://github.com/wenzx18/SiamGM. 
+
+Index Terms —Single object tracking, satellite video, siamese network, geometry-aware, motion-guided, real-time. 
+
+I. I NTRODUCTION 
+
+# SATELLITE Video Object Tracking (SVOT) has emerged as a critical research area in computer vision, driven by the increasing availability of spaceborne remote sensing imagery and the growing demand for real-time applications such as intelligent surveillance, environmental monitoring, and disaster response [1]. Among them, single object tracking (SOT), as an important branch, aims to continuously track a specific target throughout satellite videos (SVs). Unlike multiple object tracking (MOT), SOT requires exceptionally higher robustness and efficiency. Any momentary tracking fail-ure can irreversibly collapse the subsequent trajectory, which 
+
+Corresponding author: Yuhan Liu. 
+
+Zixiao Wen, Jiawei Li, Xiantai Xiang, Guangyao Zhou, Yuxin Hu and Yuhan Liu are with the Aerospace Information Research Insti-tute, Chinese Academy of Sciences, Beijing 100094, China, also with the Key Laboratory of Technology in Geo-Spatial Information Process-ing and Application System, Chinese Academy of Sciences, Beijing 100190, China, and also with the School of Electronic, Electrical and Communication Engineering, University of Chinese Academy of Sci-ences, Beijing 101408, China (e-mail: wenzixiao22@mails.ucas.ac.cn; li-jiawei231@mails.ucas.ac.cn; xiangxiantai@gmail.com; zhougy@aircas.ac.cn; huyx@aircas.ac.cn; liuyuhan@aircas.ac.cn). Zhen Yang is with the Aerospace Information Research Institute, Chinese Academy of Sciences, Beijing 100094, China, and also with the Key Labora-tory of Technology in Geo-Spatial Information Processing and Application System, Chinese Academy of Sciences, Beijing 100190, China (e-mail: yangzhen003999@aircas.ac.cn). 
+
+(a)  (b) 
+
+(c)  (d) 
+
+Fig. 1. Visual illustrations of the inherent challenges in satellite videos. (a) Tiny objects lack distinct texture features. (b) Targets often undergo arbitrary rotations. (c) Large aspect ratio changes introduce severe background noise within traditional horizontal bounding boxes. (d) Frequent partial or full occlusions easily lead to tracking drift. 
+
+is intolerable for critical real-world tasks such as suspicious target tracking and dynamic situation awareness. Despite the remarkable success of modern trackers in natu-ral scenes, extending them directly to satellite videos reveals significant performance degradation. Compared to standard se-quences, SVs present far more extreme and unique challenges, as visually demonstrated by the representative scenarios and targets in Fig. 1. First, targets captured by spaceborne sensors are typically tiny, often occupying only a few dozen pixels [2], [3]. As shown in Fig. 1(a), this miniature scale leads to severe feature blurring and a profound lack of texture infor-mation within the cropped template region, making it difficult for conventional appearance-level correlation mechanisms to reliably distinguish the target from complex backgrounds. Second, as depicted in Fig. 1(b), targets such as planes undergo arbitrary rotations during movement, which traditional appearance-based matching struggles to capture dynamically. Third, due to the top-down viewing angle, many satellite targets exhibit large aspect ratios changes. Consequently, tra-ditional horizontal axis-aligned bounding boxes fail to tightly enclose these objects. As illustrated in Fig. 1(c), non-linearly moving trains undergo significant aspect ratio changes, while horizontal annotations lead to massive background pixels being allocated high weights during label assignment (as 
+
+> arXiv:2603.07564v1 [cs.CV] 8 Mar 2026 2
+
+shown in the heatmap on the right). This injects severe false alarms that disrupt centerness estimations and fundamentally degrade boundary regression. Fourth, satellite imagery in-evitably involves severe background clutter and occlusions caused by dense cloud cover, building shadows, and bridges. As demonstrated in Fig. 1(d), when the ship is fully occluded by a bridge, appearance-based trackers lose effective visual cues and quickly accumulate localization errors, ultimately leading to severe and irreversible tracking drift. Most existing tracking models are primarily optimized for generic objects in natural scenes, relying heavily on com-plex appearance-based matching mechanisms. Consequently, they lack targeted designs to accommodate the exceptionally challenging spatial-temporal attributes inherent in satellite videos. To overcome these limitations, we propose SiamGM, a real-time tracking framework tailored specifically for SVs. SiamGM systematically tackles the aforementioned chal-lenges from spatial-geometry and temporal-motion perspec-tives. From the geometry-aware perspective, we introduce an Inter-Frame Graph Attention (IFGA) module to capture fine-grained topological correspondences, actively compensating for the severe lack of local feature details under spatial transformations. Concurrently, we design an Aspect Ratio-Constrained Label Assignment (LA) method that incorporates macroscopic shape priors. This mechanism dynamically regu-lates the sampling distribution to focus strictly on the principal axis of the target, elegantly mitigating boundary degradation and false alarms induced by diverse aspect ratios and rotations. From the motion-guided perspective, we introduce the Motion Vector-Guided Online Tracking Optimization to exploit his-torical trajectory information. By integrating the Normalized Peak-to-Sidelobe Ratio (nPSR) with our proposed Online Motion Model Refinement (OMMR) strategy, we seamlessly leverage historical motion vectors to rectify erroneous visual predictions and safely maintain trajectory continuity during severe or complete occlusions. The main contributions of this work are summarized as follows: 1) We propose SiamGM, a novel geometry-aware and motion-guided Siamese framework tailored for real-time SVOT. 2) We propose the IFGA module to capture structural topologies for small targets, which is seamlessly coupled with an aspect ratio-constrained LA method, leveraging shape priors to eliminate background noise. 3) We introduce the OMMR strategy for tracking phase by adopting the nPSR metric as a dynamic reliability indicator, which safely exploits historical trajectory in-formation to rectify visual tracking deviations. 4) Extensive experiments on two large-scale challeng-ing SatSOT and SV248S benchmarks demonstrate that SiamGM achieves state-of-the-art accuracy and real-time performance. The remainder of this paper is organized as follows. Sec-tion II briefly reviews the related work. Section III elaborates on the architectural details of the proposed SiamGM frame-work. Section IV presents the comprehensive experimental results and ablation studies, followed by an in-depth discussion and visual analysis in Section V. Finally, Section VI concludes this paper and outlines future research directions. II. R ELATED WORK 
+
+A. Deep Learning-Based Single Object Tracking 
+
+In recent years, Siamese neural networks (SNNs) have achieved dominant performance in the field of SOT due to their balanced accuracy and efficiency. The pioneering work, SiamFC [4], formulated tracking as a similarity learning prob-lem via cross-correlation between feature maps. By sharing weights and utilizing multi-scale representations, it realizes highly efficient online tracking. Following this, SiamRPN [5] and SiamRPN++ [6] introduced the Region Proposal Net-work (RPN) [7] to simultaneously perform classification and bounding box regression. Subsequent trackers, such as DaSi-amRPN [8], SA-Siam [9], and C-RPN [10], extended this paradigm, often employing architectures like AlexNet [11] to strike a favorable balance between tracking speed and precision. To eliminate the parameter tuning associated with reference boxes, SiamCAR [12] pioneered a fully convolu-tional anchor-free Siamese framework. It decomposes tracking into pixel-wise classification and regression, introducing a centerness branch to effectively suppress low-quality predic-tions. Building upon this elegant design, numerous subsequent studies [13]–[17] further solidified the dominance of Siamese architectures in SOT. Recently, Transformer-based [18] trackers have emerged, combining the global modeling capabilities of attention mech-anisms with the efficient feature extraction of Convolu-tional Neural Networks (CNNs) to further push the per-formance boundaries (e.g., TransT [19], TrDiMP [20], and STARK [21]). Furthermore, visual fully-transformer trackers gradually evolved into two major architectural paradigms. The two-stream two-stage paradigm utilizes separate Transformers for independent feature extraction and subsequent information interaction, including DualTFR [22], SwinTrack [23] and others. Conversely, the one-stream one-stage paradigm, such as OSTrack [24], MixFormer [25], SeqTrack [26], and AR-Track [27] etc., elegantly unifies feature extraction and relation modeling within a single unified Transformer backbone. Despite their remarkable success in general scenarios, these trackers implicitly assume that targets are relatively compact and axis-aligned, lacking targeted geometric awareness. This assumption inherently limits their adaptability and causes severe performance degradation when confronted with rotating objects and the extreme aspect ratios typically found in remote sensing imagery. 
+
+B. Single Object Tracking in Satellite Videos 
+
+SVOT presents unique challenges distinct from natural scenes, including small target scales, similar distractors, and complex background clutter. Early approaches relied on Cor-relation Filters (CF) due to their computational efficiency, such as CFME [28], CFKF [29]. However, CF-based trackers often struggle with severe deformation and semantic variations. Recently, deep learning-based methods have been tailored for SVs. To address feature representation issues, techniques 3IFGA             
+
+> IFGA
+> Backbone
+> PWC
+> CGR  CGR
+> Conv  Conv Conv
+> Response
+> map
+> Online Motion
+> Model Refinement penalty nPSR
+> Motion Vector -Guided Online Tracking Optimization
+> Aspect Ratio -Constrained Label Assignment
+> CGR
+> PWC
+> Depth -wise
+> correlation
+> Element -wise
+> multiple
+> Compute Loss
+> Conv + GN
+> +ReLU
+> Point -wise
+> Conv
+> template
+> search
+> Feature Modeling
+> Cen.
+> Cls .
+> Reg.
+> 4×
+> 𝜌 =𝑤 /ℎ
+> 𝛼 ·
+> Aspect Ratio−Based
+> Centerness Target
+> Centerness -Guided
+> Classification Score
+> 𝐶𝐽𝐶𝐿 ←𝑝 𝑐 𝑖 ,Ƹ𝑐 𝑖
+> 4×
+> 𝐾 𝑡
+> 𝑄 𝑠
+> 𝑉 𝑡
+> 𝑊 𝑠 ,𝑡
+> Inter -Frame
+> Graph
+> Attention
+
+… 
+
+> motion vector
+> Fig. 2. Overall architecture of the proposed SiamGM framework.
+
+incorporating multi-level correlations have gained attention. Lai et al [30] proposed a bidirection propagation and fusion (Bi-PF) module to enhance feature representation. Wang et al. [31] proposed SVLPNet to solve the textureless and low-resolution issues by introducing location prompts. Zhang et al. [32] proposed an Adaptive Multi-Scale Transformer (MT) to capture multi-scale features and adaptively fuse them for robust tracking. Wang et al. [33] introduced CAMTracker, which incorporates a contrastive-augmented matching module to enhance feature discriminability. To better classify small targets, Xue et al. [34] introduced SmallTrack to introduce a graph enhanced module, and Yang et al. [35] proposed EHTracker to enhance the discriminability of small targets by refining the classification feature map through multihead graph attention. To utilize temporal information, some methods have explored temporal modeling. Yang et al. [36] proposed SiamMDM with an dynamic template update strategy to mitigate the impact of background clutter. Lv et al. [37] intro-duced SiamS 2F, employing spectral-spatial-frame correlation to enhance feature discriminability in hyperspectral satellite videos. Zhou et al. [38] proposed SiamTITP, which integrates a temporal memory module and trajectory prediction to handle occlusion and target disappearance. While these methods have improved robustness against small scales and occlusions, they largely ignore the fine-grained topological priors and geometric constraints during the label assignment phase. Consequently, boundary regression degrades significantly for severely elongated satellite targets. 
+
+C. Motion Modeling in Satellite Video Object Tracking 
+
+Motion modeling is crucial for SVOT, especially for han-dling occlusions and predicting target trajectories. Traditional methods often rely on Kalman filters [39] or particle filters to estimate motion, but they can be limited in complex scenarios, such as CFKF [29] and Siam-TMC [40]. Recent approaches have incorporated deep learning-based motion models. For example, Li et al. [41] introduced an interacting mutiple model (IMM) through rotation state transition. Ruan et al. [42] proposed SRN-TFM which fitting trajectory with a polynomial function to predict the future position of the target. Yang et al. [36] proposed a motion model that refines the search area based on the predicted motion, improving tracking perfor-mance during occlusions. Zhou et al. [43] integrated a tra-jectory prediction module to capture long-term dependencies using linear fitting, enhancing tracking performance during occlusions. Furthermore, several learning-based approaches, such as MBLT [44] and AD-OHNet [45], employ CNNs or reinforcement learning strategies to analyze multi-frame trajectory patterns and forecast future positions. While these methods enhance temporal continuity, they often introduce substantial computational overhead. Furthermore, many exist-ing methods lack a dynamic reliability assessment mechanism, indiscriminately fusing temporal memory even when current visual observations are severely corrupted, inevitably leading to tracking drift. To fundamentally bridge these spatial and temporal gaps, this paper proposes SiamGM, a novel geometry-aware and motion-guided tracking framework. Unlike previous works, we explicitly establish structural correspondences via IFGA module and regulate specific geometric proportions using an aspect ratio-constrained LA method. Moreover, avoiding cumbersome recurrent networks, we introduce the OMMR strategy guided by the nPSR confidence indicator. This elegant combination systematically ensures real-time robustness under extreme structural distortions and severe occlusions. III. P ROPOSED METHOD 
+
+The overall architecture of the proposed SiamGM frame-work is illustrated in Fig. 2. Built upon the anchor-free SiamCAR [12], the pipeline systematically unifies geometric formulations and motion-guided refinements. Specifically, af-ter hierarchical feature extraction, the IFGA module is inte-grated to establish fine-grained topological matches between the template and search regions. Within the prediction head, the Aspect Ratio-Constrained LA method is employed during the training phase to strictly supervise spatial ambiguities. 4
+
+Finally, during the online tracking phase, the OMMR strategy is deployed as a post-processing stage to dynamically rectify trajectory bounds based on historical trajectories. Despite these structural enhancements, all integrated components introduce practically negligible computational overhead, ensuring that SiamGM operates robustly as a real-time framework. The detailed formulations of these components are elaborated in the subsequent subsections. 
+
+A. Inter-Frame Graph Attention 
+
+In standard SNN-based trackers, template and search fea-tures are typically generated from backbones with shared weights and then fused using depth-wise cross-correlation to generate response maps, which essentially measures the straightforward similarity between inter-frame sample pairs. However, targets in satellite videos are extremely small, resulting in highly limited texture information and blurred boundaries. Consequently, conventional channel-wise corre-lation struggles to capture complex spatial transformations, such as rotation and deformation. A critical challenge is how to learn more robust geometric information, such as topo-logical correspondences and structural features, to establish precise regional mappings between the template and search features. To address this issue, the IFGA module is designed to capture fine-grained geometric correspondences. By treating the feature point set of the search region as the query and the template feature point set as the key, the IFGA module constructs a dense geometric-topological mapping relation-ship. This mechanism dynamically enhances the search feature representations, thereby significantly improving the quality and robustness of the resulting response maps. Specifically, given the search feature Fs ∈ RC×Hs×Ws and the template feature Ft ∈ RC×Ht×Wt , we first generate the query, key, and value representations: 
+
+Qs = PWC q (Fs), K t = PWC k(Ft), V t = PWC v (Ft) (1) where PWC q and PWC k denote point-wise convolution in-vloving a channel reduction factor r (we set r = 4 by default) to reduce computational overhead, while PWC v maintains the original channel dimension C. Subsequently, we flatten the spatial dimensions to reshape them into matrix forms 
+
+Qs ∈ R Cr ×Ns , Kt ∈ R Cr ×Nt , and Vt ∈ RC×Nt , where 
+
+Ns = HsWs and Nt = HtWt. Then, inter-frame attention is computed by performing a matrix multiplication followed by a softmax activation along the template’s spatial dimension: 
+
+W (i,j ) 
+
+> s,t
+
+= exp( QisT Kjt )
+
+PNt 
+
+> k=1
+
+exp( QisT Kkt ) (2) which represents the attention weight between the i-th search feature point and the j-th template feature point. After-ward, the cross-frame target information is aggregated through 
+
+ˆFs = VtW Ts,t . Finally, ˆFs is reshaped back to original spatial dimensions and integrated with shortcut connection to produce the enhanced search feature: 
+
+F out s = Fs + γ ˆFs (3) 60 40 20 0 20 40 60 
+
+> Distance from Center (Pixels)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Centerness Score
+> 1D Centerness Profile (Ratio=6)
+> =0
+> =0.25
+> =0.5
+> =0.75
+> =1.0
+
+(a) 60 40 20 0 20 40 60       
+
+> 10
+> 0
+> 10
+> Y-axis
+> Centerness Distribution ( =0.0)
+> 60 40 20 020 40 60
+> X-axis
+> 10
+> 0
+> 10
+> Y-axis
+> Centerness Distribution ( =0.5)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+(b)  
+
+> Fig. 3. Visualization of (a) 1D multi-gamma centerness comparison and (b) 2D centerness distribution in which the aspect ratio is set to 6.
+
+where γ is a learnable scaling parameter. Considering the computational efficiency and semantic levels of features, we only apply the IFGA module to the P2 and P3 feature outputs, which are more relevant for small target localization, while maintaining overall real-time performance. 
+
+B. Aspect Ratio-Constrained Label Assignment 
+
+For common rigid objects, the traditional geometric assump-tion typically treats the target as a centrally symmetric shape. Consequently, the conventional label assignment strategy ef-fectively assigns positive samples to the central points in a uni-form manner, ensuring high classification precision. However, in satellite videos, this shape assumption is severely disrupted. Typical targets such as trains and ships possess unique geo-metric properties, often exhibiting extreme variations in aspect ratio. In these cases, the conventional assignment strategy still enforces a square-like distribution geometry, allocating anchor points at the corners of the targets to noisy back-ground regions, resulting in significantly less accurate positive sample selection. To address this geometric inconsistency, we propose an aspect ratio-constrained label assignment method to incorporate macroscopic shape priors, including an aspect ratio-based modulation factor for centerness calculation and corresponding centerness-guided classification score. 
+
+1) Aspect Ratio-Based Centerness Calculation: For each point t(i,j ) = ( l, r, t, b ) on the feature map, the traditional 5
+
+centerness assignment for positive sample is calculated as: 
+
+co 
+
+> (i,j )
+
+=
+
+s
+
+min( l, r )max( l, r ) · min( t, b )max( t, b ) (4) where l, r, t, b denote the distances from the corresponding point to the four sides of ground-truth box. This formulation constrains the feature distribution based on the distances to the box boundaries. However, in satellite videos, horizontal bounding boxes often fail to capture the true feature distribu-tion for targets with large aspect ratios, where the principal axis contains more target information and the other axis may include background noise. To address this, we introduce an aspect ratio-based modu-lation factor α and corresponding centerness label calculation as follows: 
+
+α(ρ) = min(1 , ρ γ ) (5) 
+
+c(i,j ) =
+
+s min( l, r )max( l, r )
+
+α( 1 
+
+> ρ)
+
+·
+
+ min( t, b )max( t, b )
+
+α(ρ)
+
+(6) where γ is a hyperparameter that controls the constraint strength of the aspect ratio ρ. The following Fig. 3 illustrates the centerness assignment strategies for two different methods when dealing with targets of varying aspect ratios. Specifically, Fig. 3(a) shows how varying the hyperparameter γ affects the centerness distribution along the principal axis: a larger 
+
+γ results in a slower decay, concentrating the centerness more along the main axis. Fig. 3(b) compares the traditional centerness assignment and our method with γ = 0 .5 for targets with large aspect ratios. It can be observed that for elongated targets, the traditional strategy tends to assign positive samples to a larger portion of the background, leading to less accurate sample selection. Our method dynamically adjust the ground truth labels for the centerness branch to more accurately reflect the feature-aware region along the principal axis of the target. 
+
+2) Centerness-Guided Classification Score: Although the classification and centerness branches are derived from the same feature representation during training, their loss func-tions are optimized independently. However, during tracking, the confidence score is calculated as the product of the classification score and the centerness score, resulting in an inconsistency between the training and inference stages. Consequently, the classification branch cannot fully utilize the spatial information provided by the centerness branch. To address this limitation, we introduce a centerness-guided classification score (CGCS) to better reflect the reliability of each anchor during training. Different from classification score in QFL [46] and VFL [47], our CGCS is specifically designed for the tracking task combined with centerness branch, defines the quality of anchor points based on both the predicted and target centerness values: 
+
+p(i,j ) =
+
+( min( c(i,j ),ˆc(i,j ))max( c(i,j ),ˆc(i,j )) , when y(i,j ) = 1 0, when y(i,j ) = 0 (7) where ˆc(i,j ) is the predicted centerness score, c(i,j ) is the aspect ratio-constrained centerness target, and y(i,j ) ∈ { 0, 1}
+
+denotes the binary classification label. Note that c(i,j ) is 0 50 100 150 200 250 300 
+
+> Frame
+> 0.40
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> nPSR
+> nPSR Curve Comparison
+> car_15 (POC/FOC)
+> car_32
+
+(a) 0 50 100 150 200 250 300 
+
+> Frame
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> nPSR
+> nPSR Curve Comparison
+> ship_02 (POC/FOC)
+> ship_03
+
+(b)  
+
+> Fig. 4. Visualization of nPSR curves for (a) two car targets and (b) two ship targets in SatSOT Dataset. The blue curve represents the nPSR values in normal tracking scenarios, while the red curve corresponds to occlusion scenarios.
+
+defined only within the positive sample region; for negative samples, we set p(i,j ) = 0 to suppress irrelevant background regions. By introducing this score, we soften the traditional classification labels, allowing the predicted sample quality to be dynamically reflected in the classification process. 
+
+3) Centerness-Joint Classification Loss: Based on the pro-posed classification score, we replace the BCELoss with a novel centerness-joint classification loss (CJCL), which guides the optimization of the classification branch, defined as fol-lows: 
+
+LCJCL = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+[pi log(ˆ yi) + (1 − pi) log(1 − ˆyi)] (8) where pi is the CGCS for the i-th sample, and ˆyi is the corresponding prediction. By weighting the classification loss with the CGCS, our method effectively suppresses noise in ambiguous regions, enhances the discriminative power of the classification scores, and ultimately improves tracking accu-racy. 
+
+C. Motion Vector-Guided Online Tracking Optimization 
+
+In satellite videos, typical scenarios such as vehicles passing under bridges, ships entering harbors can cause the tracker to temporarily lose the target, resulting in short-term tracking failure, drift, or even complete loss due to occlusion, which is a common challenge in SVOT. However, unlike general video sequences, satellite videos are captured by spaceborne sensors with relatively fixed fields of view and consistent spatial resolution, resulting in minimal viewpoint variation 6…          
+
+> …
+> …
+> …
+> …
+> N1Frames
+> 2N 2Frames
+> Yes
+> No
+> 𝐁 0,𝐁 1,…,𝐁 𝑖 −1
+> Refined 𝐁 𝑖
+> Linear Fitting
+> Curve & Points
+> 𝜹 𝑜
+> 𝜹 ′
+> 𝐯
+> nPSR 𝑖 <θ
+> Fig. 5. Illustration of the OMMR process.
+
+and negligible target deformation. Consequently, target motion in satellite videos tends to follow smooth and predictable trajectories. Leveraging this property, we introduce an motion vector-guided online tracking optimization strategy, detailed as follows. 
+
+1) nPSR Metric for Response Score Map: In each frame, the conventional tracker determines the target position by locating the peak value in the response score map. However, in challenging scenarios, the true target location may be obscured by multiple competing peaks of similar magnitude, making accurate target localization difficult. Inspired by [48], we introduce the nPSR metric to quantitatively assess the reliability of the response score map, defined as: PSR = gmax − μsl 
+
+σsl 
+
+(9) nPSR = PSR PSR max 
+
+(10) where gmax denotes the peak value of the response score map, μsl and σsl are the mean and standard deviation of the sidelobe region, respectively. Here we compute sidelobe region as the area excluding the 3 × 3 neighborhood centered at the peak location. PSR max is a dynamically maintained variable updated throughout the online tracking process, used for normalization. Different from MOSSE, in which the PSR range varies significantly across different scenes and targets, dynamic normalization enables a more consistent and robust reliability assessment across diverse tracking scenarios. A higher nPSR value indicates a more prominent and reliable peak response, whereas a lower value suggests the presence of multiple competing responses and potentially unreliable tracking results, as illustrated in Fig. 4. When the nPSR falls below a predefined threshold, the tracker increases its reliance on historical trajectory information to maintain stable and accurate tracking, which will be detailed in the following part. 
+
+2) Online Motion Model Refinement: In standard online tracking, the bounding box prediction for the current frame relies solely on the response score map generated by the model, neglecting the potential value of historical trajectory information. This can lead to issues such as tracking drift or failure, especially in the presence of occlusion, where the tracker may lose the target and subsequent predictions are up-dated based on erroneous results, causing error accumulation. Considering that targets in satellite videos typically exhibit smooth and predictable motion trajectories, we leverage the motion vector derived from historical trajectories as prior information. Accordingly, we propose the OMMR strategy, which adaptively adjusts the bounding box prediction for the 
+
+Algorithm 1 Online Motion Model Refinement 
+
+Input: 
+
+Frame window hyperparameters [N1, N 2] (N1 > 2N2); Score threshold θ for nPSR; Current frame index i;Response score map Si;Historical box deque Bhist with capacity N1;
+
+Output: 
+
+Refined bounding box Bi. 
+
+> 1:
+
+Calculate PSR i from Si using Eq. (9);  
+
+> 2:
+
+PSR max ← max( PSR max , PSR i); 
+
+> 3:
+
+Calculate nPSR i using Eq. (10);  
+
+> 4:
+
+Calculate model output Bo ← BBox (Co, So); 
+
+> 5:
+
+if i > N 1 then  
+
+> 6:
+
+if nPSR i < θ then  
+
+> 7:
+
+// Low confidence: Average Velocity  
+
+> 8:
+
+Extract Chist , Shist from last N1 frames in Bhist ; 
+
+> 9:
+
+Calculate CN1 and SN1 based on Eq. (11);  
+
+> 10:
+
+Bi ← BBox (CN1 , SN1 ); 
+
+> 11:
+
+else  
+
+> 12:
+
+// High confidence: Instantaneous Velocity  
+
+> 13:
+
+Extract Chist from last 2N2 frames in Bhist ; 
+
+> 14:
+
+Calculate motion vector v based on Eq. (12);  
+
+> 15:
+
+α ← (nPSR i)2; 
+
+> 16:
+
+δo ← Co − CN1−1; 
+
+> 17:
+
+δ′ ← α · δo + (1 − α) · v; 
+
+> 18:
+
+Bi ← BBox (CN1−1 + δ′, λ So + (1 − λ)SN1−1); 
+
+> 19:
+
+end if  
+
+> 20:
+
+else  
+
+> 21:
+
+Bi ← Standard prediction and update operation;  
+
+> 22:
+
+end if  
+
+> 23:
+
+Update Bhist by appending Bi; 
+
+> 24:
+
+return Bi
+
+current frame by integrating the nPSR value as a confidence measure, as illustrated in Fig. 5. Specifically, when the nPSR falls below the threshold θ, we consider the response score map of the current frame to be unreliable, indicating that the model prediction may contain significant errors. In this case, we rely entirely on long-term historical information for motion estimation. By performing linear fitting on the historical trajectory information, we ap-proximate the target’s average velocity and scale variation. Furthermore, we apply an exponential moving average (EMA) to smooth the predicted size, thereby obtaining the bounding box prediction for the current frame. The detailed formulation is as follows: 
+
+(vc, ˜C0) = φfit (C0, C1, . . . , CN1−1)
+
+CN1 = φval (vc, ˜C0, N 1)(vs, ˜S0) = φfit (S0, S1, . . . , SN1−1)
+
+SN1 = λφ val (vs, ˜S0, N 1) + (1 − λ)SN1−1
+
+(11) where Ck and Sk represent the historical center coordinates and size of the bounding box in the k-th frame of Chist 
+
+and Shist , respectively. φfit and φval denotes the linear fitting operation, and λ is a hyperparameter of the EMA. When the 7
+
+nPSR is high, the response score map of the current frame is considered reliable. In this case, we only use the short-term instantaneous velocity to refine the center coordinates, while the width and height are updated directly using the EMA of the model’s predicted results. Calculation of instantaneous velocity is defined as follows: 
+
+v = 1
+
+N2
+
+> N2−1
+
+X
+
+> k=0
+
+Ck+N2 − Ck
+
+N2
+
+(12) where the definition of Ck is consistent with the previous context. Note that N1 and N2 denote the window sizes for long-term and short-term frames, respectively. Given that most videos are sampled at 25 fps and the motion of targets in satellite videos is relatively slow, we typically set N1 = 50 ,which means that the average velocity is estimated using the historical information from about past 2 seconds, and 
+
+N2 = 10 , which corresponds to the instantaneous velocity. Considering the varying nPSR ranges across different scenar-ios, we set the threshold to θ = 0 .5, which effectively captures the motion trend of the target without introducing cumulative errors. Note that no fitting is performed during the first N1
+
+frames of the tracking process for robustness. The detailed steps of this approach are presented in Algorithm 1. 
+
+D. Training and Tracking Phase 
+
+Our SiamGM adopts an anchor-free structure with three sub-branches, requiring the simultaneous optimization of clas-sification, regression, and centerness losses. Specifically, the classification loss employs our proposed CJCL, the regression loss uses the weighted IoU loss, and the centerness loss adopts the cross-entropy loss. The loss functions are defined as follows: 
+
+Lreg = −
+
+PNpos  
+
+> i=1
+
+ci log AI +1  
+
+> AU+1
+
+PNpos  
+
+> i=1
+
+ci
+
+(13) 
+
+Lcen = − 1
+
+Npos Npos 
+
+X
+
+> i=1
+
+[ci log(ˆ ci) + (1 − ci) log(1 − ˆci)] (14) where AI and AU denote the intersection and union areas between the predicted box and the ground truth, respectively. 
+
+ci represents the centerness ground truth for the i-th positive sample, and ˆci is the corresponding predicted value. The overall loss function is defined as: 
+
+Ltotal = λcls LCJCL + λreg Lreg + λcen Lcen (15) where λcls , λreg , and λcen are the weighting hyperparameters for the classification loss, regression loss, and centerness loss, respectively. During training, we set λcls = 1 , λreg = 2 , and 
+
+λcen = 1 to balance the contributions of each loss component. During the tracking phase, the model first extracts features using the backbone and neck, and then obtains the target response through depth-wise cross-correlation. The response score map Si is generated based on the predictions from the three branches. The initial model output Bo is determined by the peak position ti of Si, for detailed calculation, please refer to [12]. This output is further refined by the OMMR strategy to produce the final tracking result Bi.IV. E XPERIMENT 
+
+A. Experimental Setup 1) Implementation Details: Our experiments were con-ducted on an Ubuntu 22.04 platform equipped with a 24GB NVIDIA GeForce RTX 4090 GPU. All training procedures were implemented using Python 3.11, CUDA 11.8, and Py-Torch 2.0.1. All of our models were trained for 20 epochs with a batch size of 48, using the stochastic gradient descent (SGD) optimizer with an initial learning rate of 0.005, a momentum of 0.9, and a weight decay of 0.0001. To accelerate training, we adopt the modified ResNet-50 [49] pre-trained on ImageNet from SiamRPN++ [6] as the backbone. During the first 10 epochs, the backbone weights are frozen to preserve the pre-trained representations. In the subsequent 10 epochs, the last three convolutional layers of ResNet-50 are unfrozen for fine-tuning. Considering the unique characteristics of satellite video tracking, we train our model exclusively on the VISO dataset with 30,000 image pairs per epoch. Compared to general object tracking datasets, this setup significantly reduces the number of training pairs required while introducing minimal performance degradation. The template and search images are resized to 127 × 127 and 255 × 255 pixels, respectively, and the data augmentation strategy follows that of the baseline. 
+
+2) Testing Dataset: We evaluate our model on two large-scale public benchmark datasets for satellite video single object tracking, namely SatSOT and SV248S, to validate the effectiveness and generalization ability of our method and compare with other state-of-the-art trackers. 
+
+SatSOT: SatSOT [50] consists of videos sourced from three commercial satellites: Jilin-1, Skybox, and Carbonite-2, with a frame rate of 10 or 25 fps and a duration of approximately 30 seconds. The dataset contains 105 sequences covering four categories: trains, cars, airplanes, and ships. It introduces 11 challenging attributes, such as background clutter (BC), tiny object (TO), and partial/full occlusion (POC/FOC), which best reflect the characteristics of satellite video. Notably, more than 70% of the sequences contain targets with an area smaller than 1,000 pixels, and even more than 30% contain targets with an area smaller than 100 pixels. 
+
+SV248S: SV248S [51] consists of videos captured by the Jilin-1 video satellite at a frame rate of 25 fps, with durations ranging from 20 to 30.12 seconds. The dataset comprises 248 satellite video sequences across six scenes, with approximately 40 targets per scene, covering four categories, including ships, vehicles, large vehicles, and airplanes. It introduces 3 basic properties, 3 frame state flags, and 10 sequence attributes to comprehensively characterize SVs in the SV248S dataset. In SV248S, object size (OSs) is defined as the diagonal length of the ground-truth bounding box. The average OSs for the four target categories are 15.2, 8.1, 15.6, and 47.8 pixels, respectively. 
+
+3) Evaluation Metrics: We adopt the one-pass evaluation (OPE) protocol [52] to assess tracking performance, where the target state is initialized in the first frame and all subsequent frames are predicted solely by the tracker. Three metrics are reported: precision, norm precision and success. It is 8
+
+TABLE I OVERALL PERFORMANCE ON SAT SOT AND SV248S. HOG IS HISTOGRAM OF ORIENTED GRADIENTS , CN IS COLOR NAMES , CF IS CONVOLUTIONAL 
+
+FEATURE , AND TF IS TRANSFORMER FEATURE . T HE P-5. IS PRECISION RATE WITH CLE T HRESHOLD OF 5 P IXELS , P-20. IS PRECISION RATE WITH 
+
+CLE T HRESHOLD OF 20 P IXELS , AND THE S. IS SUCCESS RATE . T HE RED REPRESENTS THE BEST PERFORMANCE , BLUE REPRESENTS THE 
+
+SECOND -PLACE , AND GREEN REPRESENTS THIRD -PLACE .
+
+Trackers Source Features SatSOT SV248S P-5. (%) P-20. (%) S. (%) P-5. (%) P-20. (%) S. (%) 
+
+KCF TPAMI2014 HOG 55.3 62.2 40.0 73.1 76.7 46.2 ECO-HC CVPR2017 HOG+CN 58.6 66.4 43.8 71.1 77.2 44.0 SiamCAR CVPR2020 CF 60.0 67.8 42.7 71.8 77.1 41.4 Mixformer-L CVPR2022 TF 46.7 52.8 37.8 33.9 37.4 14.9 SeqTrack CVPR2023 CF+TF 52.3 56.6 40.1 41.7 43.4 16.6 ARTrack CVPR2023 CF+TF 58.4 64.8 44.3 47.0 55.6 19.9 SmallTrack TGRS2023 CF 53.0 62.0 36.1 46.5 53.7 18.1 SiamMDM TGRS2023 CF 61.1 68.0 46.1 71.6 77.0 45.1 SiamTM RS2023 CF 60.8 69.0 47.5 75.3 80.0 48.7 AQATrack CVPR2024 CF+TF 51.8 61.8 39.6 37.8 52.8 16.5 HIPTrack CVPR2024 CF+TF 54.1 61.9 41.9 33.3 36.7 15.4 SVLPNet TCSVT2024 CF+TF 58.4 - 46.5 76.9 - 47.1 EHTracker JSTARS2024 CF 62.2 70.2 47.2 74.3 79.5 49.0 
+
+Adaptive MT TGRS2024 CF+TF - 70.3 42.4 - 84.6 43.7 SiamS 2F TGRS2025 CF 62.1 71.0 48.6 76.3 81.5 50.6 
+
+TSTrans TGRS2026 CF+TF 61.4 73.0 53.2 80.6 89.0 40.8 SiamGM Ours CF 65.9 74.0 47.6 85.0 89.2 50.7 
+
+important to note that all three metrics are averaged cross video sequences in the dataset. 
+
+Precision: The precision plot measures the percentage of frames in which the estimated center location falls within different distance thresholds from the ground-truth position, referred to as the center location error (CLE) threshold. Since most targets in satellite videos are relatively small, we report the precision score at a CLE threshold of 5 pixels following [50]. Additionally, given that many existing trackers still follow the traditional OTB benchmark, we also report the precision score at a CLE threshold of 20 pixels to facilitate comprehensive comparisons with other trackers. Note that the precision reported in all subsequent ablation studies defaults to the 5-pixel threshold. 
+
+Norm Precision: To evaluate tracking performance across targets of varying scales and aspect ratios in ablation studies, we also plot norm precision under different normalized CLE thresholds, where the CLE is normalized by the size of the ground-truth bounding box. We report the norm precision rate at a normalized CLE threshold of 0.5, which is more tolerant and better reflects the tracking performance of targets in satellite videos. 
+
+Success: The success plot measures the percentage of frames in which the IoU between the estimated and ground-truth bounding boxes exceeds different overlap thresholds, and we report the area under curve (AUC) of the success plot as the success rate. 
+
+B. Comparison With State-of-the-Art Trackers 
+
+To comprehensively evaluate the performance of our SiamGM, we compare it with 16 representative state-of-the-art trackers. These trackers can be broadly categorized into three groups based on their feature extraction mech-anisms: 1) Hand-crafted feature-based trackers: KCF [53] and ECO-HC [54], which rely on HOG and Color Names 0 50 100 150 200 250  
+
+> FPS
+> 47.5
+> 50.0
+> 52.5
+> 55.0
+> 57.5
+> 60.0
+> 62.5
+> 65.0
+> Precision
+> Tracker Performance Comparison Trackers (Precision)
+> Ours (65.9)
+> EHTracker (62.2)
+> SiamTM (60.8)
+> SiamCAR (60.0)
+> ECO-HC (58.6)
+> ARTrack (58.4)
+> KCF (55.3)
+> SeqTrack (52.3)
+> Mixformer-L (46.7)
+> Real-Time Thr
+
+Fig. 6. Precision vs. FPS Comparison on SatSOT benchmark. The horizontal axis represents the tracking speed, while the vertical axis represents the precision score. 
+
+features. 2) CNN-based trackers: SiamCAR [12], Small-Track [34], SiamMDM [36], SiamTM [55], EHTracker [35], and SiamS 2F [37], which utilize deep convolutional fea-tures and Siamese network architectures. 3) Transformer-based and Hybrid trackers: Mixformer-L [25], SeqTrack [26], ARTrack [27], AQATrack [56], HIPTrack [57], SVLPNet [31], Adaptive MT [32], and TSTrans [58] which leverage the at-tention mechanism of Transformers or a combination of CNN and Transformer features to capture long-range dependencies. The overall quantitative tracking results on the benchmark datasets are extensively summarized in Table I. On the chal-lenging SatSOT dataset, our proposed SiamGM demonstrates outstanding generalization and robustness, outperforming all other compared trackers in both precision metrics, while simultaneously securing highly competitive results in success rate. Specifically, it achieves an impressive precision of 65.9% at a 5-pixel threshold (P-5) and 74.0% at a 20-pixel threshold (P-20). This not only surpasses the recent state-of-the-art tracker TSTrans by substantial absolute margins of 4.5% and 1.0%, respectively, but also yields significant absolute 9                                                                                 
+
+> TABLE II COMPREHENSIVE ABLATION STUDIES ON SAT SOT. BOLD HIGHLIGHTS THE BEST RESULTS ,AND UNDERLINE MARKS THE SECOND -PLACE RESULTS .
+> Method IFGA LA OMMR P. (%) N.P. (%) S. (%) FPS
+> SiamCAR ×××60.0 70.8 42.7 142 SiamCAR-IFGA ✓××60.4( ↑0.4) 72.2( ↑1.4) 43.5( ↑0.8) 136 SiamCAR-LA ×✓×61.1( ↑1.1) 71.9( ↑1.1) 43.5( ↑0.8) 142 SiamCAR-M ××✓63.3( ↑3.3) 74.1( ↑3.3) 44.6( ↑1.9) 132 SiamCAR-G ✓✓×62.9( ↑2.9) 74.0( ↑3.2) 44.6( ↑1.9) 136 SiamGM ✓✓✓65.9 (↑5.9) 76.6 (↑5.8) 47.6 (↑4.9) 130 TABLE III ABLATION STUDY ON γPARAMETER IN THE LA M ETHOD ON SAT SOT.
+> γP. (%) N.P. (%) S. (%)
+> 0.25 60.5 71.4 43.0 0.5 61.1 71.9 43.5
+> 0.75 59.8 71.5 42.9 1.0 60.2 71.1 42.5
+
+improvements of 5.9% and 6.2% over the baseline. In terms of the success rate, SiamGM secures a highly competitive 47.6%, bringing a 4.9% absolute increase compared to the baseline. These substantial gains thoroughly validate the effectiveness of the proposed geometry-aware features and motion-guided temporal inference designs. Similarly, on the SV248S dataset, our proposed SiamGM maintains its robust tracking capability and achieves highly competitive performance. Specifically, it achieves P-5, P-20, and success rates of 85.0%, 89.2%, and 50.7%, respectively, representing absolute improvements of 13.2%, 12.1%, and 9.3% over the baseline. Compared to other advanced trackers like SiamS 2F and TSTrans, SiamGM exhibits distinct advantages or comparable results both in precision and success metrics, further consistently proving its exceptional generalization and spatial-temporal adaptabil-ity across different satellite sensors and target categories. More importantly, our model achieves this accuracy surge without incurring heavy parameter burdens or computational overhead. Specifically, the IFGA module is constructed as a lightweight module, the LA method introduces virtually zero extra computations, and the calculations required for OMMR are negligible. Overall, the inference speed is slightly reduced compared to the baseline, remaining well above the standard requirement for real-time tracking. This remarkable efficiency fundamentally benefits from the anchor-free mechanism and the elegant fully convolutional architecture of SiamGM. Fur-ther comprehensive comparisons regarding evaluation metrics versus tracking speeds are explicitly illustrated in Fig. 6. Furthermore, we observe that modern heavy Transformer-based general trackers (such as Mixformer-L and HIPTrack) suffer significant performance degradation in satellite sce-narios. This vulnerability primarily stems from their strong reliance on rich appearance and texture details, which are conspicuously absent for tiny satellite targets. This severe domain gap further underscores the necessity and superiority of customized architectures like SiamGM, which elegantly exploit structural topologies and motion priors instead of purely relying on appearance features.                      
+
+> TABLE IV ABLATION STUDY ON DIFFERENT MOTION MODELING METRICS ON
+> SAT SOT.
+> Metric P. (%) N.P. (%) S. (%) FPS
+> Reliability Coeff 63.1 73.7 45.9 128 Location Map 63.0 73.6 44.5 122 nPSR (Ours) 65.9 76.6 47.6 130
+
+C. Ablation Study 
+
+To validate the effectiveness of the proposed modules, we conduct extensive ablation studies on the SatSOT dataset, with the detailed results presented in Table II. Overall, SiamGM systematically optimizes the baseline model from two com-plementary perspectives: geometry and motion, corresponding to the SiamCAR-G(eometry) and SiamCAR-M(otion) variants. Furthermore, since SiamCAR-G integrates both the IFGA module and the LA method, we decouple it into SiamCAR-IFGA and SiamCAR-LA for a more granular analysis. Specifi-cally, compared to the baseline, SiamCAR-IFGA yields a 1.4% absolute improvement in normalized precision. However, its gains in precision and success rate are relatively marginal, primarily because IFGA focuses on capturing topological correspondences rather than directly refining the bounding box coordinates for extreme tiny targets. Conversely, SiamCAR-LA secures a 1.1% absolute gain in precision, which ef-fectively bridges the localization gap for targets with large aspect ratios, though its isolated impact on regular tiny targets remains limited. Notably, when seamlessly integrating these two components, SiamCAR-G achieves synergistic absolute improvements of 2.9%, 3.2%, and 1.9% in precision, nor-malized precision, and success rate, respectively. This demon-strates a strong complementarity between IFGA and LA. Fur-thermore, SiamCAR-M relies on temporal motion modeling to significantly boost tracking robustness, yielding absolute improvements of 3.3%, 3.3%, and 1.9% across the three metrics. This enhancement is especially pronounced in se-vere occlusion scenarios, profoundly alleviating tracking drift and tiny target loss. Ultimately, our comprehensive SiamGM framework delivers remarkable absolute surges of 5.9%, 5.8%, and 4.9% in precision, normalized precision, and success over the baseline. This comprehensively validates the individual efficacy of each module and the powerful complementarity of the geometry-aware and motion-guided paradigms. To further investigate the specific impact of the hyperparam-eter γ on the centerness distribution within the LA method, we conduct an additional ablation study. As summarized in 10                            
+
+> TABLE V ATTRIBUTES FOR PERFORMANCE ANALYSIS IN SAT SOT.
+> Attribute Description Sequences
+> BC Background Clutter 45 IV Illumination Variation 3LQ Low Quality 13 ROT Rotation 56 POC Partial Occlusion 34 FOC Full Occlusion 12 TO Tiny Object 21 SOB Similar Object 27 BJT Background Jitter 14 ARC Aspect Ratio Change 26 DEF Deformation 6
+
+Table III, the model achieves optimal performance across all metrics when γ is set to 0.5. An excessively large γ causes the valid centerness scores to spread too broadly along the major axis, blurring the discrimination boundary between the target feature and the background. Conversely, an overly small 
+
+γ sharply diminishes the intended shape-constraining effect, rendering the module practically ineffective, as demonstrated in Fig. 3(a). Additionally, to justify the necessity and superiority of the confidence indicator used in our OMMR strategy, we compare the tracking performance and real-time efficiency of different motion modeling metrics. Specifically, we evaluate two widely adopted metric, reliability coefficient [36] and location map metric [38] alongside our proposed nPSR. As detailed in Table IV, the nPSR metric achieves substantial improvements across all accuracy evaluation metrics while operating at the highest inference speed. This compelling evidence demon-strates that nPSR is exceptionally robust and discriminative in dynamically assessing the reliability of tracking states, effectively capturing target motion patterns while introducing practically negligible computational overhead. V. D ISCUSSION 
+
+A. Attribute-Based Analysis 
+
+To comprehensively evaluate the effectiveness of SiamGM across diverse scenarios, we first analyze its performance on all 11 attributes in the SatSOT benchmark, with specific definitions and sequence statistics provided in Table V. To clearly visualize the evaluation metrics for each attribute, we present radar charts comparing SiamGM, its ablated variants, and recent SOTA trackers on the SatSOT dataset, as shown in Fig. 7. These results demonstrate that SiamGM achieves superior generalization and distinct advantages over both the baseline SiamCAR and other trackers across nearly all challenging conditions. Subsequently, to precisely dissect the individual contributions of our carefully designed modules, we conduct a more fine-grained evaluation focusing on six representative extreme attributes: IV, DEF, ROT, POC, FOC, and TO. By systematically comparison under these distinctly challenging conditions, we can isolate and verify the underly-ing mechanisms and effectiveness of each component. 
+
+1) Effectiveness of IFGA: As analyzed in the methodology, the IFGA module is designed to capture fine-grained topolog-ical correspondences against intense appearance and spatial deformation. The IV and DEF attributes precisely represent these challenges: in IV scenarios, target grayscale and texture feature averages can change drastically, while in DEF scenar-ios (especially for train sequences), targets exhibit severe non-rigid structural deformations along their trajectories. Given the limited number of sequences for these two attributes, we merge them to ensure a statistically reliable evaluation. As shown in the first column of Fig. 8, SiamGM achieves a substantial performance margin under these conditions. No-tably, this improvement primarily stems from the integration of the IFGA module within the SiamCAR-G variant, yielding absolute gains of 6.0% vs. 5.9%, 12.6% vs. 10.9%, and 6.5% vs. 9.3% in precision, normalized precision, and success rate, respectively (the paired values conventionally denote the respective improvements of the isolated module and the final SiamGM over the baseline hereafter). This significant gain robustly validates the IFGA’s capability in maintaining target topological structures under complex visual transformations. 
+
+2) Effectiveness of Label Assignment: The core motivation behind our Aspect Ratio-Constrained Label Assignment strat-egy is to incorporate macroscopic shape priors into target localization. Considering the nature of standard horizontal bounding box annotations in satellite datasets, object rotation inevitably leads to drastic and sudden fluctuations in the apparent aspect ratio. Consequently, ROT serves as an ideal attribute to validate this mechanism. The performance curves in the second column of Fig. 8 demonstrate a significant gain for SiamGM under the ROT attribute, which is predominantly attributed to the LA method within the SiamCAR-G variant, yielding absolute improvements of 2.9% vs. 6.8%, 4.0% vs. 6.3%, and 2.0% vs. 4.0% in precision, normalized precision, and success rate, respectively. This substantial improvement validates its effectiveness in dynamically adapting to large aspect ratio variations and mitigating boundary degradation. 
+
+3) Effectiveness of OMMR: The OMMR strategy is specif-ically developed to refine trajectory predictions by exploiting physical motion priors, making it crucial when appearance-based tracking momentarily fails. Such signal losses frequently occur during POC and FOC. Furthermore, for tiny objects, the extremely limited spatial resolution can easily cause the predicted bounding box to completely detach from the target under minor disturbances. Therefore, we select the combined POC+FOC and the TO attributes to assess the OMMR in-ference. The plots in the third and fourth columns of Fig. 8 reveal that SiamGM outperforms other variants remarkably in these challenging situations. The dominant source of this performance boost is the SiamCAR-M variant, strongly sub-stantiating the OMMR’s superior capacity to maintain tracking continuity by safely integrating historical motion vectors, yielding absolute gains of 7.2% vs. 8.6%, 7.1% vs. 8.0%, and 4.5% vs. 5.6% in precision, normalized precision, and success rate for POC+FOC, and 6.3% vs. 8.6%, 6.3% vs. 9.3%, and 3.2% vs. 4.3% for TO, respectively. 11 ARC 
+
+(0.26, 0.32) 
+
+BC 
+
+(0.32, 0.38) 
+
+BJT 
+
+(0.49, 0.53) 
+
+DEF 
+
+(0.34, 0.45) 
+
+FOC 
+
+(0.29, 0.41) 
+
+IV 
+
+(0.53, 0.58) 
+
+LQ 
+
+(0.51, 0.62) 
+
+POC 
+
+(0.33, 0.37) 
+
+ROT 
+
+(0.39, 0.45) 
+
+SOB 
+
+(0.40, 0.46) 
+
+TO 
+
+(0.35, 0.42) 
+
+Attribute Performance Comparison - SatSOT (Success) 
+
+ARC 
+
+(0.08, 0.13) 
+
+BC 
+
+(0.42, 0.47) 
+
+BJT 
+
+(0.76, 0.87) 
+
+DEF 
+
+(0.02, 0.12) 
+
+FOC 
+
+(0.55, 0.76) 
+
+IV 
+
+(0.66, 0.69) 
+
+LQ 
+
+(0.88, 0.96) 
+
+POC 
+
+(0.40, 0.46) 
+
+ROT 
+
+(0.57, 0.64) 
+
+SOB 
+
+(0.69, 0.76) 
+
+TO 
+
+(0.67, 0.76) 
+
+Attribute Performance Comparison - SatSOT (Precision) 
+
+ARC 
+
+(0.50, 0.55) 
+
+BC 
+
+(0.58, 0.64) 
+
+BJT 
+
+(0.76, 0.86) 
+
+DEF 
+
+(0.46, 0.61) 
+
+FOC 
+
+(0.56, 0.76) 
+
+IV 
+
+(0.80, 0.94) 
+
+LQ 
+
+(0.86, 0.96) 
+
+POC 
+
+(0.53, 0.57) 
+
+ROT 
+
+(0.64, 0.70) 
+
+SOB 
+
+(0.70, 0.77) 
+
+TO 
+
+(0.65, 0.75) 
+
+Attribute Performance Comparison - SatSOT (Norm Precision) 
+
+SiamGM SiamCAR SiamCAR-IFGA SiamCAR-LA SiamCAR-G SiamCAR-M EHTracker 
+
+Fig. 7. Attribute-based performance comparisons evaluating SiamGM, its ablated variants, and recent SOTA trackers on the SatSOT dataset via radar charts. Our SiamGM exhibits distinct advantages and robust generalization in most challenging scenarios. 0 5 10 15 20 25 30 35 40 45 50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+> Precision
+
+Precision plots - IV+DEF (9) 
+
+[0.302] SiamCAR-IFGA 
+
+[0.301] SiamGM 
+
+[0.299] SiamCAR-G 
+
+[0.286] EHTracker 
+
+[0.277] SiamCAR-LA 
+
+[0.242] SiamCAR 
+
+[0.242] SiamCAR-M 0 5 10 15 20 25 30 35 40 45 50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+> Precision
+
+Precision plots - ROT (56) 
+
+[0.641] SiamGM 
+
+[0.615] SiamCAR-G 
+
+[0.614] EHTracker 
+
+[0.602] SiamCAR-LA 
+
+[0.599] SiamCAR-M 
+
+[0.585] SiamCAR-IFGA 
+
+[0.573] SiamCAR 0 5 10 15 20 25 30 35 40 45 50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Precision
+
+Precision plots - POC+FOC (43) 
+
+[0.547] SiamGM 
+
+[0.533] SiamCAR-M 
+
+[0.495] SiamCAR-G 
+
+[0.462] SiamCAR-IFGA 
+
+[0.461] SiamCAR 
+
+[0.456] EHTracker 
+
+[0.454] SiamCAR-LA 0 5 10 15 20 25 30 35 40 45 50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+> Precision
+
+Precision plots - TO (21) 
+
+[0.761] SiamGM 
+
+[0.738] SiamCAR-M 
+
+[0.708] SiamCAR-LA 
+
+[0.697] EHTracker 
+
+[0.683] SiamCAR-G 
+
+[0.675] SiamCAR 
+
+[0.667] SiamCAR-IFGA 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Precision
+
+Normalized Precision plots - IV+DEF (9) 
+
+[0.705] SiamCAR-G 
+
+[0.696] SiamCAR-IFGA 
+
+[0.683] SiamGM 
+
+[0.660] SiamCAR-LA 
+
+[0.640] EHTracker 
+
+[0.574] SiamCAR 
+
+[0.574] SiamCAR-M 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Precision
+
+Normalized Precision plots - ROT (56) 
+
+[0.705] EHTracker 
+
+[0.700] SiamGM 
+
+[0.684] SiamCAR-G 
+
+[0.677] SiamCAR-LA 
+
+[0.664] SiamCAR-M 
+
+[0.657] SiamCAR-IFGA 
+
+[0.637] SiamCAR 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+> Precision
+
+Normalized Precision plots - POC+FOC (43) 
+
+[0.635] SiamGM 
+
+[0.626] SiamCAR-M 
+
+[0.590] SiamCAR-G 
+
+[0.581] EHTracker 
+
+[0.574] SiamCAR-IFGA 
+
+[0.555] SiamCAR-LA 
+
+[0.555] SiamCAR 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50 
+
+Location error threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Precision
+
+Normalized Precision plots - TO (21) 
+
+[0.746] SiamGM 
+
+[0.716] SiamCAR-M 
+
+[0.687] EHTracker 
+
+[0.686] SiamCAR-LA 
+
+[0.667] SiamCAR-G 
+
+[0.653] SiamCAR 
+
+[0.647] SiamCAR-IFGA 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+Overlap threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> Success rate
+
+Success plots - IV+DEF (9) 
+
+[0.493] SiamGM 
+
+[0.473] SiamCAR-G 
+
+[0.465] SiamCAR-IFGA 
+
+[0.455] SiamCAR-LA 
+
+[0.445] EHTracker 
+
+[0.400] SiamCAR-M 
+
+[0.400] SiamCAR 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+Overlap threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Success rate
+
+Success plots - ROT (56) 
+
+[0.452] EHTracker 
+
+[0.431] SiamGM 
+
+[0.413] SiamCAR-G 
+
+[0.411] SiamCAR-LA 
+
+[0.407] SiamCAR-M 
+
+[0.404] SiamCAR-IFGA 
+
+[0.391] SiamCAR 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+Overlap threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Success rate
+
+Success plots - POC+FOC (43) 
+
+[0.391] SiamGM 
+
+[0.380] SiamCAR-M 
+
+[0.354] EHTracker 
+
+[0.351] SiamCAR-G 
+
+[0.335] SiamCAR 
+
+[0.332] SiamCAR-IFGA 
+
+[0.329] SiamCAR-LA 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+Overlap threshold 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+> Success rate
+
+Success plots - TO (21) 
+
+[0.415] EHTracker 
+
+[0.404] SiamGM 
+
+[0.393] SiamCAR-M 
+
+[0.374] SiamCAR-LA 
+
+[0.362] SiamCAR-G 
+
+[0.361] SiamCAR 
+
+[0.350] SiamCAR-IFGA 
+
+Fig. 8. Attribute-based performance comparison of SiamGM, its ablated variants, and state-of-the-art trackers on the SatSOT dataset. The twelve sub-figures present precision, normalized precision, and success plots under four representative challenging scenarios (IV+DEF, ROT, POC+FOC, TO) including six attributes. SiamGM consistently demonstrates superior performance, especially under severe deformation, rotation, occlusion, and tiny object scenarios. 
+
+B. Visual Analysis 
+
+To validate the geometric structural perception capabil-ity of IFGA, we conduct a visualization analysis on the 12 #001  #201  #357           
+
+> template
+> search
+> Fig. 9. Visualization of the template saliency maps for the plane_02
+> sequence, which contains both IV and ROT attributes. The consistent focus on geometrically salient regions (e.g., wings and fuselage) across different orientations validates the effectiveness of IFGA in enhancing geometric structural perception.
+
+plane_02 sequence, which contains both IV and ROT attributes—exhibiting significant grayscale changes due to illumination and rotation variations. As shown in Fig. 9, the top row displays the template saliency maps, computed by summing the attention weights from the bounding box region in the search image to each template location, as defined by: 
+
+Sj = X
+
+> i∈Vs
+
+W (i,j ) 
+
+> s,t
+
+(16) where W (i,j ) 
+
+> s,t
+
+denotes the attention weight derived from Eq. (2), and Vs represents the set of spatial points located within the corresponding bounding box region of the search feature map. The visualization reveals that, regardless of the airplane’s grayscale and orientation changes, the search attention consistently focuses on geometrically salient regions of the template, such as the wings and fuselage, rather than merely on texture features. This strongly demonstrates the effectiveness of IFGA in enhancing the model’s ability to learn and preserve target geometric structures under complex appearance variations. Moreover, to intuitively demonstrate the effectiveness of our proposed aspect ratio-constrained label assignment strategy, we visualize the classification and centerness outputs during the tracking process. As shown in Fig. 10, we compare the baseline model with our SiamCAR-LA. For targets with large aspect ratios, the baseline model often produces scattered and inaccurate response maps, leading to potential tracking drift. In contrast, SiamCAR-LA dynamically modulates the centerness distribution based on the target’s aspect ratio. This constraint effectively guides the network to concentrate on the most discriminative central regions of the target, resulting in more compact and accurate classification and centerness outputs. This visual evidence aligns with our quantitative results, confirming that the proposed label assignment strategy significantly enhances tracking robustness for targets with extreme aspect ratios. Additionally, to further illustrate the practical impact of the OMMR strategy on robust trajectory prediction, we visualize the tracking results of three challenging sequences ( car_35 ,
+
+car_58 , and car_61 ), which correspond to the POC+TO, FOC+TO, and FOC attributes, respectively. As depicted in Fig. 11, the qualitative frames are sampled at intervals of #007 
+
+> #007
+> #040
+> #040
+> #094
+> #094
+> #114
+> #114
+
+(a) #007 
+
+> #007
+> #040
+> #040
+> #094
+> #094
+> #114
+> #114
+
+(b)   
+
+> Fig. 10. Visualization of the (a) classification map and (b) centerness map outputs during the tracking process of train_08 . The first column in (a) and (b) shows the outputs from the baseline model, while the second column shows the outputs from SiamCAR-LA. We highlight the ground truth with a green bounding box.
+
+approximately 20 frames (roughly equivalent to 2 seconds). In the first two sequences, the extreme tiny scale of the cars, combined with sporadic blockages by trees and building shadows, severely corrupts the visual response maps and induces substantial tracking deviations in the baseline pre-diction. However, models with OMMR (indicated by the red and blue bounding boxes) effectively rectify these predictions by dynamically relying on motion vectors, thereby ensuring smooth and continuous tracking. The third sequence presents a classic full occlusion scenario where the target becomes completely invisible between frames 240 and 275. While purely appearance-based outputs fail completely during this period, OMMR successfully reconstructs the vehicle’s unob-servable motion trajectory via long-term linear fitting. This emphatically demonstrates its powerful capability to bridge severe informational gaps in extreme tracking environments. VI. C ONCLUSION 
+
+In this paper, we move beyond conventional appearance-centric paradigms to propose SiamGM, redefining SVOT through a joint spatial-geometry and temporal-motion per-spective. The core insight of our work is that for tiny and blurred targets, topological structure perception combined with macroscopic shape priors offers a far more resilient repre-sentation than traditional raw pixel matching. Symmetrically, in the temporal inference, dynamically integrating historical trajectory information serves as a critical strategy, effectively preventing irreversible tracking drift during severe occlusions where visual features fail completely. Empowered by these 13 #142  #162  #182  #202  #222 
+
+#194  #214  #234  #250  #274 
+
+#239  #276  #296  #316  #336 
+
+GT  SiamGM  EHTracker SiamCAR -M SiamCAR 
+
+Fig. 11. Visualization of the tracking results for three sequences ( car_35 , car_58 , and car_61 ) under occlusion and tiny object scenarios. The first two columns correspond to POC+TO and FOC+TO attributes, while the third column corresponds to FOC. The red and blue bounding boxes represent the predictions with OMMR, while the green box indicates the ground truth. 
+
+designs, our SiamGM achieves state-of-the-art performance on the SatSOT and SV248S benchmarks while . far in excess of that required for real-time tracking. Despite these advancements, certain limitations remain. First, the improvements yielded by our geometry-aware design remain relatively limited for extremely blurred targets, as it is profoundly challenging to fully capture their true morphologi-cal structures under severe visual degradation. Additionally, although our aspect-ratio constrained label assignment sig-nificantly mitigates background noise, traditional horizontal bounding boxes still intrinsically restrict the upper limit of localization precision for rotating targets. Second, the trajec-tory fitting within our OMMR strategy fundamentally relies on relatively smooth and linear kinematic assumptions. It may still struggle to accurately predict locations under background jitter or background clutter, and if a target undergoes highly unpredictable, our OMMR may fail to provide accurate pre-dictions. In future work, we plan to integrate object detection and tracking tasks into a unified continuous monitoring framework. Furthermore, we will explore fine-tuning self-supervised pre-trained foundational models to elevate feature representation capabilities, thereby fundamentally enhancing the robustness of target features against extreme environmental interferences. REFERENCES [1] Y. Chen, Y. Tang, Y. Xiao, Q. Yuan, Y. Zhang, F. Liu, J. He, and L. Zhang, “Satellite video single object tracking: A systematic review and an oriented object tracking benchmark,” ISPRS Journal of Pho-togrammetry and Remote Sensing , vol. 210, pp. 212–240, 2024. [2] Z. Wen, P. Li, Y. Liu, J. Chen, X. Xiang, Y. Li, H. Wang, Y. Zhao, and G. Zhou, “FANet: Frequency-Aware Attention-Based Tiny-Object Detection in Remote Sensing Images,” Remote Sensing , vol. 17, no. 24, p. 4066, 2025. [3] Z. Wen, Z. Yang, X. Bao, L. Zhang, X. Xiang, W. Li, and Y. Liu, “D 3R-DETR: DETR with Dual-Domain Density Refinement for Tiny Object Detection in Aerial Images,” arXiv preprint arXiv:2601.02747 , 2026. [4] L. Bertinetto, J. Valmadre, J. F. Henriques, A. Vedaldi, and P. H. Torr, “Fully-convolutional siamese networks for object tracking,” in European conference on computer vision . Springer, 2016, pp. 850–865. [5] B. Li, J. Yan, W. Wu, Z. Zhu, and X. Hu, “High Performance Visual Tracking with Siamese Region Proposal Network,” in 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition . IEEE, 2018, pp. 8971–8980. [6] B. Li, W. Wu, Q. Wang, F. Zhang, J. Xing, and J. Yan, “SiamRPN++: Evolution of Siamese Visual Tracking With Very Deep Networks,” in 
+
+2019 IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion (CVPR) . IEEE, 2019, pp. 4277–4286. [7] S. Ren, K. He, R. Girshick, and J. Sun, “Faster r-cnn: Towards real-time object detection with region proposal networks,” Advances in neural information processing systems , vol. 28, 2015. [8] Z. Zhu, Q. Wang, B. Li, W. Wu, J. Yan, and W. Hu, “Distractor-Aware Siamese Networks for Visual Object Tracking,” in European Conference on Computer Vision . Springer, 2018, pp. 103–119. [9] A. He, C. Luo, X. Tian, and W. Zeng, “A Twofold Siamese Network for Real-Time Object Tracking,” in 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition . IEEE, 2018, pp. 4834–4843. [10] H. Fan and H. Ling, “Siamese Cascaded Region Proposal Networks for Real-Time Visual Tracking,” in 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2019, pp. 7944–7953. [11] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification with deep convolutional neural networks,” Advances in neural informa-tion processing systems , vol. 25, 2012. [12] D. Guo, J. Wang, Y. Cui, Z. Wang, and S. Chen, “SiamCAR: Siamese Fully Convolutional Classification and Regression for Visual Tracking,” in 2020 IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) . IEEE, 2020, pp. 6268–6276. [13] Y. Shan, X. Zhou, S. Liu, Y. Zhang, and K. Huang, “SiamFPN: A deep learning method for accurate and real-time maritime ship tracking,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology ,vol. 31, no. 1, pp. 315–325, 2020. [14] T. Zhang, X. Liu, Q. Zhang, and J. Han, “SiamCDA: Complementarity-and distractor-aware RGB-T tracking based on Siamese network,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 32, no. 3, pp. 1403–1417, 2021. [15] H. Bao, P. Shu, H. Zhang, and X. Liu, “Siamese-based twin attention network for visual tracking,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 33, no. 2, pp. 847–860, 2022. [16] Y. Zheng, B. Zhong, Q. Liang, Z. Tang, R. Ji, and X. Li, “Leveraging local and global cues for visual tracking via parallel interaction network,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology ,vol. 33, no. 4, pp. 1671–1683, 2022. [17] J. Bao, K. Chen, X. Sun, L. Zhao, W. Diao, and M. Yan, “SiamTHN: Siamese target highlight network for visual tracking,” IEEE transactions on circuits and systems for video technology , 2023. [18] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in neural information processing systems , vol. 30, 2017. [19] X. Chen, B. Yan, J. Zhu, D. Wang, X. Yang, and H. Lu, “Transformer 14 
+
+Tracking,” in 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2021, pp. 8122–8131. [20] N. Wang, W. Zhou, J. Wang, and H. Li, “Transformer Meets Tracker: Exploiting Temporal Context for Robust Visual Tracking,” in 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2021, pp. 1571–1580. [21] B. Yan, H. Peng, J. Fu, D. Wang, and H. Lu, “Learning Spatio-Temporal Transformer for Visual Tracking,” in 2021 IEEE/CVF International Conference on Computer Vision (ICCV) . IEEE, 2021, pp. 10 428– 10 437. [22] F. Xie, C. Wang, G. Wang, W. Yang, and W. Zeng, “Learning Tracking Representations via Dual-Branch Fully Transformer Networks,” in 2021 IEEE/CVF International Conference on Computer Vision Workshops (ICCVW) . IEEE, 2021, pp. 2688–2697. [23] L. Lin, H. Fan, Z. Zhang, Y. Xu, and H. Ling, “Swintrack: A simple and strong baseline for transformer tracking,” Advances in Neural Information Processing Systems , vol. 35, pp. 16 743–16 754, 2022. [24] B. Ye, H. Chang, B. Ma, S. Shan, and X. Chen, “Joint feature learning and relation modeling for tracking: A one-stream framework,” in European conference on computer vision . Springer, 2022, pp. 341– 357. [25] Y. Cui, C. Jiang, L. Wang, and G. Wu, “MixFormer: End-to-End Tracking with Iterative Mixed Attention,” in 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2022, pp. 13 598–13 608. [26] X. Chen, H. Peng, D. Wang, H. Lu, and H. Hu, “SeqTrack: Sequence to Sequence Learning for Visual Object Tracking,” in 2023 IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2023, pp. 14 572–14 581. [27] X. Wei, Y. Bai, Y. Zheng, D. Shi, and Y. Gong, “Autoregressive Visual Tracking,” in 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2023, pp. 9697–9706. [28] S. Xuan, S. Li, M. Han, X. Wan, and G.-S. Xia, “Object tracking in satellite videos by improved correlation filters with motion estimations,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 58, no. 2, pp. 1074–1086, 2019. [29] Y. Guo, D. Yang, and Z. Chen, “Object tracking on satellite videos: A correlation filter-based tracking method with trajectory correction by Kalman filter,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 12, no. 9, pp. 3538–3551, 2019. [30] P. Lai, M. Zhang, G. Cheng, S. Li, X. Huang, and J. Han, “Target-aware transformer for satellite video object tracking,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–10, 2023. [31] J. Wang, F. Liu, L. Jiao, Y. Gao, H. Wang, L. Li, P. Chen, X. Liu, and S. Li, “Satellite video object tracking based on location prompts,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 34, no. 7, pp. 6253–6264, 2024. [32] X. Zhang, L. Jiao, L. Li, X. Liu, F. Liu, W. Ma, and S. Yang, “Adaptive multi-scale transformer tracker for satellite videos,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–16, 2024. [33] Z. Wang, Y. Hu, J. Yang, G. Zhou, F. Liu, and Y. Liu, “A contrastive-augmented memory network for anti-UAV tracking in TIR videos,” 
+
+Remote Sensing , vol. 16, no. 24, p. 4775, 2024. [34] Y. Xue, G. Jin, T. Shen, L. Tan, N. Wang, J. Gao, and L. Wang, “Smalltrack: Wavelet pooling and graph enhanced classification for uav small object tracking,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–15, 2023. [35] J. Yang, Y. Liu, Y. Liu, Z. Wang, J. Li, G. Zhou, W. Wang, and Y. Hu, “EHTracker: Towards Fine-Grained Localization for Satellite Video Target Tracking,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 18, pp. 5582–5599, 2024. [36] J. Yang, Z. Pan, Z. Wang, B. Lei, and Y. Hu, “SiamMDM: An adaptive fusion network with dynamic template for real-time satellite video single object tracking,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 61, pp. 1–19, 2023. [37] P. Lv, X. Gao, and Y. Zhong, “SiamS 2F: Satellite Video Single-Object Tracking Based on a Siamese Spectral-Spatial-Frame Correlation Net-work,” IEEE Transactions on Geoscience and Remote Sensing , vol. 63, pp. 1–13, 2025. [38] J. Zhou, Y. Dong, and B. Du, “SiamTITP: Incorporating Temporal Infor-mation and Trajectory Prediction Siamese Network for Satellite Video Object Tracking,” IEEE Transactions on Image Processing , vol. 34, pp. 4120–4133, 2025. [39] R. Kalman, “A New Approach to Linear Filtering and Prediction Problems,” Journal of Basic Engineering , vol. 82, no. 1, pp. 35–45, 1960. [40] Y. Nie, C. Bian, and L. Li, “Object tracking in satellite videos based on Siamese network with multidimensional information-aware and temporal motion compensation,” IEEE Geoscience and Remote Sensing Letters ,vol. 19, pp. 1–5, 2022. [41] Y. Li and C. Bian, “Object tracking in satellite videos: A spatial-temporal regularized correlation filter tracking method with interacting multiple model,” IEEE Geoscience and Remote Sensing Letters , vol. 19, pp. 1–5, 2022. [42] L. Ruan, Y. Guo, D. Yang, and Z. Chen, “Deep Siamese network with motion fitting for object tracking in satellite videos,” IEEE Geoscience and Remote Sensing Letters , vol. 19, pp. 1–5, 2022. [43] J. Zhou, Y. Dong, Y. Zhang, and B. Du, “Incorporating prior knowledge and temporal memory transformer network for satellite video object tracking,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 228, pp. 630–647, 2025. [44] W. Zhang, L. Jiao, F. Liu, L. Li, X. Liu, and J. Liu, “MBLT: Learning motion and background for vehicle tracking in satellite videos,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–15, 2021. [45] Y. Cui, B. Hou, Q. Wu, B. Ren, S. Wang, and L. Jiao, “Remote sensing object tracking with deep reinforcement learning under occlusion,” IEEE transactions on geoscience and remote sensing , vol. 60, pp. 1–13, 2021. [46] X. Li, W. Wang, L. Wu, S. Chen, X. Hu, J. Li, J. Tang, and J. Yang, “Generalized focal loss: Learning qualified and distributed bounding boxes for dense object detection,” Advances in neural information processing systems , vol. 33, pp. 21 002–21 012, 2020. [47] H. Zhang, Y. Wang, F. Dayoub, and N. S¨ underhauf, “VarifocalNet: An IoU-aware Dense Object Detector,” in 2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2021, pp. 8510–8519. [48] D. S. Bolme, J. R. Beveridge, B. A. Draper, and Y. M. Lui, “Visual object tracking using adaptive correlation filters,” in 2010 IEEE computer society conference on computer vision and pattern recognition . IEEE, 2010, pp. 2544–2550. [49] K. He, X. Zhang, S. Ren, and J. Sun, “Deep Residual Learning for Image Recognition,” in 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2016, pp. 770–778. [50] M. Zhao, S. Li, S. Xuan, L. Kou, S. Gong, and Z. Zhou, “SatSOT: A benchmark dataset for satellite video single object tracking,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–11, 2022. [51] Y. Li, L. Jiao, Z. Huang, X. Zhang, R. Zhang, X. Song, C. Tian, Z. Zhang, F. Liu, S. Yang et al. , “Deep learning-based object tracking in satellite videos: A comprehensive survey with a new dataset,” IEEE Geoscience and Remote Sensing Magazine , vol. 10, no. 4, pp. 181–212, 2022. [52] Y. Wu, J. Lim, and M.-H. Yang, “Object Tracking Benchmark,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 37, no. 9, pp. 1834–1848, 2015. [53] J. F. Henriques, R. Caseiro, P. Martins, and J. Batista, “High-speed track-ing with kernelized correlation filters,” IEEE transactions on pattern analysis and machine intelligence , vol. 37, no. 3, pp. 583–596, 2014. [54] M. Danelljan, G. Bhat, F. S. Khan, and M. Felsberg, “ECO: Efficient Convolution Operators for Tracking,” in 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2017, pp. 6931–6939. [55] J. Yang, Z. Pan, Y. Liu, B. Niu, and B. Lei, “Single object tracking in satellite videos based on feature enhancement and multi-level matching strategy,” Remote Sensing , vol. 15, no. 17, p. 4351, 2023. [56] J. Xie, B. Zhong, Z. Mo, S. Zhang, L. Shi, S. Song, and R. Ji, “Autoregressive Queries for Adaptive Tracking with Spatio-Temporal Transformers,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 19 300–19 309. [57] W. Cai, Q. Liu, and Y. Wang, “HIPTrack: Visual Tracking with Historical Prompts,” in 2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2024, pp. 19 258–19 267. [58] Y. Li, C. Wu, and J. Shao, “TSTrans: Temporal-Sequence-Driven Transformer for Single Object Tracking in Satellite Videos,” IEEE Transactions on Geoscience and Remote Sensing , 2026.

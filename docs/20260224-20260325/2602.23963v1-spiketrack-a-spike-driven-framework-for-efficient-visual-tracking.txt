@@ -1,0 +1,1466 @@
+Title: SpikeTrack: A Spike-driven Framework for Efficient Visual Tracking
+
+URL Source: https://arxiv.org/pdf/2602.23963v1
+
+Published Time: Mon, 02 Mar 2026 02:01:55 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+## SpikeTrack: A Spike-driven Framework for Efficient Visual Tracking 
+
+Qiuyang Zhang 1, Jiujun Cheng 1,† , Qichao Mao 1,† , Cong Liu 2, Yu Fang 1, Yuhong Li 3, Mengying Ge 4,Shangce Gao 51Tongji University 2Nova University of Lisbon 3Stockholm University 
+
+> 4
+
+Shanghai University 5University of Toyama 
+
+Abstract 
+
+Spiking Neural Networks (SNNs) promise energy-efficient vision, but applying them to RGB visual tracking remains difficult: Existing SNN tracking frameworks either do not fully align with spike-driven computation or do not fully leverage neurons’ spatiotemporal dynamics, leading to a trade-off between efficiency and accuracy. To address this, we introduce SpikeTrack, a spike-driven framework for energy-efficient RGB object tracking. SpikeTrack employs a novel asymmetric design that uses asymmetric timestep expansion and unidirectional information flow, harnessing spatiotemporal dynamics while cutting computation. To en-sure effective unidirectional information transfer between branches, we design a memory-retrieval module inspired by neural inference mechanisms. This module recurrently queries a compact memory initialized by the template to retrieve target cues and sharpen target perception over time. Extensive experiments demonstrate that SpikeTrack achieves the state-of-the-art among SNN-based trackers and remains competitive with advanced ANN trackers. No-tably, it surpasses TransT on LaSOT dataset while consum-ing only 1/26 of its energy. To our knowledge, SpikeTrack is the first spike-driven framework to make RGB tracking both accurate and energy efficient. The code and models are available at this URL. 
+
+1. Introduction 
+
+Spiking neural networks (SNNs) are a promising energy-efficient computing paradigm that simulates the spatiotem-poral dynamics and spiking mechanisms of biological neu-rons [20]. Their spike-driven computation has two advan-tages: (i) computation is triggered only when driven by events [21], and (ii) matrix multiplications between spike tensors and weights can be converted into sparse addi-tions [7]. This gives SNNs a significant power-saving ad-          
+
+> †Corresponding authors: Jiujun Cheng (chengjj@tongji.edu.cn), Qichao Mao (mao qichao@tongji.edu.cn). 64
+> 64.5
+> 65
+> 65.5
+> 66
+> 66.5
+> 67
+> 67.5
+> 68
+> 68.5
+> 010 20 30 40 50 60 70
+> Success Rate (AUC%)
+> Power (mJ)
+> TransT
+> STARK -ST 50
+> SpikeTrack -B256
+> SpikeTrack -S256
+> SpikeTrack -B384
+> Sim -B/32
+> SwinTrack 224
+> HiT -B
+> AsymTrack -B
+> Success Rate v.s. Power on LaSOT
+> Our SpikeTrack Family
+> Precision -Oriented ANN
+> Efficient -Oriented ANN
+> CSWinTT
+
+Figure 1. Energy–accuracy trade-off on LaSOT[5]. SpikeTrack achieves lower energy consumption than efficient ANN trackers while matching the accuracy of precision-oriented methods. 
+
+vantage over ANNs on neuromorphic chips [24, 25]. SNNs have shown strong results on multiple vision tasks [13, 17, 41], and their spatiotemporal dynamics make them natural candidates for tracking continuously moving objects. Current SNN tracking work falls into RGB-based and event-based methods. Within the RGB-based line, SiamSNN [18] and Spike-SiamFC++ [32], adopt the Siamese architecture, achieve tracking via network conver-sion and end-to-end training, respectively. Although these methods use spiking neurons in form, they decode spike signals into continuous values for computation, prevent-ing fully spike-driven processing and reducing energy ef-ficiency. Event-based methods [26, 34] adapt the dense interaction framework [2, 37] from ANN, also known as the one-stream architecture, as shown in Fig. 2. This ap-proach concatenates the search region and multiple tem-plates along the token length dimension within a single timestep, feeding them into the backbone for joint model-ing via spike self-attention. However, this direct imitation 1
+
+> arXiv:2602.23963v1 [cs.CV] 27 Feb 2026
+
+underuses the spatiotemporal associative dynamic of SNNs, and dense, bidirectional interactions greatly increase com-putational overhead. This raises a research question: Can we design an SNN that adheres to the spike-driven paradigm while fully leveraging spatiotemporal modeling capabilities for efficient RGB tracking? To address this problem, we propose SpikeTrack, a spike-driven SNN for energy-efficient RGB tracking. SpikeTrack adopts an asymmetric Siamese architecture, with asymmetric timestep inputs and unidirectional infor-mation transfer, as shown in Fig. 2. Specifically, the tem-plate branch expands across multiple timesteps, assign-ing a template to each step and jointly modeling template representations through neuron’s spatiotemporal dynamics, while the search branch performs efficient single-timestep inference. Information flows only from the template branch to the search branch, allowing the computation-heavy tem-plate branch to run only during initialization or template updates, thereby cutting computation. Additionally, to en-sure effective unidirectional information transfer between branches, we design a memory-retrieval module (MRM) in-spired by neural inference mechanism [27]. This module recurrently queries a compact memory initialized from the template features to retrieve target cues and sharpen target perception over time. Extensive experiments demonstrate that SpikeTrack achieves strong energy efficiency and accuracy with a simple framework, outperforming prior SNN-based track-ers. For instance, SpikeTrack-S 256 outperforms SpikeSi-amFC++ by 8.5% on the UAV123 dataset. Moreover, as shown in Fig. 1, SpikeTrack-S 256 surpasses the efficiency-oriented AsymTrack [39] with 2.5× better energy efficiency, while SpikeTrack-B 256 outperforms the precision-oriented TransT [3] with 7.6× energy savings and 2.2% higher accu-racy. Our main contributions are summarized as follows: • We design an asymmetric SNN that fully utilizes the spa-tiotemporal dynamics of neuron while significantly re-ducing computational cost. • We propose a brain-inspired memory retrieval module that enables effective unidirectional information transfer. • Building on the above designs, we propose SpikeTrack, a spike-driven framework for efficient RGB-based track-ing, with a family of model variants. Experiments across multiple benchmarks demonstrate its effectiveness. 
+
+2. Related Work 
+
+SNNs in Vision Tasks. Recently, SNN-based approaches have achieved performance comparable to ANNs across various vision tasks, including image classification [35, 36], object detection [17], semantic segmentation [13], and video classification [41], as well as higher-level applications such as autonomous driving perception [40] and embodied Templates Concatenated with Search Region 
+
+×L 
+
+> SNN Backbone
+> Time-stacked
+> Templates
+> Search Region
+> Unidirectional
+> Branch Interaction
+> Bidirectional Token Interaction Branch Runs Limited Times
+> Temporal Spiking
+> Learned Search Region Feature
+
+Figure 2. Structure comparison between one-stream tracking SNN (top) and our asymmetric tracking SNN (bottom). L represents the number of blocks in the backbone. 
+
+intelligence [10]. By modeling neuronal membrane poten-tial dynamics, SNNs possess powerful spatiotemporal en-coding capabilities, making them particularly promising for tracking tasks that require perceiving continuously moving objects. 
+
+Visual Tracking Architecture. Visual tracking aims to pre-dict a target’s position and scale across video frames given its initial template. ANN-based trackers follow either two-stream (Siamese) or one-stream designs. Two-stream meth-ods extract template and search features separately, then model their relation via cross-correlation or Transformer in-teraction. OSTrack [37] adopts a one-stream design, con-catenating template and search patches in a Vision Trans-former to jointly extract and relate features with strong re-sults. However, AsymTrack [39] shows that such bidirec-tional interactions are costly on edge devices, and proposes an asymmetric Siamese network with unidirectional tem-plate modulation for competitive lightweight tracking. In-spired by this, we design an asymmetric architecture for RGB-based SNN tracking, using asymmetric timestep in-puts and memory-retrieval-based unidirectional transfer to achieve efficient tracking with minimal overhead. 
+
+SNN-based Visual Tracking. Current SNN-based track-ing research primarily targets event-camera inputs, where sparse event data and one-stream architectures yield strong results [26, 34], but the reliance on dedicated hardware lim-its practical adoption. RGB-based tracking offers a more deployable alternative; however, existing efforts such as SiameseSNN [18] and SpikeSiameseFC++ [32] are tied to specific ANN frameworks, suffering from poor scalability, limited performance, and lacking comprehensive evaluation or energy analysis. To address these issues, we propose SpikeTrack, a concise and efficient RGB tracking baseline with extensive benchmark evaluation and detailed theoreti-cal energy analysis. 2…          
+
+> Spike-Driven CNN Block
+> Spike-Driven Transformer Block
+> DownSample
+> Spike-Driven CNN Block
+> DownSample
+> DownSample
+> Spike-Driven CNN Block
+> Spike-Driven Transformer Block
+> DownSample
+> Spike-Driven CNN Block
+> DownSample
+> DownSample
+> …………
+> Spike-Driven Transformer Block
+> DownSample
+> Spike-Driven Transformer Block
+> DownSample
+> Memory Bank Template Branch t=1 t=T Weight-sharing Backbone
+> L1= 2, Stride = 2, 4 L2= 2, Stride = 8 L3= 6, Stride = 16 L4= 2, Stride = 16
+> Memory Retrieval Module
+> Branch Runs Limited Times Temporal Spiking
+> Membrane Shorcut
+> Memory Retrieval Module
+> Memory Retrieval Module
+> Channel MLP
+> Spike Separable Conv
+> Efficient Spike-Driven Self-Attention
+> Spike-Driven CNN Block Spike-Driven Transformer Block Search Branch
+> Spike-Driven Tracking Head Spiking Neuron Layer
+> …
+> Channel Conv
+> Spike Separable Conv Search Region Templates
+
+Figure 3. Overview of SpikeTrack. The network consists of three components: a weight-sharing siamese backbone, a memory retrieval module for information transfer, and a prediction head. We use asymmetric timestep inputs and unidirectional information flow. During inference, template branch features are converted and cached as memory. The search branch queries this memory to extract target cues. The template branchs runs once, per initialization or update. 
+
+3. SpikeTrack-based Visual Tracking 
+
+In this section, we present the proposed SpiketTrack in de-tail. We begin with Sec. 3.1, briefly describing the over-all network architecture, followed by Sec. 3.2, which intro-duces the basic spiking neuron model used. Subsequently, Sec. 3.3 describe the network components in detail. Finally, Sec. 3.4 introduces the training and inference pipeline. 
+
+3.1. Overview 
+
+As shown in Fig. 3, SpikeTrack comprises three compo-nents: a shared-weight spiking backbone, a memory re-trieval module (MRM) for unidirectional branch interac-tion, and a prediction head. During inference, the template branch performs inference once after template initialization or template update, caching features from different inter-mediate layers in the memory bank as memory. The search branch then uses MRMs to retrieve the targets cues from memory and progressively refine target perception. Finally, the prediction head consumes the region features to produce the tracking results. 
+
+3.2. Spiking Neuron Model 
+
+We adopt the Normalized Integer Leaky Integrate-and-Fire (NI-LIF) neuron [13]. It trains with normalized integer acti-vations based on the classical LIF neuron [19], and converts integer activations into equivalent spikes during inference to preserve spike-driven characteristics. In this work, we de-sign the leaky factor as a trainable variable to allow the net-work to adaptively model the correlation between timesteps. The neural dynamics equation for NI-LIF is: 
+
+U [t] = βtH[t − 1] + Y [t] (1) 
+
+S[t] = Clip  round  U [t], 0, D /D (2) 
+
+H[t] = U [t] − S[t] × D (3) 
+
+βt = σ(θt) (4) where t is the timestep, U [t] represents the membrane po-tential after charging but before firing. Spatial input Y [t]
+
+is extracted from the original spike input through a Conv or MLP operation, temporal input βH [t − 1] is derived from the decay of the membrane potential at the previous timestep, βt is the leaky factor, σ(·) is the sigmoid function, 
+
+θt is a learnable variable, S[t] is the output spike, H[t] is 3the membrane potential after firing, round (·) is a round op-eration, Clip (x, min, max ) implies clipping the input x to 
+
+[min, max ], and D is a hyper-parameter to emit the maxi-mum integer value. 
+
+3.3. SpikeTrack Architecture 
+
+Asymmetric Siamese Backbone. We adopt Spike-Driven Transformer v3 [36] as the backbone. It is a meta-Transformer style SNN [38] composed of convolutional and Transformer-based SNN blocks. Specifically, the input of the backbone are template image Z ∈ RT ×3×H×W , where 
+
+T depends on the number of templates, and the search im-age X ∈ R3×H×W . The input images first pass through a 7 × 7 convolutional layer for 2 × downsampling, followed by a 3 ×3 convolutional layer after each stage for 2 × down-sampling. Each stage contains Li blocks, where the first two stages utilize CNN-based SNN blocks, and the latter two stages incorporate Transformer-based SNN blocks. In the template branch, from the second downsampling layer onward, features from each downsampling stage, the inter-mediate layer of stage3 ( l3/2) , and the final layer of stage 4 are initialized in the memory bank. When the search branch reaches layers aligned with the cached memory, the MRM retrieves target cues from the corresponding memory to en-hance target perception. After the final stage, the enriched search feature are fed into the tracking head for prediction. Next, we introduce the two basic components that make up the backbone: 
+
+CNN Block. Each CNN block consists of a spike separa-ble convolution followed by a channel-wise convolution, as detailed below: 
+
+U ′ = U + SSConv (U ), (5) 
+
+U ′′ = U ′ + ChannelConv (U ′), (6) SSConv (U ) = Conv pw (SN (Conv dw (SN (
+
+Conv pw (SN (U )))))) , (7) ChannelConv (U ′) = Conv (SN (Conv (SN (U ′)))) , (8) where SN (·) is the spike neuron layer, SSConv (·) is the spike separable convolution, Conv (·) is the vanilla convolu-tion, Conv pw (·) and Conv dw (·) are the point-wise and depth-wise convolutions, respectively. The BN layers are omitted for brevity. 
+
+Transformer Block. Each Transformer block contains a sep-arable convolution, an efficient spike-driven self-attention module (E-SDSA) and a channel MLP , as detailed below: 
+
+U ′ = U + SSConv (U ), (9) 
+
+U ′′ = U ′ + E-SDSA (U ′), (10) 
+
+U ′′′ = U ′′ + ChannelMLP (U ′′ ), (11) ChannelMLP (U ′′ ) = Linear (SN (Linear (SN (U ′′ )))) ,
+
+(12) Search Feature Template Feature          
+
+> ~
+> ~
+> QKV
+> Ks
+> Vs[B,C,HW]
+> [T,B,C,C v]
+> [B,C,HW] [T,B,C,HW]
+> Recurrent Retrieval in MRM
+> Softmax
+> ·[T,B,C v,1] [B,C v,HW]
+> ~Positional Encoding Dot Product ·Hadamard Product
+> Sum
+> [T,B,C v,HW] [T,B,C,HW]
+> Recurrent Flow
+> Memory
+> Spike Seperable Conv
+> Project
+> Recurrent End Q(i+1)
+> QS
+> (i)
+> QS
+> (i)'
+> Q(i)'
+> Q(i)
+> [T,B,C v,HW]
+> Project  [B,C,HW]
+> IC-Encoder Seg.Responder Seg.Responder
+> Detail Construction
+> Recurrent Looped Connectivity in
+> Brain Neural
+> Global
+> Contour
+> Encoding
+> Linear  Linear
+> Q(0)
+> Feeding Back
+> Higher Visual Area
+> Timestep Extention [T,B,C,HW]
+> MLP
+
+Figure 4. Implementation details of the Memory Retrieval Mod-ule. The purple legend (bottom left) illustrates the recurrent, looped connectivity structure in the brain. For simplicity of il-lustration, the temporal spiking across timesteps are omitted. 
+
+where E-SDSA (·) employs binary spiking tensors KS , QS ,
+
+VS ∈ { 0, 1}N ×D as the Query, Key and Value, respectively, where N is the token length and D is the channel size. The subscript S represents that the tensor is in spike form. By omitting the softmax function, E-SDSA enables compu-tational order rearrangement to achieve linear complexity with respect to token length. The process is described as follows: 
+
+QS = SN (Linear (U )) , (13) 
+
+KS = SN (Linear (U )) , (14) 
+
+VS = SN (Linear γ (U )) , (15) 
+
+U ′ = Linear 1 
+
+> γ
+
+SN (( QS KTS )VS
+
+| {z } 
+
+> O(N2D)
+
+∗scale )= Linear 1 
+
+> γ
+
+SN (QS (KTS VS )
+
+| {z }
+
+> O(N D 2)
+
+∗scale ) (16) where γ is the expansion factor of VS , used to enhance the representation of E-SDSA, and the constant scale factor is used for gradient stabilization. 
+
+Memory Retrieval Module (MRM). As illustrated in Fig. 4, the MRM enables effective unidirectional informa-tion transfer from the template to the search branch. Its de-sign draws on neuroscientific findings [27] regarding visual perception under occlusion, where recurrent connectivity in the brain’s V1 L2/3 area achieves complete perceptual in-ference through iterative refinement based on prior expecta-tions—a mechanism naturally aligned with template-based tracking. For efficiency, features entering the MRM are downsam-pled via average pooling to the resolution of the final back-bone stage and upsampled back at the output. The tem-plate feature FZ is projected to produce Key KS and Value 
+
+VS , while the search feature FX is temporally expanded 4to produce Query Q(0)  
+
+> S
+
+. Leveraging the linear complex-ity of spike-based attention (Eq. (16)), a memory matrix 
+
+M = KTS VS is pre-computed once during template ini-tialization and reused across frames. From this point, the recurrent loop begins. The recurrent processing comprises three stages. First, 
+
+global contour encoding : Q(i) 
+
+> S
+
+retrieves from M via a scaled dot-product followed by a spiking neuron: 
+
+Q(i) 
+
+> S
+> ′
+
+= SN (Q(i) 
+
+> S
+
+M · scale ). (17) Second, detail construction : Q(i)  
+
+> S′
+
+is processed by T ded-icated SSConvs along the temporal dimension, with each timestep assigned its own operator to improve sensitivity to temporal variations: 
+
+Q(i)′′ = SSConv t(Q(i)
+
+> S
+> ′
+
+[t]) , t ∈ { 1, 2, . . . , T }. (18) Third, feedback refinement : a residual connection with pro-jection simulates feedback to higher-level visual areas: 
+
+Q(i+1)  
+
+> S
+
+= Project (SN (Q(i) + Q(i)′′ )) . (19) This process repeats for N iterations ( N =1 for all variants). Finally, a spike-driven two-layer MLP generates channel-wise weights w for temporal fusion, and the result is pro-jected back to the original channel dimensions: 
+
+Fout = Project 
+
+> T
+
+X
+
+> t=1
+
+wt ⊙ Q(N ) 
+
+> S
+
+[t]
+
+!
+
+. (20) 
+
+Prediction Head. We employ a center head to predict the object bounding box, following the design of OSTrack[37] while adopting a spike-driven mechanism. The feature of the search branch are passed through three parallel branches, each composed of several Conv-BN-NILIF lay-ers. The last layer does not contain BN and NI-LIF. These branches predict (1) the target’s center localization (classifi-cation), (2) the local offset induced by resolution reduction, and (3) the normalized bounding-box width and height. 
+
+3.4. Training objective and Inference 
+
+Trainning. We comine weighted focal loss [12], ℓ1 loss and generalized IoU loss [23] as the training objective. The loss function can be formulated as: 
+
+L = Lclass + λGLIoU + λL1 L1, (21) where Lclass denotes the weighted focal loss used for clas-sification, LIoU represents the generalized IoU loss, ℓ1 is the L1 regression loss, and λG = 2 and λL1 = 5 are the reg-ularization parameters. 
+
+Inference. During the inference process, the template set is regarded as a queue and is updated in a first-in-first-out or-der while keeping the first initial template fixed. The update strategy follows standard practices [33], using two hyperpa-rameters: a update interval and an update score threshold. The update operation is performed when the update inter-val arrives and the predicted quality score is higher than the threshold. All models use the same set of hyperparameters. To reduce training burden and keep the network simple, SpikeTrack omits a separate quality scoring module and in-stead uses the localization branch score in the prediction head as the confidence score. 
+
+4. Experiments 
+
+4.1. Implementation Details 
+
+The SpikeTrack models are implemented using Python 3.12 with PyTorch 2.0.0 and trained on 8 NVIDIA 4090 GPUs. 
+
+Model. We develop six SpikeTrack model variants to balance power and accuracy, varying in backbone size (base/small), input resolution (256/384), and number of timesteps (1/3). We adopt Spike-Driven Transformer (SDT) V3-19M [36] as backbone for SpikeTrack-Base and SDTV3-5.1M for SpikeTrack-Small. The backbones are initialized with the Imagenet-1K [4] pre-trained parameters. 
+
+Training. We train on standard SOT datasets: COCO [15], LaSOT [5], TrackingNet [22] and GOT-10k [9] (excluding 1k sequences from the train split to align with the training data of other trackers). The total batch size is 128. Tem-plate and search images are generated by expanding target bounding boxes by a factor of 4. The AdamW [16] opti-mizer is used for training. All models use the same training strategy For T=1 models, we train for 320 epochs using 60k im-age pairs per epoch. The learning rates are set to 4e-5 for the backbone and 4e-4 for the head and MRMs, with a weight decay of 1e-4. The learning rate is reduced by a factor of 10 after 240 epochs. For T >1 models, the training data consist of image groups containing one search region and T templates. Start-ing from the pretrained T=1 SpikeTrack weights, we train for 60 epochs with learning rates of 4e-4 for the MRM and learnable decay factor, and 4e-5 for other modules. The learning rate is decreased by 10× after 30 epochs. 
+
+Inference. For simplicity, all models use the same set of hyperparameters. The online template update interval is set to 25, with an update confidence threshold of 0.7 by de-fault. A Hanning window penalty is applied to incorporate positional prior information in tracking, following standard practices [3]. 
+
+Energy evaluation. We compare SpikeTrack with SNN and ANN tracking methods, following the energy consump-tion evaluation criteria used in previous work [17, 35, 36]. The ANN energy cost is calculated as: 
+
+EAN N = FLOPs × EM AC , (22) 5Table 1. Comparison of performance and efficiency across tracking methods. Para. and Pow. denote parameters (M) and power ( mJ ), respectively; T and D represent the timestep and maximum integer value emitted during training. Results marked with ∗ are trained solely on the GOT-10K set. All results are reported in percentage (%). The top two snn results are highlighted in bold and underlined, respectively. 
+
+Method Efficiency TrackingNet GOT-10k LaSOT LaSOT ext 
+
+Para. Pow. T×D AUC PN P AO SR 50 SR 75 AUC PN P AUC PN PSNN SpikeTrack-B 384 36.8 27.3 3×4 82.0 87.6 80.7 73.1 84.0 69.9 66.7 76.8 72.9 47.6 58.5 54.5 
+
+20.0 1×4 81.8 87.1 80.4 70.7 81.0 67.0 67.5 77.8 73.3 47.3 57.8 54.1 SpikeTrack-B 256 36.8 9.8 3×4 81.1 86.9 79.1 72.2 83.9 67.7 67.1 77.7 72.5 46.7 57.6 52.9 8.1 1×4 80.1 85.4 77.6 69.6 80.6 66.2 66.6 77.2 71.6 46.0 56.7 52.0 SpikeTrack-S 256 11.2 3.7 3×4 78.7 84.6 75.5 67.8 79.9 61.7 64.5 76.0 69.0 43.9 54.5 49.2 2.8 1×4 77.9 83.6 74.8 67.2 78.8 60.9 65.1 76.4 69.6 43.3 53.4 48.2 SiamSNN [18] - - 20 - - - 31.4 32.7 - - - - - - -ANN AsymTrack-B [39] 3.36 8.3 - 80.0 84.5 77.4 67.7 76.6 61.4 64.7 73.0 67.8 44.6 - -HiT-B [11] 42.1 19.8 - 80.0 84.4 77.3 64.0 72.1 58.1 64.6 73.3 68.1 44.1 - -CSWinTT [28] 25.1 75.4 - 81.9 86.7 79.5 69.4 ∗ 78.9 ∗ 65.4 ∗ 66.2 75.2 70.9 - - -OSTrack 256 [37] - 98.9 - 83.1 87.8 82.0 71.0 ∗ 80.4 ∗ 68.2 ∗ 69.1 78.7 75.2 47.4 57.3 53.3 SwinTrack 224 [14] 23 29.4 - 81.1 - 78.4 71.3 ∗ 81.9 ∗ 64.5 ∗ 67.2 - 70.8 47.6 - 53.9 Sim-B/32 [2] - 26.5 - 79.1 - 83.9 - - - 66.2 76.1 - - - -STARK-ST 50 [33] 23.5 50.1 - 81.3 86.1 - 68.0 ∗ 77.7 ∗ 62.3 ∗ 66.6 - - - - -TransT [3] 17.9 75.2 - 81.4 86.7 80.3 72.3 82.4 68.2 64.9 73.8 69.0 - - -TrSiam [29] - - - 78.1 82.9 72.7 67.3 ∗ 78.7 ∗ 58.6 ∗ 62.4 - 60.6 - - -while the SNN energy cost is defined as: 
+
+ESN N = FLOPs × EAC × SF R × T × D, (23) where SF R denotes the average spike firing rate, T is the number of timesteps, and D is the upper limit of integer activation during training. All values are based on 32-bit floating-point implementations in 45nm technology [8], where EM AC = 4.6 pJ and EAC = 0.9 pJ . More evalu-ation details are presented in the Supplementary Material. For SpikeTrack energy analysis, we define the spike fir-ing rate as the average spike rate measured on LaSOT and GOT-10K. The template-branch energy is estimated by di-viding its total energy by the update interval. 
+
+4.2. Tracker Comparisons 
+
+We compare our SpikeTrack with SNN trackers and ANN trackers on seven widely used tracking benchmarks. 
+
+GOT-10K [9]. GOT-10k test set contains 180 videos covering a wide range of common challenges in track-ing. As reported in Tab. 1, SpikeTrack-S 256 -T3 achieves a comparable AO score to the state-of-the-art efficient ANN AsymTrack-B while consuming only half the energy. In ad-dition, SpikeTrack-B 256 -T1 delivers a 38.2% AO improve-ment over the existing SNN tracker SiamSNN. 
+
+LaSOT [5]. LaSOT is a large-scale long-term tracking benchmark. The test set contains 280 videos with an av-erage length of 2448 frames. The results on LaSOT are presented in Tab. 1. SpikeTrack-B 256 -T3 surpasses TransT by 2.2% in AUC, yet requires less than one-seventh of its energy consumption. When comparing different Spike-Track variants, the performance of S256 and B384 models does not improve as T increases. We attribute this to the higher demand for template precision in long-term tracking that our simple scoring mechanism introduces certain low-quality templates during updates, which in turn undermines predictive accuracy. 
+
+LaSOT ext [6] . LaSOT ext is a recently released dataset with 150 video sequences and 15 object classes. Across this dataset, as shown in Tab. 1, SpikeTrack variants fol-low the expected pattern: both higher T values and in-creased input resolution lead to gradual performance gains. Notably, SpikeTrack-B 256 -T1 achieves a 1.4% higher AUC than AsymTrack-B while consuming less energy. 
+
+TrackingNet [22]. TrackingNet is a large-scale dataset containing 511 videos, which covers diverse object cate-gories and scenes. As reported in Tab. 1, when matched in AUC score with SwinTrack 224 , SpikeTrack-B 256 -T3 oper-ates at only one-third of the energy cost. SpikeTrack-B 384 -T3 reaches an equivalent AUC with just 35% of the energy consumption of CSWinTT. 
+
+TNL2K [30]. TNL2K is a recently released large-scale dataset with 700 challenging video sequences. As shown 6Table 2. Performance comparison of different tracking methods. All evaluation metrics are based on Success Rate (AUC) and re-ported in percentage (%). The top two snn results are highlighted in bold and underlined, respectively. 
+
+Method T×D Pow. TNL2K OTB UAV SpikeTrack-B 384 
+
+3×4 27.3 54.8 68.9 68.3 
+
+1×4 20.0 54.2 68.3 67.2 SpikeTrack-B 256 
+
+3×4 9.8 54.0 69.6 67.8 1×4 8.1 53.3 68.0 67.5 SpikeTrack-S 256 
+
+3×4 3.7 52.0 69.4 66.2 1×4 2.8 51.2 67.1 66.3 SpikeSiamFC++ [32] 1 - - 64.4 57.8 SiamSNN [18] 20 - - 49.3 -AsymTrack-B [39] - 8.3 - - 66.5 HiT-B [11] - 19.8 - - 65.6 OSTrack 256 [37] - 98.9 54.3 - 68.3 SwinTrack 224 [14] - 29.4 53.0 - -Sim-B/32 [2] - 26.5 51.1 - -STARK-ST 50 [33] - 50.1 54.3 - 68.2 TransT [3] - 75.2 50.7 69.4 68.1 TrSiam [29] - - - 70.8 67.4 in Tab. 2, against the strong one-stream ANN baseline OSTrack 256 , SpikeTrack-B 384 -T3 delivers 0.5% higher AUC while using less than one-third of its energy. Simi-larly, SpikeTrack-S 256 -T1 achieves 0.5% better AUC than TransT with a mere 3% of the energy requirement. 
+
+UAV123 [1] and OTB100 [31]. Both of these are small-scale benchmarks including 123 and 100 videos respec-tively. The results on these two datasets are presented in Tab. 2. On the OTB dataset, SpikeTrack-S 256 -T3 outper-forms existing SNN-based methods SpikeSiamFC++ and SiamSNN by 5% and 20.1% AUC, respectively. For UAV123, SpikeTrack-B 256 -T3 delivers 10% higher AUC compared to the best previousSNN results. 
+
+4.3. Ablation and Analysis. 
+
+As shown in Tab. 3, we ablate training methods, architecture design, and hyperparameter settings. For a fair compari-son with the one-stream architecture, the baseline (#1) is a SpikeTrack-B 256 -T2 trained from scratch, rather than (#2), which fine-tunes SpikeTrack-B 256 -T1. Fine-tuning (#2) re-quires fewer epochs and performs better than training from scratch (#1). 
+
+Asymmetric v.s. One-stream. Following the structure in [26, 34] and keeping the same training settings, we compare the one-stream architecture with our asymmetric architec-ture, as shown in Tab. 3 (#3). Our method achieves bet-    
+
+> Table 3. Ablation Study on LaSOT and GOT-10k. △denotes the performance change (averaged over benchmarks) compared with the baseline. ∗indicates the non-spike version.
+
+# Method Pow. GOT-10K LaSOT △
+
+1 Baseline 8.7 71.3 66.8 -2 Fine-tuning 8.7 71.6 66.9 +0.2 3 One-stream 22.8 70.8 65.4 -0.8 4a Vanilla Cross-attn 7.6 70.9 65.0 -1.1 4b Modulation 6.8 58.3 49.9 -14.9 4c Modulation ∗ 10.2 64.0 58.1 -8.0 5 Mean Fusion 8.5 71.0 66.2 -0.4 6 Fixed Decay 8.9 68.9 66.0 -1.9 7 Smaller Template 8.3 69.6 65.7 -1.4 ter results with lower energy consumption. This shows that modeling templates with spatiotemporal neuron dynamics, combined with a memory retrieval module, outperforms jointly modeling all templates and search regions using with a backbone . 
+
+Effectiveness of the MRM. We replace the MRM with vanilla spike cross-attention, enabling search region fea-tures to learn from concatenated template features. As shown in Tab. 3 (#4a), this modification eliminates spa-tiotemporal processing and loop operations, reducing en-ergy consumption but causing a noticeable drop in accu-racy compared to the baseline. Furthermore, we replace the MRM with AsymTrack[39]’s template modulation module, implementing both spike and non-spike versions. (#4b) notes that the method is very lightweight after spiking con-version, but suffers severe performance degradation. The hybrid structure of (#4c) improves performance but remains suboptimal. This indicates that using templates as convo-lutional kernels for signal modulation is unsuitable for the coarse-grained representation of spiking networks. 
+
+Effectiveness of the Fusion Module. Table 3 (#5) compares the commonly used time-step averaging fusion method in SNN structures [17, 35, 36] with our proposed channel-wise weighted fusion method. The latter performs better. 
+
+Learnable Decay v.s. Fixed Decay. As shown in Tab. 3 (#6), we compare the fixed membrane potential leaky fac-tor used in previous SNN works [13, 17, 35, 36] with our learnable one. The learnable factor enables more flexible and controllable interactions across timesteps. 
+
+Template Expand Factor. Unlike previous methods, SpikeTrack adopts a template setting with the same size and expansion factor as the search region. Our experiments show that larger template expansion factors and higher tem-plate resolutions significantly improve accuracy, as pre-70 1 2 3
+
+> Loop Count
+> 66.0
+> 66.3
+> 66.6
+> 66.9
+> 67.2
+> 67.5
+> AUC on LaSOT (%)
+> 70.0
+> 70.4
+> 70.8
+> 71.2
+> 71.6
+> 72.0
+> AO on GOT-10k (%)
+> LaSOT
+> GOT-10k
+
+Figure 5. Influence of the number of retrieval loop in MRM. 
+
+sented in Tab. 3 (#7). We hypothesize that binary tensors lack fine-grained target detail, incorporating background information for contrastive representation allows for more global context and improves target encoding. 
+
+Loop Count in MRM. Figure 5 shows the results obtained with different retrieval loops in MRM. When the number of loops exceeds 1, we add a channel-wise learnable layer-scale on residual, to ensure training stability. One or two loops work best, while more can reduce performance due to accumulated errors and overly narrow focus. 
+
+Gap Analysis with Precision-Oriented Tracker. We com-pare SpikeTrack with the precision-oriented tracker OS-Track [37] across 14 attributes of the LaSOT dataset, as shown in the left panel of Fig. 6. A noticeable performance gap still exists between them. The right panel illustrates the average AUC gap between SpikeTrack-B variants and OSTrack-256. The largest gaps occur in the Deformation and Fast Motion scenarios, which pose greater challenges for deep semantic understanding and re-detection capabili-ties. We hope future SNN-based tracker designs can narrow the gap with ANN methods based on these insights. The full names of all attributes are provided in the Supplemen-tary Material. 
+
+Visual Analysis. As shown in Fig. 7, we visualize the spik-ing outputs of each MRM layer under three challenging scenarios. It can be observed that MRM follows a global-to-instance perception process, building an understanding of the search region based on cues provided by memory. The method performs well under occlusion and background distraction, but in the similar-object interference scenario, although it ultimately locates the correct target, it is still affected by similar objects. We attribute this to the diffi-culty of representing fine-grained semantic information us-ing spike-based encoding. 
+
+5. Conclusion 
+
+This work presents SpikeTrack, a family of spike-driven vi-sual tracking models. With an asymmetric architecture and memory-retrieval-based unidirectional information trans-fer, SpikeTrack delivers energy-efficient and accurate RGB tracking. Extensive experiments demonstrate that Spike-IV   
+
+> POC
+> DEF
+> MB
+> CM
+> ROT
+> BC
+> VC
+> SV
+> FOC
+> FM
+> OV LR
+> ARC
+> ALL
+> OSTrack-256
+> SpikeTrack-B384
+> SpikeTrack-B256
+> SpikeTrack-S256
+> IV
+> POC
+> DEF
+> MB
+> CM
+> ROT
+> BC
+> VC
+> SV
+> FOC
+> FM
+> OV LR
+> ARC
+> ALL
+> Precision Gap
+
+Figure 6. Gap analysis between SpikeTrack and a precision-oriented ANN across LaSOT attributes. 
+
+Figure 7. Visualization of the spike tensor produced by MRM. Three cases are shown: similar objects, occlusion, and background interference. 
+
+Track not only sets a new state-of-the-art among SNN-based trackers, but also shows competitive performance compared to recent ANN-based trackers, while significantly reducing energy consumption. We hope this work will ad-vance research on SNN for RGB tracking and help narrow the gap with ANN-based trackers. 
+
+Limitations. A limitation of SpikeTrack lies in its diffi-culty handling scenes with similar objects. This is because the network does not have explicit modules for distinguish-ing similar objects, and spike information alone is insuffi-cient to convey the fine-grained representations needed for such distinctions. In future work, we plan to build on this work to explore how to transmit fine-grained representa-tions through spike-based mechanisms to tackle these chal-lenging scenarios. 
+
+Acknowledgments 
+
+This work was supported in part by the NSFC under grant 62272344, in part by projects UID/04152/2025 and UID/PRR/04152/2025 from FCT (Fundac ¸ ˜ ao para a Ciˆ encia e a Tecnologia) through the Centro de Investigac ¸ ˜ ao em Gest˜ ao de Informac ¸ ˜ ao (MagIC)/NOVA IMS. 
+
+References 
+
+[1] U Benchmark. A benchmark and simulator for uav tracking. In ECCV , 2016. 7 
+
+8[2] Boyu Chen, Peixia Li, Lei Bai, Lei Qiao, Qiuhong Shen, Bo Li, Weihao Gan, Wei Wu, and Wanli Ouyang. Backbone is all your need: A simplified architecture for visual object tracking. In ECCV , pages 375–392. Springer, 2022. 1, 6, 7 [3] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang, and Huchuan Lu. Transformer tracking. In CVPR , pages 8126–8135, 2021. 2, 5, 6, 7 [4] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition , pages 248–255. Ieee, 2009. 5 [5] Heng Fan, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia Yu, Hexin Bai, Yong Xu, Chunyuan Liao, and Haibin Ling. Lasot: A high-quality benchmark for large-scale single ob-ject tracking. In CVPR , pages 5374–5383, 2019. 1, 5, 6 [6] Heng Fan, Hexin Bai, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia Yu, Harshit, Mingzhen Huang, Juehuan Liu, et al. Lasot: A high-quality large-scale single object tracking benchmark. IJCV , 129(2):439–461, 2021. 6 [7] Charlotte Frenkel, David Bol, and Giacomo Indiveri. Bottom-up and top-down approaches for the design of neu-romorphic processing systems: Tradeoffs and synergies be-tween natural and artificial intelligence. Proceedings of the IEEE , 111(6):623–652, 2023. 1 [8] Mark Horowitz. 1.1 computing’s energy problem (and what we can do about it). In 2014 IEEE international solid-state circuits conference digest of technical papers (ISSCC) , pages 10–14. IEEE, 2014. 6, 2 [9] Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A large high-diversity benchmark for generic object tracking in the wild. IEEE TPAMI , 43(5):1562–1577, 2019. 5, 6 [10] Xiaoyang Jiang, Qiang Zhang, Jingkai Sun, Jiahang Cao, Jingtong Ma, and Renjing Xu. Fully spiking neural network for legged robots. In ICASSP , pages 1–5. IEEE, 2025. 2 [11] Ben Kang, Xin Chen, Dong Wang, Houwen Peng, and Huchuan Lu. Exploring lightweight hierarchical vision transformers for efficient visual tracking. In ICCV , pages 9612–9621, 2023. 6, 7 [12] Hei Law and Jia Deng. Cornernet: Detecting objects as paired keypoints. In ECCV , pages 734–750, 2018. 5 [13] Zhenxin Lei, Man Yao, Jiakui Hu, Xinhao Luo, Yanye Lu, Bo Xu, and Guoqi Li. Spike2former: Efficient spiking trans-former for high-performance image segmentation. In AAAI ,pages 1364–1372, 2025. 1, 2, 3, 7 [14] Liting Lin, Heng Fan, Zhipeng Zhang, Yong Xu, and Haibin Ling. Swintrack: A simple and strong baseline for trans-former tracking. NeurIPS , 35:16743–16754, 2022. 6, 7 [15] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll´ ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In 
+
+ECCV , pages 740–755. Springer, 2014. 5 [16] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. 5 [17] Xinhao Luo, Man Yao, Yuhong Chou, Bo Xu, and Guoqi Li. Integer-valued training and spike-driven inference spiking neural network for high-performance and energy-efficient object detection. In ECCV , pages 253–272. Springer, 2024. 1, 2, 5, 7 [18] Yihao Luo, Min Xu, Caihong Yuan, Xiang Cao, Liangqi Zhang, Yan Xu, Tianjiang Wang, and Qi Feng. Siamsnn: Siamese spiking neural networks for energy-efficient object tracking. In International conference on artificial neural net-works , pages 182–194. Springer, 2021. 1, 2, 6, 7 [19] Wolfgang Maass. Networks of spiking neurons: the third generation of neural network models. Neural networks , 10 (9):1659–1671, 1997. 3 [20] Wolfgang Maass. Networks of spiking neurons: the third generation of neural network models. Neural networks , 10 (9):1659–1671, 1997. 1 [21] Paul A Merolla, John V Arthur, Rodrigo Alvarez-Icaza, An-drew S Cassidy, Jun Sawada, Filipp Akopyan, Bryan L Jack-son, Nabil Imam, Chen Guo, Yutaka Nakamura, et al. A mil-lion spiking-neuron integrated circuit with a scalable com-munication network and interface. Science , 345(6197):668– 673, 2014. 1 [22] Matthias Muller, Adel Bibi, Silvio Giancola, Salman Al-subaihi, and Bernard Ghanem. Trackingnet: A large-scale dataset and benchmark for object tracking in the wild. In 
+
+ECCV , pages 300–317, 2018. 5, 6 [23] Hamid Rezatofighi, Nathan Tsoi, JunYoung Gwak, Amir Sadeghian, Ian Reid, and Silvio Savarese. Generalized in-tersection over union: A metric and a loss for bounding box regression. In CVPR , pages 658–666, 2019. 5 [24] Kaushik Roy, Akhilesh Jaiswal, and Priyadarshini Panda. Towards spike-based machine intelligence with neuromor-phic computing. Nature , 575(7784):607–617, 2019. 1 [25] Catherine D Schuman, Shruti R Kulkarni, Maryam Parsa, J Parker Mitchell, Prasanna Date, and Bill Kay. Opportu-nities for neuromorphic computing algorithms and applica-tions. Nature Computational Science , 2(1):10–19, 2022. 1 [26] Yimeng Shan, Zhenbang Ren, Haodi Wu, Wenjie Wei, Rui-Jie Zhu, Shuai Wang, Dehao Zhang, Yichen Xiao, Jieyuan Zhang, Kexin Shi, et al. Sdtrack: A baseline for event-based tracking via spiking neural networks. arXiv preprint arXiv:2503.08703 , 2025. 1, 2, 7, 4 [27] Hyeyoung Shin, Mora B Ogando, Lamiae Abdeladim, Uday K Jagadisan, Severine Durand, Ben Hardcastle, Han-nah Belski, Hannah Cabasco, Henry Loefler, Ahad Bawany, et al. Recurrent pattern completion drives the neocortical representation of sensory inference. Nature Neuroscience ,pages 1–11, 2025. 2, 4 [28] Zikai Song, Junqing Yu, Yi-Ping Phoebe Chen, and Wei Yang. Transformer tracking with cyclic shifting window at-tention. In CVPR , pages 8791–8800, 2022. 6 [29] Ning Wang, Wengang Zhou, Jie Wang, and Houqiang Li. Transformer meets tracker: Exploiting temporal context for robust visual tracking. In CVPR , pages 1571–1580, 2021. 6, 7[30] Xiao Wang, Xiujun Shu, Zhipeng Zhang, Bo Jiang, Yaowei Wang, Yonghong Tian, and Feng Wu. Towards more flexible and accurate object tracking with natural language: Algo-rithms and benchmark. In CVPR , pages 13763–13773, 2021. 6[31] Yi Wu, Jongwoo Lim, and Ming-Hsuan Yang. Online object tracking: A benchmark. In CVPR , pages 2411–2418, 2013. 7
+
+9[32] Shuiying Xiang, Tao Zhang, Shuqing Jiang, Yanan Han, Yahui Zhang, Xingxing Guo, Licun Yu, Yuechun Shi, and Yue Hao. Spiking siamfc++: Deep spiking neural network for object tracking. Nonlinear dynamics , 112(10):8417– 8429, 2024. 1, 2, 7 [33] Bin Yan, Houwen Peng, Jianlong Fu, Dong Wang, and Huchuan Lu. Learning spatio-temporal transformer for vi-sual tracking. In CVPR , pages 10448–10457, 2021. 5, 6, 7[34] Jingjun Yang, Liangwei Fan, Jinpu Zhang, Xiangkai Lian, Hui Shen, and Dewen Hu. Fully spiking neural networks for unified frame-event object tracking. arXiv preprint arXiv:2505.20834 , 2025. 1, 2, 7, 4 [35] Man Yao, Jiakui Hu, Zhaokun Zhou, Li Yuan, Yonghong Tian, Bo Xu, and Guoqi Li. Spike-driven transformer. 
+
+NeurIPS , 36:64043–64058, 2023. 2, 5, 7 [36] Man Yao, Xuerui Qiu, Tianxiang Hu, Jiakui Hu, Yuhong Chou, Keyu Tian, Jianxing Liao, Luziwei Leng, Bo Xu, and Guoqi Li. Scaling spike-driven transformer with efficient spike firing approximation training. IEEE TPAMI , 2025. 2, 4, 5, 7 [37] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and Xilin Chen. Joint feature learning and relation modeling for tracking: A one-stream framework. In ECCV , pages 341– 357. Springer, 2022. 1, 2, 5, 6, 7, 8 [38] Weihao Yu, Mi Luo, Pan Zhou, Chenyang Si, Yichen Zhou, Xinchao Wang, Jiashi Feng, and Shuicheng Yan. Metaformer is actually what you need for vision. In CVPR , pages 10819– 10829, 2022. 4 [39] Jiawen Zhu, Huayi Tang, Xin Chen, Xinying Wang, Dong Wang, and Huchuan Lu. Two-stream beats one-stream: asymmetric siamese network for efficient visual tracking. In 
+
+AAAI , pages 10959–10967, 2025. 2, 6, 7 [40] Rui-Jie Zhu, Ziqing Wang, Leilani Gilpin, and Jason Eshraghian. Autonomous driving with spiking neural net-works. NeurIPS , 37:136782–136804, 2024. 2 [41] Shihao Zou, Qingfeng Li, Wei Ji, Jingjing Li, Yongkui Yang, Guoqi Li, and Chao Dong. Spikevideoformer: An efficient spike-driven video transformer with hamming attention and o(t) complexity. arXiv preprint arXiv:2505.10352 , 2025. 1, 2, 4 
+
+10 SpikeTrack: A Spike-driven Framework for Efficient Visual Tracking 
+
+## Supplementary Material 
+
+In the supplementary materials, Sec. 6 presents a vi-sual comparison of the tracking results. Sec. 8 presents SpikeTrack’s performance on each attribute in the La-SOT Benchmark’s attribute challenge. Finally, Sec. 9 ex-plains the method for estimating energy consumption and reports the spiking firing rate (SFR) for each layer of SpikeTrack-B256-T3. 
+
+6. Visualization 
+
+6.1. Visualization Retrieval Results Search Region  1st Retrieval  2nd Retrieval 
+
+> Figure 8. Visualization of the spike tensor obtained after two re-trievals in MRM, based on spike firing rate.
+
+To further demonstrate the effectiveness of recurrent re-trieval, we visualize the retrieval results at each iteration based on the per-pixel channel spike firing rate. Fig. 8 demonstrate a progressive attention refinement process, with increasingly concentrated spike firing locations and re-duced noise, validating the recurrent design’s effectiveness. This result also supports our hypothesis regarding the exper-imental observations in Fig. 5: excessive recurrent iterations narrow the attention excessively, causing useful information to be overlooked. 
+
+6.2. Visualization Tracking Results 
+
+As shown in Fig. 9, we present the tracking results of Spike-Track, efficiency-oriented ANNs, and precision-oriented ANNs. The video sequences include challenging scenarios such as deformation, blur, and similar objects, demonstrat-ing SpikeTrack’s ability to maintain accurate tracking over extended time spans.                                          
+
+> Table 4. Template update parameter sensitivity analysis of SpikeTrack-B 256 -T3. Rows indicate update confidence and columns indicate update interval. Underlines indicate default uni-fied settings of the SpikeTrack Family for short- and long-term datasets. GOT 25 35 45 55 0.65 72.2 72.5 72.2 72.1 0.7 72.2 72.2 72.0 71.9 0.75 71.8 72.4 71.6 71.8 0.8 71.7 72.3 71.3 71.7 LaSOT 40 60 80 0.65 66.8 66.8 67.1 0.7 67.0 67.2 67.1 0.75 66.7 67.6 66.7 0.8 67.1 67.5 66.8
+
+7. More Exploring Experiments 
+
+7.1. Updating Hyper-parameters 
+
+We conduct a sensitivity analysis about updating hyper-parameters. As shown in Tab. 4, within reasonable ranges, lower update intervals and thresholds favor short-term tracking, whereas long-term tracking exhibits the oppo-site trend, suggesting a stronger dependence on stable tem-plates. Note that our default setting isn’t optimal since we use unified settings for all datasets (except LaSOT) to show true generalization. 
+
+8. Performance of Attribute Challenges on La-SOT 
+
+As shown in Fig. 10, we provide a detailed comparison of the scores achieved by SpikeTrack and other ANN tracking methods for each challenge attribute in LaSOT. These chal-lenge attributes include: Illumination Variation (IV), Partial Occlusion (POC), Deformation (DEF), Motion Blur (MB), Camera Motion (CM), Rotation (ROT), Background Clutter (BC), Viewpoint Change (VC), Scale Variation (SV), Full Occlusion (FOC), Fast Motion (FM), Out-of-View (OV), Low Resolution (LR), Aspect Ratio Change (ARC). 
+
+9. Energy Consumption Estimation 
+
+9.1. Spike-driven Operators in SNNs 
+
+Spike-driven operators are the foundation of low-power neuromorphic computing, especially for SNNs. In spike-driven convolution and MLP computations, matrix multiplication between weight matrices and input spike matrices can be implemented on neuromorphic chips as address-based additions [7]. In spike-driven attention mech-anisms, the QS , KS , and VS operations involve two matrix multiplications. Similar to Conv and MLP, selecting one side as the spike matrix and the other as the weight matrix transforms the computation into sparse additions. Table 5 shows a comparison of the energy consumption of ANN and Spike-driven SNN operators. 1Figure 9. Visualization comparison of SpikeTrack and other ANN-based Trackers. 
+
+9.2. Energy Consumption of SpikeTrack 
+
+In this work, we use the same refined energy consump-tion evaluation method as recent SNN studies [13, 26, 34– 36, 41]. We first measure the spiking firing rate (the propor-tion of non-zero elements in the spike matrix, SF R ) of each layer, then calculate each layer’s energy consumption as its FLOPs multiplied by EAC and the corresponding SF R ,and finally sum the energy consumption across all layers. In 45nm technology [8], the energy of a M AC and an AC 
+
+are EM AC = 4.6 pJ and EAC = 0.9 pJ , respectively. The SF R of each layer is obtained by averaging the fir-ing rates of the model over the large-scale benchmarks La-SOT and GOT-10K. In order to give readers an intuitive feeling about the spiking firing rate, we give the detailed spiking firing rates of SpikeTrack-B256-T3 in Tab. 6 (search branch) and Tab. 7 (template branch). Overall, the firing rates exhibit a decreasing trend from shallow to deep lay-ers. The TemporalFusion-WeightMLP1 layer in the MRM module shows a relatively high firing rate, indicating that while the spatiotemporal membrane potential processing and recurrent retrieval introduced by the MRM module im-prove performance, they also increase energy consumption 2Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Aspect Ration Change (249) 
+
+[0.674] OSTrack256 
+
+[0.663] SpikeTrack-B384 
+
+[0.657] SpikeTrack-B256 
+
+[0.649] STARK-ST50 
+
+[0.649] SwinTrack-T224 
+
+[0.637] SpikeTrack-S256 
+
+[0.632] TransT 
+
+[0.632] AsymTrack 
+
+[0.630] HiT-Base 
+
+[0.611] TrSiam 
+
+[0.557] DiMP 
+
+[0.528] SiamFC++ 
+
+[0.497] ATOM 
+
+[0.471] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Background Clutter (100) 
+
+[0.615] OSTrack256 
+
+[0.597] SpikeTrack-B256 
+
+[0.592] SpikeTrack-B384 
+
+[0.582] SwinTrack-T224 
+
+[0.579] TransT 
+
+[0.573] STARK-ST50 
+
+[0.572] SpikeTrack-S256 
+
+[0.568] AsymTrack 
+
+[0.553] HiT-Base 
+
+[0.548] TrSiam 
+
+[0.513] DiMP 
+
+[0.454] ATOM 
+
+[0.449] SiamRPN++ 
+
+[0.446] SiamFC++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Camera Motion (86) 
+
+[0.720] OSTrack256 
+
+[0.709] SpikeTrack-B256 
+
+[0.703] SpikeTrack-B384 
+
+[0.701] SwinTrack-T224 
+
+[0.690] STARK-ST50 
+
+[0.682] AsymTrack 
+
+[0.677] SpikeTrack-S256 
+
+[0.672] TransT 
+
+[0.670] HiT-Base 
+
+[0.655] TrSiam 
+
+[0.614] DiMP 
+
+[0.556] SiamFC++ 
+
+[0.553] ATOM 
+
+[0.521] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+1 Success plots of OPE - Deformation (142) 
+
+[0.712] OSTrack256 
+
+[0.689] SpikeTrack-B384 
+
+[0.683] SwinTrack-T224 
+
+[0.681] SpikeTrack-B256 
+
+[0.670] TransT 
+
+[0.669] STARK-ST50 
+
+[0.659] SpikeTrack-S256 
+
+[0.658] AsymTrack 
+
+[0.658] HiT-Base 
+
+[0.637] TrSiam 
+
+[0.574] SiamFC++ 
+
+[0.571] DiMP 
+
+[0.529] SiamRPN++ 
+
+[0.512] ATOM Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 Success plots of OPE - Fast Motion (53) 
+
+[0.557] OSTrack256 
+
+[0.540] SpikeTrack-B384 
+
+[0.538] STARK-ST50 
+
+[0.534] HiT-Base 
+
+[0.530] SpikeTrack-B256 
+
+[0.526] SwinTrack-T224 
+
+[0.523] SpikeTrack-S256 
+
+[0.519] AsymTrack 
+
+[0.510] TransT 
+
+[0.499] TrSiam 
+
+[0.454] DiMP 
+
+[0.414] ATOM 
+
+[0.369] SiamFC++ 
+
+[0.319] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Full Occlusion (118) 
+
+[0.595] OSTrack256 
+
+[0.589] SpikeTrack-B384 
+
+[0.588] SpikeTrack-B256 
+
+[0.587] STARK-ST50 
+
+[0.572] SpikeTrack-S256 
+
+[0.569] SwinTrack-T224 
+
+[0.564] AsymTrack 
+
+[0.560] HiT-Base 
+
+[0.553] TransT 
+
+[0.542] TrSiam 
+
+[0.501] DiMP 
+
+[0.427] ATOM 
+
+[0.426] SiamFC++ 
+
+[0.374] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Illumination Variation (47) 
+
+[0.687] OSTrack256 
+
+[0.686] SpikeTrack-B256 
+
+[0.682] SpikeTrack-B384 
+
+[0.673] SwinTrack-T224 
+
+[0.668] STARK-ST50 
+
+[0.657] AsymTrack 
+
+[0.653] SpikeTrack-S256 
+
+[0.652] TransT 
+
+[0.648] HiT-Base 
+
+[0.636] TrSiam 
+
+[0.591] SiamFC++ 
+
+[0.573] DiMP 
+
+[0.549] ATOM 
+
+[0.528] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Low Resolution (141) 
+
+[0.616] OSTrack256 
+
+[0.610] SpikeTrack-B384 
+
+[0.604] SpikeTrack-B256 
+
+[0.596] SwinTrack-T224 
+
+[0.594] STARK-ST50 
+
+[0.589] SpikeTrack-S256 
+
+[0.578] HiT-Base 
+
+[0.576] AsymTrack 
+
+[0.564] TransT 
+
+[0.558] TrSiam 
+
+[0.514] DiMP 
+
+[0.450] ATOM 
+
+[0.440] SiamFC++ 
+
+[0.387] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Motion Blur (89) 
+
+[0.664] OSTrack256 
+
+[0.655] SpikeTrack-B384 
+
+[0.650] SwinTrack-T224 
+
+[0.641] SpikeTrack-B256 
+
+[0.630] TransT 
+
+[0.629] STARK-ST50 
+
+[0.623] AsymTrack 
+
+[0.621] SpikeTrack-S256 
+
+[0.616] HiT-Base 
+
+[0.610] TrSiam 
+
+[0.571] DiMP 
+
+[0.494] ATOM 
+
+[0.486] SiamFC++ 
+
+[0.448] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Out-of-View (104) 
+
+[0.632] OSTrack256 
+
+[0.626] SpikeTrack-B256 
+
+[0.625] SpikeTrack-B384 
+
+[0.621] STARK-ST50 
+
+[0.609] SwinTrack-T224 
+
+[0.605] HiT-Base 
+
+[0.604] SpikeTrack-S256 
+
+[0.595] AsymTrack 
+
+[0.589] TrSiam 
+
+[0.582] TransT 
+
+[0.518] DiMP 
+
+[0.471] SiamFC++ 
+
+[0.446] ATOM 
+
+[0.406] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Partial Occlusion (187) 
+
+[0.666] OSTrack256 
+
+[0.653] SpikeTrack-B384 
+
+[0.646] SpikeTrack-B256 
+
+[0.643] STARK-ST50 
+
+[0.633] SwinTrack-T224 
+
+[0.628] SpikeTrack-S256 
+
+[0.620] AsymTrack 
+
+[0.620] HiT-Base 
+
+[0.620] TransT 
+
+[0.599] TrSiam 
+
+[0.537] DiMP 
+
+[0.509] SiamFC++ 
+
+[0.474] ATOM 
+
+[0.465] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Rotation (175) 
+
+[0.686] OSTrack256 
+
+[0.673] SpikeTrack-B384 
+
+[0.668] SpikeTrack-B256 
+
+[0.661] STARK-ST50 
+
+[0.659] SwinTrack-T224 
+
+[0.649] SpikeTrack-S256 
+
+[0.643] TransT 
+
+[0.635] HiT-Base 
+
+[0.635] AsymTrack 
+
+[0.619] TrSiam 
+
+[0.550] DiMP 
+
+[0.548] SiamFC++ 
+
+[0.483] ATOM 
+
+[0.483] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Scale Variation (273) 
+
+[0.690] OSTrack256 
+
+[0.675] SpikeTrack-B384 
+
+[0.668] SpikeTrack-B256 
+
+[0.665] SwinTrack-T224 
+
+[0.661] STARK-ST50 
+
+[0.650] SpikeTrack-S256 
+
+[0.646] TransT 
+
+[0.644] AsymTrack 
+
+[0.644] HiT-Base 
+
+[0.624] TrSiam 
+
+[0.566] DiMP 
+
+[0.544] SiamFC++ 
+
+[0.512] ATOM 
+
+[0.494] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE - Viewpoint Change (33) 
+
+[0.691] OSTrack256 
+
+[0.683] SpikeTrack-B384 
+
+[0.682] SpikeTrack-B256 
+
+[0.678] STARK-ST50 
+
+[0.672] SwinTrack-T224 
+
+[0.658] AsymTrack 
+
+[0.656] SpikeTrack-S256 
+
+[0.656] HiT-Base 
+
+[0.617] TransT 
+
+[0.606] TrSiam 
+
+[0.550] DiMP 
+
+[0.514] SiamFC++ 
+
+[0.455] ATOM 
+
+[0.454] SiamRPN++ Overlap threshold 
+
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+> Success rate
+
+0
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 Success plots of OPE on LaSOT Testing Set 
+
+[0.691] OSTrack256 
+
+[0.675] SpikeTrack-B384 
+
+[0.670] SpikeTrack-B256 
+
+[0.667] SwinTrack-T224 
+
+[0.664] STARK-ST50 
+
+[0.651] SpikeTrack-S256 
+
+[0.649] TransT 
+
+[0.647] AsymTrack 
+
+[0.647] HiT-Base 
+
+[0.624] TrSiam 
+
+[0.571] DiMP 
+
+[0.543] SiamFC++ 
+
+[0.514] ATOM 
+
+[0.496] SiamRPN++ Figure 10. Performance of SpikeTrack and other ANN-based Trackers on the LaSOT attribute challenges. 
+
+to some extent. Notably, the NI-LIF neurons [13] are trained with nor-malized integer activation values, with the max integer capped at 4. During inference, these integers are mapped to equivalent spikes, which can naturally result in certain layers exhibiting an SF R greater than 1. More SpikeTrack variations of spiking firing rate and en-ergy consumption calculation tables can be found in the Ex-cel document in the supplementary material ZIP. 3Table 5. Energy evaluation. F L Conv and F L M LP represent the FLOPs of the Conv and MLP models in the ANNs, repectively. R denote the spiking firing rate (the proportion of non-zero elements in the spike matrix) of the layer corresponding to the operator. T is timestep. 
+
+EM AC and EAC are the energy consumption of performing one MAC and one AC operation, respectively. In the spike-driven attention, the scale operation is avoided by incorporating the scale factor into the neuron’s leakage factor. The first downsampling layer uses M AC 
+
+convolution, consistent with other works [26, 34–36, 41]. 
+
+ANN-based Tracker Spike-driven Tracker Conv First Conv EM AC · F L Conv EM AC · T · R · F L Conv 
+
+Other Conv EM AC · F L Conv EAC · T · R · F L Conv 
+
+Self-Attention 
+
+Q, K, V EM AC · 3N D 2 EAC · T · R · 3F L Conv 
+
+f (Q, K, V ) EM AC · 2N 2D EAC · T · R · 2N D 2
+
+Scale EM · N 2 -Softmax EM AC · 2N 2 -Linear EM AC · F L M LP EAC · T · R · F L M LP 0
+
+MLP Layer1 EM AC · F L M LP 1 EAC · T · R · F L M LP 1
+
+Layer2 EM AC · F L M LP 2 EAC · T · R · F L M LP 2
+
+4Table 6. Layer spiking firing rates of SpikeTrack-B256-T3 Search Branch. 
+
+T1 T2 T3 Stage 1 DownSampling Conv 1 - -ConvFormer Spike Block SepSpikeConv PWConv1 1.4643 - -DWConv 1.3569 - -PWConv2 1.2556 - -Channel Conv Conv1 1.5301 - -Conv2 0.2497 - -Stage 2 DownSampling Conv 1.0722 - -Memory Retrieval Module Head-Q 0.5670 - -
+
+QS 1 0.3496 0.3841 0.3786 SepSpikeConv PWConv 1.1416 1.1947 1.0329 DWConv 0.3178 0.3532 0.3461 Project1 Conv 0.4639 0.4746 0.4770 
+
+QS 2 0.6606 0.7157 0.7218 TemporalFusion WeightMLP1 1.7143 1.6588 1.4170 WeightMLP2 0.5168 0.5279 0.4708 Project2 Conv 0.3493 - -Channel MLP Linear1 0.6840 - -Linear2 0.2197 - -ConvFormer Spike Block SepSpikeConv PWConv1 0.6638 - -DWConv 0.9398 - -PWConv2 0.6144 - -Channel Conv Conv1 0.9048 - -Conv2 0.1488 - -Stage 3 DownSampling Conv 0.7663 - -Memory Retrieval Module Head-Q 0.6318 - -
+
+QS 1 0.2818 0.3085 7 0.2999 SepSpikeConv PWConv 0.8162 0.9758 0.8826 DWConv 0.3054 0.3400 0.3350 Project1 Conv 0.3661 0.3896 0.4193 
+
+QS 2 0.3456 0.3681 0.3672 TemporalFusion WeightMLP1 0.7749 0.8173 0.6948 WeightMLP2 0.3484 0.3827 0.3497 Project2 Conv 0.1389 - -Channel MLP Linear1 0.6861 - -Linear2 0.1752 - -ConvFormer Spike Block SepSpikeConv PWConv1 0.6677 - -DWConv 0.9180 - -PWConv2 0.5269 - -Channel Conv Conv1 0.6199 - -Conv2 0.0906 - -ConvFormer Spike Block SepSpikeConv PWConv1 0.9326 - -DWConv 0.5476 - -PWConv2 0.4813 - -Channel Conv Conv1 0.6739 - -Conv2 0.065 - -Stage 4 DownSampling Conv 0.8766 - -Memory Retrieval Module Head-Q 0.4919 - -
+
+QS 1 0.3510 0.3837 0.3756 SepSpikeConv PWConv 2.1617 2.3470 2.3399 DWConv 0.3806 0.4072 0.4232 5Project1 Conv 0.4583 0.4769 0.5183 
+
+QS 2 0.7903 0.8414 0.8667 TemporalFusion WeightMLP1 2.8883 2.9805 3.0267 WeightMLP2 0.2744 0.2848 0.2924 Project2 Conv 0.7324 - -Channel MLP Linear1 0.5211 - -Linear2 0.1942 - -TransFormer Spike Block SepSpikeConv PWConv1 0.5216 - -DWConv 0.8427 - -PWConv2 0.3655 - -SSA Head-QKV 0.5699 - -
+
+QS 1.0672 - -
+
+KS 0.2967 - -
+
+VS 0.7571 - -Linear 2.1776 - -Channel MLP Linear1 0.6194 - -Linear2 0.1132 - -TransFormer Spike Block SepSpikeConv PWConv1 0.7469 - -DWConv 0.7103 - -PWConv2 0.4588 - -SSA Head-QKV 0.6988 - -
+
+QS 0.7085 - -
+
+KS 0.2105 - -
+
+VS 0.3949 - -Linear 1.3788 - -Channel MLP Linear1 0.7699 - -Linear2 0.1025 - -TransFormer Spike Block SepSpikeConv PWConv1 0.7743 - -DWConv 0.5849 - -PWConv2 0.3319 - -Head-QKV 0.7370 - -SSA 
+
+QS 0.7367 - -
+
+KS 0.1592 - -
+
+VS 0.5306 - -Linear 1.2955 - -Channel MLP Linear1 0.8817 - -Linear2 0.0799 - -Memory Retrieval Module Head-Q 0.8867 - -
+
+QS 1 0.3233 0.3501 0.3357 SepSpikeConv PWConv 1.2107 1.4589 1.424 DWConv 0.3771 0.4003 0.3844 Project1 Conv 0.4302 0.4495 0.4991 
+
+QS 2 0.5933 0.6266 0.6632 TemporalFusion WeightMLP1 1.7760 1.9401 2.0085 WeightMLP2 1.0628 1.1578 1.1791 Project2 Conv 0.4434 - -Channel MLP Linear1 0.9183 - -Linear2 0.2099 - -TransFormer Spike Block SepSpikeConv PWConv1 0.9292 - -DWConv 0.6615 - -PWConv2 0.3422 - -Head-QKV 0.8495 - -SSA 
+
+QS 0.7161 - -6KS 0.1350 - -
+
+VS 0.4256 - -Linear 1.0989 - -Channel MLP Linear1 0.9172 - -Linear2 0.0677 - -TransFormer Spike Block SepSpikeConv PWConv1 0.8158 - -DWConv 0.6410 - -PWConv2 0.345 - -Head-QKV 0.7505 - -SSA 
+
+QS 0.7999 - -
+
+KS 0.1222 - -
+
+VS 0.3271 - -Linear 0.8896 - -Channel MLP Linear1 0.9085 - -Linear2 0.0744 - -TransFormer Spike Block SepSpikeConv PWConv1 0.7901 - -DWConv 0.6209 - -PWConv2 0.2965 - -Head-QKV 0.7643 - -SSA 
+
+QS 0.7730 - -
+
+KS 0.1993 - -
+
+VS 0.5176 - -Linear 1.6896 - -Channel MLP Linear1 0.8989 - -Linear2 0.0871 - -Stage 5 DownSampling Conv 0.5798 - -Memory Retrieval Module Head-Q 1.0431 - -
+
+QS 1 0.4587 0.4759 0.4673 SepSpikeConv PWConv 1.5555 1.5786 1.4752 DWConv 0.3697 0.3760 0.3707 Project1 Conv 0.5233 0.5438 0.5847 
+
+QS 2 0.3806 0.4307 0.4813 TemporalFusion WeightMLP1 1.2338 1.489 1.5396 WeightMLP2 0.9094 1.0829 1.1119 Project2 Conv 0.2615 - -Channel MLP Linear1 1.0764 - -Linear2 0.1975 - -TransFormer Spike Block SepSpikeConv PWConv1 1.1655 - -DWConv 0.5649 - -PWConv2 0.5767 - -SSA Head-QKV 0.9361 - -
+
+QS 0.7536 - -
+
+KS 0.0724 - -
+
+VS 0.1860 - -Linear 0.5488 - -Channel MLP Linear1 1.0615 - -Linear2 0.0453 - -TransFormer Spike Block SepSpikeConv PWConv1 0.8718 - -DWConv 0.2728 - -PWConv2 0.2346 - -Head-QKV 0.4639 - -SSA 
+
+QS 1.0436 - -
+
+KS 0.0690 - -7VS 0.0402 - -Linear 0.2674 - -Channel MLP Linear1 0.1904 - -Linear2 0.0043 - -Memory Retrieval Module Head-Q 0.2893 - -
+
+QS 1 0.2288 0.2511 0.2457 SepSpikeConv PWConv 1.4003 1.5141 1.4140 DWConv 0.2876 0.3126 0.3128 Project1 Conv 0.3465 0.3634 0.3737 
+
+QS 2 0.5225 0.5534 0.5321 TemporalFusion WeightMLP1 2.3932 2.5136 2.3640 WeightMLP2 0.7827 0.8143 0.7502 Project2 Conv 0.5717 - -Channel MLP Linear1 0.3105 - -Linear2 0.2024 - -Head Location Conv1 0.3149 - -Conv2 0.2198 - -Conv3 0.3037 - -Conv4 0.6767 - -Conv5 1.8021 - -Offset Conv1 0.3149 - -Conv2 0.2182 - -Conv3 0.3431 - -Conv4 0.5206 - -Conv5 0.6281 - -Size Conv1 0.3149 - -Conv2 0.2271 - -Conv3 0.3000 - -Conv4 0.6038 - -Conv5 0.5048 - -
+
+> Table 7. Layer spiking firing rates of SpikeTrack-B256-T3 Template Branch.
+
+T1 T2 T3 Stage 1 DownSampling Conv 1 1 1ConvFormer Spike Block SepSpikeConv PWConv1 1.458 1.4853 1.5083 DWConv 1.3534 1.3790 1.3954 PWConv2 1.2563 1.3188 1.3337 Channel Conv Conv1 1.5297 1.5035 1.5087 Conv2 0.2500 0.2496 0.2460 Stage 2 DownSampling Conv 1.0752 1.0885 1.0787 Memory Retrieval Module Head-KV 0.5344 0.5987 0.5938 
+
+VS 0.3571 0.3961 0.3985 
+
+KS 0.2998 0.3259 0.3188 ConvFormer Spike Block SepSpikeConv PWConv1 0.6596 0.6715 0.6727 DWConv 0.9408 0.9589 0.9664 PWConv2 0.6114 0.6465 0.6431 Channel Conv Conv1 0.9114 0.9267 0.9209 Conv2 0.1480 0.1460 0.1465 Stage 3 DownSampling Conv 0.7826 0.7730 0.7694 Memory Retrieval Module Head-KV 0.6126 0.6834 0.6718 
+
+VS 0.3057 0.3386 0.3369 8KS 0.3060 0.3400 0.3313 ConvFormer Spike Block SepSpikeConv PWConv1 0.6688 0.6766 0.6739 DWConv 0.9315 0.9402 0.9380 PWConv2 0.5135 0.5246 0.5213 Channel Conv Conv1 0.6318 0.6374 0.6359 Conv2 0.0906 0.0903 0.0888 ConvFormer Spike Block SepSpikeConv PWConv1 0.9604 0.9774 0.9793 DWConv 0.5758 0.5904 0.5886 PWConv2 0.4773 0.4883 0.4884 Channel Conv Conv1 0.6978 0.6975 0.7002 Conv2 0.0694 0.0680 0.0678 Stage 4 DownSampling Conv 0.9081 0.9001 0.8983 Memory Retrieval Module Head-KV 0.4755 0.5012 0.5137 
+
+VS 0.4067 0.4387 0.4539 
+
+KS 0.5307 0.5693 0.5842 TransFormer Spike Block SepSpikeConv PWConv1 0.4915 0.5026 0.5066 DWConv 0.8554 0.8717 0.8803 PWConv2 0.3502 0.3697 0.3749 SSA Head-QKV 0.5477 0.5811 0.5833 
+
+QS 1.1002 1.2265 1.2395 
+
+KS 0.2663 0.2994 0.3055 
+
+VS 0.7438 0.7834 0.7932 Linear 2.1391 2.3258 2.3621 Channel MLP Linear1 0.6040 0.5976 0.5933 Linear2 0.0985 0.0980 0.0974 TransFormer Spike Block SepSpikeConv PWConv1 0.7451 0.7327 0.7315 DWConv 0.7205 0.7095 0.7085 PWConv2 0.4378 0.4552 0.4575 SSA Head-QKV 0.7029 0.7192 0.7023 
+
+QS 0.7605 0.7370 0.7062 
+
+KS 0.2392 0.2287 0.2077 
+
+VS 0.4056 0.4129 0.4003 Linear 1.6298 1.5722 1.3865 Channel MLP Linear1 0.7850 0.7871 0.7767 Linear2 0.1052 0.1089 0.1039 TransFormer Spike Block SepSpikeConv PWConv1 0.7683 0.7498 0.7574 DWConv 0.5794 0.5768 0.5805 PWConv2 0.3307 0.3437 0.3452 Head-QKV 0.7291 0.7302 0.7277 SSA 
+
+QS 0.7556 0.7416 0.7483 
+
+KS 0.1557 0.1395 0.1411 
+
+VS 0.5425 0.5424 0.5408 Linear 1.3957 1.3158 1.3046 Channel MLP Linear1 0.8744 0.8590 0.8692 Linear2 0.0735 0.0722 0.0723 Memory Retrieval Module Head-KV 0.8776 0.8964 0.9105 
+
+VS 0.2765 0.3190 0.3222 
+
+KS 0.2897 0.2831 0.2953 TransFormer Spike Block SepSpikeConv PWConv1 0.8760 0.8442 0.8623 DWConv 0.6305 0.6225 0.6328 PWConv2 0.3151 0.3138 0.3219 Head-QKV 0.8052 0.8112 0.8115 SSA 
+
+QS 0.6392 0.6850 0.6665 9KS 0.1438 0.1365 0.1354 
+
+VS 0.4303 0.4325 0.4365 Linear 1.1670 1.2427 1.2174 Channel MLP Linear1 0.9013 0.8820 0.8989 Linear2 0.0616 0.0599 0.0602 TransFormer Spike Block SepSpikeConv PWConv1 0.7866 0.7636 0.7793 DWConv 0.6259 0.6263 0.6347 PWConv2 0.3305 0.3450 0.3529 Head-QKV 0.7390 0.7483 0.7388 SSA 
+
+QS 0.7814 0.8434 0.8010 
+
+KS 0.1488 0.1365 0.1227 
+
+VS 0.3419 0.3411 0.3399 Linear 0.9959 1.0392 0.9468 Channel MLP Linear1 0.8848 0.8524 0.8672 Linear2 0.0808 0.0799 0.0751 TransFormer Spike Block SepSpikeConv PWConv1 0.7143 0.6833 0.7108 DWConv 0.5917 0.5949 0.5955 PWConv2 0.2799 0.2859 0.2897 Head-QKV 0.7315 0.7115 0.7250 SSA 
+
+QS 0.8245 0.8770 0.8687 
+
+KS 0.1935 0.1864 0.1898 
+
+VS 0.4987 0.4917 0.5064 Linear 1.8150 1.8574 1.8907 Channel MLP Linear1 0.8072 0.7669 0.8002 Linear2 0.1164 0.1183 0.1128 Stage 5 DownSampling Conv 0.3914 0.3706 0.3886 Memory Retrieval Module Head-KV 1.0682 1.0843 1.0665 
+
+VS 0.1857 0.1970 0.1987 
+
+KS 0.2269 0.2089 0.2198 TransFormer Spike Block SepSpikeConv PWConv1 1.0331 1.0798 1.0915 DWConv 0.4430 0.4637 0.4686 PWConv2 0.3645 0.4348 0.4429 SSA Head-QKV 0.8320 0.8420 0.8145 
+
+QS 0.9074 0.9703 1.0095 
+
+KS 0.0435 0.0389 0.0375 
+
+VS 0.1377 0.1324 0.1297 Linear 0.5249 0.4881 0.4730 Channel MLP Linear1 0.9349 0.9175 0.9127 Linear2 0.0181 0.01697 0.0161 TransFormer Spike Block SepSpikeConv PWConv1 0.7944 0.7935 0.7932 DWConv 0.1714 0.1775 0.1778 PWConv2 0.1576 0.1701 0.1740 Head-QKV 0.3908 0.3597 0.3534 SSA 
+
+QS 0.5916 0.6136 0.6324 
+
+KS 0.0311 0.0302 0.0299 
+
+VS 0.0268 0.0255 0.0246 Linear 0.0421 0.0446 0.0520 Channel MLP Linear1 0.3862 0.3311 0.3099 Linear2 0.0091 0.0077 0.0068 Memory Retrieval Module Head-KV 0.8044 0.7835 0.7841 
+
+VS 0.3875 0.3687 0.3515 
+
+KS 0.3411 0.3344 0.3173 10

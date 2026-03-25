@@ -1,0 +1,504 @@
+Title: From Pairs to Sequences: Track-Aware Policy Gradients for Keypoint Detection
+
+URL Source: https://arxiv.org/pdf/2602.20630v3
+
+Published Time: Wed, 04 Mar 2026 01:41:08 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# From Pairs to Sequences: Track-Aware Policy Gradients for Keypoint Detection 
+
+## Yepeng Liu 1,2 * , Hao Li 2 * , Liwen Yang 1 * , Fangzhen Li 2 †, Xudi Ge 1, Yuliang Gu 1,Kuang Gao 2, Bing Wang 2, Guang Chen 2, Hangjun Ye 2, Yongchao Xu 1 † B
+
+> 1
+
+## School of Computer Science, Wuhan University 2Xiaomi EV 
+
+{yepeng.liu@,yongchao.xu@ }whu.edu, {lifangzhen@ }xiaomi.com 
+
+## Abstract 
+
+Keypoint-based matching is a fundamental component of modern 3D vision systems, such as Structure-from-Motion (SfM) and SLAM. Most existing learning-based methods are trained on image pairs, a paradigm that fails to explicitly optimize for the long-term trackability of keypoints across sequences under challenging viewpoint and illumination changes. In this paper, we reframe keypoint detection as a sequential decision-making problem. We introduce Traq-Point , a novel, end-to-end Reinforcement Learning (RL) framework designed to optimize the Tra ck-quality (Traq) of keypoints directly on image sequences. Our core innovation is a track-aware reward mechanism that jointly encourages the consistency and distinctiveness of keypoints across mul-tiple views, guided by a policy gradient method. Extensive evaluations on sparse matching benchmarks, including rel-ative pose estimation and 3D reconstruction, demonstrate that TraqPoint significantly outperforms some state-of-the-art (SOTA) keypoint detection and description methods. 
+
+## 1. Introduction 
+
+Keypoint detection and description are the foundation for a wide range of 3D computer vision tasks, including Structure-from-Motion (SfM) [25, 43], Simultaneous Lo-calization and Mapping (SLAM) [6, 29], and relocaliza-tion [39, 53]. The performance of these systems is criti-cally dependent on the quality of the detected keypoints. To enable robust matching, these points must exhibit high sta-bility under drastic viewpoint and illumination changes. Driven by advances in deep learning, the paradigm for keypoint detection has progressively shifted from hand-crafted designs to data-driven approaches. These learning-based methods are generally self-supervised or super-vised. Self-supervised methods, such as SuperPoint [9] and SiLK [15], generate pseudo-labels from synthetic im-age pairs using geometric transformations. Supervised ap- 
+
+> *
+
+Equal contribution, † Project leader, B Corresponding author, Work done during internship at Xiaomi EV. Sparse Points  Image 1  Image 2  Image 3  
+
+> RDD
+> 18,179 Landmarks 8.7k / 14.6k
+> (Successful Rate)
+> 7.5k / 14.8k
+> (Successful Rate)
+> 8.3k / 15.0k
+> (Successful Rate)
+> 4.6k / 14.0k
+> (Successful Rate)
+> 4.3k / 13.4k
+> (Successful Rate)
+> 5.1k / 14.8k
+> (Successful Rate) 9,512 Landmarks
+> TraqPoint
+
+Figure 1. Multi-view reconstruction: Our TraqPoint vs. RDD [5]. Keypoints that successfully generate landmarks are marked in blue. Failed keypoints are marked in red. Our TraqPoint gener-ates more keypoints in structurally significant areas with higher cross-view consistency, yielding more landmarks. 
+
+proaches [5, 11, 50, 55] instead train on large-scale real-world datasets ( e.g ., MegaDepth [23]) to learn repeat-able keypoints. Another category of methods (RFP [3], DISK [48], and RIPE [19]) proposes using Reinforcement Learning (RL) to select keypoints in a pair of images, re-warding those keypoints that can form matching pairs. De-spite their varied training strategies, existing methods con-verge on a common principle: defining keypoint quality through its repeatability and matchability in an image pair. This pairwise training paradigm has significantly im-proved performance on matching tasks. However, it in-herently optimizes for instantaneous “matchability” within isolated image pairs. This objective is misaligned with se-quential applications ( e.g ., SLAM and SfM), where the core requirement is long-term “trackability”. Specifically, key-points that perform well on a single pair may drift or drop over long trajectories due to strong viewpoint/illumination changes or motion blur. Such failures directly compromise the stability and accuracy of the overall system. In this paper, we advocate for a paradigm shift: moving from optimizing “pairwise matchability” to directly learn-ing for “long-term trackability”. To this end, we intro-
+
+> arXiv:2602.20630v3 [cs.CV] 3 Mar 2026
+
+duce a novel Sequence-Aware Keypoint Policy Learning 
+
+framework. We reframe keypoint detection as a sequen-tial decision-making problem, where the goal is to discover points that yield stable and persistent tracks. In our frame-work, a policy network acts as a RL agent that operates on a single reference image to select a sparse set of candidate keypoints. The “environment” is no longer a single paired image but an entire sequence. Correspondingly, the reward is a function of the quality of the entire track generated by each selected keypoint. Specifically, the reward for a track is a composite of two signals: (1) a Rank Reward that incentivizes se-lecting points maintaining high saliency within their lo-cal neighborhood across multiple views, and (2) a Dis-tinctiveness Reward that encourages selecting points with global uniqueness. By optimizing this track-centric objec-tive, our policy network learns to produce a detection prob-ability map that intrinsically favors points with the high-est potential for long-term stability. As shown in Fig. 1, TraqPoint’s keypoints are concentrated in structurally sig-nificant areas and exhibit superior cross-view consistency compared to the state-of-the-art approach, RDD [5]. Ex-tensive experiments confirm that TraqPoint achieves SOTA results—specifically on both pairwise and sequential down-stream tasks, including relative pose estimation, visual lo-calization, visual odometry, and 3D reconstruction. Our main contributions can be summarized as follows: • We identify a critical gap between the pairwise training paradigm and the demands of sequential applications. To bridge this gap, we pivot to a new perspective and propose a novel Reinforcement Learning (RL) framework that di-rectly optimizes long-term keypoint trackability. • For the RL framework, we propose a hybrid sampling strategy that enables efficient candidate keypoint selec-tion, while also introducing a novel composite reward function to jointly optimize for multi-view consistency and distinctiveness. • Through comprehensive experiments, we show that Traq-Point significantly outperforms state-of-the-art methods on both pairwise tasks and sequential tasks. 
+
+## 2. Related Work 
+
+2.1. Learned Keypoint Detection and Description 
+
+The definition of a “good” keypoint has evolved from clas-sical handcrafted [26, 28, 35, 36, 52] designs to mod-ern learning-based paradigms [2, 18, 20, 31, 34, 38, 42]. Traditional algorithms defined core properties of desirable keypoints: SIFT [26] identifies scale-space extrema via Difference-of-Gaussians, valuing scale stability and rota-tion invariance; FAST [35] and ORB [36] prioritize effi-ciency, detecting corners via surrounding pixel intensities. TBMR [52] leverages Morse theory for keypoint extraction, emphasizing contrast and affine invariance. These meth-ods share the principle that ideal keypoints lie in textured regions with strong, repeatable geometric signatures ( e.g ., corners, blobs). The learning-based paradigm has dramatically improved the robustness of keypoint detection and matching in com-plex scenes through a data-driven, pairwise training ap-proach. One line of work uses self-supervision, typi-cally by leveraging homography transformations to gen-erate image pairs with known correspondences. Super-Point [9] , for example, uses a base detector to cre-ate pseudo-labels on warped images, enabling joint train-ing of the detector and descriptor. Similarly, R2D2 [34] optimizes for both repeatability and reliability in a self-supervised manner, while SILK [15] uses the matcha-bility of learned descriptors to supervise which points should be detected. Another category of methods, in-cluding D2-Net [10], ALIKED [55], XFeat [33], De-DoDe [11], and RDD [5], trains on large-scale 3D datasets like MegaDepth [23]. By using ground-truth correspon-dences derived from COLMAP [43] reconstructions, these methods learn features that are highly consistent across real-world viewpoint and illumination changes. Furthermore, dense (RoMa [12], Mast3r [21], Dust3r [49]) and semi-dense (LoFTR [46], Efficient LoFTR [51]) matching meth-ods have garnered significant attention recently, and they also adopt a pairwise training paradigm. While these methods have established a strong base-line for pairwise matching, their objective is not explic-itly designed to model long-term temporal dynamics. Our work addresses this gap by introducing a sequence-aware paradigm that optimizes directly for long-term trackability. This approach offers greater potential to handle complex factors inherent in sequences. 
+
+2.2. RL-Based Keypoint Detection 
+
+Several works frame keypoint detection as a Reinforcement Learning (RL) problem to handle the discrete and non-differentiable keypoint selection task. Early approaches, such as [7, 47], utilize Q-learning to directly regress a key-point’s reward value. However, these rewards are calcu-lated based on the matchability of handcrafted descriptors (e.g ., SIFT), which fundamentally limits the robustness of the learned detector. More recent methods [3, 13, 19, 32, 37, 48] perform gradient optimization directly in policy space. Reinforced Feature Points (RFP) [3] represents a key advancement by embedding the learning process into high-level tasks, using the final pose estimation error as the reward signal to align keypoint selection with 3D geometry. DISK [48] achieves end-to-end optimization by using the number of geometri-cally consistent inliers as a reward, while RIPE [19] pro-poses an unsupervised approach that uses the inlier ratio 𝑯 × 𝑾 × 𝟑                   
+
+> Upsample
+> Descriptor
+> Head
+> Multi -scale
+> Deformable
+> Attention
+> DINOV3 -ConvNext
+> CPolicy
+> Head
+> Descriptor
+> Branch
+> Keypoint
+> Branch
+> 𝑯
+> 𝟒 ×𝑾
+> 𝟒 ×𝟐𝟓𝟔
+> ൗ𝟏 𝟏
+> ൗ𝟏 𝟐
+> ൗ𝟏 𝟖
+> Τ𝟏 𝟑𝟐
+> 𝑯 ×𝑾
+> Resolution/2
+> Channels ×2
+> Τ𝟏 𝟒
+> ൗ𝟏 𝟖 ൗ𝟏 𝟏𝟔
+> ൗ𝟏 𝟑𝟐
+> (𝝅 𝜽 )
+> (𝚽 )
+> Logit Map
+> (
+> L)
+> Description
+> Map (
+> D)
+
+Figure 2. Following the architectural design of RDD [5], we adopt an identical network structure. Specifically, we replace the feature extractor employed in RDD [5] with DINOv3-ConvNeXt [45]. The keypoint branch serves as the policy network ( πθ ).
+
+from epipolar constraints. These methods still retain the limitation of the pairwise paradigm: their reward functions are derived from a single image pair, optimizing for instan-taneous matchability rather than the longevity of keypoints required in sequential tasks. Our work departs from these RL-based methods by shift-ing the optimization paradigm from pairwise to sequence-level supervision, computing rewards based on the trajec-tory quality of selected keypoints to directly optimize for “trackability” over “matchability”. Furthermore, we decou-ple policy learning from descriptor training, leveraging a frozen descriptors branch to provide stable reward signal. 
+
+## 3. Method 
+
+Our TraqPoint utilizes a lightweight policy network and a sequence-aware reward to select keypoints explicitly opti-mized for long-term trackability. In Section 3.1, we first introduce the preliminaries, detailing the dual-branch net-work architecture (Fig. 2) and the pre-training of the de-scriptor branch, which provides a stable signal for reward calculation. Subsequently, we formally define the Problem Formulation (Sec. 3.2) of our RL approach. We then detail our core innovations: hybrid sampling strategy (Sec. 3.3) and the trackability reward (Sec. 3.4). Finally, we describe the policy optimization process (Sec. 3.5) for the network. Fig. 3 illustrates the complete RL training process. 
+
+3.1. Preliminaries 
+
+Our method builds upon the recent success of dual-branch architectures [5, 11]. We adopt a “describe-then-detect” training paradigm, where the descriptor branch is pre-trained first and then kept frozen in keypoint branch train-ing. This two-stage strategy allows our framework to fo-cus exclusively on optimizing the keypoint detection policy, which is the core of our work. 
+
+Network Architecture. As shown in Fig. 2, we adopt the same network architecture as RDD [5]. The descriptor branch consists of a backbone and a multi-scale deformable transformer module. We replace the original ResNet-50 backbone with a DINOv3-ConvNeXt (base) [45] and uti-lize its features from four different scales. The transformer module then aggregates these features to produce a dense descriptor map D ∈ R H   
+
+> 4×W
+> 4×256
+
+. The keypoint branch retains the lightweight 4-layer convolutional design from ALIKED [55]. As this branch serves as the policy net-work in our RL framework, we term its final 1 × 1 convo-lutional layer the policy head, which outputs the final logit map L ∈ RH×W .While this backbone upgrade improves performance (see ablation in Sec. 4.7), our primary contribution is the novel RL training paradigm, not the architectural modifications. 
+
+Descriptor Branch Pre-training. Following prior work [5, 33], we train the descriptor branch Φ on image pairs from the MegaDepth dataset [23]. We first leverage camera poses and depth maps to generate ground-truth pixel correspon-dences Mgt . For a given pair (IA, I B ), we sample the cor-responding sets of descriptors dA and dB from the outputs of Φ. We then compute the similarity matrix S between dA
+
+and dB , and apply a dual-softmax operation to obtain the probability matrix P. To optimize the network, we apply the same focal loss function [5] on the positive correspon-dences (diagonal elements Pii ) : 
+
+Ldesc = − 1
+
+|M gt |
+
+X
+
+> i∈M gt
+
+α(1 − Pii )γ log( Pii ), (1) where α = 0 .25 and γ = 2 . Upon completion of this train-ing stage, we freeze the parameters of Φ.
+
+3.2. Problem Setup 
+
+To address the dual challenges of the discrete selection problem inherent in keypoint detection and the objective misalignment of pairwise training, we introduce a reinforce-ment learning framework that reformulates keypoint detec-tion as a sequential decision-making task. In this frame-work, the policy network πθ (parameterized by θ) acts as the agent. The state s is defined as the reference image 
+
+Iref . Given s, the policy outputs a pixel-wise probability distribution, denoted as Pθ = πθ (s), over the image spatial domain. An action is defined as sampling a set of N key-points independently from this distribution: A = {xi}Ni=1 ,where xi ∼ Pθ . The objective is to maximize the expected reward R(A), which is the average long-term trackability score Ri for each keypoint in A (detailed in Sec. 3.4). This is formulated as maximizing the objective function: 
+
+J (θ) = EA∼ Pθ [R(A)] . (2) 
+
+3.3. Hybrid Sampling Strategy 
+
+While the action set A is sampled from the policy’s out-put distribution Pθ , the specific sampling method signifi-cantly impacts performance. A naive approach of sampling (1) Hybrid Sampling 
+
+> (2) Trackability Reward Calculation
+> (3) Policy Optimization
+> Input Sequence
+
+𝑰 𝒓𝒆𝒇   
+
+> Policy Network (𝝅 𝜽 )
+> Grid
+> Points
+> Global
+> Points
+> Sampled Keypoints
+> 𝑰 𝒓𝒆𝒇
+> Vis += 1
+> Vis += 1
+> Vis += 1
+> Vis += 1
+> Vis += 1
+> 𝑰 𝟐
+> 𝒕 𝑰 𝟑
+> 𝒕
+> Geometric Verification & Visibility Counting
+> Visible number = 2
+> Visible number = 3
+> Per -Frame Reward Calculation
+> Rank Reward
+> 0%
+> 100%
+> TOP
+> 90%
+
+𝒓𝒂𝒏𝒌 _𝒑𝒓𝒐𝒑 > 𝝉 𝒓𝒂𝒏𝒌      
+
+> (𝑹 𝒓𝒂𝒏𝒌 ,𝒊
+> 𝒕 )
+> Distinctiveness Reward
+> 𝐝 𝒊
+> 𝒓𝒆𝒇
+> 𝒅 𝟏
+> 𝒅 𝟐
+> 𝒓𝒂𝒕𝒊𝒐 =𝒅 𝟏 /𝒅 𝟐
+
+𝒓𝒂𝒕𝒊𝒐 < 𝝉 𝒅𝒊𝒔𝒕  
+
+> (𝑹 𝒅𝒊𝒔𝒕 ,𝒊
+> 𝒕 )
+
+𝑹 𝒊 
+
+> 𝒕
+
+= 𝟏  
+
+> 𝟐
+
+(𝑹 𝒓𝒂𝒏𝒌 ,𝒊  
+
+> 𝒕
+
++ 𝑹 𝒅𝒊𝒔𝒕 ,𝒊  
+
+> 𝒕
+
+) 
+
+> Feature Space
+> Aggregate Tracking Reward
+> Policy Network (𝝅 𝜽 )Action Reward
+
+𝓡 𝓐 
+
+> Local Logit Map
+> Action
+> Probability
+> Gradient
+> Update
+
+𝑹 𝒊 = 𝟏 
+
+𝓥 𝒊 
+
+෍
+
+> 𝒕 ∈𝓥 𝒊
+
+𝑹 𝒊 
+
+> 𝒕
+> Probability
+> (𝑷 𝜽 )
+> Action
+> (𝓐 )
+
+𝓛 𝜽 = −𝓡 𝓐 ⋅
+
+𝟏 
+
+𝑵 ෍
+
+> 𝒊 =𝟏
+> 𝑵
+
+𝐥𝐨𝐠 𝑷 𝜽 𝐱 𝒊 
+
+−𝝀 𝓗 𝑷 𝜽 + 𝜶 𝒕 𝓛 𝒘 
+
+> 𝑰 𝟏
+> 𝒕
+> 𝐝 𝟏
+> 𝒕
+> 𝐝 𝟐
+> 𝒕
+
+𝑰 𝒓𝒆𝒇 
+
+Eq.  (5) 
+
+Eq.  (6) Figure 3. Overview of our proposed Sequence-Aware Keypoint Policy Learning framework: First, we select a reference frame from the input image sequence and perform hybrid keypoint sampling on it. Next, we leverage geometric mapping to locate the corresponding positions of the reference frame’s keypoints in other frames of the sequence. We then count the number of these keypoints visible across the entire sequence. After that, we compute per-frame rewards for each sampled point and aggregate these into a final track reward. Finally, we update the policy network’s gradients. 
+
+from the global distribution can cause keypoints to cluster in high-probability regions, resulting in poor spatial cover-age. We therefore propose a hybrid sampling strategy to balance exploitation and exploration (via spatial coverage). Specifically, A is a union of two subsets: • Global Sampling: We sample Ng points by drawing di-rectly from the global distribution Pθ , focusing on high-probability regions. • Grid Sampling: We divide the image into a G × G reg-ular grid (resulting in Ngrid = G2). For each cell, we first extract the local logit submap from L and apply spa-tial softmax to obtain a local policy distribution. We then sample one keypoint from each cell based on this local distribution, ensuring spatial coverage while selecting lo-cally optimal points. This hybrid approach generates a spatially diverse set of 
+
+N = Ng + Ngrid keypoints. For the policy gradient calcu-lation, the probability of every sampled keypoint xi ∈ A 
+
+(regardless of its source) is defined by its value in the global distribution Pθ (xi).
+
+3.4. Trackability Reward Formulation 
+
+The core of our framework is the reward function Ri for each sampled keypoint xi ∈ A (located in Iref ). For each keypoint xi, we project it into every target frame It using the known relative pose and depth, yielding a projected co-ordinate xti. A projection is considered visible if it falls within the image bounds and passes standard geometric ver-ification checks (such as depth consistency). We denote the set of frame indices t where xi is visible as Vi.For each visible projection xti (where t ∈ V i), we com-pute a per-frame reward Rti . To prevent sparse signals, both components of this reward are designed as linear scores rather than binary pass/fail signals. This Rti combines two complementary signals: 
+
+Rank Reward ( Rrank ). This reward quantifies the cross-view consistency of saliency for high-probability points se-lected from the Iref . In the target frame It, we compute the logit map Lt = πθ (It). We assess the logit value Lt(xti)
+
+relative to its local K × K patch. We define rank prop as the saliency percentile score, representing the proportion of points it is more salient than. For example, in a 10 ×10 patch (100 points), the 10th-highest logit value has a rank prop of 0.9 (as it is more salient than 90% of the points). We set a cutoff threshold τrank = 0 .2, meaning only points that are more salient than the bottom 20% of points receive a re-ward. This reward is defined as follows: 
+
+Rt 
+
+> rank ,i
+
+= max 
+
+
+
+0, rank prop − τrank 
+
+1.0 − τrank 
+
+
+
+. (3) Distinctiveness Reward ( Rdist ). This reward, inspired by Lowe’s ratio test [26], measures the distinctiveness of the selected point. We use the frozen descriptor branch Φ to get the reference descriptor di = Φ( Iref , xi). We then compare di against the set of all N projected descriptors in the target frame, {dtj = Φ( It, xtj ) | j = 1 ...N and t ∈ V j }.Let d1 and d2 be the distances to the nearest and second-nearest neighbors of di within this set of N descriptors. We define ratio = d1/d 2. We reward points only if this ratio is below our threshold τdist = 0 .85 . This reward is linearly scaled: 
+
+Rt 
+
+> dist ,i
+
+= max 
+
+
+
+0, τdist − ratio 
+
+τdist 
+
+
+
+. (4) The per-frame reward Rti is the average of these two components. The final trackability reward for keypoint xi
+
+is Ri:
+
+Ri = 1
+
+|V i|
+
+X
+
+> t∈V i
+
+Rti . (5) If a keypoint is never visible ( |V i| = 0 ), its reward Ri is zero. 
+
+3.5. Policy Optimization 
+
+We optimize the policy network πθ using a composite loss function. The primary component is the policy gradient term. To reduce variance, we use the average reward of the entire action set. Let R(A) = 1
+
+> N
+
+PNi=1 Ri. The policy gradient is then estimated using the average log-probability of all sampled actions, log Pθ (xi) (from Sec. 3.3). Second, to encourage spatial diversity and prevent mode collapse, we add a spatial entropy regularization term, H(Pθ ) =
+
+− P 
+
+> x
+
+Pθ (x) log Pθ (x). Finally, to accelerate convergence in the early stages, we employ a warm-up loss Lw for the initial 10% of training epochs. This term uses keypoint lo-cations from the FAST detector [35] to weakly supervise the sigmoid of the policy’s logit map ( e.g ., via a BCE loss). The final loss function is: 
+
+L(θ) = −R (A) · 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+log Pθ (xi)
+
+!
+
+− λH(Pθ ) + αtLw,
+
+(6) where λ is a fixed hyperparameter that balances the entropy term with the main loss, and is set to 0.001. The warm-up weight αt linearly anneals from 1.0 to 0.0 during the first 10% of epochs, after which only the RL loss remains. 
+
+## 4. Experiments 
+
+To fully validate the effectiveness of our proposed Traq-Point, we conduct evaluations on pair-level tasks (relative pose estimation, visual localization), and sequence-level tasks (visual odometry, 3D reconstruction). Furthermore, we perform ablation experiments to dissect the contribu-tions of the key modules in our framework. 
+
+4.1. Training Data 
+
+We construct sequential training data from the MegaDepth dataset [23] for keypoint branch training. Specifically, we first randomly select a reference image from each sub-scene, then identify the remaining images that have an over-lap ratio between 10% and 70% with the reference via their depth maps and camera poses, and finally randomly sample images from this overlapping subset to form a training se-quence with the reference. Additional details about the data construction are provided in the supplementary material. 
+
+4.2. Implementation Details 
+
+For descriptor pre-training, images are resized to 800px. For keypoint policy learning, images are resized to 480px, and we use fixed-length sequences of 5 images with N =256 keypoints sampled per RL step. Both stages are trained for 50,000 steps on 8 NVIDIA H20 GPUs. We use Adam optimizer with a cosine annealing learning rate scheduled from 2 × 10 −4 down to 5 × 10 −6. During inference, we ap-ply a sigmoid function to the output of keypoint branch and use Non-Maximum Suppression (NMS) with a 5 × 5 win-dow to extract keypoints. Following [5, 48], we utilize the soft mutual nearest neighbor (MNN) operation, which com-putes matching probabilities by applying softmax over both dimensions of the descriptor similarity matrix. We discard matches with probability below 0.01 for feature matching. A comparison of the runtime between our method and other approaches is provided in the supplementary material. 
+
+4.3. Relative Pose Estimation 
+
+Datasets. Following prior works [5, 33], we use the MegaDepth [23] and ScanNet [8] test sets to evaluate the relative pose estimation task. These datasets feature out-door and indoor scenes respectively, and their main chal-lenges include large viewpoint changes, illumination varia-tions, and repetitive textures. There is no overlap between these test sets and our training set. 
+
+Metrics and Compared Methods. We report the Area Un-der the Curve (AUC) for pose errors at thresholds of 5°, 10°, and 20°. To ensure reliable pose estimation, we use the RANSAC function of OpenCV [4] to solve for the essential matrix. We compared TraqPoint against the state-of-the-art detector/descriptor methods [5, 9, 11, 19, 33, 48, 55], and learned matching methods [24, 40]. For all methods, images are resized to a maximum dimension of 1,600 pix-els for the MegaDepth dataset, while the VGA resolution is used for the ScanNet dataset. All methods sample the top-4096 keypoints, and conduct experiments following the optimal settings from their official repositories. 
+
+Results. Tab. 1 shows our TraqPoint outperforms some state-of-the-art pairwise and RL-based methods across the MegaDepth and ScanNet benchmarks. Specifically, com-pared to RDD [5], we improve the AUC@5 by 3.9 and Landmarks: 8685 
+
+> Landmarks: 8423
+> Landmarks: 5921
+> Landmarks: 6687
+> Landmarks: 5799
+> Landmarks: 3201
+> Landmarks: 5547
+> Landmarks: 5131
+> Landmarks: 3913
+
+Multi -View Reconstruction    
+
+> XFeat  RIPE  TraqPoint RDD
+> Landmarks: 6150 Landmarks :4170 Landmarks: 3583
+
+Feature Matching Figure 4. Qualitative results on the MegaDepth dataset [23] and the ETH benchmark [44]. For feature matching, keypoints are plotted in orange. Green lines indicate correct matches, while red lines denote incorrect ones. For multi-view reconstruction, keypoints that successfully generate point cloud landmarks are marked in blue; failed ones are marked in red. Our TraqPoint produces keypoints with better structural saliency and high cross-view consistency, which effectively improves feature matching and reconstruction tasks. Table 1. Comparison on the MegaDepth [23] and ScanNet [8] .Top 4,096 features are used for all sparse matching methods. Best in bold, second best underlined.                                                                               
+
+> Method MegaDepth-1500 ScanNet
+> AUC ↑AUC ↑
+> @5 ◦@10 ◦@20 ◦@5 ◦@10 ◦@20 ◦
+> Sparse with Learned Matcher
+> SP [9]+SG [40] CVPR’19 49.7 67.1 80.6 16.1 33.4 50.2 SP [9]+LG [24] ICCV’23 49.9 67.0 80.1 16.2 33.0 49.7
+> Sparse with MNN
+> SuperPoint [9] CVPRW’18 24.1 40.0 54.7 7.0 17.2 29.8 DISK [48] NeurIps’20 38.5 53.7 66.6 8.2 18.3 30.7 ALIKED [55] TIM’23 41.8 56.8 69.6 9.7 22.0 37.1 XFeat [33] CVPR’24 29.6 45.8 60.4 6.9 16.7 30.4 DeDoDe-V2-G [11] CVPRW’24 49.7 66.6 79.4 13.2 27.7 43.7 RDD [5] CVPR’25 51.9 68.0 79.9 13.7 29.3 45.3 RIPE [19] ICCV’25 45.4 60.8 72.9 9.4 20.5 33.5 TraqPoint (Ours) 55.8 71.3 83.0 16.6 32.8 49.5
+
+2.9 on MegaDepth and ScanNet, respectively. We also gain significant matching accuracy advantages over RL-based methods including DISK [48] and RIPE [19]. Even with only the MNN matcher, our method delivers a 5.9 boost in AUC@5 boost on MegaDepth compared to meth-ods equipped with extra matchers ( e.g ., SP+LG [24]), and achieves comparable accuracy on ScanNet—notably, our model is never trained on indoor data. As shown in Fig. 4, our method generates more structurally salient keypoints in 
+
+Table 2. Visual Localization on Aachen day-night [41]. Best in bold, second best underlined. 
+
+Methods Day Night (0.25m,2°) / (0.5m,5°) / (1.0m,10°) SuperPoint [9] CVPRW’18 87.4 / 93.2 / 97.0 77.6 / 85.7 / 95.9 DISK [48] NeurIps’20 86.9 / 95.1 / 97.8 83.7 / 89.8 / 99.0 ALIKE [54] TM’22 85.7 / 92.4 / 96.7 81.6 / 88.8 / 99.0 ALIKED [55] TIM’23 86.5 / 93.4 / 96.8 85.7 / 91.8 / 96.9 XFeat [33] CVPR’24 84.7 / 91.5 / 96.5 77.6 / 89.8 / 98.0 RDD [5] CVPR’25 87.0 / 94.2 / 97.8 86.7 / 92.9 / 99.0 TraqPoint (Ours) 87.9 / 95.1 / 97.9 85.7 / 92.9 / 100.0 
+
+texture-rich regions with strong consistency even under ex-treme viewpoint variations, which further boosts the accu-racy of pairwise matching. 
+
+4.4. Visual Localization 
+
+Dataset. We validate TraqPoint’s performance on vi-sual localization using the Aachen Day-Night dataset [41]. This dataset is specifically designed to localize high-quality nighttime images against a daytime 3D model, and it com-prises 14,607 images covering variations in weather, sea-son, viewpoint, and day-night cycles. 
+
+Metrics and Compared Methods. Following [5, 33], we use HLoc [39] to evaluate all methods [5, 9, 33, 48, 55]. Table 3. Visual Odometry test results on sequence (01-03) of KITTI [14] . ATE: Average Trajectory Error; MTE: Maximum Trajectory Error; AKTL: Average Keypoint Tracking Length. 
+
+Methods ATE ↓ MTE ↓ AKTL ↑
+
+Seq-01 
+
+RootSIFT [1] CVPR’12 60.4 102.1 4.4 XFeat [33] CVPR’24 55.0 92.7 3.9 RDD [5] CVPR’25 35.3 78.3 4.6 RIPE [19] ICCV’25 43.7 90.6 4.1 TraqPoint (Ours) 29.9 51.4 7.3 Seq-02 
+
+RootSIFT [1] CVPR’12 24.6 45.9 2.0 XFeat [33] CVPR’24 36.5 87.4 1.8 RDD [5] CVPR’25 12.8 40.3 2.4 RIPE [19] ICCV’25 35.4 82.3 1.7 TraqPoint (Ours) 11.8 22.1 3.8 Seq-03 
+
+RootSIFT [1] CVPR’12 5.8 16.6 4.8 XFeat [33] CVPR’24 11.7 26.8 4.2 RDD [5] CVPR’25 4.0 11.2 5.2 RIPE [19] ICCV’25 3.9 9.4 4.8 TraqPoint (Ours) 1.3 2.9 8.7 
+
+Images are resized to a maximum side length of 1,024 pixels, and we sample the top 4,096 keypoints for all ap-proaches. Metrics are computed using the evaluation tool from [41], including the AUC of estimated camera poses under threshold of {0.25 m, 0.5m, 1.0m} for translation er-rors and {2◦, 5◦, 10 ◦} for rotation errors respectively. 
+
+Results. Tab. 2 presents the results of visual localization. TraqPoint achieves the best performance across all daytime settings and the two nighttime settings, further demonstrat-ing its robustness. 
+
+4.5. Visual Odometry (VO) 
+
+Dataset. Visual Odometry (VO) is a core component of SLAM systems, serving as a direct testbed for long-term keypoint trackability. We thus evaluate TraqPoint on the KITTI Odometry Benchmark [14], which provides 22 stereo image sequences covering diverse real-world driv-ing scenarios ( e.g ., varying illumination, dynamic objects). Among these sequences, 10 are accompanied by ground-truth trajectories annotated via high-precision GPS/IMU for quantitative evaluation. We report the results of sequences 01–03, while the results of the remaining sequences along with detailed definitions of the metrics are included in the supplementary material. 
+
+Metrics and Compared Methods. We evaluate odome-try benchmark from two perspectives: trajectory estima-tion accuracy and keypoint tracking consistency. For trajec-tory accuracy, we compute Average Trajectory Error (ATE) 
+
+and Maximum Trajectory Error (MTE) by calculating 2D positional errors of projected x-z plane trajectories. For keypoint tracking consistency, Average Keypoint Tracking Length (AKTL) is defined as the mean tracking length of valid keypoints. We compared TraqPoint against the hand-crafted features [1] and learnable detectors [5, 19, 33]. All 
+
+Table 4. Results on ETH benchmark [44] for 3D reconstruc-tion. Best in bold, second best underlined.                                                                                                                                         
+
+> Methods Reg. Img ↑Sparse Pts ↑Track Len ↑Reproj Err ↓
+> Madrid Metropolis (1344 imgs)
+> RootSIFT [1] CVPR’12 500 116k 6.32 0.60px
+> SuperPoint [9] CVPRW’18 438 29k 9.03 1.05px D2-Net [10] CVPR’19 501 84k 6.33 1.28px ASLFeat [27] CVPR’20 613 96k 8.76 0.90px PosFeat [22] CVPR’22 419 72k 9.18 0.86px XFeat [33] CVPR’24 581 111k 6.16 1.27px RDD [5] CVPR’25 632 154k 9.40 1.12px RIPE [19] ICCV’25 644 167k 5.87 1.25px TraqPoint (Ours) 693 254k 11.14 1.03px
+> Gendarmen-markt (1463 imgs)
+> RootSIFT [1] CVPR’12 1035 338k 5.52 0.69px
+> SuperPoint [9] CVPRW’18 967 93k 7.22 1.03px D2-Net [10] CVPR’19 1053 250k 5.08 1.19px ASLFeat [27] CVPR’20 1040 221k 8.72 1.00px PosFeat [22] CVPR’22 956 240k 8.40 0.92px XFeat [33] CVPR’24 1049 276k 6.74 1.30px RDD [5] CVPR’25 1062 309k 9.87 1.17px RIPE [19] ICCV’25 1069 321k 7.21 1.26px TraqPoint (Ours) 1093 401k 11.06 1.08px
+> Tower of London (1576 imgs)
+> RootSIFT [1] CVPR’12 804 239k 7.76 0.61px
+> SuperPoint [9] CVPRW’18 681 52k 8.67 0.96px D2-Net [10] CVPR’19 785 180k 5.32 1.24px ASLFeat [27] CVPR’20 821 222k 12.16 0.92px PosFeat [22] CVPR’22 778 262k 11.64 0.90px XFeat [33] CVPR’24 796 244k 8.50 1.28px RDD [5] CVPR’25 834 278k 12.20 1.15px RIPE [19] ICCV’25 823 269k 9.14 1.25px TraqPoint (Ours) 875 341k 13.28 1.06px
+
+methods use the top-4096 keypoints for prediction, and adopt mutual nearest neighbor (MNN) matching. 
+
+Results. Tab. 3 presents our performance on the odometry task. Our method achieves the best results in both Average Trajectory Error and Maximum Trajectory Error. Notably, it delivers remarkable gains in the Average Keypoint Tra-jectory Length (AKTL) metric—outperforming RDD [5] and RIPE [19] with significant margins. Even under out-door fast-motion and associated challenges (rapid texture changes, dynamic objects), our keypoints still maintain good spatial consistency in temporal sequences, enabling more stable camera pose and trajectory estimation. 
+
+4.6. 3D Reconstruction 
+
+Dataset. We use the ETH benchmark [44] to demonstrate effectiveness on 3D reconstruction tasks. Following prior works [22, 27], we evaluate on three medium-scale scenes from this benchmark. 
+
+Metrics and Compared Methods. For each scene, we per-form matching with a ratio test of 0.8 and mutual check for outlier rejection, followed by SfM algorithm execution using COLMAP [43]. We then report the number of reg-istered images (Reg. Images), the number of sparse points (Sparse Pts), average track length (Track Len) and mean re-Table 5. Ablation study. We report matching capability (AUC@5° on MegaDepth [23]) and tracking stability (average value of AKTL on KITTI [14] sequence 01-03).                     
+
+> Variant AUC@5° ↑AKTL ↑
+> TraqPoint-Full (Ours) 55.8 6.6
+> 1. RL Paradigm
+> TraqPoint – Pairwise 53.3 4.3 Match Reward – Pairwise 49.7 2.8
+> 2. Reward Function Design
+> w/o Ranking Reward 52.6 4.0 w/o Distinctiveness Reward 54.6 5.9 w/o RL learning 52.0 3.8
+> 3. Backbone Architecture
+> DINOv2-ViT 54.8 6.4 ResNet-50 54.5 6.1
+
+projection error (Reproj. Error). The maximum number of keypoints is limited to 20k for all methods. 
+
+Results. Tab. 4 demonstrates the effectiveness of our method in multi-view sparse reconstruction. Our approach achieves the best performance across key metrics: the num-ber of registered images, generated point cloud number, and keypoint track length. The marginal increase in reprojec-tion error stems from retaining “hard” keypoints ( e.g ., under large viewpoint changes), which are essential for the signifi-cant gains in reconstruction density and track length. These results reflect that the strong consistency of our keypoints effectively boosts reconstruction quality. Further visualiza-tions in Fig. 4 demonstrate that our keypoints yield a more rational distribution: they are less likely to fall into texture-less regions ( e.g ., sky) and instead exhibit a more regular, structured arrangement in texture-rich areas. This favorable spatial consistency directly contributes to improved perfor-mance in the reconstruction task. 
+
+4.7. Ablation 
+
+We report two metrics: AUC@5 on the MegaDepth dataset [23], measuring matching capability. The AKTL metric on KITTI sequences 01–03 [14], directly quantify-ing keypoint consistency. Results are shown in Tab. 5: 
+
+1) Sequential vs. Pairwise Reinforcement Learning. Two variants are constructed: (i) a two-frame simplified version, where rewards are computed solely on single image pairs to back propagate and optimize the policy network; (ii) us-ing a basic matching reward (award keypoints that form nearest-neighbor matches with projected points), consistent with pairwise matching reward designs in most RL frame-works [19, 48]. Results show sequentialization improves AUC@5 by 2.5 and AKTL by 2.3. Additionally, our cus-tom reward outperforms the basic match reward. 
+
+2) Reward Function Design. We ablate our two re-ward components against a baseline of RDD-based super-vised training (without RL). Results show that the rank-ing reward yields substantial performance gains by enforc-(a) Sequence Length  (b) Points Number 
+
+> Figure 5. Ablation study on sequence length and the number of sampled keypoints.
+
+ing keypoint repeatability. The distinctiveness reward fur-ther elevates keypoint distinctiveness, effectively mitigating false matches. The supervised baseline exhibits marked per-formance degradation, underscoring the indispensable role of our RL framework in optimizing long-term trackability. 
+
+3) Backbone Architecture Analysis. Existing work con-firms pre-trained backbones boost descriptor robustness [5, 11, 17]. We evaluate two representatives: ResNet-50 [16] and DINOv2-ViT [30], where DINOv2-ViT only shows marginal gains over ResNet-50—we attribute this to its lack of multi-scale feature representation capabilities. Thus, we adopt DINOv3-ConvNeXt in experiments, as it possesses both multi-scale features and strong semantic representa-tion abilities. Notably, our sequence-aware RL yields con-sistent gains across all backbones, indicating the paradigm complements (not merely relies on) descriptor quality. 
+
+4) Hyperparameter Sensitivity. We investigate two key hyperparameters: training sequence length and number of sampled keypoints. For sequence length, increasing it en-hances reward stability, but an excessively long sequence diminishes the average effective information. As shown in Fig. 5, the optimal parameters are a training sequence length of 5 and 256 sampled keypoints. 
+
+## 5. Conclusion 
+
+In this paper, we present a novel sequence-aware paradigm for learning local keypoints. We identify a critical gap in previous methods—the reliance on pairwise matching objective that optimizes for short-term matchability rather than long-term consistency. To address this gap, we refor-mulate keypoint detection as a sequential decision-making problem and introduce a reinforcement learning framework trained with a novel composite reward that jointly enhances multi-view consistency and distinctiveness. Extensive ex-periments demonstrate that our approach outperforms ex-isting methods across both pairwise and sequence-based downstream tasks. Thus, our work offers a novel research perspective for boosting the long-term stability of keypoints in sequential vision systems. 
+
+Acknowledgment. This work was supported partially by the National Key Research and Development Program of China (2023YFC2705700), NSFC 62222112, 62176186, and the NSF of Hubei Province of China (2024AFB245). References 
+
+[1] Relja Arandjelovi´ c and Andrew Zisserman. Three things ev-eryone should know to improve object retrieval. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 2911– 2918, 2012. 7 [2] Giovanni Barbarani, Francesco Vaccarino, Gabriele Trivi-gno, Marco Guerra, Gabriele Berton, and Carlo Masone. Scale-free image keypoints using differentiable persistent homology. In Proc. Int. Conf. Mach. Learn. , pages 2990– 3002, 2024. 2 [3] Aritra Bhowmik, Stefan Gumhold, Carsten Rother, and Eric Brachmann. Reinforced feature points: Optimizing feature detection and description for a high-level task. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 4948– 4957, 2020. 1, 2 [4] Gary Bradski. The OpenCV library. Dr. Dobb’s Journal: Software Tools for the Professional Programmer , 25(11): 120–123, 2000. 5 [5] Gonglin Chen, Tianwen Fu, Haiwei Chen, Wenbin Teng, Hanyuan Xiao, and Yajie Zhao. RDD: Robust feature de-tector and descriptor using deformable transformer. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 6394– 6403, 2025. 1, 2, 3, 5, 6, 7, 8 [6] Chi-Ming Chung, Yang-Che Tseng, Ya-Ching Hsu, Xiang-Qian Shi, Yun-Hung Hua, Jia-Fong Yeh, Wen-Chin Chen, Yi-Ting Chen, and Winston H Hsu. Orbeez-SLAM: A real-time monocular visual slam with orb features and nerf-realized mapping. In Proc. IEEE Int. Conf. Robot. Autom. ,pages 9400–9406, 2023. 1 [7] Titus Cieslewski, Konstantinos G Derpanis, and Davide Scaramuzza. SIPs: Succinct interest points from unsuper-vised inlierness probability learning. In International Con-ference on 3D Vision , pages 604–613, 2019. 2 [8] Angela Dai, Angel X Chang, Manolis Savva, Maciej Hal-ber, Thomas Funkhouser, and Matthias Nießner. ScanNet: Richly-annotated 3D reconstructions of indoor scenes. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 5828–5839, 2017. 5, 6 [9] Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabi-novich. SuperPoint: Self-supervised interest point detection and description. In Proc. of IEEE Conf. Comput. Vis. Pattern Recognit. Workshops , pages 224–236, 2018. 1, 2, 5, 6, 7 [10] Mihai Dusmanu, Ignacio Rocco, Tomas Pajdla, Marc Polle-feys, Josef Sivic, Akihiko Torii, and Torsten Sattler. D2-Net: A trainable cnn for joint description and detection of local features. In Proc. IEEE/CVF Conf. Comput. Vis. Pat-tern Recog. , pages 8092–8101, 2019. 2, 7 [11] Johan Edstedt, Georg B¨ okman, and Zhenjun Zhao. DeDoDe v2: Analyzing and Improving the DeDoDe Keypoint Detec-tor. In Proc. of IEEE Conf. Comput. Vis. Pattern Recognit. Workshops , 2024. 1, 2, 3, 5, 6, 8 [12] Johan Edstedt, Qiyu Sun, Georg B¨ okman, M˚ arten Wadenb¨ ack, and Michael Felsberg. RoMa: Robust dense feature matching. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 19790–19800, 2024. 2 [13] Johan Edstedt, Georg B¨ okman, M˚ arten Wadenb¨ ack, and Michael Felsberg. DaD: Distilled reinforcement learn-ing for diverse keypoint detection. arXiv preprint arXiv:2503.07347 , 2025. 2 [14] Andreas Geiger, Philip Lenz, and Raquel Urtasun. Are we ready for autonomous driving? the KITTI vision benchmark suite. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. ,pages 3354–3361, 2012. 7, 8 [15] Pierre Gleize, Weiyao Wang, and Matt Feiszli. SiLK: Simple learned keypoints. In Proc. IEEE/CVF Int. Conf. Comput. Vis. , pages 22499–22508, 2023. 1, 2 [16] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 770– 778, 2016. 8 [17] Hanwen Jiang, Arjun Karpur, Bingyi Cao, Qixing Huang, and Andre Araujo. OmniGlue: Generalizable feature match-ing with foundation model guidance. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , 2024. 8 [18] Shinjeong Kim, Marc Pollefeys, and Daniel Barath. Learn-ing to make keypoints sub-pixel accurate. In Proc. Eur. Conf. Comput. Vis. , pages 413–431, 2024. 2 [19] Johannes K¨ unzel, Anna Hilsmann, and Peter Eisert. RIPE: Reinforcement learning on unlabeled image pairs for robust keypoint extraction. In Proc. IEEE/CVF Int. Conf. Comput. Vis. , 2025. 1, 2, 5, 6, 7, 8 [20] Jongmin Lee, Byungjin Kim, and Minsu Cho. Self-supervised equivariant learning for oriented keypoint detec-tion. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. ,pages 4847–4857, 2022. 2 [21] Vincent Leroy, Yohann Cabon, and J´ erˆ ome Revaud. Ground-ing image matching in 3d with MASt3R. In Proc. Eur. Conf. Comput. Vis. , pages 71–91, 2024. 2 [22] Kunhong Li, Longguang Wang, Li Liu, Qing Ran, Kai Xu, and Yulan Guo. Decoupling makes weakly supervised local feature better. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 15838–15848, 2022. 7 [23] Zhengqi Li and Noah Snavely. MegaDepth: Learning single-view depth prediction from internet photos. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 2041– 2050, 2018. 1, 2, 3, 5, 6, 8 [24] Philipp Lindenberger, Paul-Edouard Sarlin, and Marc Polle-feys. LightGlue: Local feature matching at light speed. In Proc. IEEE/CVF Int. Conf. Comput. Vis. , pages 17627– 17638, 2023. 5, 6 [25] Yepeng Liu, Wenpeng Lai, Zhou Zhao, Yuxuan Xiong, Jinchi Zhu, Jun Cheng, and Yongchao Xu. LiftFeat: 3D geometry-aware local feature matching. In Proc. IEEE Int. Conf. Robot. Autom. , pages 11714–11720, 2025. 1 [26] David G Lowe. Distinctive image features from scale-invariant keypoints. Int. J. Comput. Vis. , 60:91–110, 2004. 2, 5 [27] Zixin Luo, Lei Zhou, Xuyang Bai, Hongkai Chen, Jiahui Zhang, Yao Yao, Shiwei Li, Tian Fang, and Long Quan. ASLFeat: Learning local features of accurate shape and lo-calization. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 6589–6598, 2020. 7 [28] Jiri Matas, Ondrej Chum, Martin Urban, and Tom´ as Pa-jdla. Robust wide-baseline stereo from maximally stable ex-tremal regions. Image and vision computing , 22(10):761– 767, 2004. 2 [29] Raul Mur-Artal and Juan D Tard´ os. ORB-SLAM2: An open-source slam system for monocular, stereo, and RGB-D cam-eras. IEEE Trans. Robot. , 33(5):1255–1262, 2017. 1 [30] Maxime Oquab, Timoth´ ee Darcet, Th´ eo Moutakanni, Huy V Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel HAZIZA, Francisco Massa, Alaaeldin El-Nouby, et al. DINOv2: Learning robust visual features without supervision. Transactions on Machine Learning Research ,2024. 8 [31] Konstantin Pakulev, Alexander Vakhitov, and Gonzalo Fer-rer. Ness-st: Detecting good and stable keypoints with a neural stability score and the Shi-Tomasi detector. In Proc. IEEE/CVF Int. Conf. Comput. Vis. , pages 9578–9588, 2023. 2[32] Guilherme Potje, Felipe Cadar, Andr´ e Araujo, Renato Mar-tins, and Erickson R Nascimento. Enhancing deformable lo-cal features by jointly learning to detect and describe key-points. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 1306–1315, 2023. 2 [33] Guilherme Potje, Felipe Cadar, Andr´ e Araujo, Renato Mar-tins, and Erickson R Nascimento. XFeat: Accelerated fea-tures for lightweight image matching. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 2682–2691, 2024. 2, 3, 5, 6, 7 [34] Jerome Revaud, Cesar De Souza, Martin Humenberger, and Philippe Weinzaepfel. R2D2: Reliable and repeatable detec-tor and descriptor. Adv. Neural Inf. Process. Syst. , 32, 2019. 2[35] Edward Rosten, Reid Porter, and Tom Drummond. Faster and better: A machine learning approach to corner detection. 
+
+IEEE Trans. on Pattern Anal. and Mach. Intell. , 32(1):105– 119, 2008. 2, 5 [36] Ethan Rublee, Vincent Rabaud, Kurt Konolige, and Gary Bradski. ORB: An efficient alternative to SIFT or SURF. In 
+
+Proc. IEEE/CVF Int. Conf. Comput. Vis. , pages 2564–2571, 2011. 2 [37] Emanuele Santellani, Christian Sormann, Mattia Rossi, An-dreas Kuhn, and Friedrich Fraundorfer. S-TREK: Sequential translation and rotation equivariant keypoints for local fea-ture extraction. In Proc. IEEE/CVF Int. Conf. Comput. Vis. ,pages 9728–9737, 2023. 2 [38] Emanuele Santellani, Martin Zach, Christian Sormann, Mat-tia Rossi, Andreas Kuhn, and Friedrich Fraundorfer. Gmm-ikrs: Gaussian mixture models for interpretable keypoint re-finement and scoring. In Proc. Eur. Conf. Comput. Vis. , pages 77–93, 2024. 2 [39] Paul-Edouard Sarlin, Cesar Cadena, Roland Siegwart, and Marcin Dymczyk. From coarse to fine: Robust hierarchical localization at large scale. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 12716–12725, 2019. 1, 6 [40] Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. SuperGlue: Learning feature matching with graph neural networks. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 4938–4947, 2020. 5, 6 [41] Torsten Sattler, Will Maddern, Carl Toft, Akihiko Torii, Lars Hammarstrand, Erik Stenborg, Daniel Safari, Masatoshi Okutomi, Marc Pollefeys, Josef Sivic, et al. Benchmarking 6DOF outdoor visual localization in changing conditions. In 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 8601–8610, 2018. 6, 7 [42] Nikolay Savinov, Akihito Seki, Lubor Ladicky, Torsten Sat-tler, and Marc Pollefeys. Quad-networks: unsupervised learning to rank for interest point detection. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 1822– 1830, 2017. 2 [43] Johannes L Schonberger and Jan-Michael Frahm. Structure-from-motion revisited. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 4104–4113, 2016. 1, 2, 7 [44] Johannes L Schonberger, Hans Hardmeier, Torsten Sattler, and Marc Pollefeys. Comparative evaluation of hand-crafted and learned local features. In Proc. IEEE/CVF Conf. Com-put. Vis. Pattern Recog. , pages 1482–1491, 2017. 6, 7 [45] Oriane Sim´ eoni, Huy V. Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Micha¨ el Ramamonjisoa, Francisco Massa, Daniel Haziza, Luca Wehrstedt, Jianyuan Wang, Timoth´ ee Darcet, Th´ eo Moutakanni, Leonel Sentana, Claire Roberts, Andrea Vedaldi, Jamie Tolan, John Brandt, Camille Couprie, Julien Mairal, Herv´ e J´ egou, Patrick La-batut, and Piotr Bojanowski. DINOv3, 2025. 3 [46] Jiaming Sun, Zehong Shen, Yuang Wang, Hujun Bao, and Xiaowei Zhou. LoFTR: Detector-free local feature matching with transformers. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 8922–8931, 2021. 2 [47] Prune Truong, Stefanos Apostolopoulos, Agata Mosinska, Samuel Stucky, Carlos Ciller, and Sandro De Zanet. GLAM-points: Greedily learned accurate match points. In Proc. IEEE/CVF Int. Conf. Comput. Vis. , pages 10732–10741, 2019. 2 [48] Michał Tyszkiewicz, Pascal Fua, and Eduard Trulls. DISK: Learning local features with policy gradient. Adv. Neural Inf. Process. Syst. , 33:14254–14265, 2020. 1, 2, 5, 6, 8 [49] Shuzhe Wang, Vincent Leroy, Yohann Cabon, Boris Chidlovskii, and Jerome Revaud. DUSt3R: Geometric 3D vision made easy. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 20697–20709, 2024. 2 [50] Xinjiang Wang, Zeyu Liu, yu Hu, Wei Xi, Wenxian Yu, and Danping Zou. FeatureBooster: Boosting feature descriptors with a lightweight neural network. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , 2023. 1 [51] Yifan Wang, Xingyi He, Sida Peng, Dongli Tan, and Xiaowei Zhou. Efficient LoFTR: Semi-dense local feature matching with sparse-like speed. In Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recog. , pages 21666–21675, 2024. 2 [52] Yongchao Xu, Pascal Monasse, Thierry G´ eraud, and Laurent Najman. Tree-based morse regions: A topological approach to local feature detection. IEEE Trans. Image Process. , 23 (12):5612–5625, 2014. 2 [53] Peng Yin, Ivan Cisneros, Shiqi Zhao, Ji Zhang, Howie Choset, and Sebastian Scherer. iSimLoc: Visual global local-ization for previously unseen environments with simulated images. IEEE Trans. Robot. , 39(3):1893–1909, 2023. 1 [54] Xiaoming Zhao, Xingming Wu, Jinyu Miao, Weihai Chen, Peter CY Chen, and Zhengguo Li. ALIKE: Accurate and lightweight keypoint detection and descriptor extraction. 
+
+IEEE Trans. on Multimedia , 25:3101–3112, 2022. 6 [55] Xiaoming Zhao, Xingming Wu, Weihai Chen, Peter CY Chen, Qingsong Xu, and Zhengguo Li. ALIKED: A lighter keypoint and descriptor extraction network via deformable transformation. IEEE Trans. Instrum. Meas. , 72:1–16, 2023. 1, 2, 3, 5, 6

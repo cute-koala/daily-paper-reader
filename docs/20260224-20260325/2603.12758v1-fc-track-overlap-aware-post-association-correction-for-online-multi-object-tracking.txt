@@ -1,0 +1,257 @@
+Title: FC-Track: Overlap-Aware Post-Association Correction for Online Multi-Object Tracking
+
+URL Source: https://arxiv.org/pdf/2603.12758v1
+
+Published Time: Mon, 16 Mar 2026 00:39:42 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# FC-Track: Overlap-Aware Post-Association Correction for Online Multi-Object Tracking 
+
+Cheng Ju 1, Zejing Zhao 1, Akio Namiki 1
+
+Abstract — Reliable multi-object tracking (MOT) is essential for robotic systems operating in complex and dynamic environ-ments. Despite recent advances in detection and association, online MOT methods remain vulnerable to identity switches caused by frequent occlusions and object overlap, where incor-rect associations can propagate over time and degrade tracking reliability. We present a lightweight post-association correction framework (FC-Track) for online MOT that explicitly targets overlap-induced mismatches during inference. The proposed method suppresses unreliable appearance updates under high-overlap conditions using an Intersection over Area (IoA)–based filtering strategy, and locally corrects detection-to-tracklet mismatches through appearance similarity comparison within overlapped tracklet pairs. By preventing short-term mismatches from propagating, our framework effectively mitigates long-term identity switches without resorting to global optimization or re-identification. The framework operates online without global optimization or re-identification, making it suitable for real-time robotic applications. We achieve 81 .73 MOTA, 82 .81 
+
+IDF1, and 66 .95 HOTA on the MOT17 test set with a running speed of 5.7 FPS, 77 .52 MOTA, 80 .90 IDF1, and 65 .67 HOTA on the MOT20 test set with a running speed of 0.6 FPS. Specifically, our framework FC-Track produces only 29 .55% 
+
+long-term identity switches, which is substantially lower than existing online trackers. Meanwhile, our framework maintains state-of-the-art performance on the MOT20 benchmark. 
+
+I. INTRODUCTION Recent progress in robotic manipulation has expanded the operational scope of robots from highly controlled environments to more diverse and unstructured real-world scenarios[1], [2], [3], [4], [5]. In working conditions such as logistics automation, healthcare assistance, agricultural operations, and domestic service, robots are required to perceive and interact with multiple surrounding objects in a reliable and timely manner. Effective task execution relies on accurate understanding of both the category and spatial configuration of objects, which directly informs downstream motion planning and control. Vision-based perception, par-ticularly camera sensing, has become a dominant modality for environmental understanding due to its rich information content, flexibility, and ease of deployment. As robots engage in increasingly complex tasks, the ability to simultaneously detect and track multiple objects in real time becomes indispensable. In this context, multi-object tracking (MOT) serves as a core perception component that enables consistent object-level reasoning throughout the task execution process.                  
+
+> *This work was not supported by any organization
+> 1Cheng Ju, Zejing Zhao and Akio Namiki are with the Graduate School of Engineering, Chiba University, Chiba 263-8522 Japan.
+
+JuchengJC@outlook.com; zejingzh@gmail.com; namiki@faculty.chiba-u.jp  
+
+> Fig. 1. Samples from the results on MOT17 validation set. TrackTrack and our proposed FC-Track use the same detection results. For clarity, we show only a single representative example. On the third frame, TrackTrack exhibits an ID switch when the target overlaps with another target person, our FC-Track maintains consistent tracking throughout the occlusion.
+
+MOT aims to detect and identify multiple objects in a video stream or image sequence, which already benefited applications such as video analysis, autonomous vehicles and human activity recognition. Recent years have witnessed rapid advances in MOT methodologies.[6], [7], [8], [9] End-to-end methods address MOT problems as objects detection and re-identification (re-ID) in a single network. The in-ference time is reduced since all features are shared in a single network for both objects detection and re-ID process in this framework. However, suffering from relatively limited tracking robustness, most state-of-the-art methods follow the tracking-by-detection (TBD) paradigm. In this framework, objects are first detected in each frame and then associated with existing tracklets from previous frames or used to initialize new ones. Specifically, association is processed via multiple similarity measures such as Intersection over Union (IoU) and re-ID similarity. Despite significant progress in detection accuracy and association modeling, data association remains a major chal-lenge in practical MOT systems, especially in crowded scenes with frequent occlusions and overlapping objects. Under such conditions, even state-of-the-art trackers in-evitably suffer from incorrect matches. More critically, once a mismatched association occurs, the resulting identity error often propagates to subsequent frames, leading to long-term identity switches and severely degraded trajectories. This error accumulation phenomenon reveals a fundamental limitation of many existing online MOT systems to real-
+
+> arXiv:2603.12758v1 [cs.CV] 13 Mar 2026
+
+world application. Most existing approaches attempt to mitigate this issue by improving association accuracy through more discriminative appearance representations, sophisticated motion models, or global optimization strategies. While these methods are effective to some extent, these approaches generally treat association decisions as irreversible once made. Although offline or batch optimization methods may revise histori-cal associations, they are typically incompatible with the real-time constraints required in robotics and other online applications. As a result, the problem of online correction of association errors remains underexplored in current MOT pipelines. In this work, we argue that robust multi-object tracking should not only aim to avoid association errors but also be equipped with the capability to identify and correct mismatches during online inference. Motivated by this in-sight, we propose a real-time post-association correction framework called FC-Track that continuously refines track-ing results after the matching stage. Instead of redesigning the association module, our method acts as a lightweight correction mechanism that detects potential matching er-rors—particularly those caused by overlapping bounding boxes—and rectifies them before they propagate further in time. This design enables the tracker to recover from short-term mistakes while preserving real-time performance. We integrate the proposed framework FC-Track into a stan-dard online MOT pipeline and evaluate its effectiveness on MOT17[10] and MOT20[11]. Experimental results demon-strate that our approach improves identity consistency and tracking robustness in challenging scenarios, especially under frequent overlaps and occlusions, with minimal compu-tational overhead. These results suggest that online error correction is a complementary and necessary component for building more reliable MOT systems. The main contributions of this work can be summarized as follows: 1) We introduce a novel and robust post-association correction framework for online multi-object track-ing, which explicitly targets overlap-induced associa-tion errors and effectively mitigates long-term identity switches without redesigning the underlying associa-tion module. 2) We propose an overlapping-aware correction mecha-nism based on the Intersection over Area (IoA) of tracklet bounding boxes and local appearance simi-larity comparison, enabling reliable identification and reassignment of mismatched detections under severe occlusions and spatial overlap. 3) We demonstrated the effectiveness and robustness of our method on public dataset MOT17 and MOT20, demonstrating consistent improvements in identity consistency and tracking robustness across diverse crowded-scene scenarios. II. R ELATED WORK 
+
+A. Tracking-by-Detection 
+
+Tracking-by-detection has become the dominant paradigm in modern multi-object tracking, largely driven by the rapid advances in object detection performance. In this framework, objects are first detected independently in each frame, and temporal consistency is established by associating detec-tions across frames based on motion, appearance, or their combination. For detection part, popular methods such as Faster R-CNN[12], SDP[13] and YOLO-based network are widely used. Tracking part is the primary focus for most existing works. SORT[14] uses Kalman Filter to track target bounding boxes and uses Hungarian algorithm to associate them. DeepSORT[15] extends SORT by incorporating a deep appearance association metric learned offline, enabling more robust data association through occlusions and significantly reducing identity switches. ByteTrack[16] improves multi-object tracking by associating both high- and low-confidence detections based on YOLOX detector to reduce missed ob-jects and trajectory fragmentation, achieving state-of-the-art accuracy and robustness across multiple MOT benchmarks. Seg2Track-SAM2[17] integrates pre-trained detectors with SAM2[18] and a detector-agnostic Seg2Track module to enable zero-shot multi-object tracking and segmentation, achieving state-of-the-art association accuracy and robust identity management with significantly reduced memory us-age. TrackTrack[19] introduces a track-focused online multi-object tracking framework that employs track-perspective-based association and track-aware initialization to better handle occlusions and assignment ambiguities, achieving su-perior performance across multiple challenging MOT bench-marks. 
+
+B. Occlusion-aware Tracking 
+
+Occlusion is one of the most persistent challenges in multi-object tracking, often leading to ambiguous associations and identity switches when targets overlap or temporarily disappear. To address this issue, a large body of prior work focuses on incorporating occlusion awareness into the tracking pipeline. SMILEtrack[8] achieves state-of-the-art multi-object tracking performance by introducing a Siamese network–based similarity learning module with patch self-attention to better distinguish objects with similar appear-ances, together with a robust tracking framework using a novel GATE function for effective bounding box association. Dong et al.[20] proposed an occlusion-aware online visual tracking method that mitigates model drift by using a two-stage integrated circulant structure kernel classifier and a classifier pool with entropy-based selection to enable robust and real-time tracking under heavy and long-term occlusions. SiamON[21] addresses occlusion challenges in visual track-ing by introducing a Siamese occlusion-aware network that leverages predefined soft masks and a target-aware attention mechanism to learn robust features under limited occlusion samples, achieving state-of-the-art and real-time performance in occluded scenarios. Object overlap, which is more preva-lent in crowded scenes, can trigger identity switches that persist over long temporal durations, yet existing tracking pipelines rarely model or correct this error propagation once it occurs. 
+
+C. Online Tracking Error Correction 
+
+While most online MOT methods emphasize reducing the incidence of association errors, some recent approaches ex-plicitly consider correction after errors occur. Unfctrack[22] mitigates identity switches in multi-object tracking by lever-aging unfalsified control to model appearance variation se-quences and incorporating a detection–rectification module with an ambiguity-aware association strategy, demonstrat-ing robust performance under occlusions and rapid motion. Zou et al.[23] proposed a lightweight compensation tracker to alleviate tracking failures caused by missed detections by integrating motion compensation and object selection modules into existing tracking-by-detection frameworks, im-proving robustness and reducing identity switches without additional networks or retraining. OC-SORT[24] enhances Kalman filter–based multi-object tracking by adopting an observation-centric strategy that uses detector measurements to construct virtual trajectories during occlusion, effectively correcting error accumulation and improving robustness to occlusion and non-linear motion while maintaining real-time performance. In contrast to prior approaches that rely on global re-association to recover from errors, our method performs local and immediate correction within the online tracking loop. III. M ETHOD 
+
+We propose a generic and effective association correction framework called FC-Track for online multi-object tracking. Unlike previous works that primarily rely on motion con-sistency or instantaneous appearance matching, our method explicitly targets association errors caused by heavy spatial overlap, where both motion cues and appearance similarities become unreliable. FC-Track focuses on detecting and cor-recting the identity switches that arise after the overlapping event to recover the correct identities once the objects be-come more distinguishable. The proposed correction module operates after the association stage and does not alter the detector or motion model. Whole system design is shown as Fig. 2. Specifically, we first filter the overlapped bounding boxes tracklet pairs in the last frame and save each non-overlapped tracklet appearance features. This step is motivated by that most detection-to-tracklet mismatches happen between heavily overlapped tracking bounding boxes, where which conventional motion-based association usually fails and ap-pearance similarities between competing tracklets are nearly indistinguishable during the overlapping period. Then for each overlapped tracklet pair in the last frame, we compare the appearance similarity distance between initial matched detection and the saved appearance features of both tracklets in overlapped tracklet pair, and reassign detection results to the correct tracklet. For clarity, we provide the pseudo-code for the whole process in the Algorithm 1. Detailed descriptions of the overlapping-aware appearance features filtering and mis-matches reassignment are provided in the following subsec-tions. To put forwards the state-of-the-art performance of MOT, we imply our association correction method to the high-performance online tracker TrackTrack.       
+
+> Fig. 2. System overview of the proposed post-association correction framework FC-Track. Given matched tracklet–detection pairs at frame f,associations are first divided into overlapped and non-overlapped groups using overlap status inherited from frame f−1. Non-overlapped pairs are directly accepted, while overlapped pairs are re-evaluated through ap-pearance similarity comparison using stored features and current detections appearance feature. Corrected matches are merged to produce final tracking results. Then the IoA of all tracklets are computed to save as overlap status, and appearance features are updated for the next frame, enabling temporal consistency and online error correction.
+
+A. Overlapping-Aware Appearance Features Filtering 
+
+To prevent unreliable appearance features caused by severe object overlap from corrupting identity representations, we introduce an overlapping-aware appearance feature filter-ing strategy that selectively suppresses feature updates and overlapped tracklet pairs under high-overlap conditions on tracklet-level. At the end of each frame tracking process, we compute the intersection over area (IoA) between all pairs of tracklet bounding boxes to obtain a pairwise relation matrix in which each entry represents the IoA value between two tracklets. Except for the diagonal elements corresponding to self-comparisons, each tracklet forms a one-to-one correspon-dence with all other tracklets in the matrix. The concept of IoA is shown in Fig 3. For tracklets which contain IoA values over update IoA threshold τupdate , we suspend appearance feature up-dates and retain the features extracted from the last non-overlapping frame or the initial appearance features, thereby avoiding appearance feature cross-contamination caused by occlusion involved observations. Appearance features of other tracklets are updated and stored normally. When the IoA of one tracklet to another tracklet exceeds the predefined overlap IoA threshold τoverlap , we form an overlapped track-let pair, where the former tracklet is considered the prime element and the respected latter tracklet is assigned as the auxiliary element. The assignment of prime and auxiliary ele-ments is determined according to the directional IoA relation, Algorithm 1: Pseudo-code of FCTrack 
+
+Data: Current frame f ; current fram detection Df ;previous frame tracklets Tf −1; stored tracklets appearance feature Ftrk ; detections appearance feature Fdet ; overlapped tracklet pairs P
+
+Input: detection-to-tracklet matches 
+
+M = {(d, t )|d ∈ Df , t ∈ Tf −1}; update IoA treshold τupdate ; overlap IoA treshold 
+
+τoverlap ; minimum correction similarity treshold τmin ; correction similarity difference treshold τdif ;
+
+Output: Corrected detection-to-tracklet matches 
+
+Mcorr  
+
+> 1
+
+Initialization: P ← ∅ , F det = {df .f eature |df ∈ Df } 
+
+> 2
+
+I = [ IoA (tpri , t aux )|tpri , t aux ∈ Tf −1; pri ̸ = aux ] 
+
+> 3
+
+for i in I do  
+
+> 4
+
+if i < τ update then  
+
+> 5
+
+Update Ftrk [tpri ] from tpri  
+
+> 6
+
+Update Ftrk [taux ] from taux  
+
+> 7
+
+end  
+
+> 8
+
+if i ≥ τoverlap then  
+
+> 9
+
+P ← (tpri , t aux ) 
+
+> 10
+
+end  
+
+> 11
+
+end  
+
+> 12
+
+for m = ( df , t f −1) in M do  
+
+> 13
+
+if tf −1 in P.t pri then  
+
+> 14
+
+(tpri , t aux ) ← P [tf −1] 
+
+> 15
+
+Spri ← Distance (Fdet [df ], F trk [tprime ])  
+
+> 16
+
+Saux ← Distance (Fdet [df ], F trk [taux ])  
+
+> 17
+
+if Spri >= τmin and Spri − Saux >= τdif 
+
+then  
+
+> 18
+
+m ← (df , t aux ) 
+
+> 19
+
+end  
+
+> 20
+
+end 
+
+/* store new appearance feature */  
+
+> 21
+
+if tf −1 not in Ftrk then  
+
+> 22
+
+Create Ftrk [tf −1] ← tf −1 
+
+> 23
+
+end  
+
+> 24
+
+Mcorr ← m 
+
+> 25
+
+end 
+
+where the tracklet whose bounding box area is used as the denominator in the IoA computation is treated as the prime element. This asymmetric definition ensures a consistent and deterministic role assignment for each overlapped pair. This prime–auxiliary relationship is preserved, as the prime track-let serves as the key to retrieve the initially assigned detection during the subsequent reassignment stage, leveraging the one-to-one correspondence between each matched detection and its associated tracklet. For newly initialized tracklets in the current frame, their appearance features are saved as initial identity representations.  
+
+> Fig. 3. Concept of Intersection over Area (IoA). The overlapped green region represents the intersection between two bounding boxes, while IoA is computed as the ratio of the intersection area to the area of the reference bounding box. Since either box can serve as the reference, two IoA values can be obtained for a box pair.
+
+B. Mismatches Reassignment 
+
+To correct detection to tracklet mismatches, we introduce a mismatches reassignment strategy that explicitly targets short-term association errors during online inference. Unlike global re-association or re-identification approaches, our strategy locally corrects detection to tracklet mismatches only under strict conditions. For each overlapped tracklet pair in the last frame, we first retrieve the corresponding detection-to-tracklet match from the initial association results of the current frame, using the prime tracklet as the indexing key. Based on this matched detection, we compute two appearance similarity scores: the prime similarity distance, defined as the similarity distance between the detection and the prime tracklet, and the auxiliary similarity distance, defined as the similarity distance between the detection and the auxiliary tracklet within the overlapped pair. If the prime similarity distance is larger than the predefined the minimum correction similarity distance threshold τmin , and the auxiliary similarity distance is smaller than the prime similarity distance and the differ-ence is larger than the similarity distance difference threshold 
+
+τdif , we identify this case as a mismatch and reassign the auxiliary tracklet to the detection. Consequently, the prime tracklet is moved to the unmatched tracklet set and the as-signed detection is moved to matched detection set, while the auxiliary tracklet is set included in the matched tracklet set and the detection that was originally assigned to the auxiliary tracklet is moved to the unmatched detection set. This design prevents short-term mismatches from propagating into long-duration identity switches. Considering the growing prevalence of two-stage matching strategies in online MOT, and the two-stage association design of the chosen demonstration tracker, we integrate the proposed mismatch reassignment strategy into each associ-ation stage to ensure consistent correction throughout the tracking process. IV. E XPERIMENT 
+
+A. Datasets and Metrics 
+
+We evaluated our proposed method on 2 datasets: MOT17[10] and MOT20[11]. MOT17 training dataset is di-vided into training half and valid half. MOT17 dataset is used for testing single class multi-objects tracking performance, MOT20 focuses on more complex environments with high-density crowds. The CLEAR[25], IDF1[26] and HOTA[27] metrics are used for evaluating overall tracking accuracy. 
+
+B. Implementation Details 
+
+All evaluating were implemented on single NVIDIA Geforce RTX3090 GPU and Intel Core i9-12900k CPU. Ex-cept in ablation study, all threshold values are set as follows: the update IoA threshold τupdate to 0.3, the overlap IoA threshold τoverlap to 0.8, the minimum correction similarity distance threshold τmin to 0.8 and the similarity distance difference threshold τdif to 0.4, similarity method using cosine distance. 
+
+C. Results 
+
+We compare our FC-Track with existing online state-of-the-art trackers on the MOT17 and MOT20 benchmarks. The results are summarized in Table I and Table II, respectively. The results of baseline TrackTrack reported in our paper are obtained by running the officially released implementation and submitting the outputs to the MOT benchmark server. These numbers differ slightly from the results reported on the official leaderboard, likely due to differences in imple-mentation versions or evaluation settings. 
+
+MOT17: As shown in Table I, Our proposed method FC-Track achieves a HOTA score of 66 .95 , which is competitive with current state-of-the-art methods and improving upon the baseline 66 .94 . Our method achieves an IDF1 score of 
+
+82 .81 , outperforming most existing approaches. In terms of MOTA, our method obtains 81 .73 , demonstrating balanced improvements across both aspects. Although the number of ID switches is 837 , which is comparable to other online trackers, our approach maintains strong association accu-racy with an AssA of 67 .81 . These results indicate that our method achieves balanced performance across detection accuracy and identity preservation. 
+
+MOT20: On the MOT20 dataset, our proposed method FC-Track achieves a HOTA score of 65 .67 , outperforming the baseline result of 65 .61 . We also observe consistent improvements in IDF1 80 .90 and competitive MOTA 77 .52 ,demonstrating robustness in crowded scenes. The ID switch count is 719 , and the AssA score of 67 .48 further indicates reliable association quality under heavy occlusion and fre-quent interactions. Although the quantitative results demonstrate competitive performance across standard evaluation metrics, these aggre-gated scores do not fully reveal how identity errors behave temporally. To better understand this aspect, we further analyze the temporal characteristics of identity switches, focusing on how long trackers remain in an incorrect identity state after a switch. 
+
+D. Analysis of ID Switch Duration 
+
+While ID switches are commonly used to evaluate identity stability, they do not reflect how long an identity error                                                                                                                                                     
+
+> TABLE I COMPARISON ONLINE RESULTS ON MOT17 TEST SET .Tracker HOTA ↑MOTA ↑IDF1 ↑AssA ↑IDs ↓FPS ↑
+> MeMOTR 58.83 72.84 71.53 58.37 1902 29.6 MOTR 62.01 78.59 74.95 60.64 2619 7.5 ByteTrack 63.05 80.25 77.30 61.98 2196 29.6 OC-SORT 63.16 78.00 77.50 63.40 1950 29.0 BUSCA 63.92 78.63 79.20 64.25 1425 35.7 UTM 64.04 81.78 78.70 62.54 1431 13.1 Deep OC-SORT 64.88 79.37 80.58 65.93 1023 28.1 BoT-SORT 65.05 80.55 80.23 65.49 1212 6.8 MotionTrack 65.09 81.11 80.09 65.10 1140 15.7 RBO-TRACK 65.25 79.49 81.89 66.42 1881 16 UCMCTrack 65.73 80.62 80.95 66.42 1689 157.1
+> TrackTrack 66.94 81.71 82.78 66.80 837 5.9
+> FC-Track(Ours) 66.95 81.73 82.81 67.81 837 5.7 TABLE II COMPARISON ONLINE RESULTS ON MOT20 TEST SET .Tracker HOTA ↑MOTA ↑IDF1 ↑AssA ↑IDs ↓FPS ↑
+> ByteTrack 61.34 77.76 75.21 59.56 1223 17.5 OC-SORT 62.36 75.67 76.32 62.47 942 5.1 UTM 62.47 78.22 76.86 61.41 1228 6.2 UCMCTrack 62.81 75.61 77.38 63.46 1335 44.8
+> MotionTrack 62.77 77.98 76.50 61.81 1165 9.0 FineTrack 63.93 76.96 78.86 64.76 1142 9.0 SUSHI 64.33 74.29 79.80 67.47 706 5.3 TrackTrack 65.61 77.52 80.82 67.35 719 0.7
+> FC-Track(Ours) 65.67 77.52 80.90 67.48 719 0.6
+
+persists once it occurs. In this experiment, we additionally analyze the temporal duration of ID switches in existing multi-object trackers to study whether identity errors tend to be short-lived or prolonged. For each switch event, we measure its duration, defined as the number of consecutive frames during which a tracker remains associated with an incorrect identity before recov-ering or terminating. Based on these durations, we compute four statistics: the total number of switches (Count), the av-erage duration frames upon all switches (Mean), the median duration frames upon all switches (Med.), and the proportion of long-term switches exceeding a fixed threshold τlong over total switches (Long Ratio). This evaluation is conducted on the validation set of the MOT17 dataset. In this experiment, we set long ratio threshold τlong to 10 , following common practice for all image sequences in MOT17 recorded at frame rates up to 30 FPS. The results are shown in Table III. Compared with existing methods, our approach achieves consistently shorter switch durations. Specifically, the mean duration decreases from 
+
+33 .04 frames in prior trackers to 18 .33 , and the median duration drops to 3.0, indicating that identity errors are corrected more quickly in typical cases. In addition, the long-switch ratio is reduced to 29 .55% , noticeable lower than all comparison methods, suggesting that our method effectively suppresses persistent identity drift and mitigates long-tail failure cases. Although the total number of switches is 308 , which is comparable to or slightly higher than other methods, the substantially reduced mean, median, and long-ratio statistics indicate that these switches tend to be short-lived. In other words, even when identity errors occur, the tracker can promptly recover the correct association instead of remaining in an incorrect state for extended periods. We further analyze identity-based statistics, including Identity True Positives (IDTP), Identity False Positives (IDFP), and Identity False Negative (IDFN). The results show that our method increases the number of IDTP while reducing IDFP compared with the previous tracking methods. This indicates that more frames are correctly associated with the true identity once the correction mechanism is applied. Meanwhile, the IDFN value remains comparable, suggesting that the improvement mainly comes from more reliable identity assignments rather than changes in detection recall. These observations further support the effectiveness of the proposed correction mechanism in maintaining consistent identity associations over time. These observations demonstrate that our method improves temporal identity stability rather than merely reducing switch frequency.                                      
+
+> TABLE III ID SWITCH DURATION RESULTS ON MOT17 VALIDATION SET .Tracker Count ↓Mean ↓Med. ↓Long Ratio ↓
+> IDTP ↑IDFP ↓IDFN ↓
+> ByteTrack 201 33.04 11 50.25 40434 13456 6951 BoT-SORT 199 32.89 538.69 41757 12133 6137
+> TrackTrack 236 22.88 536.86 42144 11746 6927 FC-Track 308 18.33 329.55 42305 11585 6843
+
+E. Ablation Study 
+
+We conduct a series of ablation experiments to analyze the contribution of each component and design choice in the proposed framework. All ablations are performed on the MOT17 validation set. 
+
+Similarity: We first evaluate different similarity measures used in the correction, including cosine distance and Eu-clidean distance. As shown in Table IV, cosine distance achieves a HOTA score of 69 .67 and Euclidean distance obtains 69 .48 , both outperforming the baseline result of 
+
+69 .40 . The results indicate that cosine distance provides more reliable identity discrimination, and the consistent improvements under both similarity metrics further verify the effectiveness of our proposed method.                       
+
+> TABLE IV SIMILARITY ABLATION STUDY RESULTS ON MOT17 VALIDATION SET .Similarity HOTA ↑MOTA ↑IDF1 ↑AssA ↑IDs ↓
+> Baseline 69.40 76.57 81.86 73.57 400 Euclidean Distance 69.48 76.49 81.90 73.71 400 Cosine Distance 69.67 76.60 82.12 74.08 398
+
+Matching Stage: We next study where to insert the proposed correction module within the tracking pipeline. The current mainstream paradigm adopts a two-stage match-ing strategy, which is also used by the baseline method TrackTrack. Therefore, we evaluate the effect of integrating our module into the first matching stage and the second matching stage separately. The results show that applying the module in the first stage improves performance, achiev-ing a HOTA score of 69 .67 , while inserting it only in the second stage yields no noticeable change 69 .40 . This behavior can be explained by the role of each stage: the first stage handles high-confidence associations where early correction can effectively prevent identity drift, whereas the second stage mainly processes low-confidence or ambiguous matches, where errors are more difficult to rectify and thus the correction module has limited impact.                                 
+
+> TABLE V MATCHING STAGE ABLATION STUDY RESULTS ON MOT17 VALIDATION SET .Stage 1 Stage 2 HOTA ↑MOTA ↑IDF1 ↑AssA ↑IDs ↓
+> ##69.40 76.57 81.86 73.57 400
+> !#69.67 76.60 82.12 74.08 398
+> #!69.40 76.57 81.86 73.57 400
+> !!69.67 76.60 82.12 74.08 398
+
+Threshold Sensitivity: Finally, we analyze the sensitiv-ity of the method to four key thresholds: the update IoA threshold τupdate , the overlap IoA threshold τoverlap , the minimum correction similarity distance threshold τmin , and the similarity distance difference threshold τdif . Two figures are provided for this analysis. The Fig. 4 shows the results which set the update IoA threshold τupdate to 0.3 and the overlap IoA threshold τoverlap to 0.8, varies the two similarity thresholds. The Fig. 5 shows the results which set the minimum correction similarity distance threshold τmin 
+
+to 0.8 and the similarity distance difference threshold τdif 
+
+to 0.4, varies the two IoA thresholds. Both figures show that although performance may drop at certain individual threshold values, but the overall trend consistently remains better than the baseline across a wide range of settings, demonstrating the robustness of the proposed method to threshold selection. V. C ONCLUSION 
+
+In this paper, we presented a lightweight post-association correction framework FC-Track for online multi-object track-ing that explicitly addresses identity switches caused by detection targets overlapping. By suppressing unreliable ap-pearance updates under overlap conditions and introducing a local correction mechanism for mismatched tracklets, the proposed approach effectively prevents short-term associa-tion errors from propagating into long-term identity drift. Ex-tensive experiments on MOT17 and MOT20 demonstrate that our method consistently improves holistic tracking quality while maintaining competitive performance across standard metrics and real-time efficiency. Our method FC-Track first demonstrates clear gains on both MOT17 and MOT20, achieving 81 .73 MOTA, 82 .81 Fig. 4. Comparison of the performances of FC-Track over different mini-mum correction similarity distance threshold τmin and similarity distance difference threshold τdif . The results are evaluated on the validation set of MOT17. 
+
+Fig. 5. Comparison of the performances of FC-Track over different update IoA threshold τupdate and overlap IoA threshold τoverlap . The results are evaluated on the validation set of MOT17. 
+
+IDF1, and 66 .95 HOTA on the MOT17 test set with a running speed of 5.7 FPS, 77 .52 MOTA, 80 .90 IDF1, and 65 .67 
+
+HOTA on the MOT20 test set with a running speed of 0.6
+
+FPS. Furthermore, our analysis reveals that the proposed framework significantly shortens the duration of identity switches on MOT17 validation set. Specifically, the mean duration decreases from 22 .88 to 18 .33 , the median from 5
+
+to 3, and the long-switch ratio from 36 .86% to 29 .55% .These findings indicate enhanced temporal identity sta-bility rather than merely reducing switch frequency. This property is particularly important for real-world robotic applications, where persistent identity errors can severely affect downstream decision-making. Overall, the results sug-gest that explicitly modeling overlap-induced ambiguity is a practical and effective direction for improving the robust-ness of online MOT systems without introducing additional computational overhead or complex global optimization. Furthermore, since the proposed framework operates as a lightweight post-association module, it can be readily inte-grated with faster or real-time trackers, enabling deployment in real-time robotic applications. REFERENCES [1] T. Oka, N. Komura, and A. Namiki, “Ball juggling robot system con-trolled by high-speed vision,” in 2017 IEEE International Conference on Cyborg and Bionic Systems (CBS) . IEEE, 2017, pp. 91–96. [2] M. Sato, A. Takahashi, and A. Namiki, “High-speed catching by multi-vision robot hand,” in 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2020, pp. 9131–9136. [3] Z. Zhao, H. Mineshita, and H.-o. Lim, “Development of a voice information presentation guidance system (vipgs) using coanda-drone-v2,” IEEJ Transactions on Electrical and Electronic Engineering ,vol. 20, no. 6, pp. 862–875, 2025. [4] Y. Zhao, L. Gong, Y. Huang, and C. Liu, “A review of key tech-niques of vision-based control for harvesting robot,” Computers and Electronics in Agriculture , vol. 127, pp. 311–323, 2016. [5] H. Cao, G. J. Pappas, and N. Atanasov, “Pkf: Probabilistic data association kalman filter for multi-object tracking,” IEEE Robotics and Automation Letters , vol. 10, no. 11, pp. 11 506–11 513, 2025. [6] Q. Chu, W. Ouyang, H. Li, X. Wang, B. Liu, and N. Yu, “Online Multi-object Tracking Using CNN-Based Single Object Tracker with Spatial-Temporal Attention Mechanism,” in 2017 IEEE International Conference on Computer Vision (ICCV) . Venice: IEEE, Oct. 2017, pp. 4846–4855. [7] Y. Zhang, C. Wang, X. Wang, W. Zeng, and W. Liu, “FairMOT: On the Fairness of Detection and Re-Identification in Multiple Object Tracking,” International Journal of Computer Vision , vol. 129, no. 11, pp. 3069–3087, Nov. 2021. [8] Y.-H. Wang, J.-W. Hsieh, P.-Y. Chen, M.-C. Chang, H. H. So, and X. Li, “SMILEtrack: SiMIlarity LEarning for Occlusion-Aware Multiple Object Tracking,” Jan. 2024. [9] C. A. Holz, C. Bader, M. Enzweiler, and M. Dr¨ uppel, “Data-Driven Object Tracking: Integrating Modular Neural Networks into a Kalman Framework,” Apr. 2025. [10] A. Milan, L. Leal-Taix´ e, I. Reid, S. Roth, and K. Schindler, “Mot16: A benchmark for multi-object tracking,” arXiv preprint arXiv:1603.00831 , 2016. [11] P. Dendorfer, H. Rezatofighi, A. Milan, J. Shi, D. Cremers, I. Reid, S. Roth, K. Schindler, and L. Leal-Taix´ e, “Mot20: A benchmark for multi object tracking in crowded scenes,” 2020. [Online]. Available: https://arxiv.org/abs/2003.09003 [12] S. Ren, K. He, R. B. Girshick, and J. Sun, “Faster R-CNN: towards real-time object detection with region proposal networks,” CoRR , vol. abs/1506.01497, 2015. [Online]. Available: http://arxiv.org/abs/1506.01497 [13] F. Yang, W. Choi, and Y. Lin, “Exploit all the layers: Fast and accu-rate cnn object detector with scale dependent pooling and cascaded rejection classifiers,” in 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 2129–2137. [14] A. Bewley, Z. Ge, L. Ott, F. Ramos, and B. Upcroft, “Simple online and realtime tracking,” in 2016 IEEE International Conference on Image Processing (ICIP) , 2016, pp. 3464–3468. [15] N. Wojke, A. Bewley, and D. Paulus, “Simple online and realtime tracking with a deep association metric,” in 2017 IEEE international conference on image processing (ICIP) . IEEE, 2017, pp. 3645–3649. [16] Y. Zhang, P. Sun, Y. Jiang, D. Yu, F. Weng, Z. Yuan, P. Luo, W. Liu, and X. Wang, “Bytetrack: Multi-object tracking by associating every detection box,” 2022. [Online]. Available: https://arxiv.org/abs/2110.06864 [17] D. Mendonc ¸a, T. Barros, C. Premebida, and U. J. Nunes, “Seg2track-sam2: Sam2-based multi-object tracking and segmentation for zero-shot generalization,” arXiv preprint arXiv:2509.11772 , 2025. [18] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. R¨ adle, C. Rolland, L. Gustafson et al. , “Sam 2: Segment anything in images and videos,” arXiv preprint arXiv:2408.00714 , 2024. [19] K. Shim, K. Ko, Y. Yang, and C. Kim, “Focusing on tracks for online multi-object tracking,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 11 687–11 696. [20] X. Dong, J. Shen, D. Yu, W. Wang, J. Liu, and H. Huang, “Occlusion-aware real-time object tracking,” IEEE Transactions on Multimedia ,vol. 19, no. 4, pp. 763–771, 2017. [21] C. Fan, H. Yu, Y. Huang, C. Shan, L. Wang, and C. Li, “SiamON: Siamese occlusion-aware network for visual tracking,” IEEE Transac-tions on Circuits and Systems for Video Technology , vol. 33, no. 1, pp. 186–199, 2023. [22] Z. Wu, J. Zheng, X. Ren, F.-A. Vasluianu, C. Ma, D. P. Paudel, L. Van Gool, and R. Timofte, “Single-model and any-modality for video object tracking,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2024, pp. 19 156–19 166. [23] Z. Zou, J. Huang, and P. Luo, “Compensation tracker: Reprocessing lost object for multi-object tracking,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , 2022, pp. 307– 317. [24] J. Cao, J. Pang, X. Weng, R. Khirodkar, and K. Kitani, “Observation-centric sort: Rethinking sort for robust multi-object tracking,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 9686–9696. [25] K. Bernardin and R. Stiefelhagen, “Evaluating multiple object tracking performance: the clear mot metrics,” EURASIP Journal on Image and Video Processing , vol. 2008, no. 1, p. 246309, 2008. [26] E. Ristani, F. Solera, R. Zou, R. Cucchiara, and C. Tomasi, “Perfor-mance measures and a data set for multi-target, multi-camera tracking,” in European conference on computer vision . Springer, 2016, pp. 17– 35. [27] J. Luiten, A. Osep, P. Dendorfer, P. Torr, A. Geiger, L. Leal-Taix´ e, and B. Leibe, “Hota: A higher order metric for evaluating multi-object tracking,” International journal of computer vision , vol. 129, no. 2, pp. 548–578, 2021.

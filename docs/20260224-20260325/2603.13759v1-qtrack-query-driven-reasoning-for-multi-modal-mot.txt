@@ -1,0 +1,1204 @@
+Title: QTrack: Query-Driven Reasoning for Multi-modal MOT
+
+URL Source: https://arxiv.org/pdf/2603.13759v1
+
+Published Time: Tue, 17 Mar 2026 02:47:35 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# QTrack: Query-Driven Reasoning for Multi-modal MOT 
+
+Tajamul Ashraf 1,4∗, Tavaheed Tariq 4†, Sonia Yadav 4†, Abrar Ul Riyaz 4, Wasif Tak 2‡, Moloud Abdar 3, and Janibul Bashir 4 
+
+> 1
+
+King Abdullah University of Science and Technology (KAUST), Saudi Arabia  
+
+> 2
+
+Thapar Institute of Engineering and Technology, India  
+
+> 3
+
+The University of Queensland, Australia  
+
+> 4
+
+Gaash Research Lab, National Institute of Technology Srinagar, India Project Page: https://gaashlab.github.io/QTrack/ 
+
+Abstract. Multi-object tracking ( MOT ) has traditionally focused on es-timating trajectories of all objects in a video, without selectively rea-soning about user-specified targets under semantic instructions. In this work, we introduce a query-driven tracking paradigm that formulates tracking as a spatiotemporal reasoning problem conditioned on natu-ral language queries. Given a reference frame, a video sequence, and a textual query, the goal is to localize and track only the target(s) spec-ified in the query while maintaining temporal coherence and identity consistency. To support this setting, we construct RMOT26 , a large-scale benchmark with grounded queries and sequence-level splits to prevent identity leakage and enable robust generalization evaluation. We further present QTrack , an end-to-end vision language model that integrates multi-modal reasoning with tracking-oriented localization. Additionally, we introduce a Temporal Perception-Aware Policy Optimization strat-egy with structured rewards to encourage motion-aware reasoning. Ex-tensive experiments demonstrate the effectiveness of our approach for reasoning-centric, language-guided tracking. Code and data are available at https://github.com/gaash-lab/QTrack 
+
+Keywords: Multi-Object Tracking · Vision-Language Models · Spa-tiotemporal Reasoning · Reinforcement Learning 
+
+1 Why Query-Driven Tracking? 
+
+Multi-object tracking ( MOT ) is a fundamental computer vision task that aims to detect and consistently associate multiple objects across frames temporally [49]. Given a video, traditional MOT methods [7, 28, 37] primarily aim to estimate the trajectories of all moving objects, i.e., answering “what are the locations 
+
+> ∗
+
+Corresponding author: tajamul.ashraf@kaust.edu.sa 
+
+> †
+
+These authors contributed equally. 
+
+> ‡
+
+Work done while an intern at Gaash Lab, NIT Srinagar 
+
+> arXiv:2603.13759v1 [cs.CV] 14 Mar 2026
+
+2 Ashraf et al. ID: 1 ID: 2 ID: 2 ID: 2 ID: 2 ID: 1  ID: 1   
+
+> Query: Track the person in the red hoodie and the person in the black jacket. ID: 1 ID: 1 ID: 1
+> ID: 1 ID: 1 ID: 2 ID: 2 ID: 2 ID: 2 ID: 3 ID: 3
+
+(a) Existing  Multiple-Object  Tracking (MOT) for predicting object trajectories (“where”) only (b) Reasoning Aware, selective tracking. Only queried targets are predicted Query:  Track two pedestrians: one wearing a bright red hoodie 
+
+> and blue jeans with a crossbody bag, and another wearing a
+> black jacket and dark pants. Maintain consistent identities as
+> they walk toward the camera despite occlusions and nearby
+> pedestrians.
+
+Which  Why  Where      
+
+> <think>
+> Targets: (1) red hoodie, blue jeans, crossbody bag; (2) black jacket, dark pants.
+> Initialize both identities in the reference frame.
+> Track using appearance cues and smooth motion toward the camera.
+> Preserve identities during occlusions and nearby pedestrian interactions.
+> </think>
+> <answer>
+> Red hoodie (ID: 1):
+> t + 1: [x0, y0, w0, h0] → t + 4: [x3, y3, w3, h3]
+> Black jacket (ID: 1):
+> t + 1: [x0', y0', w0', h0'] → t + 4: [x3', y3', w3', h3']
+> </answer> Frame t+1 Frame t+2 Frame t+3 Frame t+4
+
+Fig. 1: Comparison of tracking paradigms. (a) Traditional MOT follows atracking-by-detection paradigm, tracking all objects from predefined categories regard-less of user intent. (b) QTrack enables reasoning-aware, query-conditioned tracking: given a video and natural language query, it selectively identifies and tracks only the specified targets, shifting from all-object tracking to semantic, user-driven tracking. 
+
+and identities of objects over time?” . These approaches operate at the category level with predefined classes and are not designed for query-specific, language-conditioned tracking of a particular target. Despite considerable advancements in the deep learning era [12, 39, 43], focusing solely on spatial localization in existing MOT frameworks is insufficient for comprehensive video understanding in many real-world applications. For example, beyond estimating trajectories, understanding trajectory-associated semantic 5 attributes such as the identity, role, or contextual relevance of a queried target is crucial for real-world appli-cations like surveillance and robotics. For instance, consider a crowded street scene where multiple individuals wear similar clothing. A query such as “track the person who picks up the red backpack and later enters the taxi” cannot be solved through appearance similarity alone. The model must reason about tem-porally evolving actions and maintain identity consistency even when the target undergoes occlusion or appearance changes. This motivates extending conven-tional MOT (addressing “where”) toward query-conditioned tracking that jointly reasons about “which” target to follow based on semantic instructions. 
+
+5Here, by “semantic”, we refer to high-level, trajectory-based activity understand-ing in videos within the context of tracking, rather than category-level labeling as in semantic segmentation. QTrack 3
+
+In parallel, vision-language models ( VLMs ) have demonstrated remarkable ca-pabilities in multi-modal grounding [59, 72], visual reasoning [3, 54, 64], and fol-lowing [17, 76]. By aligning visual representations with natural language seman-tics, VLMs enable fine-grained instance understanding beyond category-level per-ception. While prior works on referring video object segmentation and language-guided tracking focus on grounding a static description to a target instance, they often treat tracking and reasoning as loosely coupled modules. These systems do not explicitly leverage semantic queries to guide identity persistence, motion prediction, or occlusion recovery. Motivated by these limitations, we introduce QTrack , a query-centric track-ing paradigm that extends conventional MOT beyond trajectory estimation toward language-conditioned, target-specific reasoning. Unlike traditional MOT methods that focus solely on predicting object trajectories (“where”), this paradigm en-ables tracking of objects specified through natural language queries, integrating spatial localization with semantic grounding. Given a video, a reference ground-ing, and a query (e.g., “track the person wearing a red jacket”), the model iden-tifies and persistently tracks only the specified instance across frames. This re-quires joint reasoning over appearance, motion dynamics, contextual cues, and temporal continuity, emphasizing which object to follow and why , rather than indiscriminately tracking all category-level instances. By unifying “where” (tra-jectory estimation) with “which” (query-grounded selection), the framework ad-vances tracking from passive perception to reasoning-aware, language-guided video understanding. To realize this paradigm, we develop a reinforcement learning-optimized vi-sion–language framework for temporally consistent, query-conditioned object lo-calization. Given a video and a query, the model generates structured reasoning and directly predicts bounding boxes for the queried targets in an end-to-end manner. Unlike detect-then-track pipelines or loosely coupled vision–language systems, our approach jointly optimizes grounding and temporal consistency. Specifically, we introduce Temporal Perception-Aware Policy Optimization (TAPO), which incorporates temporal corruption and KL-based regularization to encour-age motion-aware reasoning and identity persistence. While standard supervised training optimizes frame-level localization losses and may suffer from identity drift under long-term dependencies, our reinforcement learning formulation di-rectly optimizes sequence-level objectives, promoting coherent motion dynamics and robust identity preservation across frames. To facilitate research on query-driven tracking with reasoning, we introduce 
+
+RMOT26 , which consists of a diverse collection of real-world video sequences span-ning crowded scenes, sports, complex interactions, non-linear motion, and severe occlusions. Each sample is paired with (i) a reference frame with explicit spatial grounding of the target instance and (ii) a natural-language query specifying the tracking objective (e.g., identity, attributes, role, or context). Unlike con-ventional MOT benchmarks that evaluate category-level tracking of all objects, 
+
+RMOT26 explicitly tests a model’s ability to reason about which instance to fol-low and to maintain identity persistence under appearance ambiguity, long-term 4 Ashraf et al. 
+
+temporal dependencies, and occlusion recovery. We design multiple query types to probe single-target tracking, multi-target reasoning, and occlusion-aware re-identification, with strong spatial and temporal supervision derived from high-quality verified annotations. All splits are performed at the sequence level to prevent identity leakage and ensure robust generalization. Despite its streamlined design, QTrack demonstrates strong performance in language-guided tracking scenarios and significantly outperforms baselines that combine tracking and VLM reasoning in an offline manner, highlighting the effec-tiveness of reinforcement learning-driven spatiotemporal reasoning. In summary, our contributions are: 
+
+– We introduce QTrack , a novel query-driven, reasoning-centric tracking paradigm that advances MOT from passive trajectory prediction to language-conditioned spatiotemporal reasoning, enabled by our Temporal Perception-Aware Policy Optimization ( TAPO ) and structured reward design. 
+
+– We construct RMOT26 , a large-scale benchmark with grounded natural lan-guage queries and temporally consistent supervision to systematically eval-uate reasoning-aware tracking. 
+
+– We demonstrate strong performance and provide in-depth analysis on 10+ 
+
+VLM baselines to guide future research on reasoning-aware, multimodal track-ing systems. 
+
+2 Related Work 
+
+2.1 Tracking and Language-Guided Grounding 
+
+Benchmarks have played a critical role in advancing MOT , from early datasets such as PETS2009 [19] to the MOT Challenge series [15, 16, 29, 40]. Domain-specific benchmarks include KITTI [60] and BDD100K [71] for autonomous driving, ImageNet-VID [24] and TAO [14] for large-scale and long-tail tracking, Dance-Track [52] and SportsMOT [13] for articulated human motion, AnimalTrack [73] for wildlife tracking, and UAVDT [25] and VisDrone [77] for drone scenarios. De-spite their diversity, these datasets evaluate trajectory prediction alone (“where”), without incorporating semantic or query-conditioned reasoning. Methodologi-cally, classical MOT follows the tracking-by-detection paradigm [8, 65], later uni-fied with re-identification in FairMOT [74]. Recent advances include Tracking-by-Detection approaches [5, 9, 10, 53], Joint Detection-and-Tracking frameworks [], and Transformer-based trackers [6, 43, 58, 78], all primarily improving trajec-tory estimation. While effective, these methods remain task-agnostic, tracking all category-level instances without conditioning on semantic context. Language-guided tracking introduces natural language as a target specifier [30, 62], and multi-object extensions such as LaMOT [32] expand to multiple referred enti-ties. Referring video object segmentation and grounding methods [18, 20, 66] further strengthen language–video alignment, but remain limited to grounding specified objects rather than reasoning over multiple candidates conditioned on a QTrack 5
+
+question. In contrast, RMOT26 requires question-conditioned multi-object ground-ing and temporal identity tracking , jointly modeling localization and trajectory-aware semantic reasoning. 
+
+2.2 Video Reasoning and Vision Language Models 
+
+Unlike video captioning [1, 26, 41, 46, 50, 61], which generates global natural lan-guage descriptions of video content, RMOT26 focuses on language comprehension grounded in dense multi-object trajectories, requiring precise temporal identity tracking alongside fine-grained semantic reasoning. Video question answering (VideoQA) benchmarks such as TGIF-QA [27], NExT-QA [68], and AGQA [22] emphasize spatio-temporal reasoning over actions, events, and object relations. However, these datasets evaluate only final textual answers without requiring explicit trajectory outputs, enabling models to rely on global cues or dataset priors. In contrast, RMOT26 externalizes reasoning by requiring models to gener-ate question-relevant object trajectories as structured spatiotemporal evidence. Large vision language models (VLMs), including CLIP [44] and video-enabled architectures such as Flamingo [4], have demonstrated strong open-vocabulary grounding and multimodal reasoning capabilities. However, they lack explicit identity-preserving temporal modeling and do not natively support structured multi-object tracking. Reinforcement learning has recently become a powerful paradigm for improving reasoning in large language models, with approaches such as RLHF [42], DPO [45], and PPO [47]. More recently, DeepSeek-R1 [23] leveraged Group Relative Policy Optimization (GRPO) [48] to enhance test-time reasoning and scaling behavior. Inspired by these advances, reinforcement learn-ing techniques have begun to extend to large vision language models, including Visual-RFT [36], EasyR1 [75], and Seg-Zero [34] and PAPO [63] (Perception-Aware Policy Optimization) incorporate perception-aligned reward shaping to ensure that reasoning remains grounded in reliable visual evidence. Building upon this line of work, our QTrack framework integrates VLM grounding with structured trajectory formation and temporal reasoning, optimized via GRPO and our proposed Temporal Perception-Aware Policy Optimization ( TAPO ). This unified reinforcement learning design enables explicit, interpretable, question-conditioned multi-object tracking with identity consistency across time. 
+
+3 Methodology 
+
+To develop a unified query-driven tracking framework capable of reasoning over spatiotemporal dynamics, we first formalize the reasoning-based multi-object tracking task and categorize its input–output structure. We then describe the architecture of our QTrack framework, which integrates multimodal reason-ing with tracking-oriented localization (Section 3.3). Next, we introduce our structured reward design, including motion-aware supervision and temporal con-sistency constraints (Section 3.4). Finally, we detail our reinforcement learn-ing training strategy based on GRPO and the proposed Temporal Perception-6 Ashraf et al. 
+
+Aware Policy Optimization ( TAPO ) for motion-sensitive policy optimization (Sec-tion 3.5). 
+
+3.1 Preliminaries Conventional MOT models vs. VLMs Traditional multi-object tracking (MOT ) methods are primarily designed for closed-set perception, focusing on de-tecting and associating objects from predefined categories across frames. While these approaches achieve strong performance on standard benchmarks, they op-erate at the category level and are limited to answering “where objects are lo-cated”, without modeling semantic intent or query-specific selection. As a result, they struggle to handle open-ended, attribute-based, or compositional instruc-tions that specify a particular instance among multiple candidates. In contrast, large vision language models ( VLMs ) align visual representations with natural language semantics, enabling flexible grounding of free-form queries. This capa-bility is essential for query-driven tracking, where the objective is not to track all objects, but to identify and persistently follow a semantically specified target. Integrating VLM reasoning into MOT allows the tracking process to move beyond category-level association toward identity-aware and language-conditioned spa-tiotemporal reasoning. 
+
+Group Relative Policy Optimization (GRPO). To enable structured rea-soning and trajectory prediction in QTrack , we adopt Group Relative Policy Optimization ( GRPO ), an on-policy reinforcement learning algorithm that stabi-lizes policy updates through relative reward comparison across sampled rollouts. Unlike conventional supervised training that optimizes frame-level localization losses independently, our setting requires optimizing sequence-level reasoning quality and long-term identity consistency. These objectives are difficult to en-code through differentiable losses alone, especially when reasoning traces and trajectory formation are jointly generated. Reinforcement learning allows us to directly optimize structured, sequence-level rewards that reflect spatial accuracy, motion coherence, and reasoning validity in a unified objective. In our setting, the policy πθ generates structured reasoning traces and corresponding bounding box trajectories conditioned on the video frames and the query. Given an input x = ( F, q ) consisting of a frame sequence F and a natural language query q, the previous policy πθold produces a group of rollouts {oi}Gi=1 .Each rollout contains a chain-of-thought reasoning trace along with predicted bounding boxes for the queried targets. A task-specific reward function evaluates each rollout and assigns scalar rewards {ri}Gi=1 based on spatial accuracy, motion consistency, and structured output validity. To reduce reward variance and emphasize relative performance within the sampled group, we compute a normalized relative advantage: 
+
+Ai = ri − mean( {r1, r 2, . . . , r G})std( {r1, r 2, . . . , r G}) . (1) QTrack 7
+
+The policy is then updated by maximizing a clipped surrogate objective:                          
+
+> JGRPO (θ) = Ex∼D ,{oi}∼ πθold
+> "
+> 1
+> G
+> GX
+> i=1
+> min
+> πθ(oi|x)
+> πθold (oi|x)Ai,clip
+> πθ(oi|x)
+> πθold (oi|x),1−ϵ, 1 + ϵ
+> 
+> Ai
+> 
+> −βD KL (πθ∥πref )
+> #
+
+,
+
+(2) where ϵ controls policy clipping and β regularizes deviation from a reference policy πref to prevent instability. Compared to PPO, GRPO stabilizes learning by computing relative advan-tages across multiple rollouts of the same input, emphasizing better reasoning trajectories while reducing reward variance under structured, high-variability outputs. 
+
+3.2 Task Reformulation for Query-Driven Tracking 
+
+We analyze query-conditioned tracking tasks and observe that they can be re-formulated into three fundamental spatiotemporal reasoning types. Unlike static perception problems, QTrack operates over video sequences and requires joint spatial grounding and temporal identity modeling. 
+
+Spatial Grounding. Given a video sequence V = {It}Tt=1 and a natural lan-guage query q, the spatial grounding task aims to localize the queried target(s) in specific frames by predicting bounding boxes {bti}. This corresponds to instance-level detection conditioned on semantic instructions. It requires identifying can-didate objects based on attributes, roles, or contextual descriptions provided in the query. 
+
+Temporal Tracking. Beyond frame-level localization [69, 70], the temporal tracking task requires associating predictions across frames to form coherent trajectories {τi}. This involves modeling motion dynamics, maintaining identity persistence, and handling occlusion or appearance variation over time. Unlike traditional MOT , which tracks all category-level objects [32, 65, 74], QTrack 
+
+tracks only the query-specified targets. 
+
+Relational and Reasoning-Based Tracking. Certain queries require reason-ing over interactions, comparisons, or multi-object relations (e.g., selecting an object based on its behavior or relationship with others). This task type requires compositional reasoning over both spatial and temporal cues before trajectory formation. It extends tracking from passive localization to question-conditioned decision-making. Together, these three components, spatial grounding, temporal association, and relational reasoning form the foundation of query-driven spatiotemporal tracking in RMOT26 . This reformulation highlights that QTrack is not merely a trajectory prediction problem, but a structured reasoning task over dynamic visual scenes. This decomposition is not merely descriptive; it guides the ar-chitectural and reward design of QTrack . Spatial grounding informs the local-ization objective, temporal tracking motivates motion-aware supervision, and relational reasoning necessitates structured policy learning capable of composi-tional decision-making. 8 Ashraf et al. Tracked Output 
+
+Temporal Visual Context TAPO GRPO Trainable Frozen 
+
+Frozen Sequence 
+
+> MCP Reward
+
+Reward Functions Accuracy Reward IoU       
+
+> Format Reward <think> ... </think>
+> <answer> ... </answer>
+> ... bbox ...
+> <*, *, *, *>
+> Frame t Frame t
+> Frame t Frame t+1 Frame t+2
+> Frame t Frame t+1 Frame t+2
+> Frame t
+> VQA Query: Track the man in black formal suit
+> walking on the left side of the corridor, and the man
+> in a blue shirt walking toward the camera in the mall. QTrack
+
+Multiple Structured Outputs 
+
+> Original
+> Output
+> <think> .. </think>
+> <answer> ..
+> </answer>
+> <think> .. </think>
+> <answer> ..
+> </answer>
+> <think> .. </think>
+> <answer> ..
+> </answer>
+> Temporal KL Loss QTrack
+
+TAPO 
+
+Maximize  
+
+> Update Policy
+> Best Output Rewards
+
+Advantages A1 A2 A3 
+
+R1  R2  R3 
+
+Fig. 2: Overview of the QTrack Framework architecture. Given an input video sequence V = {It}Tt=1 and natural-language query q. QTrack processes the data through a unified vision-language model (VLM). The model first generates a chain-of-thought reasoning trace, analyzing the query in the context of a visual scene to identify targets based on attributes, relationship or motion. The model directly predicts bounding box trajectories {τi}Nq
+
+i=1 for the queried target across all frames, performing joint spatial grounding and temporal association. 
+
+3.3 QTrack Framework 
+
+Our framework incorporates a reasoning module for query-conditioned spatiotem-poral grounding and a tracking-oriented localization module for trajectory for-mation. The overall architecture is illustrated in Figure 2. The key strength of QTrack lies in its ability to perform multi-object reasoning over video se-quences, enabling unified spatial grounding, temporal association, and identity persistence under natural language instructions. Specifically, given a video sequence V = {It}Tt=1 and a text query q, QTrack 
+
+first generates an interpretable reasoning trace that identifies candidate targets based on semantic attributes, contextual cues, and motion patterns. The model then predicts structured bounding boxes {bti} corresponding to the queried tar-gets across frames. These predictions are aggregated to form trajectories {τi}Nq
+
+i=1 .This process can be formulated as: {τi}Nq
+
+i=1 = F (V, q ), where F denotes the 
+
+QTrack policy that jointly reasons over spatial and temporal cues. During in-ference, the user provides a video V and a natural language query q. The system outputs trajectories corresponding only to the query-relevant objects: 
+
+Output =
+
+(
+
+{τi}Nq
+
+i=1 , if query specifies one or multiple targets ,
+
+∅, if no valid target satisfies the query . (3) QTrack 9
+
+Unlike traditional MOT , which tracks all detected objects, QTrack selectively tracks only those instances grounded in the query. By integrating reasoning and trajectory prediction within a unified framework, QTrack extends multi-object tracking from passive category-level perception to question-conditioned, identity-preserving spatiotemporal reasoning. 
+
+3.4 Unified Reward Mechanism for QTrack 
+
+As discussed in Section 3.1, reward design is central to group-relative reinforce-ment learning. In QTrack , we employ a unified reward mechanism tailored for query-conditioned multi-object tracking, jointly enforcing structured reasoning, spatial accuracy, and temporal motion consistency. The total reward is the sum of all components. 
+
+Thinking Format Reward. Assigns 1.0 if the reasoning trace is enclosed within <think> and </think> tags and the final prediction appears within 
+
+<answer> and </answer> tags. 
+
+Answer Format Reward. Ensures bounding boxes follow the predefined JSON format: [{’bbox_2d’ : [ x1, y 1, x 2, y 2]}, . . . ]. Reward is 1.0 for valid format, oth-erwise 0. 
+
+IoU Reward. After Hungarian matching between predicted boxes {bpred i }Ki=1 
+
+and ground-truth boxes {bgt j }Nj=1 , each matched pair with IoU > 0.5 contributes   
+
+> 1max( K,N )
+
+.
+
+Motion Consistency Precision (MCP) Reward. Evaluates trajectory dy-namics via direction alignment (cosine similarity), speed consistency (Gaussian penalty), and anti-static penalty. The final MCP score is the product of these components in [0 , 1] , thereby enforcing temporally coherent motion patterns. 
+
+Algorithm 1 TAPO: Temporal Perception-Aware Optimization                                                      
+
+> 1: Input: Video F=(F0, . . . , F T),query q, policy πθ, weight γ
+> 2: Generate rollout o∼πθ(o|q, F)
+> 3: Construct corrupted sequence Fmask
+> 4: Freeze frames: ˜Ft=F0
+> 5: Compute log-probabilities: 6: log p= log πθ(o|q, F)
+> 7: log pmask = log πθ(o|q, Fmask )
+> 8: Compute temporal loss: 9: Ltrack = log p−log pmask
+> 10: J=Jgrpo +γLtrack
+> 11: Update θusing J
+
+For multi-object cases, spatial and motion rewards are computed using batch matching with the Hungarian al-gorithm to ensure optimal one-to-one alignment. Note that the format-related re-wards serve as auxiliary regularizers to ensure structured and parsable outputs during early training stages. They do not directly influence localization qual-ity but improve optimization stability in VLMs. A detailed description of re-ward functions is provided in Appendix §C. 
+
+3.5 Temporal Perception-Aware Policy Optimization (TAPO) 
+
+While GRPO improves the quality of the reasoning, we empirically observe that, without additional temporal regularization, the policy may over-rely on static 10 Ashraf et al. Prompt:  Track  the person wearing a green jacket    
+
+> and carrying a black bag moves as he walks through
+> the shopping mall, keeping an eye on his position
+> relative to the Vodafone store entrance. Final Benchmark
+> MOT Images
+> Text Prompt
+> Human
+> Verification
+> Human
+> Verification
+> Generated
+> Queries Refined Queries Final Processing
+
+Fig. 3: RMOT26 dataset construction pipeline. This pipeline explains the creation of benchmark instances from existing MOT datasets. 
+
+appearance cues and ignore motion dynamics, especially in crowded scenes with similar visual attributes. Such behavior leads to identity drift under occlusion or viewpoint changes. To address this, we introduce Temporal Perception-Aware Policy Optimization (TAPO), summarized in Algorithm 1. 
+
+Temporal Corruption. Given a video sequence F = ( F0, F 1, . . . , F T ), we con-struct a corrupted sequence Fmask by freezing frames: F mask t = F0, ∀t. This removes motion while preserving static appearance. 
+
+Temporal KL Loss. We enforce temporal sensitivity by computing a divergence between policy outputs under original and corrupted sequences, as detailed in Algorithm 1: 
+
+Ltrack = DKL 
+
+ πθ (o | q, F) ∥ πθ (o | q, Fmask ). (4) We adopt this asymmetric KL formulation to explicitly penalize policies whose predictions remain invariant under temporal corruption. By measuring divergence from the original motion-aware policy to the corrupted-input policy, we directly discourage motion-agnostic behavior while preserving stable refer-ence outputs. 
+
+Overall Objective. The final optimization objective combines GRPO reward and temporal perception regularization: 
+
+JTAPO = JGRPO + γLtrack , (5) where γ controls the strength of temporal enforcement. Together, the struc-tured reward design, MCP motion supervision, and TAPO regularization adapt GRPO to query-conditioned, identity-preserving multi-object tracking. 
+
+4 RMOT26 Benchmark 
+
+Dataset Design. The proposed RMOT26 benchmark is designed to evaluate fine-grained, query-conditioned spatiotemporal reasoning in realistic multi-object tracking scenarios. We curate video clips from seven popular MOT datasets, including DanceTrack [52], MOT16/17 [29, 40], MOT20 [16], SportsMOT [13], PETS [19], TAO [14], and DAMUNT [2]. These datasets span diverse motion patterns, crowd densities, camera viewpoints, and scene dynamics, including QTrack 11 
+
+non-linear motion (DanceTrack), fast sports interactions (SportsMOT), crowded surveillance scenes (MOT16/17/20), and static camera footage with heavy over-laps (PETS). This diversity ensures evaluation beyond static grounding toward motion-aware reasoning. Each instance consists of a reference frame and a short sequence of future frames (5–6 frames). Target objects are grounded in the refer-ence frame via bounding boxes, while subsequent frames test trajectory predic-tion and motion reasoning. Object identities are inherited from the original MOT annotations, ensuring consistent track IDs across frames. The overall dataset construction pipeline is illustrated in Fig. 3. 
+
+Query Types and Reasoning Categories. Each benchmark instance includes a natural language query derived from MOT annotations, paired with explicit spatial grounding in the reference frame. We define three query categories: Single-Object Queries: Track a specified object from the reference frame across future frames, producing a sequence of bounding boxes corresponding to its trajectory. 
+
+Multi-Object Queries: Simultaneously track multiple referenced objects, each defined by bounding boxes and textual descriptions in the reference frame. The output consists of structured trajectories for all specified targets. Occlusion-Aware Queries: Track objects that are partially or fully occluded in the reference frame but visible in later frames, requiring identity persistence under visibility changes. All queries are tightly grounded spatially through explicit bounding boxes in the reference frame, eliminating ambiguity in object selection. 
+
+Annotation Protocol. Trajectory supervision is derived directly from ground-truth MOT annotations. For each query, bounding boxes of referenced objects are extracted across subsequent frames to form ordered trajectories indexed by frame number. Single-object queries require a trajectory array, while multi-object queries require a structured mapping between object identities and their tracks. Each query includes: (1) a natural language description of the target object(s), (2) explicit bounding boxes in the reference frame, and (3) a reasoning prompt specifying temporal or relational constraints. To enhance linguistic diversity and reduce annotation bias, question templates are generated using Qwen-2.5-VL-Instruct [56], conditioned on scene context, object attributes, and motion signals. All queries remain explicitly grounded in provided spatial annotations, ensur-ing no reliance on external commonsense inference. Additional details regarding dataset composition and train/test splits is included in Appendix §B. 
+
+5 Experiments 
+
+Evaluation Metrics. Let Bt = {xt, y t, w t, h t} denote the bounding box at frame t, where (xt, y t) represents the center coordinates. For a trajectory of length T , Bgt t and Bpred t denote ground-truth and predicted boxes, respectively. We evaluate tracking quality using standard localization metrics (IoU, MOTP, CLE, NDE) along with our proposed Motion Consistency Precision (MCP), which explicitly measures temporal motion alignment. Detailed definitions are provided in Table 1. Unlike association-based metrics such as HOTA, MCP di-rectly penalizes temporally implausible motion, making it particularly suitable 12 Ashraf et al. 
+
+Table 1: Evaluation metrics for RMOT26.                           
+
+> Metric Description IoU Spatial overlap between Bpred tand Bgt tper frame.
+> Center Distance Euclidean distance between predicted and ground-truth centers (xt, y t).
+> Direction Consistency ( At)Cosine similarity between predicted and ground-truth motion vectors ∆pred tand ∆gt t.
+> Speed Consistency ( St)Gaussian penalty on motion magnitude difference ∥∆pred t∥and ∥∆gt t∥.
+> MCP MCP =1
+> T−1
+> TX
+> t=2
+> At·St.
+
+Table 2: Main results on the RMOT26 benchmark. Higher is better for MCP and MOTP, while lower is better for CLE and NDE. 
+
+Model Name Params MCP ↑ MOTP ↑ CLE (px) ↓ NDE ↓
+
+Open-Source Models 
+
+Qwen2.5-VL-Instruct [56] 7B 0.24 0.48 289.2 2.07 Qwen3-VL-Instruct [57] 8B 0.25 0.64 96.0 0.97 Gemma 3 [55] 27B 0.24 0.56 58.4 0.88 Gemma 3 [55] 12B 0.18 0.73 172.9 0.95 Llama 3.2 Vision-Instruct [21] 11B 0.19 0.15 552.1 2.67 DeepSeek [67] 16B 0.11 0.27 989.13 4.7 Mistral-3-Instruct [33] 8B 0.15 0.54 225.3 0.98 
+
+Reasoning Models 
+
+VisionReasoner [35] 7B 0.23 0.24 428.9 2.24 VisionReasoner [35] 3B 0.21 0.44 416.58 2.32 Migician [31] 7B 0.25 0.22 658.39 3.28 InternVL [11] 8B 0.21 0.66 117.44 0.64 
+
+Closed-Source Models 
+
+gpt-4o-mini [38] - 0.20 0.57 130.48 0.67 gpt-5.2 [51] - 0.25 0.61 94.2 0.55 
+
+QTrack (Ours) 3B 0.30 0.75 44.61 0.39 
+
+for reasoning-based tracking. A detailed analysis of the MCP metric is provided in Appendix §D.1 
+
+Implementation Details. All experiments are conducted on a single NVIDIA H100 GPU (100GB memory). Training follows the GRPO-based reinforcement learning scheme described in Sec. 3.1. We adopt VisionReasoner [35] as our primary baseline, which employs GRPO-based policy optimization (Sec. 3.1). In addition to standard accuracy and format rewards, we introduce the MCP reward (Sec. 3.4) to explicitly supervise motion consistency. Furthermore, we integrate TAPO into the GRPO objective to enforce temporal sensitivity. Addi-tional details regarding hyperparameters is written in Appendix §D. QTrack 13 
+
+Model (3B) MCP ↑ MOTP ↑ NDE ↓
+
+VisionReasoner 0.21 0.44 2.32 GRPO 0.22 0.65 0.96 MCP-Reward 0.25 0.61 1.06 TAPO 0.24 0.72 0.82 
+
+QTrack (Ours) 0.30 0.75 0.39    
+
+> (a) Component-wise (b) GRPO vs TAPO comparison.
+
+Fig. 4: Ablation analysis of QTrack components. TAPO significantly improves motion consistency and localization stability over GRPO.                                             
+
+> (a) MOT17 Dataset
+> Model MOTA MOTP HOTA MCP
+> MOTR 0.61 0.81 0.22 0.44 BoostTrack++ 0.63 0.76 0.38 0.44
+> TrackTrack 0.75 0.50 0.23 0.29 VisionReasoner 0.64 0.86 0.60 0.21
+> QTrack 0.69 0.87 0.69 0.26
+> (b) DanceTrack Dataset
+> Model MOTA MOTP HOTA MCP
+> MOTR 0.42 0.70 0.35 0.51 MOTRv2 0.49 0.73 0.37 0.52 TrackTrack 0.36 0.73 0.40 0.55
+> VisionReasoner 0.59 0.85 0.61 0.26
+> QTrack 0.63 0.83 0.66 0.35
+
+Table 3: Comparison with traditional MOT methods. QTrack improves HOTA and MOTP while maintaining competitive MOTA. 
+
+5.1 Main Results on RMOT26 
+
+Table 2 presents comparisons across open-source, closed-source, and reasoning models. Scaling alone does not ensure temporal reasoning. We observe that increasing model size does not guarantee improved motion consistency. For instance, Gemma-3 (27B) achieves an MCP of 0.24, while Qwen-3-VL (8B) achieves 0.25, despite a significant parameter gap. This demonstrates that tem-poral consistency is not purely a scaling property but requires explicit motion supervision. QTrack achieves the best overall performance. QTrack (3B) achieves the highest MCP (0.30), highest MOTP (0.75), lowest CLE (44.61), and lowest NDE (0.39), outperforming all baselines. Notably, improvements are con-sistent across both spatial precision and temporal stability metrics, validating the effectiveness of structured rewards and TAPO regularization. Closed-source models are evaluated using identical prompts and deterministic decoding set-tings. We used a default temperature of 1.0 and default Top-p of 1.0. 
+
+5.2 Ablation Studies Component Wise Results Fig 4(a) analyzes the contribution of each compo-nent. GRPO improves spatial alignment but not motion stability. While GRPO significantly improves MOTP (0.65), MCP remains limited (0.22), indicating in-sufficient temporal reasoning. MCP reward improves motion consistency. Intro-ducing the MCP reward increases MCP to 0.25, confirming that explicit motion 14 Ashraf et al. "Track the dancer in the black crop top with yellow side stripes at [402.0, 256.0, 183.0, 477.0], the red ‑haired performer in a white  
+
+> top and black pants at [601.0, 201.0, 232.0, 631.0], and the center dancer in a long ‑sleeve black top with blue jeans at [915.0,
+> 253.0, 112.0, 501.0]. Also keep an eye on the woman in a sleeveless black top with white ‑stripe pants at [1149.0, 213.0, 204.0,
+> 684.0] and the blonde in an all ‑black outfit at [1428.0, 252.0, 175.0, 462.0]; how do their trajectories shift and their spacing and
+> alignment evolve relative to each other over the next frames?"
+> Frame 0
+> VisionReasoner QTrack
+> Frame 2 Frame 4
+
+Fig. 5: In this figure, Visionreasoner is not able to detect and track all the objects in the frames, but QTrack is able to detect and track all objects in all frames. 
+
+supervision is essential for trajectory coherence. TAPO enhances temporal ro-bustness. Integrating TAPO further improves MOTP (0.72) and reduces NDE (0.82), demonstrating reduced identity drift and improved motion sensitivity. 
+
+Full QTrack yields complementary gains. The complete framework (GRPO + MCP + TAPO) achieves the best performance across all metrics. This confirms that spatial grounding, motion supervision, and temporal perception regulariza-tion are complementary and jointly necessary for reasoning-aware tracking. 
+
+GRPO vs TAPO. As illustrated in Fig. 4(b), GRPO improves reasoning qual-ity but often produces temporally invariant trajectories. TAPO explicitly en-forces motion sensitivity, resulting in smoother trajectories, reduced drift, and significantly higher MCP. 
+
+Comparison with Traditional MOT Methods. Tables 3a and 3b compare QTrack against recent MOT methods on MOT17 [40] and DanceTrack [52]. On MOT17, QTrack achieves the best MOTP (0.87) and HOTA (0.69), while main-taining competitive MOTA (0.69). On DanceTrack, QTrack achieves the best MOTA (0.63) and HOTA (0.66). Since QTrack is not a traditional MOT model, it is important to note that this comparison is conducted on short query-specific segments derived from the benchmark sequences rather than entire videos. Tra-ditional MOT methods track all objects indiscriminately, whereas QTrack se-lectively tracks query-specified targets. Despite this stricter constraint, QTrack 
+
+remains competitive or superior on standard tracking metrics, demonstrating that reasoning-aware tracking does not compromise trajectory quality. Details of the evaluation protocol used for traditional MOT models are provided in Appendix §E. 
+
+Qualitative Analysis. Figure 5 presents qualitative comparisons. VisionRea-soner fails to consistently localize all targets across frames, particularly under QTrack 15 
+
+occlusion and appearance ambiguity. In contrast, QTrack maintains stable iden-tities and coherent motion trajectories, demonstrating improved multi-object reasoning and temporal robustness. Detailed qualitative analysis is shown in Appendix §G. 
+
+6 Conclusion 
+
+We introduced QTrack , a query-driven tracking paradigm that reformulates multi-object tracking as a reasoning-aware, language-conditioned problem. To this end, we curated the RMOT26 benchmark for evaluating fine-grained spa-tiotemporal reasoning under explicit query grounding. In addition, we further proposed a reinforcement learning-based framework with structured rewards and Temporal Perception-Aware Policy Optimization (TAPO), explicitly enforcing motion consistency and identity persistence. QTrack achieves state-of-the-art performance on RMOT26 , improving MCP by +5% absolute over the strongest baseline (0.30 vs. 0.25) and reducing NDE by more than 50% (0.39 vs. 0.82 in ablations). On traditional MOT benchmarks, QTrack remains competitive de-spite selectively tracking query-specified objects, achieving the best HOTA on MOT17 (+9% relative over prior reasoning models) and the best MOTA and HOTA on DanceTrack, demonstrating that reasoning-aware tracking does not sacrifice trajectory quality. These results highlight that explicit motion supervi-sion and temporal perception optimization are more critical than model scaling alone for robust spatiotemporal reasoning. Bibliography 
+
+[1] Abdar, M., Kollati, M., Kuraparthi, S., Pourpanah, F., McDuff, D., Ghavamzadeh, M., Yan, S., Mohamed, A., Khosravi, A., Cambria, E., et al.: A review of deep learning for video captioning. IEEE Transactions on Pat-tern Analysis and Machine Intelligence (2024) 5 [2] Abeysinghe, C., Reid, C., Rezatofighi, H., Meyer, B.: Tracking different ant species: an unsupervised domain adaptation framework and a dataset for multi-object tracking. arXiv preprint arXiv:2301.10559 (2023) 10 [3] Al-Tahan, H., Garrido, Q., Balestriero, R., Bouchacourt, D., Hazirbas, C., Ibrahim, M.: Unibench: Visual reasoning requires rethinking vision-language beyond scaling. Advances in Neural Information Processing Sys-tems 37 , 82411–82437 (2024) 3 [4] Alayrac, J.B., Donahue, J., Luc, P., et al.: Flamingo: A visual language model for few-shot learning. NeurIPS (2022) 5 [5] Andriluka, M., Roth, S., Schiele, B.: People-tracking-by-detection and people-detection-by-tracking. In: 2008 IEEE Conference on computer vi-sion and pattern recognition. pp. 1–8. IEEE (2008) 4 [6] Ashraf, T., Bin Afzal Mir, F., Gillani, I.A.: Transfed: A way to epitomize fo-cal modulation using transformer-based federated learning. In: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision. pp. 554–563 (2024) 4 [7] Bernardin, K., Stiefelhagen, R.: Evaluating multiple object tracking per-formance: the clear mot metrics. EURASIP Journal on Image and Video Processing 2008 (1), 246309 (2008) 1 [8] Bewley, A., Ge, Z., Ott, L., Ramos, F., Upcroft, B.: Simple online and realtime tracking. In: ICIP (2016) 4 [9] Bochinski, E., Eiselein, V., Sikora, T.: High-speed tracking-by-detection without using image information. In: 2017 14th IEEE international con-ference on advanced video and signal based surveillance (AVSS). pp. 1–6. IEEE (2017) 4 [10] Breitenstein, M.D., Reichlin, F., Leibe, B., Koller-Meier, E., Van Gool, L.: Robust tracking-by-detection using a detector confidence particle filter. In: 2009 IEEE 12th International Conference on Computer Vision. pp. 1515– 1522. IEEE (2009) 4 [11] Chen, Z., Wu, J., Wang, W., Su, W., Chen, G., Xing, S., Zhong, M., Zhang, Q., Zhu, X., Lu, L., et al.: Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 24185–24198 (2024) 12 [12] Ciaparrone, G., Sánchez, F.L., Tabik, S., Troiano, L., Tagliaferri, R., Her-rera, F.: Deep learning in video multi-object tracking: A survey. Neurocom-puting 381 , 61–88 (2020) 2 QTrack 17 
+
+[13] Cui, Y., Zeng, C., Zhao, X., Yang, Y., Wu, G., Wang, L.: Sportsmot: A large multi-object tracking dataset in multiple sports scenes. arXiv preprint arXiv:2304.05170 (2023) 4, 10 [14] Dave, A., Khurana, T., Tokmakov, P., Schmid, C., Ramanan, D.: Tao: A large-scale benchmark for tracking any object. In: European conference on computer vision. pp. 436–454. Springer (2020) 4, 10 [15] Dendorfer, P., Osep, A., Milan, A., Schindler, K., Cremers, D., Reid, I., Roth, S., Leal-Taixé, L.: Motchallenge: A benchmark for single-camera mul-tiple target tracking: P. dendorfer et al. International Journal of Computer Vision 129 (4), 845–881 (2021) 4 [16] Dendorfer, P., Rezatofighi, H., Milan, A., Shi, J., Cremers, D., Reid, I., Roth, S., Schindler, K., Leal-Taixé, L.: Mot20: A benchmark for multi object tracking in crowded scenes. arXiv preprint arXiv:2003.09003 (2020) 4, 10 [17] Ding, S., Wu, S., Zhao, X., Zang, Y., Duan, H., Dong, X., Zhang, P., Cao, Y., Lin, D., Wang, J.: Mm-ifengine: Towards multimodal instruction following. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 1099–1109 (2025) 3 [18] Ding, Y., Chen, Z., Liu, Z., Wang, L.: Mevis: A benchmark for multi-event video segmentation with natural language expressions. In: ICCV (2023) 4 [19] Ferryman, J., Shahrokni, A.: Pets2009: Dataset and challenge. In: 2009 Twelfth IEEE International Workshop on Performance Evaluation of Track-ing and Surveillance. pp. 1–6 (2009). https://doi.org/10.1109/PETS-WINTER.2009.5399556 4, 10 [20] Gavrilyuk, K., Ghodrati, A., Li, X., Snoek, C.: Actor and action video segmentation from a sentence. In: CVPR (2018) 4 [21] Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al.: The llama 3 herd of models. arXiv preprint arXiv:2407.21783 (2024) 12 [22] Grunde-McLaughlin, L., He, J., Abbeel, P., Darrell, T.: Agqa: A benchmark for compositional spatio-temporal reasoning. In: CVPR (2021) 5 [23] Guo, D., Yang, D., Zhang, H., Song, J., Wang, P., Zhu, Q., Xu, R., Zhang, R., Ma, S., Bi, X., et al.: Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 (2025) 5 [24] He, L., Zhou, Q., Li, X., Niu, L., Cheng, G., Li, X., Liu, W., Tong, Y., Ma, L., Zhang, L.: Imagenet vid dataset (dec 2024). https://doi.org/ 10.57702/58xou3kx , https://service.tib.eu/ldmservice/dataset/ imagenet-vid-dataset 4[25] HOU, Y.: Uavdt (Dec 2024). https : / / doi . org / 10 . 5281 / zenodo . 14575517 , https://doi.org/10.5281/zenodo.14575517 4[26] Iashin, V., Rahtu, E.: Multi-modal dense video captioning. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition workshops. pp. 958–959 (2020) 5 [27] Jang, Y., Song, Y., Yu, Y., Kim, Y., Kim, G.: Tgif-qa: Toward spatio-temporal reasoning in visual question answering. In: CVPR (2017) 5 [28] Kalake, L., Wan, W., Hou, L.: Analysis based on recent deep learning ap-proaches applied in real-time multi-object tracking: a review. IEEE Access 
+
+9, 32650–32671 (2021) 1 18 Ashraf et al. 
+
+[29] Leal-Taixé, L., Milan, A., Reid, I., Roth, S., Schindler, K.: Motchal-lenge 2015: Towards a benchmark for multi-target tracking. arXiv preprint arXiv:1504.01942 (2015) 4, 10 [30] Li, Y., Huang, C., Li, X., Yang, X., Hua, G., Zhang, H.: Tracking by natural language specification. In: CVPR (2017) 4 [31] Li, Y., Huang, H., Chen, C., Huang, K., Huang, C., Guo, et al.: Migician: Revealing the magic of free-form multi-image grounding in multimodal large language models. In: Findings of the Association for Computational Linguis-tics (ACL 2025). pp. 9845–9867 (2025) 12 [32] Li, Y., Wang, N., Zhou, W., Li, H.: Lamot: Language-based multi-object tracking. In: CVPR (2024) 4, 7 [33] Liu, A.H., Khandelwal, K., Subramanian, S., Jouault, V., Rastogi, A., Sadé, A., Jeffares, A., Jiang, A., Cahill, A., Gavaudan, A., et al.: Ministral 3. arXiv preprint arXiv:2601.08584 (2026) 12 [34] Liu, Y., Peng, B., Zhong, Z., Yue, Z., Lu, F., Yu, B., Jia, J.: Seg-zero: Reasoning-chain guided segmentation via cognitive reinforcement. arXiv preprint arXiv:2503.06520 (2025) 5 [35] Liu, Y., Qu, T., Zhong, Z., Peng, B., Liu, S., Yu, B., Jia, J.: Visionreasoner: Unified visual perception and reasoning via reinforcement learning. arXiv preprint arXiv:2505.12081 (2025) 12, 36 [36] Liu, Z., Sun, Z., Zang, Y., Dong, X., Cao, Y., Duan, H., Lin, D., Wang, J.: Visual-rft: Visual reinforcement fine-tuning. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 2034–2044 (2025) 5 [37] Luo, W., Xing, J., Milan, A., Zhang, X., Liu, W., Kim, T.K.: Multiple object tracking: A literature review. Artificial intelligence 293 , 103448 (2021) 1 [38] Mao, J., Huang, J., Toshev, A., Camburu, O., Yuille, A.L., Murphy, K.: Generation and comprehension of unambiguous object descriptions. In: Pro-ceedings of the IEEE conference on computer vision and pattern recognition. pp. 11–20 (2016) 12 [39] Meimetis, D., Daramouskas, I., Perikos, I., Hatzilygeroudis, I.: Real-time multiple object tracking using deep learning methods. Neural Computing and Applications 35 (1), 89–118 (2023) 2 [40] Milan, A., Leal-Taixé, L., Reid, I., Roth, S., Schindler, K.: Mot16: A bench-mark for multi-object tracking. arXiv preprint arXiv:1603.00831 (2016) 4, 10, 14, 36 [41] Niu, T.Z., Chen, Z.D., Luo, X., Zhang, P.F., Huang, Z., Xu, X.S.: Video cap-tioning by learning from global sentence and looking ahead. ACM Transac-tions on Multimedia Computing, Communications and Applications 19 (5s), 1–20 (2023) 5 [42] Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P., Zhang, C., Agarwal, S., Slama, K., Ray, A., et al.: Training language models to follow instructions with human feedback. Advances in neural information processing systems 35 , 27730–27744 (2022) 5 [43] Pal, S.K., Pramanik, A., Maiti, J., Mitra, P.: Deep learning in multi-object detection and tracking: state of the art. Applied Intelligence 51 (9), 6400– 6429 (2021) 2, 4 QTrack 19 
+
+[44] Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., et al.: Learning transferable visual models from natural language supervi-sion. In: ICML (2021) 5 [45] Rafailov, R., Sharma, A., Mitchell, E., Manning, C.D., Ermon, S., Finn, C.: Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems 36 , 53728–53741 (2023) 5 [46] Samleti, S., Mishra, A., Jhajhria, A., Rai, S.K., Malik, G.: Real time video captioning using deep learning. INTERNATIONAL JOURNAL OF ENGI-NEERING RESEARCH and TECHNOLOGY (IJERT) 10 (12) (2021) 5 [47] Schulman, J., Wolski, F., Dhariwal, P., Radford, A., Klimov, O.: Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 (2017) 5 [48] Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y., Wu, Y., et al.: Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 (2024) 5[49] Shim, K., Ko, K., Yang, Y., Kim, C.: Focusing on tracks for online multi-object tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 11687–11696 (June 2025) 1 [50] Shingare, S., Haribhakta, Y., Rajmane, D.: Video captioning using deep learning and nlp to detect suspicious activities. In: 2022 International Con-ference on Signal and Information Processing (IConSIP). pp. 1–5. IEEE (2022) 5 [51] Singh, A., Fry, A., Perelman, A., Tart, A., Ganesh, A., El-Kishky, A., McLaughlin, A., Low, A., Ostrow, A., Ananthram, A., et al.: Openai gpt-5 system card. arXiv preprint arXiv:2601.03267 (2025) 12 [52] Sun, P., Cao, J., Jiang, Y., Yuan, Z., Bai, S., Kitani, K., Luo, P.: Dance-track: Multi-object tracking in uniform appearance and diverse motion. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 20993–21002 (2022) 4, 10, 14, 36 [53] Sun, Z., Chen, J., Chao, L., Ruan, W., Mukherjee, M.: A survey of mul-tiple pedestrian tracking based on tracking-by-detection framework. IEEE Transactions on Circuits and Systems for Video Technology 31 (5), 1819– 1833 (2020) 4 [54] Tan, H., Ji, Y., Hao, X., Chen, X., Wang, P., Wang, Z., Zhang, S.: Reason-rft: Reinforcement fine-tuning for visual reasoning of vision language models (2025), https://api.semanticscholar.org/CorpusID:281842907 3[55] Team, G., et al.: Gemma 3 technical report (2025), https://arxiv.org/ abs/2503.19786 12, 36 [56] Team, Q.: Qwen2.5-vl (January 2025), https://qwenlm.github.io/blog/ qwen2.5-vl/ 11, 12, 23, 36 [57] Team, Q.: Qwen3 technical report (2025), https://arxiv.org/abs/2505. 09388 12 [58] Tomasi, C., Kanade, T.: Detection and tracking of point. Int J Comput Vis 
+
+9(137-154), 3 (1991) 4 20 Ashraf et al. 
+
+[59] Tong, S., Brown, E., Wu, P., Woo, S., Middepogu, M., Akula, S.C., Yang, J., Yang, S., Iyer, A., Pan, X., Wang, A., Fergus, R., LeCun, Y., Xie, S.: Cambrian-1: A fully open, vision-centric exploration of multimodal llms. ArXiv abs/2406.16860 (2024), https://api.semanticscholar.org/ CorpusID:270703300 3[60] Voigtlaender, P., Krause, M., O˘ sep, A., Luiten, J., Sekar, B.B.G., Geiger, A., Leibe, B.: MOTS: Multi-object tracking and segmentation. In: CVPR (2019) 4 [61] Wang, B., Ma, L., Zhang, W., Liu, W.: Reconstruction network for video captioning. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 7622–7631 (2018) 5 [62] Wang, N., Zhou, W., Li, Y., Tan, Z., Li, J.: Tnl2k: Benchmarking tracking by natural language specification. In: CVPR (2021) 4 [63] Wang, Z., Guo, X., Stoica, S., Xu, H., Wang, H., Ha, H., Chen, X., Chen, Y., Yan, M., Huang, F., et al.: Perception-aware policy optimization for multimodal reasoning. arXiv preprint arXiv:2507.06448 (2025) 5 [64] Wei, Y., Zhao, L., Sun, J., Lin, K., Yin, J., Hu, J., Zhang, Y., Yu, E., Lv, H., Weng, Z., Wang, J., Han, C., Peng, Y., Han, Q., Ge, Z., Zhang, X.T., Jiang, D., Patel, V.M.: Open vision reasoner: Transferring linguistic cognitive behavior for visual reasoning. ArXiv abs/2507.05255 (2025), 
+
+https://api.semanticscholar.org/CorpusID:280068664 3[65] Wojke, N., Bewley, A., Paulus, D.: Simple online and realtime tracking with a deep association metric. In: ICIP (2017) 4, 7 [66] Wu, T., Zeng, L., Zhang, L.: Language as queries for referring video object segmentation. In: CVPR (2022) 4 [67] Wu, Z., Chen, X., Pan, Z., Liu, X., Liu, W., Dai, D., Gao, H., Ma, Y., Wu, C., Wang, B., Xie, Z., Wu, Y., Hu, K., Wang, J., Sun, Y., Li, Y., Piao, Y., Guan, K., Liu, A., Xie, X., You, Y., Dong, K., Yu, X., Zhang, H., Zhao, L., Wang, Y., Ruan, C.: Deepseek-vl2: Mixture-of-experts vision-language models for advanced multimodal understanding (2024), https: //arxiv.org/abs/2412.10302 12 [68] Xiao, J., Shang, X., Yao, T., Mei, T.: Next-qa: Next phase of question-answering for temporal and causal reasoning in video. In: CVPR (2021) 5[69] Xu, K., Sun, T., Jiang, X.: Video anomaly detection and localization based on an adaptive intra-frame classification network. IEEE Transactions on Multimedia 22 (2), 394–406 (2019) 7 [70] Yan, S., Xiong, X., Nagrani, A., Arnab, A., Wang, Z., Ge, W., Ross, D., Schmid, C.: Unloc: A unified framework for video localization tasks. In: Pro-ceedings of the IEEE/CVF International Conference on Computer Vision. pp. 13623–13633 (2023) 7 [71] Yu, F., Xian, W., Chen, Y., Liu, F., Liao, M., Madhavan, V., Darrell, T., et al.: Bdd100k: A diverse driving video database with scalable annotation tooling. arXiv preprint arXiv:1805.04687 2(5), 6 (2018) 4 [72] Zhang, H., Li, H., Li, F., Ren, T., Zou, X., Liu, S., Huang, S., Gao, J., Leizhang, Li, C., et al.: Llava-grounding: Grounded visual chat with large QTrack 21 
+
+multimodal models. In: European Conference on Computer Vision. pp. 19– 35. Springer (2024) 3 [73] Zhang, L., Gao, J., Xiao, Z., Fan, H.: Animaltrack: A benchmark for multi-animal tracking in the wild. International Journal of Computer Vision 
+
+131 (2), 496–513 (2023) 4 [74] Zhang, Y., Wang, C., Wang, X., Zeng, W., Liu, W.: Fairmot: On the fairness of detection and re-identification in multiple object tracking. International journal of computer vision 129 (11), 3069–3087 (2021) 4, 7 [75] Zheng, Y., Lu, J., Wang, S., Feng, Z., Kuang, D., Xiong, Y.: Easyr1: An efficient, scalable, multi-modality rl training framework. https://github. com/hiyouga/EasyR1 (2025) 5 [76] Zhou, J., Lu, T., Mishra, S., Brahma, S., Basu, S., Luan, Y., Zhou, D., Hou, L.: Instruction-following evaluation for large language models. ArXiv abs/2311.07911 (2023), https://api.semanticscholar.org/ CorpusID:265157752 3[77] Zhu, P., Wen, L., Du, D., Bian, X., Fan, H., Hu, Q., Ling, H.: Detection and tracking meet drones challenge. IEEE Transactions on Pattern Analysis and Machine Intelligence 44 (11), 7380–7399 (2021) 4 [78] Zhu, P., Wen, L., Du, D., Bian, X., Fan, H., Hu, Q., Ling, H.: Detection and tracking meet drones challenge. IEEE transactions on pattern analysis and machine intelligence 44 (11), 7380–7399 (2021) 4 22 Ashraf et al. 
+
+# Appendix for QTrack: Query-Driven Reasoning for Multi-modal MOT           
+
+> Appendix Section Description
+> Section A RMOT26 Data Card
+> Section B RMOT26 Dataset Statistics
+> Section C Detailed Reward Function Formulation
+> Section D Metrics and Implementation Details
+> Section E Evaluation Protocol for Traditional MOT Comparison
+> Section F Comparison with Fine-Tuned Models
+> Section G Additional Qualitative Results
+> Section H Failure Cases
+> Section I Prompt Templates for Baseline Models
+
+A Datacard for RMOT26 
+
+A.1 Motivation – For what purpose was the dataset created? 
+
+The RMOT26 dataset is designed to evaluate query-driven multi-object track-ing , where models track only objects specified by a natural language query rather than all objects in a scene. Each task requires identifying the correct object(s) in a reference frame and maintaining consistent trajectories across subsequent frames. The dataset evaluates language-conditioned spatiotem-poral reasoning, including query understanding, spatial grounding, temporal identity consistency, and robustness under challenging conditions such as oc-clusion or object interactions. 
+
+– Who created the dataset? 
+
+The dataset was created by the authors of this paper. 
+
+– Who funded the creation of the dataset? 
+
+Funding information will be disclosed after the anonymous review process. 
+
+A.2 Composition – What do the individual instances represent? 
+
+Each instance represents a query-conditioned tracking task consisting of a reference frame with annotated bounding boxes, a sequence of subsequent frames, a natural language query describing the target object(s), and ground-truth trajectories. QTrack 23 
+
+– How many instances are there? 
+
+The dataset contains 1000 instances: 900 single-object tracking tasks and 100 multi-object tracking tasks. Among the single-object tasks, 20 queries specifically focus on occlusion scenarios. 
+
+– Is the dataset a complete set or a sample? 
+
+The dataset is a curated collection of tracking scenarios rather than an ex-haustive set. 
+
+– What data does each instance contain? 
+
+Each instance includes a reference frame, subsequent video frames, a natural language query, and ground-truth bounding box trajectories with object IDs. 
+
+– Is there a label associated with each instance? 
+
+Yes. Ground-truth bounding boxes and object IDs define the target trajec-tories. 
+
+– Is any information missing from instances? 
+
+No. 
+
+– Are there recommended data splits? 
+
+Yes. The dataset provides predefined training and test splits described in Section B. 
+
+– Are there errors or noise in the dataset? 
+
+The dataset is generated using a semi-automated pipeline and verified by humans. Minor annotation noise may occur due to human error. 
+
+– Does the dataset rely on external resources? 
+
+Yes. The video sequences are derived from existing multi-object tracking datasets. 
+
+– Does the dataset contain confidential data? 
+
+No. 
+
+– Does the dataset contain potentially offensive content? 
+
+No. 
+
+A.3 Collection Process – How was the data acquired? 
+
+Language queries and reasoning steps were generated using Qwen2.5-VL-Instruct [56] and subsequently reviewed and refined by human annotators. The visual data was collected from publicly available datasets. 
+
+– What methods were used to generate and curate the data? 
+
+A semi-automated pipeline was used. Queries, reasoning steps, and candidate outputs were first generated by Qwen2.5-VL-Instruct and then manually verified for correctness and clarity. 
+
+– Who was involved in the data collection process? 
+
+Researchers and student annotators. 
+
+– Over what timeframe was the data collected? 
+
+The dataset was created between 2025 and 2026. 
+
+– Were ethical considerations taken into account? 
+
+Yes. All visual data comes from datasets released for academic research. Removal requests from original dataset authors will be honored. 24 Ashraf et al. 
+
+A.4 Preprocessing/Cleaning/Labeling – Was preprocessing or annotation performed? 
+
+Yes. Automatically generated queries and reasoning outputs were manually reviewed and corrected before inclusion. 
+
+– Was the raw data saved? 
+
+No separate raw data is stored. The dataset contains curated subsets of images and videos from existing datasets along with generated annotations. 
+
+A.5 Uses – Has the dataset already been used for tasks? 
+
+Yes. It is used in this paper to evaluate query-driven multi-object tracking. 
+
+– Is there a repository listing papers using the dataset? 
+
+No. 
+
+– What other tasks could this dataset support? 
+
+The dataset can support research in vision-language reasoning, multimodal grounding, and agent-based visual decision-making. 
+
+– Could the dataset composition impact future uses? 
+
+No known limitations are expected. 
+
+– Are there potential negative social impacts? 
+
+No direct negative social impacts are anticipated. 
+
+A.6 Distribution – Will the dataset be distributed externally? 
+
+Yes. 
+
+– How will the dataset be distributed? 
+
+The dataset will be released through a public GitHub repository. 
+
+– Under what license will it be released? 
+
+The dataset will be released under the Apache License. 
+
+– Are there any third-party restrictions? 
+
+No. 
+
+A.7 Maintenance – Who will maintain the dataset? 
+
+The authors of this paper. 
+
+– How can the maintainers be contacted? 
+
+Contact details are provided in the paper. 
+
+– Will the dataset be updated? 
+
+Yes. Updates and corrections will be made through the GitHub repository. 
+
+– Can others contribute to the dataset? 
+
+Yes. Contributions and suggestions can be proposed through GitHub or by contacting the authors. QTrack 25 Frame 0 Reference Frame Query "Observe how the person wearing a 
+
+> black hoodie and jeans, carrying a
+> bag, moves along the sidewalk as he
+> walk away from the camera."
+
+Frame 1 Frame 2 Frame 3 Scenerio 
+
+Crowded 
+
+Scene 
+
+> "Track the person wearing black
+> colored clother, fully occluded by a
+> person with blue shirt and white
+> jeans moves through the mall."
+> Track the dancer in a black tee with a
+> white adiddas logo , the blonde
+> wearing a white crop top , the woman
+> in the black crop top , and the red-
+> haired performer in a black outfit
+> with a white band across the chest.
+> Observe ...
+> "Observe how the person wearing a
+> light blue shirt and jeans occluded by
+> a person wearing a yellow shirt and
+> black jeans, keeping an eye on his
+> trajectory as he walks past the LG
+> OLED TV advertisement."
+
+Partial 
+
+Occlusion 
+
+Complete 
+
+Occlusion 
+
+Similar 
+
+Appearance 
+
+Each row showcases a challenging scenario:  crowded scenes , partial occlusion , complete occlusion  and  similar 
+
+apperrance distractors . The sequence includes a reference frame, query appearance and future frames (0 to 3). 
+
+Reference Target       
+
+> Tracking Challenges:
+> Crowded |Partial Occlusion |Complete Occlusion |Similar
+> Appearance
+
+RMOT26 Dataset Examples 
+
+Fig. 6: Overview of the RMOT26 dataset components. The dataset contains four types of query scenarios: (1) crowded scenes, (2) partial occlusion, (3) complete occlusion, and (4) similar-appearance distractors. These cases require models to perform robust language-guided tracking under challenging visual conditions. 
+
+B RMOT26 Dataset Statistics 
+
+The RMOT26 dataset is constructed by curating video sequences from seven ex-isting multi-object tracking (MOT) benchmarks. To ensure fair evaluation and avoid identity leakage between training and testing sets, all splits are performed at the sequence level rather than the frame level. Figure 6 illustrates the key components and challenging scenarios represented in the dataset. In particular, the dataset includes four types of query conditions: (1) crowded scenes, (2) par-tial occlusion, (3) complete occlusion, and (4) similar-appearance distractors. These scenarios require models to perform both spatial grounding and temporal reasoning when tracking objects specified by natural language queries. 
+
+B.1 Dataset Composition 
+
+Each instance in the dataset consists of a reference frame followed by a short future sequence of 5–6 frames. The dataset is constructed using sequences from multiple existing MOT benchmarks to ensure diversity in scene types, motion patterns, and tracking difficulty. Table 4 summarizes the dataset composition, showing the contribution of each source dataset to the training and test sets in terms of sequences and frames. 
+
+B.2 Train / Test Splits 
+
+The overall dataset statistics for the training and test splits are presented in Table 5. The training set contains 1,636 sequences and 6,678 frames, while the 26 Ashraf et al.                                
+
+> Table 4: Composition of the RMOT26 dataset derived from existing MOT bench-marks.
+> Dataset Train Test Sequences Frames Sequences Frames
+> MOT17 253 1058 242 995 MOT16 122 535 66 284 MOT20 73 305 46 190 DanceTrack 962 3864 574 2275 SportsMOT 73 297 28PETS 21 81 26DAMUNT 132 538 68 250
+
+test set includes 1,000 sequences and 4,008 frames. These splits ensure a balanced distribution of scenes and tracking conditions while preventing sequence overlap between the training and evaluation sets.      
+
+> Table 5: Overall RMOT26 dataset statistics for training and test splits.
+> Split Sequences Frames
+> Train 1636 6678 Test 1000 4008
+
+C Detailed Reward Function Formulation 
+
+In the main paper (Section 3.4), we introduced a unified reward mechanism that combines structured reasoning supervision, spatial localization accuracy, and temporal motion consistency. In this appendix section, we provide additional implementation details for each reward component, including the reasoning for-mat constraint and the structured output requirements used during training. 
+
+C.1 Thinking Format Reward 
+
+The Thinking Format Reward encourages the model to generate structured rea-soning traces before producing bounding box predictions. Specifically, the out-put must follow a predefined structure consisting of two components: a reasoning section enclosed in <think> tags and a prediction section enclosed in <answer> 
+
+tags. Below diagram illustrates the required response structure expected from the model. QTrack 27 
+
+Required Output Structure 
+
+<think> reasoning steps explaining how the target object is identified and tracked </think> <answer> bounding box predictions </answer> 
+
+This structure encourages models to explicitly reason about the visual scene and the query before producing the tracking outputs. During training, the gen-erated output is verified using a rule-based validator to ensure that the required tags are present and properly structured. Table 6 summarizes the reward assign-ment for different formatting conditions.                
+
+> Table 6: Thinking format reward conditions.
+> Condition Output Format Reward
+> Correct tags Valid reasoning and answer enclosed in <think> and <answer> 1.0 Missing tags Output lacks either <think> or <answer> tags 0.0 Malformed tags Incorrect or mismatched tag structure causing regex mismatch 0.0
+
+C.2 Answer Format Reward 
+
+In addition to structured reasoning, the model must produce tracking predictions in a structured JSON format so that outputs can be reliably parsed and evaluated during training. Each prediction contains the frame index and the corresponding bounding box coordinates represented using the [x1,y1,x2,y2] format, where 
+
+(x1, y 1) and (x2, y 2) denote the top-left and bottom-right corners of the bounding box, respectively. Single Object Prediction Format 
+
+[{"frame": frame_id, "bbox": [x1, y1, x2, y2]}, {"frame": frame_id, "bbox": [x1, y1, x2, y2]} ]28 Ashraf et al. 
+
+Multiple Object Prediction Format 
+
+[{"frame": frame_id, "object_id": 1, "bbox": [x1, y1, x2, y2]}, {"frame": frame_id, "object_id": 2, "bbox": [x1, y1, x2, y2]}, {"frame": frame_id, "object_id": 3, "bbox": [x1, y1, x2, y2]} ]
+
+The model always outputs bounding boxes in the [x1,y1,x2,y2] represen-tation. However, the ground-truth annotations in the dataset are stored using the [x,y,w,h] format, where (x, y ) corresponds to the top-left corner of the bounding box and (w, h ) denote its width and height. To ensure consistency during reward computation, all ground-truth annota-tions are converted to the [x1,y1,x2,y2] format prior to evaluation using the following transformation: 
+
+x1 = x, y1 = y
+
+x2 = x + w, y2 = y + h
+
+After this conversion, both predicted and ground-truth bounding boxes share the same coordinate representation. Consequently, all subsequent reward compo-nents, including IoU computation, geometric distance rewards, and temporal mo-tion consistency, operate on bounding boxes represented in the [x1,y1,x2,y2] 
+
+format. During evaluation, model outputs are first validated using a strict JSON parser. If strict parsing fails due to minor formatting issues, a regex-based fall-back parser is applied to extract the relevant fields such as frame , bbox , and optional object_id . This fallback mechanism improves robustness by allowing slightly malformed outputs to be recovered while preserving the required bound-ing box coordinate structure. 
+
+C.3 IoU-Based Spatial Reward 
+
+Spatial localization quality is evaluated using the intersection-over-union (IoU) between predicted and ground-truth bounding boxes. Let Bpred = {bpred i }Mi=1 
+
+denote the set of predicted bounding boxes and Bgt = {bgt j }Nj=1 denote the corresponding ground-truth boxes. Each bounding box is represented using the corner-coordinate format 
+
+b = ( x1, y 1, x 2, y 2),
+
+where (x1, y 1) and (x2, y 2) denote the top-left and bottom-right corners of the bounding box. For a predicted box bpred i and a ground-truth box bgt j , the IoU score is defined as QTrack 29 
+
+IoU (bpred i , b gt j ) = Area (bpred i ∩ bgt j )
+
+Area (bpred i ∪ bgt j ) .
+
+A binary IoU reward is assigned using a threshold τIoU = 0 .5:
+
+rIoU (i, j ) = 
+
+(
+
+1 if IoU (bpred i , b gt j ) > 0.5,
+
+0 otherwise .
+
+This reward provides strong supervision when the predicted box sufficiently overlaps with the ground-truth object. However, IoU alone can produce sparse reward signals when predictions are close to the ground truth but do not yet meet the overlap threshold. To provide additional gradient signals during training, we incorporate two auxiliary geometric rewards: a bounding-box L1 reward and a point localization reward. 
+
+Bounding Box L1 Reward To capture geometric proximity between predicted and ground-truth boxes, we compute the mean L1 distance between their coor-dinates: 
+
+dL1(i, j ) = 14
+
+> 4
+
+X
+
+> k=1
+
+bpred i,k − bgt j,k .
+
+A binary reward is assigned using threshold τL1 = 10 :
+
+rL1(i, j ) = 
+
+(
+
+1 if dL1(i, j ) < 10 ,
+
+0 otherwise .
+
+This reward provides partial credit when predicted boxes are geometrically close to the ground truth even if the IoU threshold is not satisfied. 
+
+Point Localization Reward To further encourage accurate localization, we eval-uate the distance between predicted and ground-truth keypoints. Let ppred i =(xi, y i) and pgt j = ( xj , y j ) denote the predicted and ground-truth keypoints. Their Euclidean distance is 
+
+dpoint (i, j ) = 
+
+q
+
+(xi − xj )2 + ( yi − yj )2.
+
+A point reward is assigned if the predicted point is spatially close to the ground truth and lies inside the predicted bounding box: 
+
+rpoint (i, j ) = 
+
+(
+
+1 if dpoint (i, j ) < 30 ∧ ppred i ∈ bpred i ,
+
+0 otherwise .
+
+The point-in-box constraint is defined as 
+
+x1 ≤ xi ≤ x2 and y1 ≤ yi ≤ y2.
+
+This additional constraint prevents trivial solutions where points are pre-dicted near the ground truth but outside the bounding box. 30 Ashraf et al. 
+
+Reward Aggregation and Instance Matching For each predicted–ground-truth pair (i, j ), the individual reward components are combined to form a unified reward score 
+
+Rij = rIoU (i, j ) + rL1(i, j ) + rpoint (i, j ).
+
+All pairwise rewards are computed to construct a reward matrix of size 
+
+M × N . To obtain the optimal alignment between predicted and ground-truth instances, we convert the reward matrix into a cost matrix 
+
+Cij = 3 − Rij .
+
+The Hungarian algorithm is then applied to solve the bipartite matching problem 
+
+M∗ = arg min 
+
+> M
+
+X
+
+> (i,j )∈M
+
+Cij .
+
+Finally, the normalized spatial reward is computed as 
+
+Rf inal = 1max( M, N )
+
+X
+
+> (i,j )∈M ∗
+
+Rij .
+
+This formulation ensures that the reward signal captures both overlap accu-racy and geometric consistency while providing stable supervision during train-ing. 
+
+C.4 Motion Consistency Precision (MCP) Reward 
+
+While spatial rewards such as IoU evaluate frame-wise localization accuracy, they do not explicitly enforce temporal consistency across consecutive frames. To address this limitation, we introduce the Motion Consistency Precision (MCP) reward, which encourages predicted bounding boxes to follow the mo-tion trajectory of the ground-truth object across time. Specifically, the MCP reward evaluates three aspects of motion: 
+
+– Direction alignment between predicted and ground-truth motion 
+
+– Speed consistency of object movement 
+
+– Anti-static penalty to prevent degenerate stationary predictions Let 
+
+Bgt t−1, Bgt t , Bpred t
+
+denote the ground-truth bounding boxes at frames t − 1 and t, and the predicted bounding box at frame t respectively. All bounding boxes are represented using the [x1,y1,x2,y2] coordinate for-mat 
+
+Bt = ( x1,t , y 1,t , x 2,t , y 2,t )
+
+where (x1,t , y 1,t ) and (x2,t , y 2,t ) denote the top-left and bottom-right corners. QTrack 31 
+
+Bounding Box Centers To model object motion, we first compute the center of each bounding box 
+
+ct =
+
+ x1,t + x2,t 
+
+2 , y1,t + y2,t 
+
+2
+
+
+
+.
+
+Let cgt t and cpred t denote the centers of the ground-truth and predicted bound-ing boxes. 
+
+Motion Vectors The ground-truth motion vector is defined as 
+
+∆gt = cgt t − cgt t−1.
+
+Similarly, the predicted motion vector is 
+
+∆pt = cpred t − cgt t−1.
+
+The corresponding motion magnitudes are 
+
+vgt t = ∥∆gt∥, vpred t = ∥∆pt∥.
+
+If the ground-truth motion is nearly static ( vgt t ≈ 0), motion consistency is not enforced and the reward is set to 1.
+
+Direction Consistency Direction consistency measures alignment between predicted and ground-truth motion using cosine similarity 
+
+cosθ t = ∆pt · ∆gt
+
+∥∆pt∥∥ ∆gt∥ .
+
+We normalize the cosine similarity to the interval [0 , 1] 
+
+At = 1 + cosθ t
+
+2 .
+
+A value close to 1 indicates strong directional agreement. 32 Ashraf et al. 
+
+Algorithm 2 Motion Consistency Precision (MCP) Reward 
+
+Require: Bgt t−1, Bgt t , Bpred t
+
+1: Compute bounding box centers 
+
+cgt t−1 = xgt  
+
+> 1,t −1
+
++ xgt 
+
+> 2,t −1
+
+2 , ygt  
+
+> 1,t −1
+
++ ygt 
+
+> 2,t −1
+
+2
+
+!
+
+cgt t = xgt  
+
+> 1,t
+
++ xgt 
+
+> 2,t
+
+2 , ygt  
+
+> 1,t
+
++ ygt 
+
+> 2,t
+
+2
+
+!
+
+cpred t = xpred  
+
+> 1,t
+
++ xpred 
+
+> 2,t
+
+2 , ypred  
+
+> 1,t
+
++ ypred 
+
+> 2,t
+
+2
+
+!
+
+2: Compute motion vectors 
+
+∆g = cgt t − cgt t−1
+
+∆p = cpred t − cgt t−1
+
+3: Compute motion magnitudes 
+
+vgt = ∥∆g ∥, vpred = ∥∆p ∥
+
+4: if vgt < ϵ then return 1.0
+
+5: end if 
+
+6: Compute direction consistency 
+
+cosθ = ∆p · ∆g 
+
+∥∆p ∥∥ ∆g ∥ + ϵ
+
+A = 1 + cosθ 
+
+2
+
+7: Compute speed consistency 
+
+S = exp 
+
+
+
+− (vpred − vgt )2
+
+2( αv gt )2
+
+
+
+8: Compute anti-static penalty 
+
+P =
+
+(
+
+0.2 if vpred < 0.1 vgt 
+
+1.0 otherwise 
+
+9: Compute final MCP reward 
+
+RM CP = A · S · P
+
+return RM CP 
+
+Speed Consistency Speed consistency evaluates whether the predicted motion magnitude matches the ground-truth motion speed. This is modeled using a Gaussian penalty QTrack 33 
+
+St = exp − (vpred t − vgt t )2
+
+2( αv gt t )2
+
+!
+
+where α ∈ [0 .5, 1.0] controls tolerance to speed deviations. 
+
+Anti-Static Penalty To discourage degenerate solutions where the model pre-dicts nearly static bounding boxes for moving objects, we introduce 
+
+Pt =
+
+(
+
+0.2 if vpred t < 0.1 vgt t
+
+1.0 otherwise 
+
+Final MCP Reward The final reward combines all motion consistency com-ponents 
+
+RM CP,t = At · St · Pt
+
+Since each term lies in [0 , 1] , the final MCP reward is also bounded within 
+
+[0 , 1] . Larger values indicate stronger agreement between predicted and ground-truth motion. Algorithm 2 summarizes the complete computation procedure. 
+
+D Metrics and Implementation Details 
+
+Hardware setup. All model evaluations were conducted on a single NVIDIA H100 GPU (100GB), ensuring consistent hardware conditions across experi-ments. During evaluation, visual inputs and corresponding queries are processed by the selected VLMM agent, which produces structured outputs in a predefined 
+
+JSON format. 
+
+Training hyperparameters. Table 7 summarizes the hyperparameters used to train QTrack on the RMOT26 benchmark. Due to memory constraints, training was performed using only two frames per query. Training with the full sequence length may lead to different performance characteristics. 
+
+D.1 Motion Consistency Precision (MCP) 
+
+Traditional tracking metrics primarily focus on spatial alignment (e.g., IoU) or identity preservation across frames. However, such metrics do not explicitly eval-uate whether predicted trajectories follow physically consistent motion patterns over time. To address this limitation, we introduce Motion Consistency Pre-cision (MCP) , a metric designed to measure the temporal coherence between predicted and ground-truth object trajectories. MCP evaluates whether the predicted motion follows the same trajectory dynamics as the ground truth by jointly considering both the direction and the 
+
+speed of motion. Intuitively, a reliable tracker should not only localize objects accurately in each frame but should also maintain motion patterns consistent with the underlying object dynamics. 34 Ashraf et al.  
+
+> Table 7: Training hyperparameters for QTrack.
+
+Hyperparameter Value Hyperparameter Value 
+
+max_prompt_length 1300 max_response_length 2000 
+
+max_pixels 12845056 use_kl_loss true 
+
+kl_loss_coef 5.0e-3 fsdp.param_offload false 
+
+fsdp.torch_dtype null offload.param_offload true 
+
+offload.optimizer_offload true rollout.n 8
+
+limit_images 2 learning_rate 1.0e-6 
+
+weight_decay 1.0e-2 max_grad_norm 1.0 
+
+global_batch_size 1 adv_estimator grpo 
+
+kl_coef 0.0 kl_penalty kl 
+
+tapo_strategy freeze tapo_keep_prob 0.7 
+
+tapo_interval 2 tapo_kl_weight 0.1 
+
+rollout_batch_size 1 temperature 1.0 
+
+tensor_parallel_size 1 total_episodes 4
+
+n_gpus_per_node 1
+
+Bounding box representation. For each frame t, an object is represented by a bounding box 
+
+Bt = ( xt, y t, w t, h t), (6) where (xt, y t) denotes the center coordinates of the bounding box, and wt
+
+and ht denote its width and height. Let 
+
+Bgt t = ( xgt t , y gt t , w gt t , h gt t ) (7) denote the ground-truth bounding box, and 
+
+Bpred t = ( xpred t , y pred t , w pred t , h pred t ) (8) denote the predicted bounding box at frame t.
+
+Bounding box motion. The motion of an object between two consecutive frames is defined as the displacement of the bounding box center. The ground-truth and predicted motion vectors are therefore computed as 
+
+∆gt =
+
+xgt t − xgt t−1
+
+ygt t − ygt t−1
+
+
+
+, ∆pt =
+
+xpred t − xpred t−1
+
+ypred t − ypred t−1
+
+
+
+. (9) These vectors capture the instantaneous motion of the object in the image plane. QTrack 35 
+
+Direction consistency. To evaluate whether the predicted trajectory follows the same motion direction as the ground truth, we compute the cosine similarity between the predicted and ground-truth motion vectors: 
+
+cos θt = ∆pt · ∆gt
+
+∥∆pt∥ ∥ ∆gt∥ . (10) The direction consistency score is then defined as 
+
+At = 1 + cos θt
+
+2 , (11) which maps the cosine similarity to the interval [0 , 1] . Values close to 1 in-dicate strong alignment between predicted and ground-truth motion directions, whereas lower values indicate directional disagreement. 
+
+Speed consistency. In addition to directional alignment, MCP evaluates whether the magnitude of the predicted motion matches the ground-truth motion speed. The corresponding motion magnitudes are 
+
+vpred t = ∥∆pt∥, vgt t = ∥∆gt∥. (12) Speed consistency is modeled using a Gaussian penalty that measures the deviation between predicted and ground-truth speeds: 
+
+St = exp − (vpred t − vgt t )2
+
+2( αv gt t )2
+
+!
+
+. (13) The parameter α controls the tolerance to speed deviations. Smaller values enforce stricter speed matching, while larger values allow more flexibility. In our experiments, we set α = 0 .9 to provide robustness against small motion varia-tions arising from annotation noise, frame discretization, and minor localization errors. 
+
+Motion Consistency Precision. The frame-level motion consistency score is de-fined as the product of direction and speed consistency: 
+
+MCP t = At · St. (14) For a sequence of T frames, the overall Motion Consistency Precision is com-puted as 
+
+MCP = 1
+
+T − 1
+
+> T
+
+X
+
+> t=2
+
+MCP t. (15) By construction, MCP lies within the range [0 , 1] , where higher values indi-cate stronger agreement between predicted and ground-truth motion trajecto-ries. Unlike purely spatial metrics, MCP explicitly measures the temporal realism 
+
+of object motion, making it particularly suitable for evaluating tracking systems that must maintain coherent trajectories across time. 36 Ashraf et al.                          
+
+> Table 8: Comparison of VLLM models after fine-tuning.
+> Model Params MCP ↑MOTP ↑MOTA ↑NDE ↓
+> Qwen 2.5 VL Instruct [56] 3B 0.14 0.76 -0.51 3.41 Gemma3 [55] 4B 0.18 0.73 -0.16 0.95 Visionreasoner [35] 3B 0.22 0.65 0.01 0.76
+> QTrack (Ours) 3B 0.30 0.75 0.21 0.39
+
+E Evaluation Protocol for Traditional MOT Comparison 
+
+To compare QTrack with traditional multi-object tracking (MOT) methods, we design a query-based evaluation protocol derived from standard MOT bench-marks. Specifically, we use sequences from the MOT17 [40] and DanceTrack [52] datasets, adapting them to reflect the query-driven nature of our task. Tra-ditional MOT benchmarks evaluate trackers that detect and track all objects across an entire video. In contrast, QTrack is designed to track only objects specified by a natural-language query. Direct evaluation on full MOT videos would therefore be inconsistent with the intended task. To address this mis-match, we construct query-specific tracking segments from benchmark sequences so that both QTrack and conventional trackers can be evaluated under compa-rable conditions. For each sequence, we first select a reference frame containing the target object and generate a natural-language query describing that object. Starting from this reference frame, the tracker is required to follow only the queried target across subsequent frames. The predicted trajectories are then converted to the standard MOT annotation format, enabling the computation of common tracking metrics such as HOTA, MOTA, and MOTP. This protocol allows QTrack to be evaluated on widely used MOT datasets while preserving the query-based nature of the task. At the same time, it enables meaningful comparison with traditional trackers by isolating the trajectory of the queried object within a multi-object scene. Notably, this evaluation setting introduces a stricter requirement for QTrack . Instead of relying on global as-sociations among all objects in the scene, the tracker must reason about the identity of the queried target and maintain its trajectory over time. Despite this constraint, QTrack achieves competitive or superior performance on standard MOT metrics, demonstrating that query-aware reasoning can improve robust-ness in complex tracking scenarios. Overall, this protocol bridges traditional MOT evaluation with query-based tracking, enabling fair and practical compar-isons between the two paradigms. 
+
+F Comparison with Fine-Tuned Models 
+
+Table 8 evaluates fine-tuned VLLMs under identical training settings. QTrack achieves the highest MCP (0.30), highest MOTA (0.21), and lowest NDE (0.39), QTrack 37 
+
+highlighting the importance of reward design and temporal regularization beyond supervised fine-tuning. "Observe how the person wearing a blue shirt and carrying a black bag moves through the mall, 
+
+> keeping an eye on his trajectory as he walk past the LG OLED TV advertisement." VisionReasoner  Qwen3  InternVL  GPT 4o-mini QTrack
+
+Frame 0 Frame 2 Frame 4 
+
+Fig. 7: Qualitative comparison for single-object tracking across multiple frames. 
+
+QTrack produces more accurate and stable bounding boxes over time, while base-line VLLM models often exhibit drifting or inconsistent localization as the sequence progresses. 
+
+G Additional Qualitative Results 
+
+We present additional qualitative comparisons to further analyze the behavior of 
+
+QTrack under different tracking scenarios. Figures 7 and 8 compare the predic-tions of several VLLM-based baselines with our proposed method across multiple frames. As illustrated, QTrack produces more stable and accurate trajectories 38 Ashraf et al. 
+
+across time, particularly in challenging situations involving motion, occlusion, and appearance similarity. In contrast, baseline models often exhibit drifting predictions or inconsistent localization across frames. Frame 0 Qwen 2.5 VL Llama 3.2 vision InternVL Visionreasoner QTrack Frame 1 Frame 2 Frame 3 Frame 4 Track the man wearing a red shirt and beige pants as he walks through the mall corridor. Observe how his position 
+
+> changes as he moves past the storefronts and along the railing
+
+Fig. 8: Additional qualitative comparison of different VLLM models on challenging tracking scenarios. Our method demonstrates stronger temporal consistency and better object localization compared to baseline models. 
+
+Figure 9 investigates the impact of providing an initial bounding box in the reference frame. We evaluate two settings: (1) the model receives both a natural-language query and the initial bounding box of the target object, and (2) the model receives only the natural-language query without any spatial initializa-tion. When the initial bounding box is provided, the model is able to reliably maintain the trajectory of the queried object across subsequent frames. However, when the model relies solely on the textual query, it occasionally struggles to pre-cisely localize the target object in the first frame. This highlights an important limitation of current vision-language models: while they can reason about object descriptions, precise spatial grounding from language alone remains challenging in complex scenes. QTrack 39 Track two pedestrians in the scene: the person wearing a long black coat near the center-right of the frame, and the 
+
+person wearing a black jacket near the center-left of the frame. Follow both individuals as they walk across the road. 
+
+Track two pedestrians in the scene: the person wearing a long black coat near the center-right of the frame with initial bounding box  [562,240,39,83] , and the person wearing a black jacket near the center-left of the frame with initial bounding box  [307,208,31,86] . Follow both individuals as they walk across the road. 
+
+Fig. 9: Effect of spatial initialization. Tracking is reliable with an initial bounding box, but localization becomes difficult when relying solely on language queries. Observe how the gymnast in the                                
+
+> purple leotard with white accents
+> and agold design moves as she
+> perform her routine; track her
+> position from the starting position at
+> [853.0, 469.0, 225.0, 467.0]. Frame 0 Reference Frame Reference Frame Frame 2
+> Track the person wearing awhite
+> shirt and black jeans as he walk’s
+> through the shopping mall, keeping
+> an eye on how his position shifts
+> across the frames. Frame 4
+
+Fig. 10: This figure shows failure cases of QTrack, we can see that for some sequences QTrack is unable to predict next bounding box for frames, it repeatedly predicts the same initial bounding box for all future frames. 
+
+H Failure Cases 
+
+Figure 10, shows failure cases of QTrack, we can see that for some sequences QTrack is unable to predict next bounding box for frames, it repeatedly predicts the same initial bounding box for all future frames. 
+
+I Prompt Templates for Baseline Models 
+
+To ensure a fair comparison, all baseline models are evaluated using the same input information and prompt structure. 
+
+Input format. Each model receives the following inputs: 
+
+– Video frames from the sequence 
+
+– A natural-language query describing the target object 40 Ashraf et al. 
+
+– A reference bounding box indicating the initial location of the object in the reference frame 
+
+Prompt template. We use a unified prompt template for all baseline models. The template instructs the model to track the queried object across the provided video frames and output the predicted bounding boxes in a structured JSON format. Prompt Template 
+
+> {textual_query} Initially, object {obj_id} is located at {initial_bbox} in the reference image. The following images correspond to consecutive frames of a video. Please output the bounding box for the object in each frame using the following format: [{"frame": N, "bbox": [x1, y1, x2, y2]}, ...] Do not include any additional text.
+
+This prompt ensures that all models receive identical instructions and out-put constraints. By enforcing a structured JSON response format, we simplify downstream parsing and ensure consistent evaluation across different baseline models.

@@ -1,0 +1,1287 @@
+Title: Search Multilayer Perceptron-Based Fusion for Efficient and Accurate Siamese Tracking
+
+URL Source: https://arxiv.org/pdf/2603.01706v1
+
+Published Time: Tue, 03 Mar 2026 03:47:09 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# SEARCH MULTILAYER PERCEPTRON -B ASED FUSION FOR 
+
+# EFFICIENT AND ACCURATE SIAMESE TRACKING ∗
+
+Tianqi Shen 
+
+Institute of Mining Artificial Intelligence, Chinese Institute of Coal Science Department of Computer Science, City University of Hong Kong Beijing 100013, China / Hong Kong SAR 
+
+tianqshen5-c@my.cityu.edu.hk 
+
+Huakao Lin 
+
+Image Processing Center, School of Astronautics, Beihang University Beijing 100191, China 
+
+sy2315212@buaa.edu.cn 
+
+Ning An †
+
+Institute of Mining Artificial Intelligence, Chinese Institute of Coal Science State Key Laboratory of Intelligent Coal Mining and Strata Control Beijing 100013, China 
+
+ning.an.010@foxmail.com 
+
+## ABSTRACT 
+
+Siamese visual trackers have recently advanced through increasingly sophisticated fusion mechanisms built on convolutional or Transformer architectures. However, both struggle to deliver pixel-level interactions efficiently on resource-constrained hardware, leading to a persistent accuracy–efficiency imbalance. Motivated by this limitation, we redesign the Siamese neck with a simple yet effective Multilayer Perception (MLP)-based fusion module that enables pixel-level interaction with minimal structural overhead. Nevertheless, naïvely stacking MLP blocks introduces a new challenge: compu-tational cost can scale quadratically with channel width. To overcome this, we construct a hierarchical search space of carefully designed MLP modules and introduce a customized relaxation strategy that enables differentiable neural architecture search (DNAS) to decouple channel-width optimization from other architectural choices. This targeted decoupling automatically balances channel width and depth, yielding a low-complexity architecture. The resulting tracker achieves state-of-the-art accuracy–efficiency trade-offs. It ranks among the top performers on four general-purpose and three aerial tracking benchmarks, while maintaining real-time performance on both resource-constrained Graphics Processing Units (GPUs) and Neural Processing Units (NPUs). 
+
+Keywords Computer vision · Object tracking · Siamese networks · Feature fusion · Multilayer perceptrons · Neural architecture search · Graphics processing units · Neural processing units 
+
+## 1 Introduction 
+
+Visual object tracking is a fundamental task in computer vision, which aims to determine the location and scale of a target object within a video sequence [ 1, 2 ]. Significant progress in this field [ 3, 4, 5 , 6] has been driven by Siamese-based trackers. As illustrated in Figure 1(a), these trackers typically consist of three core components [ 7 ] that work together to achieve robust performance. First, feature extraction is performed on both the template t and the search 
+
+> ∗
+
+Accepted by IEEE TCDS as a regular paper. Code: https://github.com/AmadeusSTQ/SEAT . †Corresponding author. 
+
+> arXiv:2603.01706v1 [cs.CV] 2 Mar 2026
+
+Efficient and Accurate MLP-based Siamese Tracking 𝒕   
+
+> 𝒔
+> Fusion
+> Module
+> 𝑭 𝑡
+> 𝑭 𝑠
+> 𝒛
+> 𝒛
+> 𝒄𝒍𝒔
+> 𝒓𝒆𝒈
+> Backbone Neck Head
+> Conventional
+> Siamese Tracker
+
+𝒂 
+
+> 𝒕
+> 𝒔
+> 𝑭 𝑡
+> 𝑭 𝑠
+> 𝒛
+> 𝒛
+> 𝒄𝒍𝒔
+> 𝒓𝒆𝒈
+
+# ∗  
+
+> Backbone Neck Head
+> Fusion
+> Search
+> Space
+> Our
+> Siamese Tracker
+
+𝒃 
+
+Figure 1: Comparison between the conventional pipeline and the proposed pipeline. In subfigure ( a), the template feature F t and search feature F s are processed using manually designed module(s). Alternatively, ( b) integrates the fusion architecture into a searchable space, enabling the discovery of a lightweight yet effective neck design. region s using a Siamese backbone , which is often adapted from image recognition models [ 8, 9, 10 , 11 ]. Second, the resulting feature maps (or tokens) F t and F s are fused in the neck through correlation operations to generate one or more response maps z. Finally, the state of the object, typically represented as a bounding box, is predicted by the tracking head , which decodes z using classification ("cls") and regression ("reg") branches. In this tracking paradigm, numerous studies [ 12 , 13 , 14 , 15 ] have highlighted that the correlation architecture, where feature fusion occurs, directly influences how the tracker utilizes prior information from the template to evaluate the object’s new state in the search region. However, as fusion mechanisms become increasingly sophisticated, the challenge of balancing accuracy and efficiency has intensified, particularly on hardware-constrained platforms [ 16 , 14 , 17 ]. In other words, there remains a lack of modular fusion designs that support pixel-level interactions for accurate representation while maintaining high efficiency under limited computational resources. 
+
+Figure 2: ( a) CNN-based fusion uses template feature maps F t as kernels sliding over search feature maps F s,performing patch-level fusion efficiently on hardware. ( b) Transformer-based fusion applies cross-attention between template tokens F t and search tokens F s, achieving pixel-level fusion but with slower hardware execution. ( c) Our MLP-based fusion first performs coarse fusion on F t and F s, followed by refinement using Wave-MLP blocks, resulting in hardware-efficient pixel-level fusion. ( d) The MLP-based approach yields a better accuracy–speed trade-off than its CNN and Transformer counterparts. From the accuracy perspective, precise feature fusion in the correlation stage is essential, as the performance of the tracking head heavily depends on accurate similarity estimation. Therefore, the fusion module must operate at the pixel level to ensure that each pixel in the response map reflects the similarity between features from the template and the search region. As shown in Figure 2, existing methods have progressed from patch-level convolutional neural network (CNN)-based fusion to pixel-level Transformer-based fusion [ 14 ]. However, this shift has led to a significant increase in computational cost [15]. To address this issue, we leverage the fully connected nature of the multilayer perceptron (MLP) to enable efficient pixel-level fusion. Specifically, we propose two novel modules. The Coarse Fusion MLP (CFM) performs early integration of template and search features in a simple yet effective manner, analogous to attention mechanisms. The 
+
+Refine Fusion MLP (RFM) employs Wave-MLP blocks [ 18 ] to further enhance and refine the fused features. Together, these modules form a progressive fusion framework that transitions from coarse to fine levels of detail. From the efficiency perspective, adopting an MLP-based fusion module presents a new challenge : MLP blocks, particularly Wave-MLP, exhibit quadratic computational complexity w.r.t the channel dimension (see Lemma 1). This complexity makes it difficult to enhance representational capacity without compromising efficiency on resource-constrained hardware, motivating the use of Neural Architecture Search (NAS) for automated design. However, while 2Efficient and Accurate MLP-based Siamese Tracking prior lightweight trackers have employed NAS to optimize the backbone and prediction head [ 16 , 4, 17 ], the correlation architecture in the neck (Figure 1(b)) has received comparatively little attention. To address this gap, we integrate the CFM and RFM modules into a hierarchical MLP-based Correlation Architecture Space (MCAS) , complemented by a Harmony-Relaxation strategy. Unlike conventional flat search spaces, MCAS organizes Wave-MLP variants that share the same channel count but differ in other hyperparameters into distinct 
+
+Harmonization blocks , each defined at a specific channel dimension. This hierarchical design decouples the optimization of channel width across Harmonization blocks from the fine-grained tuning of other architectural parameters within each block. In summary, our methods Search for and yield, to the best of our knowledge, the first MLP-based fusion architecture explicitly designed for Efficient and Accurate Siamese Tracking under resource-constrained settings. We refer to the resulting tracker as SEAT . Our key contributions are as follows: • We propose a simple yet effective MLP-based coarse-to-fine fusion framework, comprising the CFM and RFM modules, which enables efficient pixel-level feature interaction and improves Siamese tracker accuracy. • We introduce a hierarchical MCAS with a Harmony-Relaxation strategy that supports DNAS and decouples channel-width optimization from other architectural hyperparameters, enhancing Siamese tracker efficiency. • We develop two lightweight tracker variants: SEAT_LT for resource-limited Graphics Processing Units (GPUs) and SEAT_AL for resource-constrained Neural-network Processing Units (NPUs). The remainder of the paper is organized as follows. Section 2 reviews three pertinent research areas that contextualize our contributions. Section 3 presents the technical details (based on theoretical analysis) of our hierarchical MCAS search space, together with the Harmony-Relaxation strategy. Section 4 provides comprehensive evaluations against state-of-the-art (SOTA) methods across multiple benchmarks. Finally, Section 5 summarizes the findings and outlines potential directions for future work. 
+
+## 2 Related Work 
+
+In this section, we review the current landscape of three fields that this work intersects, highlighting the key developments and advancements in each field. We also demonstrate how our work fills the gap at the intersection of them. 
+
+2.1 Feature Fusion in Siamese-Based Trackers 
+
+Early Siamese trackers, such as SiamFC [ 7], adopted cross-correlation by treating template features as convolutional kernels applied to the search features. This CNN-based fusion approach is efficient and compatible with variable-size inputs. However, it operates at the patch level, limiting its ability to capture fine-grained, pixel-level similarity. Subsequent works [ 19 , 20 , 13 , 14 ] explored deeper or asymmetric correlation modules and combined multiple fusion operators. Despite these advancements, they remained constrained by the coarse granularity inherent to convolutional operations. To improve alignment precision, recent methods have transitioned to Transformer-based fusion. These models employ cross-attention to directly model pixel-to-pixel relationships between the template and search regions [ 15 ,21 , 22 ]. Some even unify the backbone and fusion components within a single Transformer network [ 23 , 24 , 25 ]. While these designs offer high accuracy, they also introduce significant computational overhead, making them less suitable for real-time edge deployments. As illustrated in Figure 2 and Figure 3, we propose an MLP-based fusion framework that performs pixel-level integration while substantially reducing computational complexity through the design of the CFM and RFM modules. 
+
+2.2 Vision MLP 
+
+Recent Vision MLPs have emerged as a powerful paradigm, demonstrating remarkable performance in various tasks [26 ]. MLP-Mixer [ 27 ] introduces a simple architecture composed of two MLP layers to extract features both within and across image patches. Subsequent works [ 28 , 29 ] extended this design by reducing computational cost through axial aggregation and by hierarchically rearranging tokens to better capture both local and global information. Wave-MLP [ 18 ] further advances the field by representing each token as a wave function with amplitude and phase, allowing it to model content variations across different images more effectively. Despite this progress, Vision MLPs have been scarcely explored in visual tracking. The sole instance, MLPT [ 30 ], appends an MLP-Mixer-style block after a CNN-based cross-correlation module rather than redesigning the whole fusion mechanism itself. Such limited adoption stems from two inherent limitations that impede direct application in Siamese tracking: (1) most Vision MLPs are built for single-stream inputs and do not naturally fuse two heterogeneous feature sources ( F t and F s); 3Efficient and Accurate MLP-based Siamese Tracking and (2) although structurally simple, stacking MLP blocks, particularly Wave-MLP, induces quadratic growth in computational complexity w.r.t channel number, as shown in Lemma 1. Our approach tackles these challenges by performing pre-fusion via CFM to handle dual-stream inputs (addressing limitation (1)), and by organizing CFM and RFM within a hierarchical MCAS that decouples channel width from other hyperparameters, thereby improving efficiency via DNAS (addressing limitation (2)). 
+
+2.3 Neural Architecture Search for Tracking 
+
+Neural Architecture Search (NAS) has been widely adopted to automate network design [ 31 ]. Early methods based on reinforcement learning (RL) or evolutionary algorithms (EA) are often computationally expensive and limited to coarse design choices [ 32 ]. Differentiable NAS (DNAS) approaches such as DARTS [ 33 ] and FBNet [ 34 ] improve efficiency mainly by employing weight-sharing strategies to assess candidate architectures [ 35 ]. In visual tracking, LightTrack [16 ] uses EA-based NAS to search for lightweight CNN backbones, while FEAR [ 4] and EfficientTrack [ 17 ] directly adopt architectures searched for image classification. UAV-oriented trackers such as SiamAPN++ [5], HIFT [36], and TCTrack [ 37 ] rely on shallow, manually designed CNNs (e.g., AlexNet [ 38 ]) to prioritize speed. However, prior work has largely overlooked NAS-driven design for feature fusion, particularly within the neck—the critical component for object localization in visual tracking. Moreover, vanilla DARTS cannot naturally accommodate dual-input fusion nor support decoupled optimization of channel width (see Section 2.2 limitation (2)). As shown in Figure 3, we address these gaps by introducing MCAS with Harmony-Relaxation. Specifically, Wave-MLP blocks that share the same channel count but differ in other hyperparameters (e.g., kernel size, MLP expansion ratio) are grouped into Harmonization blocks. Along the inter-block "highway" (in green dashed arrow), we apply a relaxation parameter β to optimize channel width, while within each block Hi we employ a relaxation parameter α to select among candidate operations. This yields, to our knowledge, the first DNAS framework explicitly tailored to designing lightweight fusion modules for Siamese trackers. Coarse Fusion MLP  
+
+> (CFM) Module
+> Backbone
+> (LightTrack_M ,AlexNet )
+> collector
+> Refine Fusion MLP (RFM) Module
+> (multiple Harmonization Blocks with Wave -MLP units)
+> Tracking Head
+> Tracking -Head
+> (Classification
+> & Regression)
+
+⋯
+
+⋮  
+
+> ⋮
+> ⋮
+> ⋮⋮⋮
+> 𝐻 1
+
+⋮  
+
+> ⋮
+> ⋮
+> ⋮⋮⋮
+> 𝐻 2
+
+⋮           
+
+> ⋮
+> ⋮
+> ⋮⋮⋮
+> 𝐻 3
+> MLP -based Correlation Architecture Space (MCAS)
+> Template Feature Search Feature Point -wise Add Matrix Multiplication Roi -Align Harmonization Block Connecting Path Wave -MLP Block
+
+Figure 3: Overview of our proposed tracker and MCAS. i. Versatile architecture with two backbones: [ 16 ] for resource-constrained GPU platforms and [ 38 ] for resource-limited NPU deployment. ii. The primary MLP-based components in the MCAS include the Coarse Fusion MLP (CFM) Module and the Refine Fusion MLP (RFM) Module. CFM performs coarse fusion to generate the heatmap, while RFM refines it to produce the response map. iii. Tracking-head network transforms the response map into classification and regression response maps, representing the predictive classification and bounding box of the target. 
+
+## 3 Methodology 
+
+In this section, we first provide some preliminary background and then introduce our novel MLP-based Correlation Architecture Space (MCAS) method, highlighting its innovative aspects and contributions to the field. 
+
+3.1 Theoretical Foundations and Extensions 3.1.1 Wave-MLP Block 
+
+The Wave-MLP block achieves token mixing through Phase-Aware Token Mixing (PATM) [ 18 ], which models each token as a wave with learned amplitude and phase. The fully connected layers in PATM establish global dependencies, providing a natural pixel-level fusion to enhance tracking accuracy. 4Efficient and Accurate MLP-based Siamese Tracking Given an arbitrary feature map z ∈ RHsWs×C′
+
+, the Wave-MLP block transforms each token zϕ ∈ R1×C′
+
+through the following equations: 
+
+hϕ = zϕW h ∈ RC′
+
+, θϕ = zϕW θ ∈ RC′
+
+,
+
+where hϕ and θϕ represent the amplitude and phase of the ϕ-th token, respectively, and W h and W θ are trainable parameters of size C′ × C′.Token mixing is then performed using Euler’s formula [39], projecting the complex wave state to real values: 
+
+oϕ′ =
+
+> HsWs
+
+X
+
+> ϕ=1
+
+(hϕ ⊙ cos θϕ)W cos ϕ′ϕ + ( hϕ ⊙ sin θϕ)W sin ϕ′ϕ, (PATM mechanism in Wave-MLP) where ⊙ denotes element-wise multiplication, oϕ′ is the ϕ′-th token after mixing, and W cos ϕ′ϕ and W sin ϕ′ϕ are trainable parameters of size C′ × C′.However, naively stacking Wave-MLP blocks can lead to increased computational costs, as shown in our Lemma 1 (the proof can be found in Appendix A.1). 
+
+Lemma 1 Let the channel number of a PATM module be C′. Then, the number of FLoating Point Operations (FLOPs) of this module is bounded by O(C′2).
+
+According to Lemma 1, the FLOPs of Wave-MLP blocks increase quadratically with the channel number C′. Therefore, although a larger channel number C′ can lead to a more abundant feature expression, the channel number C′ should be discretely set to maintain a lightweight tracker. 
+
+3.1.2 DARTS 
+
+DARTS [ 33 ] formulates NAS by relaxing the discrete search space A into a continuous one, referred to as a supernet .In this context, relaxation means that for each edge in the supernet, the candidate operations O are weighted using a softmax function over architecture parameters αO := {αo | o ∈ O} :output = X
+
+> o∈O
+
+exp( αo)
+
+P 
+
+> o′∈O
+
+exp( αo′ ) o(input ). (1) Here, αo is the architecture parameter assigned to operation o. Each operator (e.g., a Wave-MLP block) has its own trainable weights w, which collectively form the set of all trainable weights W in the supernet. This relaxation allows discrete operations to be embedded into the supernet N (α, W ), making it continuously differentiable. This formulation (1) enables gradient-based optimization through bi-level training. In the inner loop, W is optimized to minimize the training loss Ltrain on the training dataset. In the outer loop, α is optimized to maximize the validation accuracy Acc val on the validation set, leveraging continuous differentiability: 
+
+α∗ = arg max  
+
+> α∈A
+
+Acc val (N (α, W ∗(α))) ,
+
+s.t. W ∗(α) = arg min  
+
+> W
+
+Ltrain (N (α, W )) .
+
+Here, α is formed by grouping all αO ’s values across all sets of operations O, i.e., α := S 
+
+> O
+
+αO . In summary, the inner loop optimizes the supernet weights W while keeping α fixed, and the outer loop updates α while fixing W .This approach enables efficient architecture search by eliminating the need to train each candidate from scratch [ 40 ], a strategy known as weight sharing [ 35 ]. Importantly, DARTS treats all architecture parameters α uniformly under a single optimizer. Although it can optimize discrete parameters such as channel numbers using certain techniques (e.g., those employed in FBNetV2 [ 41 ]), it does so independently and not in a truly decoupled manner. This limitation makes it suboptimal for MLP-based fusion modules, where channel count is the dominant factor in computational complexity (see Lemma 1). To address this limitation, we propose a hierarchical MCAS framework that adapts DARTS to MLP-based search spaces. It introduces a harmonization block to enable channel-aware DNAS by decoupling the choice of feature channel numbers (controlled by a new set of architectural-parameters β) from other architectural factors such as kernel size and expansion ratio (controlled by the typical set of architectural-parameters α). The two parameter sets are optimized in a fully decoupled manner using separate optimizers. Further details are provided in the following subsections. 5Efficient and Accurate MLP-based Siamese Tracking 
+
+3.2 MLP-based Correlation Architecture Space (MCAS) 3.2.1 Coarse Fusion MLP Module (CFM) 
+
+As illustrated in Figure 3, the CFM Module which serves as the first fixed entity in the MCAS, is responsible for initially fusing F t and F s. The pseudocode is provided in Algorithm 1, where +b and S denote broadcast summation and tensor reshaping, respectively. In this algorithm, Operation 1 isolates the region of interest (ROI) for subsequent enhancement. Pixel-level fusion occurs in Operations 2 and 3, while Operation 4 maps the channel features into a more distinct space, facilitating processing by the subsequent modules. Although the algorithm’s steps are straightforward, Lemma 2 demonstrates that CFM can achieve effects akin to an attention mechanism (see Appendix A.2). 
+
+Algorithm 1 Coarse Fusion MLP (CFM) Module 
+
+Require: F t ∈ RHt×Wt×C : Template feature map 
+
+Require: F s ∈ RHs×Ws×C : Search feature map 
+
+Require: bbox : Bounding box of the target object in the t
+
+Ensure: z ∈ RHsWs×C′
+
+: Coarsely fused heat map 
+
+Operation 1: ROI Align  
+
+> 1:
+
+r ← ROIAlign (F t, bbox ) ∈ R1×1×C ▷ Extract target region features from the template 
+
+Operation 2: Point-wise Addition  
+
+> 2:
+
+r′ ← Duplicate (r, H s × Ws) ∈ RHs×Ws×C 
+
+> 3:
+
+x ← r′ +b F s ∈ RHs×Ws×C ▷ Broadcast and sum with the search region features 
+
+Operation 3: Matrix Multiplication  
+
+> 4:
+
+x′ ← S(x) ∈ RHsWs×C , F t′
+
+← S(F t) ∈ RC×HtWt 
+
+> 5:
+
+y ← MatMul (x′, F t′
+
+) ∈ RHsWs×HtWt ▷ Multiply reshaped feature maps 
+
+Operation 4: Channel Transformation  
+
+> 6:
+
+z ← yW + b ∈ RHsWs×C′
+
+▷ Transform to match input channel numbers of RFM 
+
+Lemma 2 The output z ∈ RHsWs×C′
+
+from the CFM can be computed using the following equation, which defines the element zϕζ located at row ϕ and column ζ:
+
+> C
+
+X
+
+> ψ=1
+
+F sϕψ (
+
+> HtWt
+
+X
+
+> φ=1
+
+F tψφ wφζ ) + 
+
+> C
+
+X
+
+> ψ=1
+
+rψ (
+
+> HtWt
+
+X
+
+> φ=1
+
+F tψφ wφζ ) + bϕζ , (2) 
+
+where F sϕψ + rψ corresponds to the element at row ϕ and column ψ of S(x), and F tψφ is the corresponding element in S(F t). The terms wφζ and bϕζ are elements of the trainable weight matrix W and bias vector b, as defined in Operation 4 of Algorithm 1. 
+
+The latter term of Equation (2) aligns the target region’s features with those of the template using trainable parameters. This process enhances the representation of the object region while comparatively diminishing that of the background, similar to the self-attention mechanism in the ECA module of TransT [ 15 ]. In contrast, the former term of Equation (2) computes the pixel-level similarity between the template and search feature maps using trainable parameters, resembling the cross-attention mechanism of TransT’s CFA module. By generating the heat map z through CFM, an initial fusion of F t and F s is achieved. This allows the subsequent Wave-MLP blocks in RFM to process z directly, facilitating the fusion of more distinct feature tokens at the pixel level within a compact and discriminative feature space, ultimately improving the accuracy of our tracker. Therefore, the CFM module addresses challenge (1) from Section 2.2. 
+
+3.2.2 Refine Fusion MLP Module (RFM) 
+
+As shown in Figure 3, the RFM module derived from the MCAS, serves as a flexible component responsible for enhancing and fusing the features F t and F s through a lightweight configuration and connection scheme. The primary goal here is to simplify the complex search space (excluding CFM) by grouping Wave-MLP blocks with diverse configurations into a novel structure, referred to as the harmonization block, as illustrated in Figure 4. 
+
+Harmonization Block MCAS employs a set of distinct harmonization blocks, denoted as Hi, to search for an appropriate RFM. Each block aggregates feature maps from preceding layers and transmits the fused results to subsequent ones. This cascading structure introduces multiple pathways within the supernet, enabling more flexible 6Efficient and Accurate MLP-based Siamese Tracking ⋮
+
+> Ci-1×H×W
+> Output by  𝑯 𝒊 −𝟏
+> Ci-k×H×W
+> Output by  𝑯 𝒊 −𝒌
+> C0×H×W
+> Output by  𝑯 𝟎
+
+⋮
+
+## Channel Harmonization (CH) Layers 
+
+⋮ ⋮ ⋮
+
+## Pixel Harmonization (PH) Layers  
+
+> Candidate Operations Point -wise Add
+
+⋮   
+
+> 𝑪 𝒊𝒊
+> 𝑪 𝒊𝒌
+> 𝑪 𝒊𝟏
+> 𝑷 𝒊𝟏 𝑷 𝒊𝟐 𝑷 𝒊𝟑
+> Input & Output Relaxation Connection
+> Input
+> Ci-1×H×W
+
+wavemlp_k3_t4 
+
+wavemlp_k5_t4_dw 
+
+wavemlp_k7_t8 
+
+⋮
+
+⋮
+
+> Output
+> Ci×H×W
+> Basic Layer
+
+𝑪 𝒊𝟏 
+
+> Harmonization  Block
+
+⋯
+
+⋯
+
+⋯
+
+⋯
+
+Figure 4: Structure of the harmonization block Hi and its basic layer Ci1. Top: Basic layers are categorized into CH layers ( Ci1, · · · , C ik , · · · , C ii with 1 ≤ k ≤ i) and PH layers ( Pi1, P i2, P i3). Bottom: Ci1 consists of 12 Wave-MLP blocks with different configurations. "wavemlp_k5_t4_dw" refers to a Wave-MLP block where the PATM module uses a 5×5 convolution kernel ("k5"), the MLP expansion ratio is 4 ("t4"), and depthwise separable convolution is applied ("dw"). Each CH or PH layer is a basic layer. 
+
+and effective feature fusion. We employ one CFM and three harmonization blocks, denoted as H0, H1, H2, and H3.Regardless of the backbone architecture, H0 transforms the input feature map’s channel count to 256 and forwards the result to the subsequent blocks, where the spatial resolution of the feature map is not altered. The specific interconnections among these blocks are depicted by the green dashed lines in Figure 3. Table 1: CH and PH Configurations of Each Harmonization Block 
+
+H1 CH C11 (256 , 256) - -PH P11 (256 , 256) P12 (256 , 256) P13 (256 , 256) 
+
+H2 CH C22 (256 , 320) C21 (256 , 320) -PH P21 (320 , 320) P22 (320 , 320) P23 (320 , 320) 
+
+H3 CH C33 (256 , 384) C32 (256 , 384) C31 (320 , 384) 
+
+PH P31 (384 , 384) P32 (384 , 384) P33 (384 , 384)  
+
+> 1
+
+C31 (320 , 384) indicates that the input channel count is 320 and the output dimension is 384. The same notation applies to other entries. 
+
+CH Layer and PH Layer Each harmonization block consists of two primary components: Channel Harmonization (CH) layers and Pixel Harmonization (PH) layers. The CH layers comprise several parallel basic layers that receive feature maps with varying channel dimensions from earlier blocks. These inputs are unified using convolutional layers to align the channel dimensions. The processed feature maps are then forwarded to the PH layers, where further enhancement and fusion are performed at the pixel level using additional basic layers. Let Cik and Pij denote the k-th and j-th basic layers in the CH and PH layers of Hi, respectively. The basic layer Cik is responsible for processing the output from Hi−k. The configurations of Cik and Pij in each Hi are listed in Table 1, in which 256, 320, and 384 are selected as the fixed candidate channel dimensions based on prior knowledge derived from recent Transformer-based trackers (e.g., [42, 43, 25]). 
+
+Wave-MLP Variants in Basic Layer Each basic layer in harmonization block is constructed by grouping a set of 12 Wave-MLP variants (as listed in Table 2) along with a skip connection. If the skip connection is selected during architecture search, the corresponding basic layer is effectively bypassed. Since CH layers are responsible for aligning the channel dimensions across different feature streams, the skip connection is excluded from the candidates. In 7Efficient and Accurate MLP-based Siamese Tracking contrast, PH layers perform pixel-level refinement without altering channel dimensions, and therefore include the skip connection as a valid candidate. In CH layers, candidate Wave-MLP blocks are slightly modified to support channel transformation. Specifically, while original Wave-MLP designs maintain input-output channel consistency, we adapt the first convolutional layer to project the input into the desired output channel dimension. The transformed features are then passed to the PATM module for spatial fusion. For brevity, we do not include a detailed architectural diagram of the Wave-MLP block in this paper. Table 2: Configurations of Different Wave-MLP Variants Type Expansion Ratio Kernel Size Depthwise k3_t4 4 3 ✗
+
+k3_t4_dw 4 3 ✓
+
+k3_t8 8 3 ✗
+
+k3_t8_dw 8 3 ✓
+
+k5_t4 4 5 ✗
+
+k5_t4_dw 4 5 ✓
+
+k5_t8 8 5 ✗
+
+k5_t8_dw 8 5 ✓
+
+k7_t4 4 7 ✗
+
+k7_t4_dw 4 7 ✓
+
+k7_t8 8 7 ✗
+
+k7_t8_dw 8 7 ✓
+
+3.3 MCAS-relaxed Supernet 
+
+As discussed in Section 3.2.2, our MCAS enable DNAS to optimize various configurations of the Wave-MLP block within each basic layer, while decoupling the optimization of channel numbers across different harmonization blocks. Both optimization processes are realized through Harmony-relaxation technique, as explained in Section 3.3.1 and Section 3.3.2 below. The rationale for this design, discussed in Section 3.1.1, is that the number of channels is the dominant factor affecting the FLOPs and parameter count of stacked Wave-MLP blocks. Consequently, the derived RFM module effectively addresses challenge (2) from Section 2.2. 
+
+3.3.1 Relaxation across Harmonization Blocks 
+
+Consider the block Hi, which receives feature maps from its m preceding blocks, denoted as Hi−m, H i−m+1 , . . . , H i−1.The CFM is also treated as H0. Crucially, each harmonization block has a fixed channel dimension (see Table 1 for channel configurations of H1, H2, and H3), where H0 is fixed to 256 channels. The channel dimensions of input feature maps are aligned to uniform sizes via CH layers. The output of the CH layers in Hi is computed using softmax-based relaxation: output =
+
+> m
+
+X
+
+> k=1
+
+exp( βi−k,i )
+
+Pm′ 
+
+> k′=1
+
+exp( βi−k,k ′ ) · Cik (Hi−k’s output ).
+
+Here, βi−k,i is a learnable architecture parameter for the path from Hi−k to Hi, and m′ denotes the number of subsequent harmonization blocks connected to Hi−k. This relaxation mechanism directly optimizes the channel configuration by selecting the optimal inter-block connections, where each connection path corresponds to a specific fixed channel dimension. After training, the final channel configuration is determined by selecting the path with the maximum βi−k,i value (i.e., arg max k βi−k,i ) for each connection, which inherently resolves the effective channel numbers across the entire network. For example, in the final architecture, H3 will only accept inputs from H1 or H2
+
+(whichever has larger β), automatically selecting between 256 → 384 or 320 → 384 channel transformations. 
+
+3.3.2 Relaxation within Basic Layer 
+
+Let Oc denote the set of Wave-MLP blocks with different configurations (e.g., kernel size, MLP expansion ratio) but 
+
+identical channel dimensions (fixed by CH layers’ connection decisions). A trainable architecture parameter αlo is assigned to each candidate o ∈ O c in basic layer l. The output of basic layer l is computed as: output = X
+
+> o∈O c
+
+exp( αlo)
+
+P 
+
+> o′∈O c
+
+exp( αlo′ ) · o(input ).
+
+8Efficient and Accurate MLP-based Siamese Tracking Importantly, within each basic layer, the channel dimension is already fixed (as detailed above). This relaxation only selects the optimal operation configuration (i.e., kernel size, expansion ratio and whether to use depthwise convolution) for the predetermined channel size. After training, the final operation for each basic layer is chosen via arg max o αlo
+
+to extract the highest-weighted candidate. For instance, in P31 (384-channel PH layer), the system selects between "wavemlp_k5_t4_dw" or "wavemlp_k7_t8" based on α weights, while the channel count (384) remains unchanged. 
+
+3.3.3 Evaluation of Possible Architectures 
+
+After relaxing the MCAS search space into a continuous supernet, Table 3 enumerates the total candidate architecture count. The complete search space comprises approximately 1.83 × 10 13 distinct configurations for the Siamese tracker neck (comprising CFM and RFM modules), which aligns with the typical magnitude range for specialized DNAS methodologies in computer vision. A detailed visualization of MCAS and the supernet structure is provided in Appendix B.3. Table 3: Number of All Possible Architectures Routing Path Number of Architectures 
+
+0 → 1 12 × 13 × 13 × 13 = 26 , 364 0 → 1 → 2 (12 × 13 × 13 × 13) 2 = 695 , 060 , 496 0 → 2 12 × 13 × 13 × 13 = 26 , 364 0 → 1 → 2 → 3 (12 × 13 × 13 × 13) 3 = 18 , 324 , 574 , 916 , 544 0 → 1 → 3 (12 × 13 × 13 × 13) 2 = 695 , 060 , 496 0 → 2 → 3 (12 × 13 × 13 × 13) 2 = 695 , 060 , 496 0 → 3 12 × 13 × 13 × 13 = 26 , 364             
+
+> 1The notation 0→2→3indicates a path that starts from H0and passes through H2before directly producing the final output at H3. Other routing paths follow the same convention.
+
+3.4 Optimization Strategy Algorithm 2 Optimization Procedure for MCAS 
+
+Require: Dataset Dtotal = Dtrain ∪ D val , architecture parameters α and β, model weight parameters γ
+
+Ensure: Optimized parameters α, β and γ
+
+Stage 1: Warm up with shallow training  
+
+> 1:
+
+Freeze α, β and feature extractor (backbone) weights  
+
+> 2:
+
+for each mini-batch in D do  
+
+> 3:
+
+Update γ by minimizing Ltotal (γ, α, β) 
+
+> 4:
+
+end for Stage 2: Warm up with deep training  
+
+> 5:
+
+Unfreeze feature extractor weights, keep α and β frozen  
+
+> 6:
+
+for each mini-batch in D do  
+
+> 7:
+
+Update γ by minimizing Ltotal (γ, α, β) 
+
+> 8:
+
+end for Stage 3: Alternate Optimization of γ and α, β 
+
+> 9:
+
+for each epoch do  
+
+> 10:
+
+for each mini-batch in Dtrain do  
+
+> 11:
+
+Update γ by minimizing Ltrain (γ, α, β) 
+
+> 12:
+
+end for  
+
+> 13:
+
+for each mini-batch in Dval do  
+
+> 14:
+
+Update α and β by minimizing Lval (γ, α, β) using SGD [44] and Adam [45], respectively.  
+
+> 15:
+
+end for  
+
+> 16:
+
+end for 
+
+To derive a lightweight correlation architecture from the MCAS-relaxed supernet through training, we propose a novel optimization strategy specifically designed for tracking tasks. As shown in pseudocode Algorithm 2, the optimization procedure is divided into three stages. The first stage aims to mitigate the risk of the feature extractor’s weight parameters being adversely affected by the undertrained supernet during the initial epochs. The second stage addresses the tendency of the supernet to favor shallow architectures due to the limited representational capacity of the Wave-MLP 9Efficient and Accurate MLP-based Siamese Tracking blocks in the early stages of training. The third stage implements bi-level optimization where weight updates and architecture parameter updates are alternated to converge on Pareto-optimal solutions balancing accuracy and efficiency. 
+
+Loss Function The loss function used during the optimization process is also tailored for tracking tasks. The MCAS-derived supernet outputs one response map, which is then processed by the tracking head, decoding the outcomes of both regression and classification. We employ the Intersection over Union (IOU) loss [ 46 ] for regression, denoted as 
+
+Lreg , and binary cross-entropy (BCE) loss for classification, denoted as Lcls . The total loss function during the search stage is formulated as: 
+
+L(γ, α, β) = ηLsea + λLreg + μLcls , (3) where Lsea represents the inverse chained cost (defined in Appendix A.3) [ 47 ] of supernet’s latency or FLOPs. The hyperparameters η, λ, and μ control the relative contribution of each term, respectively. 
+
+Optimizer Design We employ distinct optimizers for the optimization of channel-level ( β) and operation-level ( α)parameters. Adam [ 45 ] is used for β to stabilize sparse connection paths with high variance, while SGD [ 44 ] with momentum optimizes α to enable robust exploration of operation candidates within fixed channel configurations. This decoupled optimization strategy efficiently navigates the hierarchical search space while maintaining computational tractability. 
+
+## 4 Experiments 
+
+4.1 Configurations of Implementation 
+
+The proposed SEAT tracker was searched and retrained on a computer with four NVIDIA 3090 GPUs. In the case of SEAT_AL, the sizes of the template t and search region s were set to 127 × 127 and 255 × 255 , respectively. AlexNet served as the feature extractor for our tracker, operating with a stride of 8. In the search stage, the MCAS-relaxed supernet is trained for 48 epochs according to the strategy outlined in Sec 3.4. The weight parameters γ are optimized on the training dataset using an SGD [ 44 ] optimizer, with the learning rate exponentially decaying from 5 × 10 −3 to 
+
+10 −5 and employing a warm-up trick in the first 5 epochs. The architecture parameters α and β were optimized on the validation dataset using both SGD and Adam [ 45 ] optimizers. The Adam optimizer was initialized with a learning rate of 10 −4 and a weight decay of 10 −3. The hyper-parameters η, λ, μ are set to 1. During the retrain progress, the model derived from the search stage is trained for 48 epochs in the same manner as AutoMatch [ 14 ]. The same weight optimizer and learning rate are utilized as in the search stage without inheriting any parameters from the search stage. We utilize COCO [ 48 ], YouTube-BB [ 49 ], GOT-10k [ 50 ], as well as ImageNet DET and VID [ 51 ] as the training dataset for experiments on four generic tracking benchmarks and three aerial tracking benchmarks. To enable comparisons with both generic trackers on resource-constrained GPUs and UAV trackers on resource-limited NPUs, we derive two configurations of our model: SEAT_LT and SEAT_AL, respectively (Figure 11 in Appendix B.3 visualizes these configurations). SEAT_LT is further used in ablation studies to demonstrate the effectiveness of the proposed components in our correlation architecture, namely the CFM Module and the RFM Module. 
+
+4.2 Evaluation Datasets and Metrics 
+
+We conduct evaluations of SEAT_LT on generic tracking benchmark datasets, namely GOT10K [ 50 ], OTB2015 [ 52 ], VOT2019 [ 53 ], and NFS30 [ 54 ]. SEAT_AL undergoes evaluation on a diverse set of aerial tracking benchmark datasets, including UAV123 [55] (which includes the UAV10FPS and UAV20L), UAVDT [56], and VISDRONE [57]. 
+
+4.2.1 Generic Benchmarks. GOT10K : A substantial dataset featuring over 10,000 videos capturing moving objects in real-world scenarios. Notably, it poses a challenge with zero-class-overlap between the training and testing subsets. VOT2019 : Featuring 60 challenging sequences, VOT2019 measures tracking accuracy and robustness concurrently using the expected average overlap (EAO) metric. NFS30 : A long-range benchmark consisting of 100 videos (380,000 frames) captured with higher frame rate (240FPS) cameras, providing real-world scenarios. OTB2015 : Comprising 100 video sequences, OTB2015 introduces challenging attributes that reflect various visual effects leading to tracking difficulties. The average sequence length is approximately 500 frames. 10 Efficient and Accurate MLP-based Siamese Tracking 
+
+4.2.2 Aerial Benchmarks. UAV10FPS : This dataset involves video sequences derived from the original 30fps version by selecting every 10 frames. Consequently, UAV10FPS introduces more severe motion challenges compared to UAV123 [ 55 ]. UAV20L : Featuring 20 long-term video sequences created by merging short subsequences from UAV123, UAV20L presents progressively larger and irregular changes in object location between frames, posing a heightened challenge for object tracking. 
+
+UAVDT : Specifically designed to address complicated circumstances such as weather variations, altitude changes, diverse camera views, vehicle types, and occlusion, UAVDT provides a comprehensive evaluation of UAV tracking performance. VISDRONE : Originating from the Vision Meets Drone Single-Object Tracking challenge, VISDRONE utilizes various drone platforms across different weather and lighting conditions, providing a challenging and realistic evaluation environment. 
+
+4.2.3 Evaluation Metrics 
+
+In our quantitative evaluation, we adhere to the specific protocols established by each tracking dataset to ensure a rigorous and consistent assessment of the tracker’s performance. For all benchmarks, excluding VOT2019, we employ success plots as our primary evaluation metric. The success plot illustrates the percentage of successful frames across varying overlap thresholds, ranging from 0 to 1. A frame is deemed successful if the overlap between the predicted and ground truth bounding boxes surpasses a predefined threshold. The area under the success plot curve (AUC) serves as a quantitative measure, capturing the tracker’s performance across different levels of overlap. In the case of the VOT2019 dataset, we compute the expected average overlap (EAO), a metric that provides a balanced assessment by considering both tracking accuracy and robustness. 
+
+4.3 Trackers for Lightweight GPU-based Applications 
+
+In Table 4, which presents a comprehensive comparison of tracker performances, SEAT_LT emerges as an exemplary lightweight tracker. It not only demonstrates superior accuracy compared to other lightweight generic trackers such as LightTrack [ 16 ], FEAR [ 4], and E.T.Track [ 17 ] across various benchmarks, securing top-tier rankings as indicated by the results highlighted in red and blue, but also maintains a fast processing speed that ensures it remains within the lightweight category on resource-constrained GPU hardware. Table 4: Comparison of Trackers for Lightweight GPU Use on OTB2015, GOT10KTEST and VOT2019 VOT2019 FPS                                                    
+
+> ↑
+> Latency
+> ↓(ms) Orientation Trackers Year Type EAO ↑Robustness ↓
+> OTB 2015 GOT10K TEST NFS 30 ECO 2017 ---64.3 -46.6 --LightTrack(M) 2021 cnn 33.3 32.1 65.8 61.1 56.3 50.20 19.9 FEAR(XS) 2022 cnn 25.2 56.2 66.7 61.9 58.3 123.33 8.1 E.T.Track 2023 trans 24.1 57.2 67.8 58.3 59.0 48.15 20.8 GPU-constrained platforms
+> SEAT_LT(ours) 2023 mlp 34.0 31.6 69.7 63.6 61.1 80.54 12.4
+
+Table 4 demonstrates that SEAT_LT achieves an impressive balance between accuracy, model efficiency, and GPU performance. On the OTB2015 benchmark, it achieves a success rate of 69.7%, surpassing its closest competitor, E.T.Track, by 1.9%. On the VOT2019 dataset, it continues to lead with the highest Expected Average Overlap (EAO) score of 34.0%, slightly ahead of LightTrack’s 33.3%. In terms of computational efficiency, SEAT_LT operates with just 12.28 million parameters and 6.01 billion FLOPs, significantly lighter than more resource-intensive trackers, such as AutoMatch [ 14 ] and TransT [ 15 ], which typically require around 20 million parameters and 20 billion FLOPs. Moreover, SEAT_LT achieves an impressive frame rate of 80.54 FPS, making it highly suitable for real-time tracking applications. SEAT_LT proves to be an ideal solution for resource-constrained GPU environments. In addition, the tracking efficacy of SEAT_LT has been rigorously evaluated on the VOT2019 dataset, focusing on five critical attributes: camera motion, illumination changes, motion changes, size changes, and occlusion. As shown in Figure 5, SEAT_LT consistently outperforms SOTA Siamese-based trackers optimized for lightweight GPU use, especially when compared to LightTrack. The vertex annotations highlight SEAT_LT’s consistent superiority across most attributes, with the exception of illumination changes. Its MLP-based fusion module leverages global dependencies captured by fully connected layers, enabling more effective target–background separation and improving tracking accuracy under various appearance variations. Performance degrades under severe illumination changes, particularly when the target blends into dark backgrounds. This is primarily due to the amplitude branch of the PATM module, which encodes intensity information and is therefore more sensitive to lighting variations. In practice, however, modern imaging sensors often apply illumination pre-processing, resulting in illumination-stable inputs that help mitigate this 11 Efficient and Accurate MLP-based Siamese Tracking issue. Notably, SEAT_LT performs robustly on complex sequences with challenging occlusions and outperforms other SOTA lightweight trackers in this attribute. Overall (0.241,0.340) Camera motion (0.346,0.438) Illumination change (0.228,0.631) Motion Change (0.157,0.203) Size change (0.376,0.555) Occlusion (0.190,0.447) Unassigned (0.049,0.061)    
+
+> SEAT_LT ETTrack FEAR LightTrackM
+
+Figure 5: Comparative analysis of tracker attributes on VOT2019. The radar chart annotates the minimum and maximum EAO scores per attribute. SEAT_LT attains consistently high EAO scores across attributes—except for illumination change—and surpasses other lightweight GPU-oriented trackers, with particularly strong gains under occlusion. 
+
+4.4 Trackers for On-board NPU Applications 
+
+As NPUs become increasingly essential for aerial tracking in on-board computing systems, we introduce SEAT_AL as a novel solution tailored for UAV trackers operating in NPU-equipped edge environments. This approach leverages the same backbone architecture (AlexNet), which used by on-board UAV trackers such as SiamAPN [ 58 ], enabling direct performance comparisons while showcasing the distinct advantages of our method in edge computing scenarios. 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+> Overlap threshold
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Success rate
+
+Success plots on UAV10FPS           
+
+> SEAT_AL [0.611] TCTrack [0.587] SiamAPN++ [0.581] SiamAPN [0.571] HiFT [0.569]
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> Overlap threshold
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Success rate
+
+Success plots on UAVDT           
+
+> SEAT_AL [0.600] SiamAPN++ [0.551] TCTrack [0.527] SiamAPN [0.518] HiFT [0.475]
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+> Overlap threshold
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Success rate
+
+Success plots on VISDRONE 
+
+> SEAT_AL [0.580] SiamAPN [0.575] TCTrack [0.560] SiamAPN++ [0.535] HiFT [0.527]
+
+Figure 6: The comprehensive assessment of trackers tailored for on-board deployment encompasses three renowned aerial tracking benchmarks. 
+
+4.4.1 Overall Performance 
+
+The success plots depicted in Figure 6 showcase the performance of various trackers across three aerial benchmarks. The accompanying legend sorts trackers by their respective Area Under the Curve (AUC) metric. Our SEAT_AL tracker 12 Efficient and Accurate MLP-based Siamese Tracking demonstrates superior performance when compared to traditional tracking algorithms: SEAT_AL achieves the highest success scores, leading the benchmarks with results of 0.611, 0.600 and 0.580 respectively. Table 5: COMPARISON of MODEL DEPLOYMENT on HORIZON X3 CHIP among DIFFERENT ON-BOARD TRACKERS MACs Params FPS Average Latency Subgraphs DDR Latency UAV20L Accuracy SEAT_AL( ours ) 8.13G 11.47M 20.41 195.47ms 13 892.43ms 0.593 SiamAPN++ [5] 10.25G ↑ 15.15M ↑ 23.57 ↑ 168.64ms ↓ 8↓ 624.77ms ↓ 0.533 ↓               
+
+> HiFT [36] 4.83G ↓9.98M ↓4.30 ↓921.41ms ↑28 ↑681.40ms ↓0.566 ↓
+> TCTrack [37] 3.37G ↓7.09M ↓0.71 ↓5608.77ms ↑52 ↑3461.16ms ↑0.516 ↓
+> 1MACs (Multiply-Accumulate Operations) are a key metric for evaluating the computational complexity of deep learning models.
+
+4.4.2 Real-world Tests 
+
+The efficacy of the discussed on-board trackers, primarily designed for UAV applications, was demonstrated through their deployment on the Horizon X3 chip, a low-power embedded platform with an NPU offering 5 TOPS for inference, along with 4 ARM A53 cores. This setup enabled a performance comparison between SEAT_AL and other trackers. As shown in Table 5, SEAT_AL strikes an impressive balance between speed and accuracy, achieving 20.41 FPS with an average latency of 195.47ms. It also boasts a relatively low number of subgraphs (13) and moderate DDR latency (892.43ms), while maintaining a high accuracy score (0.593) on the UAV20L benchmark. In contrast, trackers like HiFT and TCTrack, which rely on ViT-based correlation operations, exhibit significantly higher latencies and lower FPS due to the computationally heavy architecture, making them less efficient for real-world deployment on the Horizon X3. Comprehensive real-world tests, depicted in Figure 7, were conducted in two aerial tracking scenarios: bus (long-term tracking) and pedestrian (short-term tracking). Precision was evaluated using the Center Location Error (CLE), which measures the Euclidean distance between the ground truth box’s center and the predicted box’s center. The CLE curves were plotted, and points where the CLE exceeded the 20-pixel threshold were analyzed. SEAT_AL effectively handled challenges such as similar objects and camera motion, maintaining continuous and robust tracking throughout both scenarios. In contrast, SiamAPN++ struggled with target loss. Specifically, it lost and relocated the bus due to interference from a similar object and failed entirely to track the pedestrian due to camera motion. The CLE curves consistently demonstrated SEAT_AL’s resilience in maintaining accurate tracking, while SiamAPN++ frequently experienced lapses in performance despite its higher FPS. These real-world tests substantiate SEAT_AL’s robustness and efficiency for UAV-specific tracking, confirming its suitability for on-board deployment. Furthermore, its stable accuracy–efficiency trade-off indicates strong potential for extension to indoor drone tracking scenarios [59]. MCAS_a l CLE  MCAS_a l CLE 
+
+Figure 7: In real-world scenarios involving bus (left) and pedestrian (right), SEAT_AL successfully addresses chal-lenges related to similar objects and camera motion, maintaining robust tracking without any target loss. In contrast, SiamAPN++ [5] struggles, losing the target in both cases. 
+
+4.5 Ablation Studies 
+
+We conduct comprehensive ablation studies to dissect the impact of key components in our proposed MLP-based Correlation Architecture Space. Our ablation targets include the Coarse Fusion MLP (CFM) Module and the Wave-MLP blocks within the Refine Fusion MLP (RFM) Module. Table 6 provides a detailed breakdown of results for each component and their combinations across five ablation experiments (Ab0-4). We explore different pre-fusion operations, including CFM, Cross-Attention, and Depthwise-Convolution, representing mlp-based fusion, transformer-based fusion, and cnn-based fusion, respectively. The "Fusion Type" denotes whether fusion occurs at the pixel or patch level. Additionally, Figure 8 presents visualizations of the ablation studies. 13 Efficient and Accurate MLP-based Siamese Tracking Table 6: ABLATION ANALYSIS of THE PROPOSED MODULES on GOT10K, OTB2015 and VOT2019 SEAT_LT Ablation Study Pre-Fusion Fusion -Type Post-Fusion Fusion -Type GOT10K (AO)% OTB2015 (AUC)% VOT2019 (EAO)% FPS Latency (ms) Ab1 cnn patch mlp pixel 52.2 62.8 22.3 69.63 14.4 Ab2 transformer pixel mlp pixel 62.6 65.7 30.8 61.23 16.3 Ab0 mlp pixel - - 63.5 68.1 33.7 89.39 11.2 Ab3 mlp pixel cnn patch 63.1 69.6 31.5 83.82 11.9 Ab4 mlp pixel transformer pixel 63.8 69.6 33.6 77.99 12.8 ours mlp pixel mlp pixel 63.6 69.7 34.0 80.54 12.4 From the comparison between Ab1, Ab2, and ours in Table 6 and Figure 8, the effectiveness of CFM is evident, showcasing higher AUC and EAO across three benchmark datasets. While adopting Depthwise Convolution as a pre-fusion operation yields higher FPS, CFM exhibits superior performance with a modest speed cost. To further illustrate the balance between speed and accuracy achieved by our RFM, we replace Wave-MLP blocks with ViT blocks and ResNet blocks, varying architectural types and fusion strategies. Ab3, Ab4, and ours in Table 6 and Figure 8 demonstrate the higher FPS of Wave-MLP-based RFM compared to ViT-block-based post-fusion, along with higher accuracy than ResNet-block-based post-fusion and more focused concentration on target region. Notably, Ab0 does not involve any post-fusion operation, highlighting two key points: 1) The efficacy of our CFM design is evident. Through the decomposition of target and background features and their integration with search features in an attention-like manner, Ab0 achieves impressive performance at high speed, despite the feature map’s visualization showing a lack of concentration. 2) The efficacy of transitioning from pre-fusion to post-fusion (coarse-to-fine) is demonstrated by the superior performance of our SEAT compared to Ab0. This indicates that adopting the proposed coarse-to-refine framework (CFM+RFM in MCAS) for fusing template and search feature maps enables the tracker to focus more effectively on the target region. Consequently, this approach mitigates limitations associated with small components of the target or distractions from background noise. 
+
+Figure 8: Visualization of ablation study. We adopt EigenCAM [ 60 ] to visualize of feature maps outputted by collector layer in ablation experiments of SEAT_LT. Original images are chosen from GOT10KTEST, OTB2015 and VOT2019. Our tracker yields feature maps whose attention gathers at target region better. 
+
+## 5 Conclusion 
+
+We propose SEAT, an MLP-based tracker that addresses the long-standing efficiency-accuracy trade-off in Siamese visual object tracking, with a particular focus on resource-constrained settings. By fundamentally redesigning feature fusion in the Siamese neck, we introduce the CFM and RFM modules and realize a simple yet effective coarse-to-fine fusion framework. This design enables pixel-level feature fusion via MLPs, yielding improved accuracy. To avoid the quadratic complexity with respect to channel width that arises from stacking Wave-MLP blocks in RFM, we construct the MCAS search space by jointly grouping CFM and RFM into a unified supernet under a Harmony-Relaxation strategy. Within this DNAS framework, channel width is decoupled from other structural choices: channel counts are optimized across Harmonization blocks using Adam optimizer, while intra-block architectural parameters are optimized with SGD. Our search identifies effective Wave-MLP configurations for RFM, improving the efficiency of the derived 14 Efficient and Accurate MLP-based Siamese Tracking models. Consequently, we develop two lightweight trackers: SEAT_LT, optimized for resource-constrained GPUs, and SEAT_AL, tailored to low-power NPUs. Both achieve SOTA accuracy with superior inference speed. Looking ahead, future work will focus on evolving SEAT into a one-stage architecture, integrating backbone feature extraction and neck feature fusion into a unified process (for searching). This evolution is expected to enhance accuracy in resource-abundant GPU environments while further simplifying model design for improved scalability and efficiency. 
+
+## Acknowledgments 
+
+We are sincerely grateful to Lu Huang, a Ph.D. candidate at Peking University, for her work in creating the figures and other visual materials for this paper. We also thank Prof. Ding Yuan (School of Astronautics, Beihang University) and Prof. Muhammad Haris Khan (MBZUAI) for their early guidance on the writing and presentation of the manuscript. In addition, we appreciate Zhaoxi Li and Guosheng Xu from Horizon Robotics for their technical assistance and valuable guidance on deploying the tracking algorithm on the Horizon X3 chip. 
+
+## References 
+
+[1] Libo Zhang and Heng Fan. Visual object tracking: Progress, challenge, and future. The Innovation , 4(2), 2023. [2] Sajid Javed, Martin Danelljan, Fahad Shahbaz Khan, Muhammad Haris Khan, Michael Felsberg, and Jiri Matas. Visual object tracking with discriminative filters and siamese networks: A survey and outlook. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(5):6552–6574, 2023. [3] Yun Liang, Qiaoqiao Li, and Fumian Long. Global dilated attention and target focusing network for robust tracking. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 1549–1557, 2023. [4] Vasyl Borsuk, Roman Vei, Orest Kupyn, Tetiana Martyniuk, Igor Krashenyi, and Jiˇ ri Matas. Fear: Fast, efficient, accurate and robust visual tracker. In Computer Vision–ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part XXII , pages 644–663. Springer, 2022. [5] Ziang Cao, Changhong Fu, Junjie Ye, Bowen Li, and Yiming Li. Siamapn++: Siamese attentional aggregation network for real-time uav tracking. In 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pages 3086–3092. IEEE, 2021. [6] Lihong Dai, Jinguo Liu, Zhaojie Ju, and Yang Gao. Attention-mechanism-based real-time gaze tracking in natural scenes with residual blocks. IEEE Transactions on Cognitive and Developmental Systems , 14(2):696–707, 2022. [7] Luca Bertinetto, Jack Valmadre, Joao F Henriques, Andrea Vedaldi, and Philip HS Torr. Fully-convolutional siamese networks for object tracking. In Computer Vision–ECCV 2016 Workshops: Amsterdam, The Netherlands, October 8-10 and 15-16, 2016, Proceedings, Part II 14 , pages 850–865. Springer, 2016. [8] Zhipeng Zhang and Houwen Peng. Deeper and wider siamese networks for real-time visual tracking. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4591–4600, 2019. [9] Bo Li, Wei Wu, Qiang Wang, Fangyi Zhang, Junliang Xing, and Junjie Yan. Siamrpn++: Evolution of siamese visual tracking with very deep networks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4282–4291, 2019. [10] Junyi Wang, Wentao Zhang, Jun Fu, Kechen Song, Qinggang Meng, Lin Zhu, and Yuru Jin. Ldcnet: A weight multi-scale convolutional neural network using local dense connectivity for image recognition. IEEE Transactions on Cognitive and Developmental Systems , 2023. [11] Wenjie Liu, Guoqing Wu, and Fuji Ren. Deep multibranch fusion residual network for insect pest recognition. 
+
+IEEE Transactions on Cognitive and Developmental Systems , 13(3):705–716, 2020. [12] Dongyan Guo, Yanyan Shao, Ying Cui, Zhenhua Wang, Liyan Zhang, and Chunhua Shen. Graph attention tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9543–9552, 2021. [13] Wencheng Han, Xingping Dong, Fahad Shahbaz Khan, Ling Shao, and Jianbing Shen. Learning to fuse asymmetric feature maps in siamese trackers. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16570–16580, 2021. [14] Zhipeng Zhang, Yihao Liu, Xiao Wang, Bing Li, and Weiming Hu. Learn to match: Automatic matching network design for visual tracking. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 13339–13348, 2021. [15] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang, and Huchuan Lu. Transformer tracking. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8126–8135, 2021. 15 Efficient and Accurate MLP-based Siamese Tracking [16] Bin Yan, Houwen Peng, Kan Wu, Dong Wang, Jianlong Fu, and Huchuan Lu. Lighttrack: Finding lightweight neural networks for object tracking via one-shot architecture search. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15180–15189, 2021. [17] Philippe Blatter, Menelaos Kanakis, Martin Danelljan, and Luc Van Gool. Efficient visual tracking with exemplar transformers. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 1571–1581, 2023. [18] Yehui Tang, Kai Han, Jianyuan Guo, Chang Xu, Yanxi Li, Chao Xu, and Yunhe Wang. An image patch is a wave: Phase-aware vision mlp. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10935–10944, 2022. [19] Zedu Chen, Bineng Zhong, Guorong Li, Shengping Zhang, and Rongrong Ji. Siamese box adaptive network for visual tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 6668–6677, 2020. [20] Dongyan Guo, Jun Wang, Ying Cui, Zhenhua Wang, and Shengyong Chen. Siamcar: Siamese fully convolutional classification and regression for visual tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 6269–6277, 2020. [21] Shenyuan Gao, Chunluan Zhou, Chao Ma, Xinggang Wang, and Junsong Yuan. Aiatrack: Attention in attention for transformer visual tracking. In European Conference on Computer Vision , pages 146–164. Springer, 2022. [22] Guang Han, Ruiyu Yang, Hua Gao, and Sam Kwong. Deep decoupling classification and regression for visual tracking. IEEE Transactions on Cognitive and Developmental Systems , 15(3):1239–1251, 2022. [23] Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu. Mixformer: End-to-end tracking with iterative mixed attention. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 13608–13618, 2022. [24] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and Xilin Chen. Joint feature learning and relation modeling for tracking: A one-stream framework. In European Conference on Computer Vision , pages 341–357. Springer, 2022. [25] Guang Han, Jianshu Ma, Ziyang Li, and Haitao Zhao. A two-stage foveal vision tracker based on transformer model. IEEE Transactions on Cognitive and Developmental Systems , 16(4):1575–1588, 2024. [26] Ruiyang Liu, Yinghui Li, Linmi Tao, Dun Liang, and Hai-Tao Zheng. Are we ready for a new paradigm shift? a survey on visual deep mlp. Patterns , 3(7), 2022. [27] Ilya O Tolstikhin, Neil Houlsby, Alexander Kolesnikov, Lucas Beyer, Xiaohua Zhai, Thomas Unterthiner, Jessica Yung, Andreas Steiner, Daniel Keysers, Jakob Uszkoreit, et al. Mlp-mixer: An all-mlp architecture for vision. 
+
+Advances in neural information processing systems , 34:24261–24272, 2021. [28] Chuanxin Tang, Yucheng Zhao, Guangting Wang, Chong Luo, Wenxuan Xie, and Wenjun Zeng. Sparse mlp for image recognition: Is self-attention really necessary? In Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, pages 2344–2351, 2022. [29] Jianyuan Guo, Yehui Tang, Kai Han, Xinghao Chen, Han Wu, Chao Xu, Chang Xu, and Yunhe Wang. Hire-mlp: Vision mlp via hierarchical rearrangement. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 826–836, 2022. [30] Sixian Chan, Yu Wang, Jian Tao, Xiaolong Zhou, Jie Tao, and Qike Shao. Mlpt: Multilayer perceptron based tracking. In 2022 IEEE International Conference on Systems, Man, and Cybernetics (SMC) , pages 1936–1941. IEEE, 2022. [31] Barret Zoph and Quoc Le. Neural architecture search with reinforcement learning. In International Conference on Learning Representations , 2017. [32] Hieu Pham, Melody Guan, Barret Zoph, Quoc Le, and Jeff Dean. Efficient neural architecture search via parameters sharing. In International conference on machine learning , pages 4095–4104. PMLR, 2018. [33] Hanxiao Liu, Karen Simonyan, and Yiming Yang. DARTS: Differentiable architecture search. In International Conference on Learning Representations , 2019. [34] Bichen Wu, Xiaoliang Dai, Peizhao Zhang, Yanghan Wang, Fei Sun, Yiming Wu, Yuandong Tian, Peter Vajda, Yangqing Jia, and Kurt Keutzer. Fbnet: Hardware-aware efficient convnet design via differentiable neural architecture search. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 10734–10742, 2019. 16 Efficient and Accurate MLP-based Siamese Tracking [35] Xiaotian Song, Xiangning Xie, Zeqiong Lv, Gary G Yen, Weiping Ding, Jiancheng Lv, and Yanan Sun. Efficient evaluation methods for neural architecture search: A survey. IEEE Transactions on Artificial Intelligence ,5(12):5990–6011, 2024. [36] Ziang Cao, Changhong Fu, Junjie Ye, Bowen Li, and Yiming Li. Hift: Hierarchical feature transformer for aerial tracking. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 15457–15466, 2021. [37] Ziang Cao, Ziyuan Huang, Liang Pan, Shiwei Zhang, Ziwei Liu, and Changhong Fu. Tctrack: Temporal contexts for aerial tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 14798–14808, 2022. [38] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. Communications of the ACM , 60(6):84–90, 2017. [39] Leonhard Euler. Introductio in analysin infinitorum , volume 2. Apud Bernuset, Delamolliere, Falque & soc., 1797. [40] Jiaqi Li, Haoran Li, Yaran Chen, Zixiang Ding, Nannan Li, Mingjun Ma, Zicheng Duan, and Dongbin Zhao. Abcp: Automatic blockwise and channelwise network pruning via joint search. IEEE Transactions on Cognitive and Developmental Systems , 15(3):1560–1573, 2022. [41] Alvin Wan, Xiaoliang Dai, Peizhao Zhang, Zijian He, Yuandong Tian, Saining Xie, Bichen Wu, Matthew Yu, Tao Xu, Kan Chen, et al. Fbnetv2: Differentiable neural architecture search for spatial and channel dimensions. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 12965–12974, 2020. [42] Hong Zhang, Wanli Xing, Yifan Yang, Yan Li, and Ding Yuan. Siamst: Siamese network with spatio-temporal awareness for object tracking. Information Sciences , 634:122–139, 2023. [43] Yaozong Zheng, Bineng Zhong, Qihua Liang, Zhiyi Mo, Shengping Zhang, and Xianxian Li. Odtrack: Online dense temporal token learning for visual tracking. In Proceedings of the AAAI conference on artificial intelligence ,volume 38, pages 7588–7596, 2024. [44] Léon Bottou. Large-scale machine learning with stochastic gradient descent. In Proceedings of COMPSTAT’2010: 19th International Conference on Computational StatisticsParis France, August 22-27, 2010 Keynote, Invited and Contributed Papers , pages 177–186. Springer, 2010. [45] Diederik P Kingma. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. [46] Jiahui Yu, Yuning Jiang, Zhangyang Wang, Zhimin Cao, and Thomas Huang. Unitbox: An advanced object detection network. In Proceedings of the 24th ACM international conference on Multimedia , pages 516–520, 2016. [47] Jiemin Fang, Yuzhu Sun, Qian Zhang, Yuan Li, Wenyu Liu, and Xinggang Wang. Densely connected search space for more flexible neural architecture search. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10628–10637, 2020. [48] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In Computer Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part V 13 , pages 740–755. Springer, 2014. [49] Esteban Real, Jonathon Shlens, Stefano Mazzocchi, Xin Pan, and Vincent Vanhoucke. Youtube-boundingboxes: A large high-precision human-annotated data set for object detection in video. In proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pages 5296–5305, 2017. [50] Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A large high-diversity benchmark for generic object tracking in the wild. IEEE transactions on pattern analysis and machine intelligence , 43(5):1562–1577, 2019. [51] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual recognition challenge. International journal of computer vision , 115:211–252, 2015. [52] Yi Wu, Jongwoo Lim, and Ming-Hsuan Yang. Object tracking benchmark. IEEE Transactions on Pattern Analysis and Machine Intelligence , 37(9):1834–1848, 2015. [53] Matej Kristan, Jiri Matas, Ales Leonardis, Michael Felsberg, Roman Pflugfelder, Joni-Kristian Kamarainen, Luka 
+
+ˇCehovin Zajc, Ondrej Drbohlav, Alan Lukezic, Amanda Berg, et al. The seventh visual object tracking vot2019 challenge results. In Proceedings of the IEEE/CVF international conference on computer vision workshops , pages 0–0, 2019. 17 Efficient and Accurate MLP-based Siamese Tracking [54] Hamed Kiani Galoogahi, Ashton Fagg, Chen Huang, Deva Ramanan, and Simon Lucey. Need for speed: A benchmark for higher frame rate object tracking. In Proceedings of the IEEE International Conference on Computer Vision , pages 1125–1134, 2017. [55] Matthias Mueller, Neil Smith, and Bernard Ghanem. A benchmark and simulator for uav tracking. In Computer Vision–ECCV 2016: 14th European Conference, Amsterdam, The Netherlands, October 11–14, 2016, Proceedings, Part I 14 , pages 445–461. Springer, 2016. [56] Dawei Du, Yuankai Qi, Hongyang Yu, Yifan Yang, Kaiwen Duan, Guorong Li, Weigang Zhang, Qingming Huang, and Qi Tian. The unmanned aerial vehicle benchmark: Object detection and tracking. In Proceedings of the European conference on computer vision (ECCV) , pages 370–386, 2018. [57] Heng Fan, Longyin Wen, Dawei Du, Pengfei Zhu, Qinghua Hu, Haibin Ling, Mubarak Shah, Biao Wang, Bin Dong, Di Yuan, et al. Visdrone-sot2020: The vision meets drone single object tracking challenge results. In 
+
+Computer Vision–ECCV 2020 Workshops: Glasgow, UK, August 23–28, 2020, Proceedings, Part IV 16 , pages 728–749. Springer, 2020. [58] Changhong Fu, Ziang Cao, Yiming Li, Junjie Ye, and Chen Feng. Siamese anchor proposal network for high-speed aerial tracking. In 2021 IEEE International Conference on Robotics and Automation (ICRA) , pages 510–516. IEEE, 2021. [59] Mohannad Alhafnawi, Haythem A. Bany Salameh, Ala’eddin Masadeh, Haitham Al-Obiedollah, Moussa Ayyash, Reyad El-Khazali, and Hany Elgala. A survey of indoor and outdoor uav-based target tracking systems: Current status, challenges, technologies, and future directions. IEEE Access , 11:68324–68339, 2023. [60] Mohammed Bany Muhammad and Mohammed Yeasin. Eigen-cam: Class activation map using principal components. In 2020 International Joint Conference on Neural Networks (IJCNN) , pages 1–7. IEEE, 2020. 
+
+## A More Details of Methodology 
+
+A.1 Computational Analysis of Wave-MLP 
+
+The Wave-MLP [ 18 ] blocks incorporate Phase-Aware Token Mixing (PATM) to fuse all feature tokens and enhance their representations. Upon obtaining the amplitude representation h and phase representation θ for all tokens, given by (both hϕ and θϕ for ϕ = 1 , 2, · · · , H sWs are all row vectors with C′ length): 
+
+h = h⊤ 
+
+> 1
+
+h⊤ 
+
+> 2
+
+· · · h⊤
+
+> HsWs
+
+⊤ ∈ RHsWs×C′
+
+, θ = θ⊤ 
+
+> 1
+
+θ⊤ 
+
+> 2
+
+· · · θ⊤
+
+> HsWs
+
+⊤ ∈ RHsWs×C′
+
+,
+
+the enhanced consequence o can be computed using the Euler formula with trainable parameters: 
+
+S(o)C′HsWs×1 = o⊤ 
+
+> 1
+
+o⊤ 
+
+> 2
+
+· · · o⊤
+
+> HsWs
+
+⊤
+
+=
+
+
+
+W cos  
+
+> 1,1
+
+· · · W cos  
+
+> 1,H sWs
+
+W sin  
+
+> 1,1
+
+· · · W sin 
+
+> 1,H sWs
+
+... . . . ... ... . . . ...
+
+W cos HsWs,1 · · · W cos HsWs,H sWs W sin HsWs,1 · · · W sin HsWs,H sWs
+
+
+
+h⊤ 
+
+> 1
+
+⊙ (cos θ1)⊤
+
+...
+
+h⊤ 
+
+> HsWs
+
+⊙ (cos θHsWs )⊤
+
+h⊤ 
+
+> 1
+
+⊙ (sin θ1)⊤
+
+...
+
+h⊤ 
+
+> HsWs
+
+⊙ (sin θHsWs )⊤
+
+
+
+=
+
+
+
+W cos  
+
+> 1,1
+
+· · · W cos  
+
+> 1,H sWs
+
+W sin  
+
+> 1,1
+
+· · · W sin 
+
+> 1,H sWs
+
+... . . . ... ... . . . ...
+
+W cos HsWs,1 · · · W cos HsWs,H sWs W sin HsWs,1 · · · W sin HsWs,H sWs
+
+
+
+h⊤
+
+> 1
+
+...
+
+h⊤
+
+> HsWs
+
+h⊤
+
+> 1
+
+...
+
+h⊤
+
+> HsWs
+
+
+
+⊙
+
+
+
+(cos θ1)⊤
+
+...
+
+(cos θHsWs )⊤
+
+(sin θ1)⊤
+
+...
+
+(sin θHsWs )⊤
+
+
+
+= W cos W sin  S(h) ⊙ cos S(θ)
+
+S(h) ⊙ sin S(θ)
+
+
+
+,
+
+where S reshapes all the o, h, and θ to the size of C′HsWs ×1, the size of both W cos and W sin is C′HsWs ×C′HsWs,and ⊙ represents element-wise multiplication. According to the deduction outlined above, the PATM mechanism in the 18 Efficient and Accurate MLP-based Siamese Tracking Wave-MLP block enables the fusion of all tokens within the feature maps using a single trainable parameter matrix. In most Siamese tracking settings, the number of tokens HsWs is relatively small and fixed (determined by the backbone’s stride [ 8]). Thus, this matrix has a size of 2C′HsWs × C′HsWs, which implies that the parameters and FLOPs of a Wave-MLP block exhibit quadratic growth as the channel number C′ increases. 
+
+A.2 Similarity Measurement of CFM 
+
+CFM (the pre-fusion module in MCAS supernet) fuses template feature maps and search feature maps in a attention-like way implicitly if deducing the formula below, 
+
+y = Mutmal( S(x), S (F t)) = Mutmal( S(r+bF s), S (F t)) =
+
+
+
+F s 
+
+> 1,1
+
++ r1 F s 
+
+> 1,2
+
++ r2 · · · F s 
+
+> 1,C
+
++ rC
+
+F s 
+
+> 2,1
+
++ r1 F s 
+
+> 2,2
+
++ r2 · · · F s 
+
+> 2,C
+
++ rC
+
+... ... . . . ...
+
+F sHsWs,1 + r1 F sHsWs,2 + r2 · · · F sHsWs,C + rC
+
+
+
+F t 
+
+> 1,1
+
+F t 
+
+> 1,2
+
+· · · F t
+
+> 1,H tWt
+
+F t 
+
+> 2,1
+
+F t 
+
+> 2,2
+
+· · · F t
+
+> 2,H tWt
+
+... ... . . . ...
+
+F tC, 1 F tC, 2 · · · F tC,H tWt
+
+ ,
+
+where C is channel number of template and search feature maps, S reshapes r+bF s and F t to the size of HsWs × C
+
+and C × HtWt, y ∈ RHsWs×HtWt . The element in row ϕ and column φ of y is, 
+
+yϕφ =
+
+> C
+
+X
+
+> ψ=1
+
+(F sϕψ + rψ )F tψφ =
+
+> C
+
+X
+
+> ψ=1
+
+F sϕψ F tψφ +
+
+> C
+
+X
+
+> ψ=1
+
+rψ F tψφ . (4) The former term of Equation (4) computes the similarity of template feature maps and search feature maps at the pixel level, which corresponds to the cross-attention mechanism of the CFA module in TransT [ 15 ]. The latter term of Equation (4) matches the features of the object region with the feature maps of the template. In this way, it enhances the representation of the object region and weakens the representation of the background region comparatively, corresponding to the self-attention mechanism of the ECA module in TransT. Since the size of y can be reshaped to Hs × Ws × C, a fully connected layer can be applied to transform y into z,whose size is Hs × Ws × C′. Here, C′ (typically 256) represents the channel number required by the subsequent Wave-MLP blocks. This transformation is mathematically represented as z = yW + b, where W ∈ RHtWt×C′
+
+and 
+
+b ∈ RHsWs×C′
+
+are trainable parameters. The element in row ϕ and column ζ of z is given by: 
+
+zϕζ =
+
+> HtWt
+
+X
+
+> φ=1
+
+yϕφ wφζ + bϕζ =
+
+> HtWt
+
+X
+
+> φ=1
+
+
+
+> C
+
+X
+
+> ψ=1
+
+F sϕψ F tψφ +
+
+> C
+
+X
+
+> ψ=1
+
+rψ F tψφ 
+
+ wφζ + bϕζ 
+
+=
+
+> C
+
+X
+
+> ψ=1
+
+F sϕψ 
+
+> HtWt
+
+X
+
+> φ=1
+
+F tψφ wφζ 
+
+!
+
++
+
+> C
+
+X
+
+> ψ=1
+
+rψ
+
+> HtWt
+
+X
+
+> φ=1
+
+F tψφ wφζ 
+
+!
+
++ bϕζ ,
+
+where F tψφ wφζ indicates that the linear transformation is applied to the template feature maps. With these trainable parameters, the similarity measurement becomes more representative and flexible, avoiding information loss from the search region. The output z of CFM contains more differentiated feature tokens, allowing for better establishment of global dependencies by the Wave-MLP to address specific challenges in tracking. 
+
+A.3 Inverse Chained Cost Estimation 
+
+Referring to [ 47 ], our computational cost (latency or FLOPs measurement) is optimized using a inverse chained cost estimation algorithm. This algorithm considers the global effects of connections on the predicted cost when adopting our MCAS-relaxed supernet. We measure the cost of each Wave-MLP block [ 18 ] separately in advance and record them in a lookup table. The cost of one basic layer is estimated as follows: 
+
+cost i,l  
+
+> CH/PH
+
+= X
+
+> o∈O c
+
+exp( αi,l o )
+
+P 
+
+> o′∈O c
+
+exp( αi,l o′ ) · cost i,l o ,
+
+where cost i,l o represents the pre-measured cost of the Wave-MLP block o ∈ O c in the basic layer l within the harmonization block Hi. cost i,l  
+
+> CH
+
+refers to the l-th basic layer in the Channel-Harmonization layers, while cost i,l 
+
+> PH
+
+denotes the l-th basic layer in the Pixel-Harmonization layers. 19 Efficient and Accurate MLP-based Siamese Tracking The chained cost estimation algorithm is executed as follows: 
+
+ˆcost i = cost i 
+
+> PH
+
++
+
+> i+m′
+
+X
+
+> j=i+1
+
+exp( βi,j )
+
+Pm′ 
+
+> j′=1
+
+exp( βi,j ′ ) · (cost ij  
+
+> CH
+
++ cost j
+
+> PH
+
+),
+
+where cost i 
+
+> PH
+
+represents the total cost of all the basic fusion layers of Hi, which can be computed as a summation, 
+
+cost i 
+
+> PH
+
+= P 
+
+> l
+
+cost i,l 
+
+> PH
+
+. The numbers of preceding/subsequent harmonization blocks connected to Hi are denoted by m
+
+and m′. cost ij  
+
+> CH
+
+denotes the cost of the basic layer in the Channel-Harmonization layers in Hj , which processes the channel number of the feature map from Hi.The overall cost of our supernet can be obtained by computing ˆcost 1 recursively, i.e., Lsea = ˆcost 1.
+
+A.4 Complexity Analysis 
+
+There is a comprehensive comparison of the computational complexity (measured in FLOPs) for the key modules in our fusion pipeline: the Coarse Fusion MLP (CFM) and Refine Fusion MLP (RFM). The results are summarized in Table 7, where we compare our designs with commonly used alternatives in visual tracking literature. Table 7: FLOPs comparison of different fusion blocks used in CFM and RFM                                                                                               
+
+> Module Block Type FLOPs Expression
+> CFM Convolution-based HsWs·HtWt·C·C′
+> Cross-attention-based 2HsWs·HtWt·C+HsWs·C·C′
+> CFM (Ours) HsWs·HtWt·(C+C′) + HtWt·C
+> RFM Standard CNN (3 ×3) 9·HzWz·C·C′
+> Depthwise CNN HzWz·(9 C+C·C′)
+> Transformer (4 heads, w/o FFN) 4·(HzWz)2·C+ 4 ·HzWz·C·C′
+> Wave-MLP (used in our method) 2·(HzWz)2·C+ 2 ·HzWz·C·C′
+> *Hs×Wsand Ht×Wtdenote spatial sizes of search feature Fsand template feature Ftrespectively, while Hz×Wzrepresents the coarsely fused feature zfrom CFM; Cand C′indicate input/output channels (constant terms like bias are omitted).
+
+CFM Module This module fuses information from both the template and search branches. We compare three designs: • Convolution-based fusion: This approach treats the template feature map as convolutional kernels and slides it over the search feature. It is efficient (lowest FLOPs), but it only enables patch-level similarity and lacks fine-grained pixel-wise alignment [14]. • Cross-attention-based fusion: This enables pixel-level interactions via full attention matrices. However, the complexity grows significantly with the product of template and search spatial dimensions, and it requires multiple projections and softmax operations. • Our CFM: We propose a lightweight alternative that uses ROI-aligned template features and linear fusion. The complexity is similar to attention-based methods, but CFM avoids softmax and multi-head operations, making it significantly faster in practice and more hardware-friendly. Its structure allows pixel-level fusion while maintaining low computational overhead. The last term HtWt · C results from pooling template features before fusion, which introduces negligible cost. 
+
+RFM Module This module operates on a single fused feature map z and enhances spatial and channel-wise representations. Four variants are considered: • Standard 3 ×3 CNN: Efficient but limited in capturing global dependencies due to small receptive fields. • Depthwise CNN: Reduces parameter count by decoupling spatial and channel mixing, but still lacks global context modeling. • Transformer: Offers global receptive field and pixel-level interaction, but incurs quadratic FLOPs due to its all-to-all attention ( O(( HW )2)), making it impractical for high-resolution feature maps. • Wave-MLP (adopted in our method): Introduced in [ 18 ], Wave-MLP achieves global token mixing via phase-aware transformations with lower complexity than Transformers. As shown in Table 7, although the first term scales quadratically with spatial size, the constant is significantly smaller than that of Transformers (2 vs. 4 heads), and the absence of softmax, multi-head projections, and attention maps makes it faster and more parallelizable on edge devices. 20 Efficient and Accurate MLP-based Siamese Tracking 
+
+## B More Details of Experiment 
+
+B.1 Overall Performance 
+
+Figure 9: Performance comparison of trackers in terms of frames per second (FPS) and Success Rate. The visualizations represent computational complexity (FLOPs) by color intensity and model size by circle size. The green line marks the real-time FPS threshold. The overall performance of SEAT_LT and SEAT_AL is presented in Figure 9, demonstrating an effective balance between accuracy and efficiency. SEAT attains top-tier accuracy on four general-purpose and three aerial tracking benchmarks, while delivering superior speed on both a GeForce RTX 3090 GPU and a Horizon X3 NPU edge chip. 
+
+B.2 Attribute Analysis of UAV Trackers 
+
+The performance of SEAT_AL was thoroughly evaluated across 12 aerial-specific attributes, as outlined by [ 55 ]. These attributes represent common challenges in aerial tracking: IV (Illumination Variation), LR (Low Resolution), FM (Fast Motion), CM (Camera Motion), SOB (Similar Object), ARC (Aspect Ratio Change), FOC (Full Occlusion), SV (Scale Variation), OV (Out-of-View), VC (Viewpoint Change), BC (Background Clutters), and POC (Partial Occlusion). 0.0 0.2 0.4 0.6  
+
+> SEAT_AL
+> TCTrack
+> HiFT
+> SiamAPN++
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL  HiFT  SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack
+> SEAT_AL  HiFT  TCTrack
+> SiamAPN++
+> SEAT_AL
+> HiFT
+> SiamAPN++
+> TCTrack UAV20L AUC
+> IV FOC LR SV FM OV CM VC SOB BC ARC POC
+
+Figure 10: Qualitative Attribute-based comparisons of trackers for NPU deployment on UAV20L. The top five trackers are displayed in a bar chart, illustrating their success scores across 12 different attributes, with each bar representing a specific attribute. 21 Efficient and Accurate MLP-based Siamese Tracking As shown in Figure 10, SEAT_AL demonstrates strong performance in handling these challenges, particularly excelling in Camera Motion (CM) and Viewpoint Change (VC) — scenarios that are especially difficult in aerial tracking due to the dynamic nature of drones. These high scores suggest that SEAT_AL is well-suited to managing the complexities of aerial footage, such as rapid camera movements and significant changes in the tracked object’s appearance. The success of SEAT_AL can be attributed to its use of MLP modules, which effectively capture global dependencies and pixel relationships essential in handling fast and complex motion. This allows SEAT_AL to maintain tracking robustness even during challenging flight maneuvers and viewpoint shifts. Overall, the attribute analysis highlights the versatility and robustness of SEAT_AL, affirming its capability as a reliable tracker for aerial tracking environments that require NPU on-board deployment. 
+
+B.3 Search Space and Derived Model 
+
+As shown in Figure 11, the complete search space for the correlation operation in the neck of our Siamese tracker comprises a fixed Coarse Fusion MLP (CFM) Module and a Refine Fusion MLP (RFM) Module, which varies across different search iterations. In our experiments, the RFM consists of three Harmonization Blocks, which are densely connected. Specifically, the first Harmonization Block only receives the feature map from the CFM as input, the second block receives both the CFM input and the output from the previous block, and this pattern continues for subsequent blocks. CFM 
+
+RFM 
+
+H1
+
+H2
+
+H3
+
+LightTrackM 
+
+Backbone 
+
+Collector 
+
+CLS 
+
+Tower 
+
+REG 
+
+Tower 
+
+CFM 
+
+RFM 
+
+H1
+
+H2
+
+H3
+
+AlexNet 
+
+Backbone 
+
+Collector 
+
+CLS 
+
+Tower 
+
+REG 
+
+Tower 
+
+> Wavemlp_k3_t4_dw
+> Wavemlp_k3_t8_dw
+> Wavemlp_k5_t4_dw
+> Wavemlp_k5_t8_dw
+> Wavemlp_k7_t4_dw
+> Wavemlp_k7_t8_dw
+> Wavemlp_k3_t4
+> Wavemlp_k3_t8
+> Wavemlp_k5_t4
+> Wavemlp_k5_t8
+> Wavemlp_k7_t4
+> Wavemlp_k7_t8
+> CH Layer
+> PH Layer
+> Skip_connection
+
+Figure 11: Visualization of the MCAS-relaxed supernet and derived architectures for resource-constrained targets (SEAT_LT for GPU, SEAT_AL for NPU). 22 Efficient and Accurate MLP-based Siamese Tracking The feature maps produced by the three Harmonization Blocks are unified to a consistent number of channels, specifically 256, 320, and 384 in each block, respectively. The task of unifying the channels is handled by the Channel Harmonization (CH) layers within each Harmonization Block, while the Pixel Harmonization (PH) layers continue to enhance and fuse the features at the pixel level. Each CH and PH layer is a Basic Layer, which is composed of different configurations of Wave-MLP blocks. For example, a configuration labeled as WaveMLP_k5_t4_dw specifies a Wave-MLP block with a kernel size of 5, an MLP expansion ratio of 4, and depth-wise convolution. The outputs of these blocks are combined point-wise and passed to subsequent layers. In the end, each Basic Layer selects only one Wave-MLP block for the final architecture. As shown in Figure 3 of the main text, we configured the supernet, composed of this search space, with different backbone architectures. After the search phase, we derived two models from the supernet: SEAT_LT for resource-constrained GPU usage, and SEAT_AL for resource-limited NPU platforms. The specific paths used by these two MCAS-based trackers in the supernet are highlighted in red in Figure 11. 
+
+B.4 Ablation of NAS Approach 
+
+To demonstrate the superiority of our differentiable neural architecture search (DNAS) method based on the Harmoni-relaxation strategy, we compare it with evolutionary neural architecture search (ENAS), which has been employed in [ 16 ] to search for lightweight backbones in Siamese tracking. Specifically, we maintain the Wave-MLP blocks in the search space but use an evolutionary algorithm to continuously search for the optimal block configurations and combinations. 
+
+Figure 12: Comparison of the search processes between differentiable neural architecture search (DNAS) and evolution-ary neural architecture search (ENAS). The x-axis denotes the number of search iterations, while the y-axis represents the Intersection over Union (IOU) metric on the validation set (left) and the total chained latency cost (right). As illustrated in Figure 12, our algorithm, which relaxes the search space into a continuous space, achieves a more stable search process with smaller variance. This continuous space includes more detailed candidate possibilities, resulting in higher accuracy on the validation set. In contrast, the evolutionary algorithm introduces mutations, leading to greater uncertainty in the search process and consequently larger variance. The discrete space search of ENAS results in slightly lower accuracy on the validation set. However, it is worth noting that the search time overhead of DNAS is significantly higher than that of ENAS. 23
