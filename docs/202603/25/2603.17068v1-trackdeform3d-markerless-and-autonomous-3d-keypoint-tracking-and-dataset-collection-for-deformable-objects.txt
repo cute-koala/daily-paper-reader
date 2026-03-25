@@ -1,0 +1,296 @@
+Title: TrackDeform3D: Markerless and Autonomous 3D Keypoint Tracking and Dataset Collection for Deformable Objects
+
+URL Source: https://arxiv.org/pdf/2603.17068v1
+
+Published Time: Thu, 19 Mar 2026 00:10:03 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# TrackDeform3D: Markerless and Autonomous 3D Keypoint Tracking and Dataset Collection for Deformable Objects 
+
+Yeheng Zong 1∗, Yizhou Chen 1∗, Alexander Bowler 1, Chia-Tung Yang 1, Ram Vasudevan 1
+
+Abstract — Structured 3D representations such as keypoints and meshes offer compact, expressive descriptions of de-formable objects, jointly capturing geometric and topological information useful for downstream tasks such as dynamics modeling and motion planning. However, robustly extracting such representations remains challenging, as current perception methods struggle to handle complex deformations. Moreover, large-scale 3D data collection remains a bottleneck: existing approaches either require prohibitive data collection efforts, such as labor-intensive annotation or expensive motion capture setups, or rely on simplifying assumptions that break down in unstructured environments. As a result, large-scale 3D datasets and benchmarks for deformable objects remain scarce. To address these challenges, this paper presents an affordable and autonomous framework for collecting 3D datasets of deformable objects using only RGB-D cameras. The proposed method identifies 3D keypoints and robustly tracks their trajectories, incorporating motion consistency constraints to produce tempo-rally smooth and geometrically coherent data. TrackDeform3D is evaluated against several state-of-the-art tracking methods across diverse object categories and demonstrates consistent improvements in both geometric and tracking accuracy. Using this framework, this paper presents a high-quality, large-scale dataset consisting of 6 deformable objects, totaling 110 minutes of trajectory data. 
+
+I. I NTRODUCTION 
+
+Deformable objects such as wire harnesses or fabrics are ubiquitous in homes and factories, yet remain challenging for robots to manipulate. [1], [2]. Because these objects possess infinitely many degrees of freedom, directly model-ing their full state is intractable. Researchers therefore often approximate their state with structured 3D representations such as keypoints or meshes, which provide a compact yet informative description of their geometry and topology [3]– [12]. Large-scale, high-quality keypoint and mesh trajectory datasets of deformable objects could significantly advance robotic manipulation. Scalable data collection demands platforms that are easy to deploy, robust in operation, and require minimal hu-man involvement. High data quality further requires correct topology as well as consistent indexing , meaning the same keypoint index always refers to the same physical location on the object across all frames and sessions. High data quality also demands two forms of geometric consistency: 
+
+Initialization consistency requires that keypoints are placed at the same locations across different collection sessions, mini-mizing misalignment across data collection sessions. Trajec- 
+
+> ∗These authors contributed equally.
+> 1The authors are with the Department of Robotics at the University of Michigan, 2505 Hayward Drive, Ann Arbor, USA <yizhouch,ramv
+> >@umich.edu 1D Deformable Object Tracking 3D Dataset Tracking 3D Dataset 2D Deformable Object
+> Fig. 1: This paper presents TrackDeform3D, a system for keypoint initial-ization, tracking, and dataset generation for 1D and 2D deformable objects during dual-arm robotic manipulation. For each object category, the figure illustrates tracked keypoint trajectories during manipulation and the resulting 3D trajectory data. The 3D trajectory is visualized from a perspective that is orthogonal to the visualized RGB camera frame. Color encodes spatial position across keypoints, while transparency encodes temporal progression, with earlier frames appearing more transparent and later frames more opaque.
+
+tory consistency requires that distances between neighboring keypoints remain stable throughout a collection episode, preventing oscillating noise and sudden jumps that would corrupt downstream tasks such as computing stretching or bending forces in physics simulation [13]. Satisfying all of these requirements simultaneously while collecting data at scale remains an open challenge. Among existing approaches, marker-assisted motion cap-ture [4], [5], [11], [12] and volumetric reconstruction sys-tems [14], [15] can provide accurate 3D trajectories and meshes. However, marker-assisted motion capture requires expensive infrastructure, along with significant human ef-fort for pre- and post-processing. Volumetric reconstruction methods, meanwhile, are designed for 3D deformable objects such as foam or plasticine and do not generalize to 1D or 2D objects such as wires and cloth [14], [15]. Point-cloud-based tracking methods [6]–[10] offer a lightweight alternative, operating with a single RGB-D camera. However, these methods depend on accurate object segmentation, often relying on simple color filters, and most address neither initialization consistency nor trajectory consistency. To address these challenges, we propose TrackDeform3D ,a data collection pipeline for robust 3D keypoint track-ing of deformable objects. Our contributions are two-fold: 
+
+> arXiv:2603.17068v1 [cs.CV] 17 Mar 2026
+
+First, an affordable tracking system that enforces geometric consistency to robustly initialize and track 3D keypoints across multiple collection sessions. Second, a large-scale, high-quality 3D dataset of 1D and 2D deformable objects comprising X objects and totaling X hours of trajectory data for training and benchmarking deformable object models. II. R ELATED WORK 
+
+Prior work on deformable object tracking and data collec-tion can be broadly categorized into marker-assisted tracking, RGB-D based tracking, and learning-based vision methods, each with limitations that motivate our approach. 
+
+A. Marker-assisted Tracking Methods 
+
+MoCap systems [4], [11], [12] and invisible-marker sys-tems [5] can achieve submillimeter accuracy at high temporal resolution, and naturally maintain geometric consistency through physically attached markers. However, these systems are sensitive to lighting variations and sensor noise, often resulting in missing or corrupted observations. Recorded data also frequently require manual reindexing to account for changes in object topology and orientation, leading to labor-intensive post-processing. Finally, these methods rely on costly multi-camera setups, limiting their scalability and deployability in unstructured environments. 
+
+B. RGB-D Based Methods 
+
+RGB-D based approaches offer a simpler and more afford-able alternative for tracking deformable objects. Volumetric reconstruction pipelines [14], [15] reconstruct 3D meshes of deformable objects but do not generalize to flexible 1D and 2D objects such as wires and cloth undergoing diverse and dynamic motions. Within the robotics community, several works [6]–[10] have explored point-cloud-based deformable object tracking. While these methods ensure that extracted keypoints remain on the object surface, most do not en-force trajectory consistency, and none address initialization consistency. The exception is [9], which enforces trajectory consistency, but as we show in our experiments, it loses track during dynamic manipulation. Beyond consistency, these methods assume deformable objects can be easily segmented by color or background contrast, requiring carefully con-trolled setups, and rely on predefined object topologies rather than inferring them automatically. The computer vision community has made significant progress in segmentation [16]–[18], visual tracking, and 3D reconstruction, yet directly applying these tools to de-formable object data collection presents its own challenges. Segmentation approaches [16]–[18] can isolate deformable objects and lift them into 3D using depth information, but require manual prompting in cluttered scenes and are computationally expensive, taking up to 3 seconds per frame [18]. Keypoint-tracking methods [3], [19]–[21] can track deformable objects in real time but require manual keypoint selection, which is labor-intensive and introduces initialization inconsistency across sequences. Furthermore, both 2D and 3D tracking methods [3], [19]–[21] frequently lose track when object and background colors are similar. These limitations propagate as noise in downstream tasks such as neural network training or system identification, and none of these methods address the geometric and topological consistency required for scalable, autonomous data collec-tion. 
+
+C. Deformable Object Dataset 
+
+Few publicly available datasets exist for deformable object manipulation [4], [5], [14]. PokeFlex focuses exclusively on volumetric objects with simple poking interactions [14]. [4] is limited to cloth with a small number of motion sequences. [5] offers the greatest diversity, but covers only four objects totaling approximately 20 minutes of data. Using TrackDe-form3D, we construct a dataset consisting of 6 deformable objects and 110 minutes of trajectory data, addressing the scale and diversity gaps left by prior work. III. M ETHODOLOGY 
+
+This section presents TrackDeform3D, our pipeline for robust 3D keypoint tracking of deformable objects. We begin by describing the experimental setup and problem formulation, then introduce a unified optimization framework that governs both keypoint initialization and tracking. The initialization stage segments the deformable object and com-putes an initial keypoint configuration. The tracking stage then propagates these keypoints throughout the manipula-tion sequence, producing smooth and temporally consistent trajectories. An overview of the pipeline is shown in Fig. 2. 
+
+A. Setup and Assumptions 
+
+A single RGB-D camera is positioned in front of the data collection station, where two robotic arms grasp and manipulate the deformable object. The camera is calibrated with respect to the world frame via hand-eye calibration, and all quantities discussed hereafter are expressed in this frame. The camera records a depth video sequence {Dt}Tt=0 ∈
+
+R(T +1) ×H×W ×1 from time 0 to T , where H and W denote the image height and width, respectively. The goal is to extract a sequence of 3D keypoints {Xt}Tt=1 ∈ RT ×N ×3
+
+from the recorded video, where N is the number of keypoints on the object and each keypoint is represented by its 3D coordinates (x, y, z ) in the world frame. We make three assumptions. First, the deformable object remains unoccluded throughout manipulation, as data collec-tion requires direct observation of the ground truth object state [4], [5], [11], [12], [14], [15]. Second, two robotic arms are available and provide control inputs {ut}Tt=0 ∈
+
+R(T +1) ×12 for downstream training. This assumption can be relaxed for human demonstrations by substituting hand pose estimates in place of robot arm inputs [22], [23]. Third, the camera intrinsic and extrinsic calibration matrices are known, enabling depth images {Dt}Tt=0 to be lifted to point clouds 
+
+{Pt}Tt=0 ∈ R(T +1) ×H×W ×3.Input: RGB-D Video Preprocessing Keypoints Initialization Point Cloud Segmentation Object Classification Anchor Points Detection Initialization Warmstart Topology Identification Initialized Keypoints Initialization Warmstart Anchor Points Detection Tracking Solve Eq.1 Solve Eq.1 Keypoints Filter Final Frame? Yes No Fig. 2: Overview of TrackDeform3D. Given an RGB-D video, TrackDeform3D first lifts depth images to point clouds and segments the deformable object via point cloud differencing (§III-C). From the first segmented frame, the object type is classified and 3D keypoints are initialized by detecting anchor points, generating warm-start positions, inferring object topology, and solving a constrained geometric optimization (§III-B, §III-D). During tracking, anchor points are re-detected at each frame and the same optimization is solved recursively, warm-started from the previous solution. A temporal moving-average filter is applied to suppress high-frequency jitter, producing smooth and temporally consistent 3D keypoint trajectories (§III-E). 
+
+B. Problem Formulation 
+
+At each time step t, we seek to compute keypoint positions 
+
+Xt ∈ RN ×3 distributed along the deformable object. Because the camera observes the full scene, we first segment the object from the background to obtain a point cloud Pseg t that constrains keypoints to lie on the object surface. A natural approach is then to minimize an energy that encourages uniform spacing among neighboring keypoints until an equi-librium is reached. However, without boundary constraints, such equilibria are sensitive to initialization and can vary across collection sessions, violating initialization consistency. To address this, we introduce a set of anchor points that serve a dual purpose: 1) they correspond to geometrically significant features relevant to object dynamics (e.g., leaf nodes and junctions for 1D objects, or contour points for 2D objects), which are important landmarks to capture during data collection; and 2) they remain fixed during optimization, constraining the solution space and stabilizing the keypoint configuration across sessions. Given the point cloud segmentation, the topology of an object, and a set of anchor points, we formulate keypoint computation as the following constrained optimization prob-lem: 
+
+arg min 
+
+> Xt
+
+X
+
+> (i,j )∈E
+
+ ∥xt,i − xt,j ∥ − dij 
+
+2
+
+s.t. xt,i ∈ Pseg t ,
+
+xt,k = at,k , ∀ k ∈ A ,
+
+(1) where xt,i denotes the position of the i-th keypoint at time 
+
+t, E is the set of edges defined by the object topology, and 
+
+dij is the target edge length between adjacent keypoints 
+
+i and j. The anchor set A ⊆ {1, . . . , N } indexes the geometrically significant keypoints, each fixed to a detected position at,k ∈ R3. The edge-length term encourages con-sistent spacing between adjacent keypoints, the point cloud constraint ensures fidelity to the observed geometry, and the anchor constraints regularize the solution so that it remains well-posed and repeatable across sessions. Solving (1) requires five components: 1) segmentation of the deformable object point cloud Pseg t , 2) anchor positions 
+
+at,k and the anchor set A, 3) a topology E defining con-nectivity among all N keypoints, 4) warm-start positions for the non-anchor keypoints to improve convergence, and 5) a stable and efficient solver. We use this formulation for both initialization ( t=1 , Section III-D) and tracking ( t ≥ 2,Section III-E), and describe how each component is obtained in the sections that follow. 
+
+C. Deformable Object Segmentation 
+
+The first step is to segment the deformable object from the background. In unstructured environments, deformable objects often occupy only a small portion of the scene, mak-ing robust unsupervised segmentation challenging. While segmentation networks such as SAM [16]–[18] can address this, they require manual prompts to identify the region of interest, which becomes labor-intensive at the scale of large dataset collection. We therefore propose an autonomous segmentation procedure based on point cloud differencing. We begin by extracting a point cloud P0 from the initial depth image D0, then command the robotic arms to move to a different configuration and capture a second point cloud 
+
+P1. Computing the difference P1−P0 filters out the majority of static background points, leaving three components: robot arm points, deformable object points from both frames, and residual depth sensor noise. Because the deformable object appears in both frames at different configurations, the differencing yields positive depth values for the object at t=1 and negative depth values at t=0 , allowing us to isolate the object point cloud P1. To remove robot arm points, we reconstruct the arms in simulation using the known joint configurations and camera calibration, and filter out points within proximity of the simulated arm point cloud. Finally, DBSCAN [24] is applied to cluster the remaining points. Because the deformable object constitutes the largest coherent cluster, we select the cluster with the most points, yielding the segmented point cloud Pseg  
+
+> 1
+
+for the subsequent stage. 
+
+D. Keypoint Initialization 
+
+Given the segmented point cloud Pseg  
+
+> 1
+
+, we compute the initial keypoints X1 ∈ RN ×3 by solving (1) at t=1 . The components of (1) are determined separately for 1D and 2D deformable objects. We begin by classifying the object type, then determine the anchor positions, warm-start positions, and topology for each case. The solver is shared across both topologies. 
+
+1) Object Classification : To minimize human involve-ment, we automatically classify whether the deformable object is 1D or 2D by evaluating local geometry on Pseg  
+
+> 1
+
+.We randomly sample seed points p ∈ Pseg  
+
+> 1
+
+and collect their neighborhoods N (p) within radius r. Let λ1 ≥ λ2 ≥ λ3
+
+be the eigenvalues of the covariance matrix of N (p). A 1D structure is locally line-like, yielding λ1 ≫ λ2 ≈ λ3,whereas a 2D surface is locally planar, yielding λ1 ≈ λ2 ≫
+
+λ3 [25]. We compute the ratios λ2/λ 1 and λ3/λ 2 over the sampled seeds and classify the object type using a fixed threshold. 
+
+2) 1D Objects : Anchor Point Detection. For 1D objects such as Deformable Linear Objects (DLOs), anchor points correspond to leaf nodes and junction points. Leaf nodes mark where the object terminates, which is essential for accurately representing its geometry. For objects with more complex topology, such as Branched DLOs (BDLOs), junc-tion points are additionally detected to capture the branching structure and provide boundaries for distributing keypoints along each branch. An illustration of junction points can be found in Fig. 3. To detect these anchor points, we project Pseg  
+
+> 1
+
+onto the image plane to obtain a 2D binary mask, then apply skeletonization [26] to extract the medial axis. A Minimum Spanning Tree (MST) is computed over the skeleton pixels using Euclidean distances as edge weights. For each skeleton pixel, we compute its degree s, defined as the number of incident edges in the MST, and classify it as a leaf node if 
+
+s = 1 or a junction if s ≥ 3. The detected points are then lifted back to 3D using the depth image, yielding the anchor positions {ak}k∈A .
+
+Warm Start. Non-anchor keypoints are initialized using Far-thest Point Sampling (FPS) [27] on Pseg  
+
+> 1
+
+, seeded from the anchor points {ak}k∈A . FPS greedily selects points that maximize the minimum distance to all previously selected points, and starting from the anchors, selects the N − Na
+
+remaining keypoints from Pseg  
+
+> 1
+
+to form the warm start for (1). DLO BDLO Fabric T-shirt 
+
+> Fig. 3: An illustration of anchor point placement on different deformable object categories: DLO, BDLO, fabric, and T-shirt.
+
+Topology. The topology of a 1D object is a chain, or a tree of chains for BDLOs. Keypoints are ordered by finding the chain sequence that minimizes the total sum of squared edge lengths, and E is defined as the edges connecting consecutive keypoints in this ordering. 
+
+3) 2D Objects (Cloth-like) : Anchor Point Detection. For cloth-like objects, anchor points are distributed along the object contour, which captures the overall geometric shape of the cloth. Dense contour points are first extracted from the segmented point cloud using OpenCV [28], then FPS is applied to distribute anchor points evenly along the contour, yielding {ak}k∈A .
+
+Warm Start and Topology. Consistent initialization and topol-ogy recovery for 2D objects are more challenging than in the 1D case due to increased geometric complexity and addi-tional degrees of freedom. Prior work addresses this through template matching against pre-defined cloth meshes [29]. Here, we exploit the structure of rectangular fabrics, which can be discretized into a regular grid defined by the ex-tracted contours. Interior keypoints are generated via bilinear interpolation and indexed according to the resulting grid topology. This approach generalizes to non-rectangular 2D objects by replacing the regular grid with a topology-aware mesh defined by the object boundary 
+
+4) Solve (1) : For notational brevity, we omit the time subscript t in the following. We solve (1) using a Gauss-Seidel-style iterative projection procedure summarized in Algorithm 1. At each iteration, the edge length projec-tion enforces target distances dij edge by edge, the point cloud projection maps non-anchor keypoints to their nearest neighbor on Pseg , and the anchor projection resets anchor positions to their fixed values ak. Together, these projections produce a consistent keypoint configuration. The initial con-figuration X1 is obtained by applying Algorithm 1 to the first segmented point cloud frame. 
+
+E. Tracking 
+
+Given the initialized keypoints X1, we track them across subsequent frames t = 2 , . . . , T by solving (1) at each time Algorithm 1 Solve (1) via Gauss-Seidel Method 
+
+Require: Pseg , E, A, {ak}k∈A , {dij }(i,j )∈E , # of iterations 
+
+M 
+
+> 1:
+
+Initialize X; set xk ← ak, ∀k ∈ A  
+
+> 2:
+
+for m = 1 to M do  
+
+> 3:
+
+for (i, j ) ∈ E do  
+
+> 4:
+
+Project xi, xj s.t. ∥xi−xj ∥=dij as in [30, (8)]  
+
+> 5:
+
+end for  
+
+> 6:
+
+xl ← arg min p∈Pseg ∥xl − p∥, ∀l / ∈ A  
+
+> 7:
+
+xk ← ak, ∀k ∈ A  
+
+> 8:
+
+end for  
+
+> 9:
+
+return X
+
+Algorithm 2 Keypoint Tracking 
+
+Require: Initial keypoints X1, segmented point clouds 
+
+{Pseg t }Tt=2 , topology E, edge lengths {dij }(i,j )∈E  
+
+> 1:
+
+for t = 2 to T do  
+
+> 2:
+
+{at,k }k∈A ← Detect Anchors (Pseg t ) 
+
+> 3:
+
+Xt ← Solve (1) with warm start Xt−1 
+
+> 4:
+
+end for  
+
+> 5:
+
+{Xt}Tt=1 ← Temporal Average ({Xt}Tt=1 ) 
+
+> 6:
+
+return {Xt}Tt=1 
+
+step. The topology E is fixed after initialization, while anchor positions {at,k }k∈A are re-detected independently at each frame using the procedure described in Section III-D. At time t, the optimization is warm-started from Xt−1 and solved against the segmented point cloud Pseg t , enforcing edge-length and point cloud consistency at each step. As a post-processing step, we apply a temporal moving average filter to reduce high-frequency jitter. The position of each keypoint is replaced by the average of positions within a local symmetric temporal window, yielding smooth and temporally consistent trajectories while preserving overall motion. The full tracking procedure is summarized in Al-gorithm 2. IV. E XPERIMENT 
+
+This section presents experimental validation of TrackDe-form3D as a robust and scalable pipeline for deformable object data collection. We evaluate tracking performance against baseline methods, ablate the contribution of each component in (1), and compare our collected dataset against existing benchmarks. 
+
+A. Experiment Details 1) Hardware Setup: The data collection station consists of two Franka Emika Panda robotic arms and an RGB-D camera. The two arms grasp and manipulate deformable objects within a shared workspace, while the camera captures synchronized color and depth streams at 30 Hz at a resolution of 720 × 1080 . The camera is mounted in front of the workspace and calibrated with respect to both robot base frames via hand-eye calibration. An overview of the setup is shown in the upper portion of Fig. 4. RGB-D Camera Panda Arm1 Panda Arm 2 Deformable Object         
+
+> Rope Brached Rope Fabric Wire Wire Harness T-shirt
+> Fig. 4: Top. Experimental setup. Bottom. Constructed deformable objects..
+
+2) Dataset Collection Preparation: We assemble a di-verse dataset spanning both 1D and 2D deformable objects. The 1D category includes DLOs such as rope and wire, as well as BDLOs such as branched rope and wire harnesses. The 2D category includes rectangular fabric and T-shirt. Examples are shown in the lower portion of Fig. 4. Within each category, objects are varied along several dimensions to ensure diversity and evaluate the robustness of TrackDeform3D. Stiffness : 1D objects range from flexible rope to relatively stiff wire with plasticity. Appearance : ob-jects span uniform color (wire, wire harness, branched rope), patterned color (rope, fabric), and random patterns (cloth). 
+
+Contact : sequences include both contact and non-contact configurations, where the object contacts the workstation table. Upon release, these will be split into separate subsets, with the workstation table mesh provided for contact-aware benchmarking. All data is collected using pre-recorded trajectories exe-cuted by the two Panda arms, which also provide grasp input information for downstream tasks. Motion speed is varied by commanding the robot to reach each waypoint in 4 s (slow), 2 s (medium), or 1–1.5 s (fast). In total, we collect 20 minutes of motion per DLO, 20 minutes per BDLO, and 15 minutes per cloth object, segmented into 5 s intervals for a total of 1,320 motion sequences. 
+
+3) Metrics: We evaluate initialization consistency and tracking quality using three metrics. Absolute edge length error (Abs.), reported as RMSE in millimeters, measures the deviation between distances of neighboring keypoints and their target edge lengths, reflecting how well the keypoint 2
+
+t = 0s t = 10s t = 0s t = 10s t = 0s t = 10s t = 0s t = 10s TrackDeform3D (Ours) Spatial Tracker CDCPD2 CoTracker3                                                    
+
+> 3Fig. 5: Upper: Qualitative comparison of keypoint tracking results between TrackDeform3D and all baseline methods on a cloth sequence at the start and end of manipulation. While CDCPD2, the best-performing baseline, maintains track of the deformable object, it exhibits inconsistent edge lengths and distorted mesh topology over time. SpatialTracker and CoTracker both show significant keypoint drift by the end of the sequence. Bottom: Edge length RMSE and Chamfer distance over time for all methods.
+> Method Rope Branched Rope Fabric
+> Abs. (mm) E<5(%) CD (mm) F<10 (%) Abs. (mm) E<5(%) CD (mm) F<10 (%) Abs. (mm) E<5(%) CD (mm) F<10 (%) CoTracker3 [19] 42.31 1.0 8.54 74.9 20.35 24.7 42.87 36.4 25.09 61.3 20.60 13.2 CDCPD2 [9] 3.89 25.3 10.73 63.7 5.08 42.8 8.02 80.3 13.28 20.4 13.97 47.7 SpatialTrackerV2 [21] 40.21 53.6 121.15 0.3 182.9 20.8 253.8 0.5 22.42 12.2 88.58 8.74
+> TrackDeform3D (Ours) 3.19 63.3 8.04 74.1 3.83 87.8 6.70 87.3 2.99 97.6 7.52 77.8
+> TABLE I: Baseline comparison. Abs. denotes absolute edge length error. CD denotes Chamfer distance. E <5 denotes the percentage of frames with Abs. below 5 mm. F <10 denotes the fraction of frames with CD below 10 mm over the entire trajectory.
+
+layout preserves the intended spacing. Chamfer distance (CD), computed as the mean L2 distance between each predicted keypoint and its nearest neighbor on the segmented point cloud, reported in millimeters. F-score complements these by jointly measuring precision and recall of predicted keypoints with respect to the observed point cloud, capturing how well keypoints both align with and cover the object geometry. 
+
+4) Tracking Baseline Comparison: We compare TrackDe-form3D against three baselines under the same initialization. CoTracker3 [19] is a video-based point tracker that jointly tracks multiple points by exploiting long-range temporal cor-relations; its 2D tracking points are lifted to 3D using depth information. CDCPD2 [9] is a point-cloud-based deformable object tracker that enforces geometric constraints to handle partial occlusions. SpatialTrackerV2 [21] is a recent 3D point tracking method that lifts 2D video tracking into 3D space. Each method is applied to recorded RGB-D sequences comprising 1140 s of rope, 1220 s of branched rope, and 400 s of cloth. Quantitative results are reported in Table I, and a qualitative comparison with per-frame error plots is shown in Fig. 5. The vision-based trackers [3], [21] commonly fail when object and background colors are similar. CDCPD2 loses track during dynamic manipulation and inconsistently pre-serves edge lengths. Additional visualizations are provided in the supplementary video. 
+
+B. Ablation Studies 1) Tracking Ablation: To evaluate the contribution of each constraint during tracking, we ablate the anchor and edge length components from (1) across all three object categories, with results reported in Table II. For DLOs, the anchor constraint has no effect because the grasped endpoints Init. Case 1 Init. Case 2 Init. Case 3 Init. Case 4 Fig. 6: Demonstration of keypoint initialization consistency across four data collection sessions, showing that the full formulation produces stable and repeatable keypoint layouts. 
+
+already coincide with the end effector inputs, yielding results identical to the full formulation. For BDLOs and cloth, re-moving the anchor constraint ( w/o anchor ) causes keypoints to drift from their intended positions due to the increased degrees of freedom, resulting in higher absolute edge length error and lower E <5 scores. Removing the edge length term (w/o repulsion ) leads to a substantial increase in absolute edge length error across all categories, as keypoints no longer maintain consistent spacing. We omit the ablation on the point cloud projection step, as removing it would yield static keypoints that do not follow the observed geometry. The full formulation consistently achieves the best performance across all metrics and object types, confirming that both constraints are essential for accurate and stable tracking. 
+
+2) Initialization Ablation: To verify the importance of each component in (1) for initialization, we ablate the anchor, edge length, and point cloud projection components on two representative object types: branched rope and fabric. For each variant, initialization is re-run across multiple sessions and absolute edge length error is reported in Table III. The effects of removing the anchor and edge length constraints are consistent with those observed in the tracking ablation. Removing point cloud projection causes keypoints to deviate from the observed object surface, resulting in geometrically invalid configurations. The full formulation achieves the most stable and geometrically consistent initialization across ses-sions. A visualization of initialization results across sessions is shown in Fig. 6. 
+
+C. Dataset Comparison 
+
+We compare our dataset against two existing benchmarks: DOT [5], a large public dataset collected with textureless markers, and a motion capture dataset referred to as Mo-cap [4]. As shown in Table IV, our dataset provides broader object category coverage and significantly more motion sequences and total recording time. Notably, it is the only dataset that includes branched deformable objects, which are important for applications such as wire harness modeling. Mocap [4] offers a richer variety of 2D object motion types and manipulation strategies, which we consider a valuable Trajectory 1 Trajectory 2 BDLO Fabric 
+
+> Fig. 7: Example 3D trajectory visualizations from the collected dataset for a BDLO and cloth object. Color encodes spatial position across keypoints, while transparency encodes temporal progression, with earlier frames ap-pearing more transparent and later frames more opaque. Each trajectory preserves the keypoint topology throughout the manipulation sequence.
+
+complement to our work. In future iterations, we plan to expand the dataset with more diverse manipulation patterns and object categories. The dataset will be released with 3D trajectories annotated with keypoint indexing and topology information. Robot arm motion inputs will be accompanied by the indices of the grasped keypoints on the deformable object. The dataset will be split into contact and non-contact subsets, with the work-station table mesh provided for contact-aware benchmarking. A visualization of example trajectories is shown in Fig. 7. V. C ONCLUSION 
+
+We presented TrackDeform3D, a pipeline for robust 3D keypoint tracking of deformable objects during robotic ma-nipulation. By formulating both initialization and tracking as a unified constrained optimization, TrackDeform3D enforces anchor, edge length, and point cloud projection constraints to produce consistent and geometrically accurate keypoint trajectories across diverse object categories including DLOs, BDLOs, and cloth. We also introduced a large-scale RGB-D dataset comprising over 1,300 motion sequences spanning multiple object types, stiffness levels, and manipulation speeds, annotated with 3D keypoint trajectories and topology information, which will be publicly released to support future research. Experimental results demonstrate that TrackDe-form3D outperforms existing baselines across all evaluated metrics and object categories, and ablation studies confirm the contribution of each optimization component. The current approach assumes rectangular fabric geometry for cloth tracking and a single-camera setup. Future work will focus on extending the framework to objects with more complex or unknown topologies, incorporating multi-camera setups to reduce occlusion, and expanding the dataset with more diverse manipulation patterns and object categories. VI. A CKNOWLEDGMENT 
+
+This work is supported by Ford Motor Company. Method Rope Branched Rope Fabric 
+
+Abs. (mm) E<5(%) CD (mm) F<10 (%) Abs. (mm) E<5(%) CD (mm) F<10 (%) Abs. (mm) E<5(%) CD (mm) F<10 (%) w/o Anchor 3.19 63.3 8.04 74.1 9.56 62.7 15.00 60.0 6.44 56.7 22.72 58.0 w/o Repulsion 74.34 6.8 14.49 59.9 52.35 9.9 8.43 77.6 48.21 70.0 10.46 65.4 w/o Projection 1.49 96.0 120.83 3.9 3.51 91.6 27.44 24.69 2.81 99.6 17.11 44.5 
+
+TrackDeform3D (Ours) 3.19 63.3 8.04 74.1 3.83 87.8 6.70 87.3 2.99 97.6 7.52 77.8 
+
+TABLE II: Ablation study. Metrics are defined in Table I. 
+
+Variant Branched Rope Fabric 
+
+Abs. (mm) CD (mm) F<10 (%) Abs. (mm) CD (mm) F<10 (%) w/o Anchor 2.45 3.16 95.3 3.89 9.94 61.9 w/o Repulsion 15.08 3.08 96.4 22.28 5.50 86.2 
+
+w/o Projection 1.81 4.58 91.2 2.87 8.70 66.2 
+
+Full 1.62 3.06 96.1 2.58 6.66 79.0 TABLE III: Initialization consistency ablation. Metrics are defined in Table I. 
+
+DOT [5] Mocap [4] Ours 
+
+DLO objects 1 0 2BDLO objects 0 0 22D objects 2 4 2Total time 20 min 9.8 min 110 min Motion sequences 220 120 1320 TABLE IV: Dataset comparison with existing deformable object tracking benchmarks. 
+
+REFERENCES [1] J. Zhu, A. Cherubini, C. Dune, D. Navarro-Alarcon, F. Alambeigi, D. Berenson, F. Ficuciello, K. Harada, J. Kober, X. Li, J. Pan, W. Yuan, and M. Gienger, “Challenges and outlook in robotic manipulation of deformable objects,” 2021. [2] F. Gu, Y. Zhou, Z. Wang, S. Jiang, and B. He, “A survey on robotic manipulation of deformable objects: Recent advances, open challenges and new frontiers,” 2023. [3] N. Karaev, I. Rocco, B. Graham, N. Neverova, A. Vedaldi, and C. Rupprecht, “Cotracker: It is better to track together,” 2024. [4] F. Coltraro, J. Borr` as, M. Alberich-Carrami˜ nana, and C. Torras, “Tracking cloth deformation: A novel dataset for closing the sim-to-real gap for robotic cloth manipulation learning,” The International Journal of Robotics Research , vol. 44, no. 9, pp. 1431–1442, 2025. [5] X. Li, Y. Guo, Y. Tu, Y. Ji, Y. Liu, J. Ye, and C. Zheng, “Textureless deformable object tracking with invisible markers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 47, no. 9, pp. 7243– 7254, 2025. [6] J. Schulman, A. Lee, J. Ho, and P. Abbeel, “Tracking deformable objects with point clouds,” in 2013 IEEE International Conference on Robotics and Automation , pp. 1130–1137, 2013. [7] C. Chi and D. Berenson, “Occlusion-robust deformable object tracking without physics simulation,” in 2019 IEEE/RSJ International Confer-ence on Intelligent Robots and Systems (IROS) , p. 6443–6450, IEEE, Nov. 2019. [8] T. Tang and M. Tomizuka, “Track deformable objects from point clouds with structure preserved registration,” The International Journal of Robotics Research , vol. 41, no. 6, pp. 599–614, 2022. [9] Y. Wang, D. McConachie, and D. Berenson, “Tracking partially-occluded deformable objects while enforcing geometric constraints,” 2020. [10] T. Tang, Y. Fan, H.-C. Lin, and M. Tomizuka, “State estimation for deformable objects by point registration and dynamic simulation,” in 
+
+2017 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 2427–2433, 2017. [11] Y. Chen, Y. Zhang, Z. Brei, T. Zhang, Y. Chen, J. Wu, and R. Va-sudevan, “Differentiable discrete elastic rods for real-time modeling of deformable linear objects,” arXiv preprint arXiv:2406.05931 , 2024. [12] Y. Chen, X. Wu, Y. Zong, Y. Chen, A. Li, B. Zhang, and R. Vasudevan, “Deft: Differentiable branched discrete elastic rods for modeling furcated dlos in real-time,” arXiv preprint arXiv:2502.15037 , 2025. [13] D. Baraff and A. P. Witkin, “Large steps in cloth simulation,” Pro-ceedings of the 25th annual conference on Computer graphics and interactive techniques , 1998. [14] J. Obrist, M. Zamora, H. Zheng, R. Hinchet, F. Ozdemir, J. Zarate, R. K. Katzschmann, and S. Coros, “Pokeflex: A real-world dataset of volumetric deformable objects for robotics,” 2025. [15] Z. Zhang, X. Chu, Y. Tang, and K. W. S. Au, “Dofs: A real-world 3d deformable object dataset with full spatial information for dynamics model learning,” 2024. [16] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, P. Doll´ ar, and R. Gir-shick, “Segment anything,” 2023. [17] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. R¨ adle, C. Rolland, L. Gustafson, et al. , “Sam 2: Segment anything in images and videos,” arXiv preprint arXiv:2408.00714 , 2024. [18] S. Zhaole, H. Zhou, L. Nanbo, L. Chen, J. Zhu, and R. B. Fisher, “A robust deformable linear object perception pipeline in 3d: From seg-mentation to reconstruction,” IEEE Robotics and Automation Letters ,vol. 9, no. 1, pp. 843–850, 2023. [19] N. Karaev, I. Makarov, J. Wang, N. Neverova, A. Vedaldi, and C. Rupprecht, “Cotracker3: Simpler and better point tracking by pseudo-labelling real videos,” arXiv preprint arXiv:2410.11831 , 2024. [20] B. Zhang, L. Ke, A. W. Harley, and K. Fragkiadaki, “Tapip3d: Tracking any point in persistent 3d geometry,” arXiv preprint arXiv:2504.14717 , 2025. [21] Y. Xiao, J. Wang, N. Xue, N. Karaev, Y. Makarov, B. Kang, X. Zhu, H. Bao, Y. Shen, and X. Zhou, “Spatialtrackerv2: 3d point tracking made easy,” arXiv preprint arXiv:2507.12462 , 2025. [22] D. Shan, J. Geng, M. Shu, and D. F. Fouhey, “Understanding human hands in contact at internet scale,” 2020. [23] Z. Zhao, W. Li, Y. Li, T. Liu, B. Li, M. Wang, K. Du, H. Liu, Y. Zhu, Q. Wang, K. Althoefer, and S.-C. Zhu, “Embedding high-resolution touch across robotic hands enables adaptive human-like grasping,” 
+
+Nature Machine Intelligence , vol. 7, p. 889–900, June 2025. [24] M. Ester, H.-P. Kriegel, J. Sander, and X. Xu, “A density-based algorithm for discovering clusters in large spatial databases with noise.,” in KDD (E. Simoudis, J. Han, and U. M. Fayyad, eds.), pp. 226–231, AAAI Press, 1996. [25] M. Weinmann, B. Jutzi, S. Hinz, and C. Mallet, “Semantic point cloud interpretation based on optimal neighborhoods, relevant features and efficient classifiers,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 105, pp. 286–304, 2015. [26] M. Z¨ urn, M. Wnuk, A. Lechler, and A. Verl, “Topology matching of branched deformable linear objects,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) , pp. 7097–7103, IEEE, 2023. [27] Y. Eldar, M. Lindenbaum, M. Porat, and Y. Zeevi, “The farthest point strategy for progressive image sampling,” in Proceedings of the 12th IAPR International Conference on Pattern Recognition, Vol. 2 - Conference B: Computer Vision & Image Processing. (Cat. No.94CH3440-5) , pp. 93–97 vol.3, 1994. [28] G. Bradski, “The OpenCV Library,” Dr. Dobb’s Journal of Software Tools , 2000. [29] G. Pons-Moll, S. Pujades, S. Hu, and M. Black, “Clothcap: Seamless 4d clothing capture and retargeting,” ACM Transactions on Graphics ,vol. 36, pp. 1–15, 07 2017. [30] S. Bouaziz, S. Martin, T. Liu, L. Kavan, and M. Pauly, “Projective dynamics: Fusing constraint projections for fast simulation,” Seminal Graphics Papers: Pushing the Boundaries, Volume 2 , 2023.
