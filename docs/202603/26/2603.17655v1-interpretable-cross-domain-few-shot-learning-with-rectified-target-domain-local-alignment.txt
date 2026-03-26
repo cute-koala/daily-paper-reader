@@ -1,0 +1,689 @@
+Title: Interpretable Cross-Domain Few-Shot Learning with Rectified Target-Domain Local Alignment
+
+URL Source: https://arxiv.org/pdf/2603.17655v1
+
+Published Time: Thu, 19 Mar 2026 01:19:34 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Interpretable Cross-Domain Few-Shot Learning with Rectified Target-Domain Local Alignment 
+
+## Yaze Zhao, Yixiong Zou *, Yuhua Li, Ruixuan Li School of Computer Science and Technology, Huazhong University of Science and Technology 
+
+{zyaz, yixiongz, idcliyuhua, rxli }@hust.edu.cn 
+
+## Abstract 
+
+Cross-Domain Few-Shot Learning (CDFSL) adapts models trained with large-scale general data (source domain) to downstream target domains with only scarce training data, where the research on vision-language models (e.g., CLIP) is still in the early stages. Typical downstream domains, such as medical diagnosis, require fine-grained visual cues for interpretable recognition, but we find that current fine-tuned CLIP models can hardly focus on these cues, albeit they can roughly focus on important regions in source do-mains. Although current works have demonstrated CLIP’s shortcomings in capturing local subtle patterns, in this pa-per, we find that the domain gap and scarce training data further exacerbate such shortcomings, much more than that of holistic patterns , which we call the local misalign-ment problem in CLIP-based CDFSL. To address this prob-lem, due to the lack of supervision in aligning local visual features and text semantics, we turn to self-supervision in-formation. Inspired by the translation task, we propose the CC-CDFSL method with cycle consistency, which translates local visual features into text features and then translates them back into visual features (and vice versa), and con-strains the original features close to the translated back fea-tures. To reduce the noise imported by richer information in the visual modality, we further propose a Semantic Anchor mechanism, which first augments visual features to provide a larger corpus for the text-to-image mapping, and then shrinks the image features to filter out irrelevant image-to-text mapping. Extensive experiments on various bench-marks, backbones, and fine-tuning methods show we can (1) effectively improve the local vision-language alignment, (2) enhance the interpretability of learned patterns and model decisions by visualizing patches, and (3) achieve state-of-the-art performance. Code is available at CC-CDFSL. 
+
+## 1. Introduction 
+
+Deep learning has achieved breakthrough progress in com-puter vision [3, 6, 18, 43, 44]. However, these achievements 
+
+> *Corresponding author.
+
+Figure 1. Fine-grained visual cues (marked as red boxes) are cru-cial in specialized fields like interpretable medical diagnosis (a). However, in target domains, the fine-tuned CLIP cannot focus on these subtle patterns (b), but in source domains (c), CLIP can still roughly capture all important regions for recognition. Therefore, we hypothesize that the domain gap and scarce training data ex-acerbate CLIP’s shortcomings in capturing subtle patterns, much more than that of holistic patterns, which we aim to address. 
+
+are mainly in general domains where large-scale training data is available. In real-world applications, particularly in downstream domains like the medical diagnosis of rare dis-eases, acquiring sufficient labeled samples is not only costly but also often constrained by privacy and security con-cerns. To address this practical challenge, Cross-Domain Few-Shot Learning (CDFSL) [11, 52] has emerged. Its ob-jective is to adapt models from a data-rich source domain to downstream target domains with few labeled data. Re-cently, vision-language foundation models like CLIP [28], pretrained on vast image-text pairs, have provided a robust foundation [35, 39] for CDFSL due to their generalizability. However, the research is still in its early stages. Typical downstream domains, such as medical diagno-sis, always rely on fine-grained visual cues for interpretable recognition. For example, as illustrated in Fig. 1a, differ-ent categories of lung diseases in X-ray images may mani-fest as subtle abnormalities in texture or density within the 
+
+> arXiv:2603.17655v1 [cs.CV] 18 Mar 2026 Figure 2. (a) To validate our hypothesis, we measure the alignment score between global / local features and text features, and we find the alignments of both global and local features are harmed under the CDFSL task, but the local features show a larger decline in the alignment score, verifying our hypothesis. (b) Our proposed method effectively improves the local alignment in target domains.
+
+lung area [34], as shown by red boxes in Fig. 1a. How-ever, in Fig. 1b, we find current CLIP models fine-tuned on target domains always fail to focus on these subtle visual patterns, where the heatmap can only coarsely outline the contour of the body (e.g., the lung border or road edge), but cannot focus on these red boxes. Similar phenomena are also observed in other target-domain images. However, it may not be an issue in source-domain images (Fig. 1c), since the model can roughly highlight all important areas of the image. Since some works have found CLIP’s short-comings in capturing subtle local patterns, we hypothesize that the domain gap and scarce training data exacerbate CLIP’s shortcomings in capturing subtle local patterns more than holistic patterns . To quantitatively validate this issue, we further measure the alignment scores [7] between CLIP’s global features (CLS token), or local patch features, and their text semantics (Fig. 2a). The results show that the domain gap harms the alignment between visual and text features, where the local features are more vulnerable, ver-ifying our hypothesis. Therefore, in this paper, we aim to address the misalign-ment between local visual features and text features exac-erbated by CDFSL (Fig. 2b). To achieve this goal, follow-ing the pretraining of CLIP, during the target-domain fine-tuning, we need to align each local visual feature (patch feature) with its corresponding text descriptions. However, firstly, image patches lack supervision that provides direct labels of texts, making it difficult to directly associate patch features with text semantics. Secondly, patches may contain noise or irrelevant regions (e.g., background) due to richer information in the visual modality, and there is insufficient supervision to remove the noise in few-shot scenarios. To solve these problems, we turn to self-supervision in-formation for the local feature alignments. Inspired by translation [21, 24], we propose a regularization framework based on cycle consistency, named CC-CDFSL, to explic-itly constrain the bidirectional mapping between local vi-sual features and text features, just like translating local vi-sual features into text features and then translating them back into visual features (and vice versa) . Specifically, we design two cycle paths: Text-to-Image-to-Text (T-I-T) and Image-to-Text-to-Image (I-T-I). To reduce the noise or ir-relevant regions in the visual modality, we further propose a Semantic Anchor (SA) mechanism, which first augments visual features to provide a larger corpus for the text-to-image mapping, and then shrinks the effective visual fea-tures to filter out irrelevant image-to-text mappings. Addi-tionally, these cycle paths also enhance interpretability by enabling visualization of patch-level semantic similarities, providing insights into learned patterns and model decisions for interpretable CDFSL. In summary, our contributions are listed as follows: • To the best of our knowledge, we are the first to find and address the local-feature-alignment problem in the CLIP-based CDFSL scenarios. • To address this problem, we propose the CC-CDFSL method to provide self-supervision between local visual features and text features, by translating local visual fea-tures into text features and then translating back into vi-sual features (and vice versa), and constraining the origi-nal features close to the translated back features. • To reduce the noise caused by the richer information in the visual modality, we further propose a Semantic An-chor mechanism, which first augments the visual features and then shrinks them to improve the fine-grained map-ping between modalities. • Extensive experiments on various datasets, backbones, and fine-tuning methods demonstrate that CC-CDFSL consistently improves performance and outperforms state-of-the-arts with better patch-level interpretability. 
+
+## 2. Related Work 
+
+Cross-Domain Few-Shot Learning aims to enable a model trained on a data-rich source domain to rapidly adapt to a target domain. The main challenge is the significant dis-tribution difference between the source and target domains [51]. Existing research primarily revolves around three per-spectives: metric-based learning methods [38] achieve ef-ficient classification by constructing similarity metrics in a feature space; meta-learning methods [16, 31] optimize rapid adaptation by simulating few-shot tasks; and transfer learning methods [23, 27] leverage pre-trained models from the source domain, adapting to the target domain through fine-tuning or feature alignment. Now vision-language models (VLMs) provide new opportunities for Source-Free Cross-Domain Few-Shot Learning [36, 46] (SF-CDFSL). 
+
+Parameter-Efficient Fine-Tuning (PEFT) in VLMs . Re-cent research on the efficient fine-tuning of vision-language large models focuses on three primary approaches. Prompt-based methods [19, 47, 48] freeze encoder parameters, in-troducing trainable vectors into text or visual inputs to guide task-specific outputs. Adapter-based methods [9, 42] insert lightweight bottleneck modules into specific layers of pre-trained models, utilizing residual connections to integrate features for task adaptation. Low-Rank Adaptation (LoRA) methods [14, 40] employ low-rank matrix decomposition for weight updates, significantly reducing parameter counts while preserving inference efficiency. Although effective for in-domain fine-tuning [45], these methods only align image-level CLS tokens with text, leaving local patches without explicit semantic supervision. Consequently, fine-grained cues are prone to being overlooked when transfer-ring across domains (Figs. 1 and 2). 
+
+Local Alignment in VLMs . Some approaches explore lo-cal alignment during the pretraining phase of VLMs, such as transforming image embeddings into region representa-tions given spatial hints [2], introducing region-text con-trastive learning, or hard fine-grained negative sample learn-ing [35]. Additionally, recent advancements in downstream fine-tuning have increasingly focused on local alignment strategies to enhance fine-grained cross-modal understand-ing. Notable approaches include employing region-based or local feature matching with LLM-generated text descrip-tions to capture detailed semantics [1, 4] or refine the sim-ilarity score [20]. However, these methods often rely on explicit region annotations or additional auxiliary losses requiring extensive labeled data, which is impractical in CDFSL scenarios where annotated data is scarce. In con-trast, local alignment in CDFSL remains unexplored, and we find that the domain gap and limited data worsen lo-cal visual feature misalignment more than global features. So we leverage self-supervised cycle consistency to achieve robust patch-level alignment, which also enhances model interpretability. 
+
+## 3. Method 
+
+3.1. Preliminaries 
+
+Cross-Domain Few-Shot Learning (CDFSL) requires a model trained on a source domain (e.g., miniImageNet) to adapt to target domains (e.g., EuroSAT) using a few labeled samples ( K-way N-shot setting), and evaluates its classifi-cation performance on the target domain. In K-way N-shot 
+
+classification tasks, the support set S contains K classes with N labeled samples each ( N is usually small) , denoted as S = {(xi, y i)}K×Ni=1 , where the label yi ∈ { 1, . . . , K }.The query set Q = {(xqj , y qj )} assesses the model’s perfor-mance, and S ∩ Q = ∅. We mainly focus on the fine-tuning on the target domain with only |S| = N · K samples. 
+
+Visual-Language Models exemplified by CLIP [28] have significantly advanced vision-related tasks. CLIP uses a dual-encoder architecture with separate image and text en-coders. The image encoder, which can be a ResNet [12] or ViT [6], extracts features from an image I into a feature vec-tor vI = fimage (I) ∈ Rd, where d is the feature dimension. In the Vision Transformer, the input image I ∈ RH×W ×3 is split into M =
+
+j Hp
+
+k
+
+×
+
+j Wp
+
+k
+
+patches of size p×p×3. These patches are mapped to patch embeddings to form the initial image embedding sequence E0 ∈ RM ×dv . After concate-nating a class token c0 and adding position embeddings, the sequence is processed by L Transformer layers. The final class token cL is projected to obtain vI = Pv (cL).The text encoder processes the input text T ′ by convert-ing it into a sequence of discrete tokens. Each token is embedded into a vector to form the initial text embedding 
+
+T ′ 
+
+> 0
+
+∈ RN ×dt . Special beginning ( b0) and end ( e0) tokens are added, and position embeddings are included. The se-quence is then processed by L Transformer layers. The final text feature vector vT = ftext (T ′) = Pt(eL) is obtained by projecting the output vector of the EOS token eL.For downstream image classification tasks with C
+
+categories and their corresponding text descriptions 
+
+D1, D 2, . . . , D C , the image I is classified into the category with the highest similarity. Under the standard CLIP fine-tuning framework, global feature G ∈ Rd generated by the CLS token is typically used for classification tasks. The original loss function is expressed as:             
+
+> LCE =−log p(y=c|x) = −log exp( sim (G, T c)/τ )
+> PCi=1 exp( sim (G, T i)/τ )
+> (1)
+
+Here, τ is the temperature scaling parameter, and Tc is the text feature corresponding to the true class label c.
+
+3.2. CC-CDFSL 
+
+In the ViT architecture used in the image encoder, the local features of image patches contain rich visual information such as edges, shapes, and colors [41], making them impor-tant for interpretable diagnosis in specialized domains like medical imaging. As discussed earlier, CLIP pre-training relies solely on the CLS token to represent the whole image and leaves local patches unsupervised, leading to criticism of CLIP’s limited ability to capture fine-grained visual de-tails [35]. We go one step further and find that downstream cross-domain tasks demand stronger local discrimination. For instance, Pneumothorax appears as a thin dark band along the lung border, while Nodules manifest as faint cir-cular shadows in chest X-rays (Fig. 1a). Fig. 1b shows that target-domain fine-tuning harms CLIP’s local features more severely, so we hypothesize that the domain gap and scarce training data exacerbate CLIP’s local feature misalignment more than global feature misalignment. To validate this, we quantitatively measure the alignment scores for global and local patch features on the support set:                             
+
+> Ag=1
+> |S|
+> |S|
+> X
+> i=1
+> vcls
+> i·tyi
+> ∥vcls
+> i∥∥ tyi∥,Al=1
+> |S| M
+> |S|
+> X
+> i=1
+> MX
+> j=1
+> vi,j ·tyi
+> ∥vi,j ∥∥ tyi∥
+> (2) local features
+> original image ’s
+> global feature
+> MLP
+> text features Lcycle_txt Text
+> Encoder
+> Etxt
+> Dtxt
+> L
+> L∗
+> Trec
+> a photo of a {class}.
+> T
+> Lcycle_img
+> similar image feature s
+> similar text feature s
+> original aug4
+> aug1
+> Image -to -Text -to -Image Cycle Consistency
+> reconstructed text feature s
+> reconstructed
+> image feature s
+> Text -to -Image -to -Text Cycle Consistency
+> Eimg
+> Dimg
+> Lrec
+> T∗
+> L′
+> semantic a nchor
+> visual features
+> Xanchor
+> Semantic Anchor –Shrinking Phase
+> Image
+> Encoder
+> I-T-Icycle
+> T-I-Tcycle
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> .
+> aug2
+> aug3 aug4
+> Semantic Anchor –
+> Augmentation Phase
+> original image
+
+Figure 3. Overview of our framework, consisting of three key components: (a) the Text-to-Image-to-Text (T-I-T) cycle-consistency module, (b) the Semantic Anchor (SA) module, and (c) the Image-to-Text-to-Image (I-T-I) cycle-consistency module. The process begins with the SA module augmenting raw images to create a larger corpus, followed by extracting local image features from these images and transforming them via MLP to align with the text feature space. The T-I-T cycle then uses text features to select semantically relevant patches and maps them back to reconstruct text features, enhancing local feature alignment. Subsequently, the SA module shrinks the feature set to select class-relevant anchor patches, which are used in the I-T-I cycle to map these anchor visual features through text features to augmented image features. Our model improves local alignment and interpretability in cross-domain few-shot learning. 
+
+where M is the number of patches per image, and tyi ∈ Rd
+
+is the normalized text feature for the true class label yi.Fig. 2a shows that in cross-domain tasks, the decrease in Al is significantly greater than that of A g, confirming that domain discrepancies amplify CLIP’s inability to capture fine-grained discriminative information. Drawing inspiration from this limitation, this study intro-duces a novel self-supervision strategy based on cycle con-sistency. By explicitly constraining the bidirectional map-ping relationship between local features and text semantics, we effectively improve the local alignment between visual and textual modalities, and enhance interpretability. The overall framework of our method is shown in Figure 3. 
+
+Semantic Anchor Module: Augmentation Phase . To re-duce noise and irrelevant regions in the visual modality, we introduce the Semantic Anchor (SA) mechanism, operat-ing in an augment-then-shrink manner. In the augmentation phase, we generate A augmented views for each image and include the original image, flattening all patch features into a single augmented feature matrix: 
+
+Xaug ∈ R(( A+1) ·M )×d (3) This enlarges the candidate corpus for the first hop of the T-I-T cycle. Next, we concatenate these features across the entire support set to form the local feature matrix: 
+
+L′ = Concat 
+
+
+
+{X(i) 
+
+> aug
+
+| i ∈ S} 
+
+
+
+∈ RH×d, H = |S| (A + 1) M
+
+(4) 
+
+Local Features Transformation . Since CLIP pre-training uses global features to align visual and textual modalities, directly using local image features may result in a signif-icant modality gap. Thus, we first transform local image features L′ ∈ RH×d generated from all patches across the support set to reduce the distribution discrepancy with the textual feature space via a two-layer MLP: 
+
+L = MLP( L′) = ReLU( L′ · W1) · W2 (5) 
+
+Text-to-Image-to-Text Cycle Consistency . In the pro-posed T-I-T cycle, we first compute the cosine similarity matrix Dtxt ∈ RC×H between text features T ∈ RC×d (C
+
+is the number of categories) and local image features: 
+
+Dtxt  
+
+> j,i
+
+= Tj · Li
+
+∥Tj ∥∥ Li∥ , Dtxt  
+
+> [b]
+
+∈ RC×M , b ∈ [1 , 2, ..., |S| (A+1)] 
+
+(6) 
+
+All features are processed to be L2-normalized for brevity in the rest, so cosine similarity is expressed as the dot product. Next, for each text feature Tj , we select the most relevant local image feature to construct the similar image feature matrix L∗ ∈ RC×d:
+
+L∗ 
+
+> j
+
+= Larg max i Dtxt  
+
+> j,i
+
+∈ Rd (7) Then, we compute the reverse similarity matrix Etxt :
+
+Etxt = L∗ · T⊤ ∈ RC×C (8) where Etxt  
+
+> j,k
+
+represents the cosine similarity between the im-age patch feature L∗ 
+
+> j
+
+(selected as the most relevant to the 
+
+j-th text feature Tj ) and the k-th text feature Tk.Table 1. Accuracies (%) of target domain datasets of 5-way 1-shot and 5-shot tasks. Refer to the Appendix for the extended table. 
+
+Task Method Mark backbone ISIC ChestX EuroSAT CropDisease Avg 5-way 1-shot 
+
+StepSPT [37] TPAMI-25 ViT/CLIP 32.97 22.84 70.01 84.84 52.68 Tip-Adapter [42] ECCV-22 ViT/CLIP 32.68 22.24 75.44 77.15 51.87 AMU-Tuning [30] CVPR-24 ViT/CLIP 32.29 21.56 72.24 80.20 51.57 LP++ [17] CVPR-24 ViT/CLIP 33.63 21.72 73.05 81.84 52.56 LDC [22] CVPR-25 ViT/CLIP 33.72 22.32 74.39 84.07 53.62 CoOp [48] IJCV-22 ViT/CLIP 29.47 20.95 68.16 79.27 49.46 
+
+CoOp + OURS - ViT/CLIP 31.96 21.37 71.17 81.80 51.58 CLIP-Adapter [9] IJCV-24 ViT/CLIP 30.52 21.32 67.87 82.05 50.44 
+
+CLIP-Adapter + OURS - ViT/CLIP 32.47 22.14 72.89 82.01 52.37 Maple [19] CVPR-23 ViT/CLIP 33.56 20.89 75.05 82.67 53.04 
+
+Maple + OURS - ViT/CLIP 34.00 21.41 78.92 85.21 54.89 CLIP-LoRA [40] CVPR-24 RN50/CLIP 32.01 21.76 57.79 65.24 44.20 
+
+CLIP-LoRA + OURS - RN50/CLIP 35.21 22.75 59.23 72.85 47.51 CLIP-LoRA [40] CVPR-24 ViT/CLIP 35.23 21.73 81.49 85.11 55.89 
+
+CLIP-LoRA + OURS - ViT/CLIP 38.13 22.21 86.07 88.91 58.83 
+
+∆ - - +2.90 +0.48 +4.58 +3.80 +2.94 5-way 5-shot 
+
+StepSPT [37] TPAMI-25 ViT/CLIP 52.12 26.36 89.40 96.01 65.97 Tip-Adapter [42] ECCV-22 ViT/CLIP 46.96 24.07 87.24 94.19 63.12 AMU-Tuning [30] CVPR-24 ViT/CLIP 44.60 23.34 88.47 94.26 62.66 LP++ [17] CVPR-24 ViT/CLIP 48.49 23.89 87.48 94.47 63.58 LDC [22] CVPR-25 ViT/CLIP 49.70 25.89 90.82 96.71 65.78 CoOp [48] IJCV-22 ViT/CLIP 42.56 22.22 85.53 93.48 60.95 
+
+CoOp + OURS - ViT/CLIP 42.75 22.76 86.43 93.82 61.44 CLIP-Adapter [9] IJCV-24 ViT/CLIP 44.09 23.53 84.48 93.34 61.36 
+
+CLIP-Adapter + OURS - ViT/CLIP 46.67 23.87 86.99 93.89 62.86 Maple [19] CVPR-23 ViT/CLIP 46.72 22.29 89.29 93.51 62.95 
+
+Maple + OURS - ViT/CLIP 48.77 23.05 91.72 95.16 64.67 CLIP-LoRA [40] CVPR-24 RN50/CLIP 46.53 23.00 77.26 87.42 58.55 
+
+CLIP-LoRA + OURS - RN50/CLIP 49.11 23.55 79.23 90.99 60.72 CLIP-LoRA [40] CVPR-24 ViT/CLIP 50.68 24.44 92.63 96.20 65.99 
+
+CLIP-LoRA + OURS - ViT/CLIP 54.72 25.47 94.35 97.08 67.90 
+
+∆ - - +4.04 +1.03 +1.72 +0.88 +1.91 
+
+The cycle consistency loss is constructed by maximizing the cosine similarity between each text feature Tj and the reconstructed text feature Trec  
+
+> j
+
+∈ Rd:
+
+Lcyc txt = 1 − 1
+
+C
+
+> C
+
+X
+
+> j=1
+
+sim (Tj , Trec  
+
+> j
+
+) (9) where Trec  
+
+> j
+
+= T arg max k Etxt  
+
+> j,k
+
+is the text feature correspond-ing to the j-th text feature after reverse mapping. This pro-cess encourages the model to learn more discriminative and semantically meaningful local representations (Fig. 9). 
+
+Semantic Anchor Module: Shrinking Phase . Before the I-T-I cycle, we filter out noisy or irrelevant patches to reduce semantic drift by selecting the most class-relevant anchor features. For the b-th image and the j-th class, we pick the top-k indices of the most similar patches: 
+
+I(b) 
+
+> j
+
+= top-k i
+
+ Dtxt 
+
+> [b],j,i
+
+ (10) We merge and deduplicate to obtain the anchor index set: 
+
+Ianchor = unique 
+
+
+
+> |S| (A+1)
+
+[
+
+> b=1
+> C
+
+[
+
+> j=1
+
+I(b)
+
+> j
+
+ , V = |I anchor | (11) 
+
+The anchor visual features are extracted as: 
+
+Xanchor = LIanchor ∈ RV ×d (12) These anchor features represent the local features most relevant to class semantics, suppressing low-information re-gions (Fig. 7), and are used exclusively in the I-T-I cycle. 
+
+Image-to-Text-to-Image Cycle Consistency . Mirroring the above T-I-T consistency process but in another direc-tion, we use text features as an intermediary to achieve cyclic mapping from original to augmented image features. Specifically, for each anchor xn ∈ Xanchor , we leverage text features to bridge original and its augmented image fea-tures: 1. Identify the most similar text feature: 
+
+tn = Targmax j (xn·Tj ) ∈ Rd (13) 2. Using the selected text feature tn as an intermedi-ary, retrieve the most similar patch only in the augmented feature space of xn (i.e., Xaug ) to complete the cyclic map-ping: 
+
+m∗ = argmax m(tn · Xaug ,m ), ˆxn = Xaug ,m ∗ ∈ Rd
+
+(14) We compute the cosine distance between anchors and their retrieved counterparts to construct the image-to-text-to-image cycle consistency loss: 
+
+Lcyc img = 1 − 1
+
+V
+
+> V
+
+X
+
+> n=1
+
+sim (xn, ˆxn) (15) This approach ensures reliable localization of local im-age features in the augmented space, enhancing the model’s robustness to input variations (Tab. 3). 
+
+Consistency Loss . Finally, the total loss combines the orig-inal cross-entropy loss with both the text-to-text and image-to-image cycle consistency losses: 
+
+Ltotal = LCE + λ1Lcyc txt + λ2Lcyc img (16) where λ1 and λ2 are balancing hyperparameters. During in-ference, we assign the label to each query sample by com-puting the highest cosine similarity between its visual fea-ture and the text features of all classes. 
+
+## 4. Experiments 
+
+4.1. Implementation Details 
+
+According to the benchmark provided by [11], our model is directly fine-tuned on four target domain datasets: CropDis-eases [26] (plant diseases), EuroSAT [13] (satellite im-agery), ISIC2018 [5] (skin lesions), and ChestX [34] (chest X-rays). Following [37], all experiments in the main pa-per are conducted based on the CLIP model with the ViT-Base/16 backbone. Performance evaluations with other backbone variants are detailed in Supplementary Table 5. For all baseline methods, we adhere to the experimental set-tings reported in their respective original publications. For a fair comparison, all models are fine-tuned for 100 epochs on a single NVIDIA RTX 4090 GPU. Evaluation is con-ducted 100 times under the 1-shot setting and 400 times un-der the 5-shot setting, with the mean classification accuracy reported. For the hyper-parameters in Eq. 16, we set λ1 and 
+
+λ2 based on empirical observation on a validation set via grid search; see the Appendix for details. k in the Semantic Anchor module is fixed to 10 across all experiments. 
+
+4.2. Comparison with State-of-the-Art Methods 
+
+We evaluate our CC-CDFSL framework in comparison with the most competitive state-of-the-art (SOTA) meth-ods. These competing approaches cover representative technical paradigms in PEFT of vision-language mod-els, including prompt learning (CoOp [48]) in the text branch, adapter-based methods (Tip-Adapter [42], CLIP-Adapter [9]), multi-modal prompt learning (Maple [19]), and low-rank adaptation (CLIP-LoRA [40]) —as well as recent advanced tuning strategies (AMU-Tuning [30], LP++ [17], LDC [22], StepSPT [37]). As presented in ImageNet   
+
+> Caltech101
+> OxfordPets
+> StanfordCars
+> Flowers102
+> Food101 FGVCAircraft
+> SUN397
+> DTD
+> EuroSAT
+> UCF101
+> 75.57
+> 75.59
+> 98.02
+> 97.91
+> 95.82
+> 72.66
+> 96.11
+> 96.07
+> 90.75
+> 90.83
+> 38.34
+> 38.00 80.92
+> 81.04
+> 79.86 79.90
+> 92.66
+> 93.57
+> 83.66
+> 83.51
+> Base Class Accuracy MaPLe
+> + Ours
+> ImageNet
+> Caltech101
+> OxfordPets
+> StanfordCars
+> Flowers102
+> Food101 FGVCAircraft
+> SUN397
+> DTD
+> EuroSAT
+> UCF101
+> 70.88
+> 71.10
+> 95.49
+> 97.80
+> 97.99
+> 73.80
+> 74.84 72.44
+> 73.90
+> 91.84
+> 92.00
+> 36.01
+> 79.08
+> 59.54
+> 62.28
+> 71.98
+> 79.07
+> New Class Accuracy MaPLe
+> + Ours
+
+Base vs New Class Accuracy Across Datasets 
+
+Figure 4. Base-to-new generalization on 11 datasets. 
+
+Tab. 1, our CC-CDFSL consistently enhances the perfor-mance of all baseline methods. To investigate whether the proposed CC-CDFSL can be re-purposed beyond cross-domain few-shot learning, we further evaluate it on the widely used base-to-new gener-alization setting [10, 19, 47] across 11 commonly adopted datasets. As illustrated in Figure 4, we achieve substan-tial gains on challenging fine-grained datasets, such as Eu-roSAT (+3.6% in New), StanfordCars (+1.0% in New), and DTD (+2.7% in New). These results indicate that cycle-consistent patch-level alignment not only mitigates domain shift in few-shot settings but also enhances generalization to unseen classes by learning semantically richer local rep-resentations. 
+
+4.3. Ablation Study 
+
+The effects of each component . According to Table 2, both cycles boost performance over the baseline, but the T-I-T cycle outperforms the I-T-I cycle. We identify two pri-mary reasons for this: First, using the StanfordCars dataset as an example, where category names are vehicle names, image patches (e.g., tires or headlights) struggle to accu-rately match corresponding text features in few-shot scenar-ios due to the limited number of categories, resulting in text features that fail to effectively guide visual feature learn-ing. Second, the noise or redundant information in image local features is difficult to completely eliminate, causing I-T-I reconstructed image features to deviate from their orig-inal semantics, whereas T-I-T focuses on the most semanti-cally relevant patches, reducing interference from irrelevant patches and enhancing the robustness of local alignment. 
+
+Retrieval strategies in I-T-I cycle . Tab. 3 presents the impact of different retrieval strategies on model perfor-mance. Cross-view retrieval, by using text features as an intermediary to match semantic anchor features only in the augmented image feature space, significantly enhances the model’s robustness to input transformations (e.g., rota-Table 2. Ablation study of the 5-way 5-shot task. T-I-T I-T-I SA ISIC ChestX EuroSAT Crop. Ave. 50.68 24.44 92.63 96.20 65.98                                             
+
+> ✓51.13 25.15 93.79 96.37 66.61
+> ✓✓54.30 25.35 94.33 96.95 67.73
+> ✓✓53.81 25.14 93.83 97.01 67.45
+> ✓✓✓54.72 25.47 94.35 97.08 67.90
+> Table 3. Impact of different retrieval strategies. Retrieval ISIC ChestX EuroSAT Crop. Ave. Cross-view 53.77 25.13 93.75 96.84 67.37 Intra-image 53.59 25.01 93.63 96.77 67.25 All-images 53.66 25.02 93.46 96.64 67.19
+
+tion, flipping), adapting to distribution differences in cross-domain few-shot learning. In contrast, intra-image retrieval and all-images retrieval are limited to the original image feature space and overly large selection range separately, lacking the diversity of augmented views and being suscep-tible to noise, resulting in less accurate semantic alignment. 
+
+Hybrid coefficient λ1 and λ2 balance the contributions of T-I-T and I-T-I cycle losses, respectively. We conducted a grid search over [0 .0, 7.0] , finding that λ1 = 3 .0 and λ2 =2.0 yield the best accuracy on ISIC2018 (see Fig. 5). As shown in the line graph, increasing λ1 enhances the T-I-T path’s contribution, significantly improving performance. However, when λ1 > 3.0, performance plateaus, indicating that excessive focus on local alignment may neglect global features. The effect of λ2 is similar but more pronounced, as the I-T-I path is more susceptible to noise. 
+
+> Figure 5. Ablation study on hybrid coefficient in Eq. 16.
+
+Anchor Patch Number k in Eq. 10 . In Fig. 6, we inves-tigate the influence of the anchor-patch budget k (as de-fined in Eq. 10, controlling the number of patches that sur-vive the Semantic Anchor shrinking phase and enter the I-T-I cycle for each image-class pair) on 5-way 5-shot ac-curacy. Results demonstrate that a small k(≤ 3) under-utilizes informative cues, reducing the average accuracy from 54.67% to 54.28%, whereas an excessively large k(≥
+
+13) re-introduces noisy regions and pushes accuracy back down to 54.21%. Setting k = 10 strikes an optimal bal-ance, preserving fine-grained semantics while suppressing distractors and yielding the peak 54.72% on the ISIC2018 dataset. Therefore, we adopt k = 10 throughout all main experiments across the four datasets.   
+
+> Figure 6. Ablation study on hyperparameter kin Eq. 10.
+
+4.4. Meaningful Patch Selection in SA 
+
+As shown in Fig. 7, the Semantic Anchor module only re-tains the top-k most reliable patch-text matches, filtering out ambiguous mappings and reducing semantic drift.   
+
+> Figure 7. Semantic Anchor (SA) selection across four domains. Red boxes indicate the top-k= 10 patch proposals retained by the SA shrinking phase (Eq. 11).
+
+4.5. Improved Local Alignment 
+
+Fig. 8 illustrates the heatmaps of the baseline model and our CC-CDFSL across four datasets using Grad-CAM [29]. The comparison reveals that our method reduces interfer-ence from irrelevant features, highlighting image regions most relevant to the text. This demonstrates that lever-aging textual semantic guidance significantly enhances the model’s capacity to concentrate on discriminative features during CDFSL. Additional results can be found in Supp. Figs. 16 and 17. Quantitative analysis in Fig. 2b also con-firms that our method improves local alignment scores. 
+
+4.6. Interpretability 
+
+T-I-T cycle pathway . To validate the interpretability of our approach, we show the T-I-T cycle consistency path-way, as illustrated in Figure 9. Taking the ChestX-ray im-age in pathway-1 as an example, the initial text label is “In-filtration”. Through the T-I-T pathway, the model identi-fies a local region of interest (highlighted by the red box) and maps this patch back to the text space, resulting in the reconstructed text “Mass”. Even though the reconstructed text does not exactly match the initial label, this inconsis-tency itself provides valuable interpretability. On one hand, Figure 8. Our method (the third row) outperforms the baseline (the second row) in highlighting key details, offering a clearer view of important features in data-scarce scenarios. 
+
+it demonstrates that the model is able to focus on disease-relevant regions and detect potential abnormal structures within the image. On the other hand, in medical imag-ing, different pathological types such as “Infiltration” and “Mass” may share similar visual characteristics on chest X-rays, making such semantic deviations in patch-level recon-struction understandable. This phenomenon indicates that the model not only localizes abnormal areas but also cap-tures the fine-grained semantic relationships between differ-ent diseases, providing a valuable reference for clinicians in their further analysis and diagnosis. 
+
+I-T-I cycle pathway . Figure 10 depicts the I-T-I cycle consistency pathway (Due to space constraints, we present more results in the Supplementary Material). It shows that the model can extract and retain essential semantics in the text domain, and that these semantics can, in turn, be used to re-focus on meaningful regions within the image. 
+
+Activation Map and Semantic Anchors . Our model’s activation maps (Fig. 8) precisely highlight discriminative fine-grained cues. Semantic Anchor’s shrink phase provides interpretability by visualizing the model’s focus (Fig. 7). 
+
+4.7. Beneficial to Discriminability 
+
+Notably, the above inconsistency is not a model failure but rather evidence that our method successfully learns trans-ferable, fine-grained visual concepts shared across seman-tically related categories. By identifying these common concepts, the model is compelled to learn more nuanced representations that capture the subtle distinctions between classes, thereby improving feature discriminability. To ver-ify discriminability, we conducted prototype classification            
+
+> Table 4. Prototype-classification accuracy of the vision encoder. ISIC ChestX EuroSAT CropDiseases CLIP-LoRA 49.83 23.79 93.0 95.85 + Ours 50.68 24.51 93.64 96.24
+> Figure 9. The T-I-T pathway indicates that the model can focus on disease-relevant regions and capture fine-grained semantic re-lationships between different diseases, providing valuable inter-pretability for medical analysis even when the reconstructed text does not fully match the initial label.
+> Figure 10. The I-T-I cycle pathway demonstrates how the model extracts and retains essential semantics in the text domain, which are then used to re-focus on meaningful regions within the image’s augmented feature space.
+
+using only the vision encoder. Tab. 4 shows consistent im-provements after applying our cycle-consistent regularizer. The enhanced feature discriminability is also visually con-firmed by the t-SNE plots in Supplementary Figure 15. 
+
+## 5. Conclusion 
+
+We proposed CC-CDFSL, a self-supervised regularization framework that enhances local feature alignment in CLIP-based CDFSL. By introducing the T-I-T, I-T-I cycle, and complementary Semantic Anchor module, our method ef-fectively captures fine-grained semantics, improving ro-bustness and interpretability. Extensive experiments on var-ious benchmark datasets demonstrate superior performance. Acknowledgments 
+
+This work is supported by the National Natural Sci-ence Foundation of China under grants 62206102; the National Key Research and Development Pro-gram of China under grant 2024YFC3307900; the National Natural Science Foundation of China under grants 62436003, 62376103 and 62302184; Major Sci-ence and Technology Project of Hubei Province under grant 2025BAB011 and 2024BAA008; Hubei Science and Technology Talent Service Project under grant 2024DJC078; and Ant Group through CCF-Ant Research Fund. The computation is completed in the HPC Plat-form of Huazhong University of Science and Technology. 
+
+## References 
+
+[1] Guangyi Chen, Weiran Yao, Xiangchen Song, Xinyue Li, Yongming Rao, and Kun Zhang. PLOT: prompt learning with optimal transport for vision-language models. In ICLR 2023 , 2023. 3 [2] Hong-You Chen, Zhengfeng Lai, Haotian Zhang, Xinze Wang, Marcin Eichner, Keen You, Meng Cao, Bowen Zhang, Yinfei Yang, and Zhe Gan. Contrastive localized language-image pre-training. CoRR , abs/2410.02746, 2024. 3 [3] Xiaohui Chen, Yinkai Wang, Yuanqi Du, Soha Hassoun, and Liping Liu. On separate normalization in self-supervised transformers. In NeurIPS 2023 , 2023. 1 [4] Hyungyu Choi, Young Kyun Jang, and Chanho Eom. GOAL: global-local object alignment learning. In CVPR 2025 , pages 4070–4079. Computer Vision Foundation / IEEE, 2025. 3 [5] Noel Codella, Veronica Rotemberg, Philipp Tschandl, M Emre Celebi, Stephen Dusza, David Gutman, Brian Helba, Aadi Kalloo, Konstantinos Liopyris, Michael Marchetti, et al. Skin lesion analysis toward melanoma detection 2018: A challenge hosted by the interna-tional skin imaging collaboration (isic). arXiv preprint arXiv:1902.03368 , 2019. 6, 1 [6] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In ICLR 2021 , 2021. 1, 3 [7] Sedigheh Eslami and Gerard de Melo. Mitigate the gap: In-vestigating approaches for improving cross-modal alignment in CLIP. CoRR , abs/2406.17639, 2024. 2 [8] Yuqian Fu, Yu Xie, Yanwei Fu, and Yu-Gang Jiang. Styleadv: Meta style adversarial training for cross-domain few-shot learning. In CVPR 2023 , pages 24575–24584, 2023. 3 [9] Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li, and Yu Qiao. Clip-adapter: Better vision-language models with feature adapters. Int. J. Comput. Vis. , 132(2):581–595, 2024. 3, 5, 6 [10] Yuncheng Guo and Xiaodong Gu. MMRL: multi-modal representation learning for vision-language models. In 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2025, Nashville, TN, USA, June 11-15, 2025 , pages 25015–25025. Computer Vision Foundation / IEEE, 2025. 6 [11] Yunhui Guo, Noel C Codella, Leonid Karlinsky, James V Codella, John R Smith, Kate Saenko, Tajana Rosing, and Rogerio Feris. A broader study of cross-domain few-shot learning. In Computer vision–ECCV 2020: 16th European conference, glasgow, UK, August 23–28, 2020, proceedings, part XXVII 16 , pages 124–141, 2020. 1, 6, 2 [12] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In CVPR 2016, , pages 770–778, 2016. 3 [13] Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth. Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , pages 2217–2226, 2019. 6, 1 [14] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. In 
+
+ICLR 2022 , 2022. 3 [15] Shell Xu Hu, Da Li, Jan St¨ uhmer, Minyoung Kim, and Tim-othy M. Hospedales. Pushing the limits of simple pipelines for few-shot learning: External data and fine-tuning make a difference. In CVPR 2022 , pages 9058–9067. IEEE, 2022. 3 [16] Yanxu Hu and Andy J. Ma. Adversarial feature augmenta-tion for cross-domain few-shot classification. In Computer Vision - ECCV 2022 - 17th European Conference , pages 20– 37. Springer, 2022. 2 [17] Yunshi Huang, Fereshteh Shakeri, Jose Dolz, Malik Boudiaf, Houda Bahig, and Ismail Ben Ayed. Lp++: A surprisingly strong linear probe for few-shot clip. In IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) ,2024. 5, 6 [18] Yongwei Jiang, Yixiong Zou, Yuhua Li, and Ruixuan Li. Revisiting pool-based prompt learning for few-shot class-incremental learning. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , pages 1303–1313, 2025. 1 [19] Muhammad Uzair Khattak, Hanoona Abdul Rasheed, Muhammad Maaz, Salman H. Khan, and Fahad Shahbaz Khan. Maple: Multi-modal prompt learning. In CVPR 2023 ,pages 19113–19122, 2023. 2, 5, 6 [20] Jinhao Li, Haopeng Li, Sarah Monazam Erfani, Lei Feng, James Bailey, and Feng Liu. Visual-text cross alignment: Refining the similarity score in vision-language models. In 
+
+ICML 2024 , 2024. 3 [21] Minjun Li, Haozhi Huang, Lin Ma, Wei Liu, Tong Zhang, and Yu-Gang Jiang. Unsupervised image-to-image transla-tion with stacked cycle-consistent adversarial networks. In 
+
+Computer Vision - ECCV 2018 - 15th European Conference, Munich , pages 186–201, 2018. 2 [22] Shuo Li, Fang Liu, Zehua Hao, Xinyi Wang, Lingling Li, Xu Liu, Puhua Chen, and Wenping Ma. Logits deconfusion with clip for few-shot learning. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pages 25411–25421, 2025. 5, 6 [23] Hanwen Liang, Qiong Zhang, Peng Dai, and Juwei Lu. Boosting the generalization capability in cross-domain few-shot learning via noise-enhanced supervised autoencoder. In 
+
+ICCV 2021 , pages 9404–9414. IEEE, 2021. 2 [24] Ming-Yu Liu, Thomas M. Breuel, and Jan Kautz. Unsuper-vised image-to-image translation networks. In Advances in Neural Information Processing Systems 30: Annual Confer-ence on Neural Information Processing Systems 2017, De-cember 4-9, 2017, Long Beach, CA, USA , pages 700–708, 2017. 2 [25] Ran Ma, Yixiong Zou, Yuhua Li, and Ruixuan Li. Recon-struction target matters in masked image modeling for cross-domain few-shot learning. In AAAI-25 , pages 19305–19313, 2025. 3 [26] Sharada P Mohanty, David P Hughes, and Marcel Salath´ e. Using deep learning for image-based plant disease detection. 
+
+Frontiers in plant science , page 215232, 2016. 6, 1 [27] Cheng Perng Phoo and Bharath Hariharan. Self-training for few-shot transfer across extreme task differences. In ICLR 2021 , 2021. 2 [28] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In ICML 2021 ,pages 8748–8763, 2021. 1, 3 [29] Ramprasaath R. Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Ba-tra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In IEEE International Confer-ence on Computer Vision, ICCV 2017 , 2017. 7, 3 [30] Yuwei Tang, Zhenyi Lin, Qilong Wang, Pengfei Zhu, and Qinghua Hu. Amu-tuning: Effective logit bias for clip-based few-shot learning. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 23323–23333. IEEE, 2024. 5, 6[31] Hung-Yu Tseng, Hsin-Ying Lee, Jia-Bin Huang, and Ming-Hsuan Yang. Cross-domain few-shot classification via learned feature-wise transformation. In ICLR 2020 , 2020. 2[32] Hung-Yu Tseng, Hsin-Ying Lee, Jia-Bin Huang, and Ming-Hsuan Yang. Cross-domain few-shot classification via learned feature-wise transformation. arXiv preprint arXiv:2001.08735 , 2020. 1 [33] Reece Walsh, Islam I. Osman, and Mohamed S. Shehata. Masked embedding modeling with rapid domain adjustment for few-shot image classification. IEEE Trans. Image Pro-cess. , pages 4907–4920, 2023. 3 [34] Xiaosong Wang, Yifan Peng, Le Lu, Zhiyong Lu, Mo-hammadhadi Bagheri, and Ronald M Summers. Chestx-ray8: Hospital-scale chest x-ray database and benchmarks on weakly-supervised classification and localization of common thorax diseases. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 2097–2106, 2017. 2, 6 [35] Chunyu Xie, Bin Wang, Fanjing Kong, Jincheng Li, Dawei Liang, Gengshen Zhang, Dawei Leng, and Yuhui Yin. FG-CLIP: fine-grained visual and textual alignment. CoRR ,abs/2505.05071, 2025. 1, 3 [36] Huali Xu, Li Liu, Shuaifeng Zhi, Shaojing Fu, Zhuo Su, Ming-Ming Cheng, and Yongxiang Liu. Enhancing informa-tion maximization with distance-aware contrastive learning for source-free cross-domain few-shot learning. IEEE Trans. Image Process. , pages 2058–2073, 2024. 2, 3, 4 [37] Huali Xu, Li Liu, Tianpeng Liu, Shuaifeng Zhi, Shuzhou Sun, and Ming-Ming Cheng. Step-wise distribution-aligned style prompt tuning for source-free cross-domain few-shot learning. IEEE Transactions on Pattern Analysis and Ma-chine Intelligence , pages 1–16, 2025. 5, 6, 3 [38] Mengqi Xue, Qihan Huang, Haofei Zhang, Jingwen Hu, Jie Song, Mingli Song, and Canghong Jin. Protopformer: Con-centrating on prototypical parts in vision transformers for in-terpretable image recognition. In IJCAI 2024 , pages 1516– 1524, 2024. 2 [39] Lu Yuan, Dongdong Chen, Yi-Ling Chen, Noel Codella, Xiyang Dai, Jianfeng Gao, Houdong Hu, Xuedong Huang, Boxin Li, Chunyuan Li, Ce Liu, Mengchen Liu, Zicheng Liu, Yumao Lu, Yu Shi, Lijuan Wang, Jianfeng Wang, Bin Xiao, Zhen Xiao, Jianwei Yang, Michael Zeng, Luowei Zhou, and Pengchuan Zhang. Florence: A new foundation model for computer vision. CoRR , abs/2111.11432, 2021. 1 [40] Maxime Zanella and Ismail Ben Ayed. Low-rank few-shot adaptation of vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops , pages 1593–1603, 2024. 3, 5, 6, 2 [41] Fanhu Zeng, Zhen Cheng, Fei Zhu, Hongxin Wei, and Xu-Yao Zhang. Local-prompt: Extensible local prompts for few-shot out-of-distribution detection. In The Thirteenth Interna-tional Conference on Learning Representations , 2025. 3 [42] Renrui Zhang, Wei Zhang, Rongyao Fang, Peng Gao, Kun-chang Li, Jifeng Dai, Yu Qiao, and Hongsheng Li. Tip-adapter: Training-free adaption of CLIP for few-shot classi-fication. In Computer Vision - ECCV 2022 - 17th European Conference , pages 493–510, 2022. 3, 5, 6 [43] Zhenyu Zhang, Guangyao Chen, Yixiong Zou, Zhimeng Huang, Yuhua Li, and Ruixuan Li. Micm: Rethinking un-supervised pretraining for enhanced few-shot learning. In 
+
+Proceedings of the 32nd ACM International Conference on Multimedia , pages 7686–7695, 2024. 1 [44] Zhenyu Zhang, Guangyao Chen, Yixiong Zou, Yuhua Li, and Ruixuan Li. Learning unknowns from unknowns: Di-versified negative prototypes generator for few-shot open-set recognition. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 6053–6062, 2024. 1 [45] Zhenyu Zhang, Guangyao Chen, Yixiong Zou, Zhimeng Huang, and Yuhua Li. Decoupling template bias in clip: Harnessing empty prompts for enhanced few-shot learning. 
+
+arXiv preprint arXiv:2512.08606 , 2025. 3 [46] Zhenyu Zhang, Guangyao Chen, Yixiong Zou, Yuhua Li, and Ruixuan Li. Reclaiming lost text layers for source-free cross-domain few-shot learning. arXiv preprint arXiv:2603.05235 ,2026. 2 [47] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Zi-wei Liu. Conditional prompt learning for vision-language models. In CVPR 2022 , pages 16795–16804, 2022. 2, 6 [48] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for vision-language models. Int. J. Comput. Vis. , 2022. 2, 5, 6 [49] Linhai Zhuo, Zheng Wang, Yuqian Fu, and Tianwen Qian. Prompt as free lunch: Enhancing diversity in source-free cross-domain few-shot learning through semantic-guided prompting. CoRR , abs/2412.00767, 2024. 4 [50] Yixiong Zou, Yicong Liu, Yiman Hu, Yuhua Li, and Ruixuan Li. Flatten long-range loss landscapes for cross-domain few-shot learning. In CVPR 2024 , pages 23575–23584. IEEE, 2024. 3 [51] Yixiong Zou, Ran Ma, Yuhua Li, and Ruixuan Li. Atten-tion temperature matters in vit-based cross-domain few-shot learning. In NeurIPS 2024 , 2024. 2, 3 [52] Yixiong Zou, Shuai Yi, Yuhua Li, and Ruixuan Li. A closer look at the CLS token for cross-domain few-shot learning. In 
+
+NeurIPS 2024 , 2024. 1, 3 Interpretable Cross-Domain Few-Shot Learning with Rectified Target-Domain Local Alignment 
+
+# Supplementary Material 
+
+## 6. Detailed Dataset Description 
+
+Our experimental setup follows the BSCD-FSL [11] bench-mark, addressing the challenge of significant distributional shifts across four distinct target domain datasets. Detailed information on these datasets is provided below: 
+
+CropDiseases [26] is a dataset including 54,306 im-ages of 14 crop species (Apple, Blueberry, Cherry, Corn, Grape, Orange, Peach, Bell Pepper, Potato, Raspberry, Soy-bean, Squash, Strawberry, and Tomato) with 26 diseases (or healthy). The samples of this dataset are listed in Fig. 11. CropDiseases images are natural images, but are very spe-cialized (specific to the agriculture industry), so the domain gap here is larger than in the previous cross-domain set-ting [32]. 
+
+> Figure 11. Samples from CropDiseases.
+
+EuroSAT [13] is a dataset for land use and land cover classification. EuroSAT based on Sentinel-2 satellite im-agery, covers 13 spectral bands and consists of 10 categories including Industrial Buildings, Residential Buildings, An-nual Crop, Permanent Crop, River, Sea & Lake, Herba-ceous Vegetation, Highway, Pasture and Forest, with a total of 27,000 annotated and geographically referenced images. Compared to CropDiseases, EuroSAT images are less sim-ilar to mini Imagenet (source domain dataset) as they have lost perspective distortion, but are still color images of nat-ural scenes. The samples of this dataset are listed in Fig. 12. 
+
+> Figure 12. Samples from EuroSAT.
+
+The ISIC2018 [5] dataset was published by the Interna-tional Skin Imaging Collaboration (ISIC) as a large-scale dataset of dermoscopy images containing 10,015 images of seven skin injury types (melanoma, melanocytic nevus, basal cell carcinoma, actinic keratosis, benign keratosis, dermatofibroma, or a vascular lesion). ISIC2018 images are even less similar to mini Imagenet as they have lost perspec-tive distortion and no longer represent natural scenes. The samples of this dataset are listed in Fig. 13. 
+
+> Figure 13. Samples from ISIC2018.
+
+ChestX-ray14 is the largest lung X-ray database to date, which contains more than 100,000 pre-X-ray views for 14 lung diseases. Categories 1 to 14 correspond to 14 lung diseases, and category 15 indicates no disease. [34] stud-ied the images of eight diseases in this database and con-structed the ChestX-ray8 dataset, which comprises 108,948 frontal view X-ray images of 32,717 unique patients with the text-mined eight disease image labels (where each im-age can have multi-labels) from the associated radiological reports using natural language processing. In this work, we use ChestX-ray8 for cross-domain testing, consistent with [11]. ChestX is the most dissimilar to mini Imagenet across the four target domains as its images have lost perspective distortion, do not represent natural scenes, and have lost 2 color channels. The samples of this dataset are listed in Fig. 14. 
+
+> Figure 14. Samples from ChestX.
+
+## 7. Applying Our Method to other ViT Variants 
+
+Table 5 presents a comparative analysis of our method against the CLIP-LoRA baseline across other ViT archi-tectures, specifically ViT-B/32, and ViT-L/14, under the 1-shot setting. As observed, our method consistently demon-strates significant performance improvements over the base-line across all tested ViT variants and target domains.                             
+
+> Table 5. Comparison with ViT-based methods in 1-shot. Backbone Method ChestX ISIC EuroSAT Crop. Ave. ViT-B/32 Baseline 21.23 36.32 79.79 81.13 54.62 + Ours 21.36 38.26 82.88 83.98 56.62 ViT-L/14 Baseline 22.90 38.45 85.83 89.83 59.25 + Ours 23.19 38.72 90.11 90.77 60.70
+
+## 8. Experimental Data of Figure 2 
+
+Figure 2 in the main paper quantifies the hypothesis that the domain gap and scarce training data in CDFSL hurt patch-level local alignment more severely than global align-ment. Table 6 reports these alignment scores for both global (CLS-token) and local (patch-level) representations of the baseline, CLIP-LoRA [40]. As observed, all cross-domain datasets exhibit lower local alignment scores com-pared to miniImageNet, with the exception of EuroSAT, whose images are dominated by foreground regions, con-firming the baseline’s inability to capture fine-grained cues under data scarcity. To further validate the efficacy of the proposed CC-CDFSL framework, we compare the lo-cal alignment scores before and after applying our method. Table 7 summarizes the results. Consistently, our method significantly improves these scores, demonstrating that the cycle-consistency and semantic anchor mechanisms suc-cessfully enhance patch-level semantics alignment under domain shift without additional annotations.                                  
+
+> Table 6. Alignment Scores of Global and Local Features. Dataset Global Feature Local Features Far Domain miniImageNet 0.7056 0.3821 ✗
+> ChestX 0.6768 0.2391 ✓
+> ISIC2018 0.7261 0.2360 ✓
+> EuroSAT 0.6768 0.3845 ✓
+> CropDiseases 0.7012 0.3811 ✓
+> Table 7. Comparison of Local Feature Alignment Scores. Method ChestX ISIC EuroSAT Crop. Ave. Baseline 0.2391 0.2360 0.3845 0.3811 0.3102 + Ours 0.3293 0.2661 0.3796 0.3877 0.3407
+
+## 9. Generalization to Base-to-New Setting 
+
+The base-to-new generalization task refers to a scenario where a dataset is evenly divided by class into non-overlapping base classes and new classes. After a model is trained on a few-shot dataset from the base classes, its generalization ability is tested on the new classes. The har-monic mean (HM) of the classification accuracies on both is used to evaluate the overall performance: HM = 2 
+
+> 1
+> Base
+
++ 1
+
+> New
+
+= 2 · Base · New Base + New (17) As shown in Table 8, CC-CDFSL consistently outper-forms MaPLe [19] across all datasets in terms of new-class accuracy and harmonic mean, with marginal improvements on base classes. 
+
+## 10. Visualization 
+
+10.1. Better Class Separation 
+
+As illustrated in the Figure 15, features extracted by CLIP-LoRA tend to form less compact and more overlapping clusters, with different classes not well separated in the em-bedding space. In contrast, our method produces more dis-tinct and compact clusters for each class, resulting in clearer (a) Average over 11 datasets. 
+
+Base New HM MaPLe 82.19 74.55 78.18 + Ours 82.26 75.75 78.87 
+
+> (b) ImageNet.
+
+Base New HM MaPLe 75.57 70.88 73.15 + Ours 75.59 71.10 73.28 
+
+> (c) Caltech101.
+
+Base New HM MaPLe 98.02 94.43 96.19 + Ours 97.91 95.49 96.68 
+
+> (d) OxfordPets.
+
+Base New HM MaPLe 95.64 97.80 96.71 + Ours 95.82 97.99 96.89 
+
+> (e) StanfordCars.
+
+Base New HM MaPLe 72.56 73.80 73.17 + Ours 72.66 74.84 73.73 
+
+> (f) Flowers102.
+
+Base New HM MaPLe 96.11 72.44 82.61 + Ours 96.07 73.90 83.19 
+
+> (g) Food101.
+
+Base New HM MaPLe 90.75 91.84 91.29 + Ours 90.83 92.00 91.41 
+
+> (h) FGVCAircraft.
+
+Base New HM MaPLe 38.34 34.59 36.37 + Ours 38.00 36.01 36.98 
+
+> (i) SUN397.
+
+Base New HM MaPLe 80.92 78.21 79.54 + Ours 81.04 79.08 80.05 
+
+> (j) DTD.
+
+Base New HM MaPLe 79.86 59.54 68.28 + Ours 79.90 62.28 70.00 
+
+> (k) EuroSAT.
+
+Base New HM MaPLe 92.66 68.39 78.70 + Ours 93.57 71.98 81.37 
+
+> (l) UCF101.
+
+Base New HM MaPLe 83.66 78.04 80.75 + Ours 83.51 79.07 81.23 Table 8. Base-to-new generalization on 11 datasets. Ours (CC-CDFSL) consistently improves new-class accuracy and harmonic mean (HM) over MaPLe, validating the cross-task generality of cycle-consistent patch-level alignment. 
+
+class boundaries and reduced intra-class variance. This in-dicates that our approach achieves better class separation compared to the baseline. For ChestX, t-SNE embeddings are omitted: the grayscale chest X-rays exhibit minuscule lesion regions that yield highly overlapping clusters, ren-dering any inter-method distinctions imperceptible. 
+
+CropDiseases EuroSAT ISIC Figure 15. t-SNE visualization of feature distributions on different datasets. The first row shows results from CLIP-LoRA. The sec-ond row shows results from our proposed method. Different colors denote different classes. 
+
+10.2. Improved Focus on Relevant Semantics 
+
+Figure 16 and Figure 17 respectively present the attention maps and Grad-CAM [29] heatmaps produced by the base-line model and our proposed method across four datasets. This demonstrates that our method enhances the model’s ability to focus on critical features in cross-domain few-shot learning tasks and simultaneously improves local alignment between local visual patches and textual semantics. 
+
+ISIC EuroSAT ChestX CropDiseases Figure 16. Row 2 and Row 3 display the attention maps of the baseline and CC-CDFSL, respectively, showing that the latter lo-calizes critical regions more precisely. 
+
+## 11. Comparison with SOTA CDFSL Methods 
+
+We also evaluate our CC-CDFSL framework in comparison with the most competitive state-of-the-art (SOTA) CDFSL methods, covering a range of settings such as different back-bones, the use of source datasets, and whether fine-tuning is performed on the target domain (FT). MEM-FS [33], StyleAdv [8], FLoR [50], DAMIM [25], AttnTemp [51], CD-CLS [52], PMF [15], IM-DCL [36], StepSPT [37], and CropDiseases EuroSAT ISIC ChestX Figure 17. The heatmap for CLIP-LoRA (the second row) and our CC-CDFSL (the third row) in four target domains. Tomato Early  
+
+> blight
+> Tomato Bacterial
+> spot
+> Dermatofibroma
+> Residential
+> Buildings
+> Dermatofibroma
+> Pneumothorax
+> Pneumothorax
+> Residential
+> Buildings
+> Actinic Keratosis
+> Atelectasis
+> Highway
+> or Road
+> River
+> Strawberry healthy
+> Strawberry healthy
+> Atelectasis
+> Actinic Keratosis
+> Pathway -1Pathway -2
+
+Figure 18. Illustration of the Text-to-Image-patch-to-Text (T-I-T) cycle consistency pathway. Each specific class text is first used to locate the most semantically relevant local patch within the image. The selected image patch is then mapped back to the text space in an attempt to reconstruct the original class label. And the patches in the figure are resized to a resolution of 64×64 for better presen-tation. 
+
+SeGD-VPT [49] are introduced as competitors. Tabs. 9and 10 present that our method achieves new SOTA aver-age accuracies of 67.90% and 58.85% for the 5-way 5-shot and 5-way 1-shot classification tasks, respectively. Notably, IM-DCL [36] excels on ChestX, which we attribute to its ResNet-based backbone being better suited for capturing lo-cal features prevalent in medical images. 
+
+Figure 19. Additional visualizations of the Image-to-Text-to-Image (I-T-I) cycle consistency pathway. Each pathway shows a selected patch within the initial image, the most similar text de-rived from this patch, and a semantically re-focused patch within its corresponding image in the augmented image space. 
+
+## 12. Interpretability 
+
+T-I-T cycle pathway Figure 18 presents additional visu-alizations of the Text-to-Image-to-Text (T-I-T) cycle con-sistency pathway. The pathways demonstrate the model’s ability to establish fine-grained semantic connections be-tween textual descriptions and visual regions. Even when the reconstructed text does not exactly match the original text (e.g., “River” vs. “Highway or Road” of the EuroSAT for Pathway-2), the inconsistency provides valuable insights into the model’s understanding and reasoning at a local level. For instance, both “River” and “Highway or Road” categories represent linear structures (elongated shapes) in satellite imagery. Note that while the Semantic Anchor (SA) Module’s augmentation phase expands the corpus for the first hop of the T-I-T cycle, for display convenience, only the original image is used for retrieval in these visu-alizations. 
+
+I-T-I cycle pathway As explicitly mentioned in the main paper, Figure 19 provides more detailed visualizations of the Image-to-Text-to-Image (I-T-I) cycle consistency path-way: the model (1) extracts semantics from an anchor patch Table 9. Comparison with state-of-the-art CDFSL works by the 5-way 5-shot classification. 
+
+Method Backbone Mark Source Target CropDiseases EuroSAT ISIC ChestX Ave. MEM-FS ViT/DINO TIP-23 93.74 86.49 47.38 26.67 63.57 StyleAdv ViT/DINO CVPR-23 ✓ - 94.85 88.57 47.73 26.97 64.53 FLoR ViT/DINO CVPR-24 ✓ - 95.28 90.41 49.52 27.28 65.48 DAMIM ViT/DINO AAAI-25 ✓ - 95.52 89.50 50.76 27.28 65.77 AttnTemp ViT/DINO NeurIPS-24 ✓ - 95.53 90.13 53.09 27.72 66.62 CD-CLS ViT/DINO NeurIPS-24 ✓ ✓ 96.27 91.53 54.69 27.66 67.54 PMF ViT/DINO CVPR-22 ✓ ✓ 92.96 85.98 50.12 27.27 64.08 StyleAdv-FT ViT/DINO CVPR-23 ✓ ✓ 95.99 90.12 51.23 26.97 66.08 FLoR-FT ViT/DINO CVPR-24 ✓ ✓ 96.47 90.75 53.06 27.02 66.83 DAMIM-FT ViT/DINO AAAI-25 ✓ ✓ 96.34 91.18 54.86 27.82 67.78 IM-DCL RN10 TIP-24 - ✓ 95.73 89.47 52.74 28.93 66.72 StepSPT ViT/CLIP TPAMI-25 - ✓ 96.01 89.40 52.12 26.36 65.97 SeGD-VPT ViT/CLIP MM-24 - ✓ 96.93 93.81 53.10 23.20 66.76 CLIP-LoRA ViT/CLIP CVPR-24 - ✓ 96.20 92.63 50.68 24.44 65.99 CLIP-LoRA + Ours ViT/CLIP Ours - ✓ 97.08 94.35 54.72 25.47 67.90  
+
+> ∆
+
+- - - - +0.88 +1.72 +4.04 +1.03 +1.91 
+
+Table 10. Comparison with state-of-the-art CDFSL works by the 5-way 1-shot classification. 
+
+Method Backbone Mark Source Target CropDiseases EuroSAT ISIC ChestX Ave. MEM-FS ViT/DINO TIP-23 81.11 68.11 32.97 22.76 51.24 StyleAdv ViT/DINO CVPR-23 ✓ - 81.22 72.15 33.05 22.92 52.34 FLoR ViT/DINO CVPR-24 ✓ - 81.81 72.39 34.20 22.78 52.80 DAMIM ViT/DINO AAAI-25 ✓ - 82.34 72.87 34.66 22.97 53.21 AttnTemp ViT/DINO NeurIPS-24 ✓ - 84.02 74.35 34.92 23.19 54.12 CD-CLS ViT/DINO NeurIPS-24 ✓ ✓ 84.53 74.97 35.56 23.39 54.62 PMF ViT/DINO CVPR-22 ✓ ✓ 80.79 70.74 30.36 21.73 50.91 StyleAdv-FT ViT/DINO CVPR-23 ✓ ✓ 84.11 74.93 33.99 22.92 53.99 FLoR-FT ViT/DINO CVPR-24 ✓ ✓ 83.55 73.09 35.49 23.26 53.85 DAMIM-FT ViT/DINO AAAI-25 ✓ ✓ 83.90 73.61 36.35 23.38 54.31 IM-DCL RN10 TIP-24 - ✓ 84.37 77.14 38.13 23.98 55.91 StepSPT ViT/CLIP TPAMI-25 - ✓ 84.84 70.01 32.97 22.84 52.68 CLIP-LoRA ViT/CLIP CVPR-24 - ✓ 85.11 81.49 35.23 21.73 55.89 CLIP-LoRA + Ours ViT/CLIP Ours - ✓ 88.91 86.07 38.13 22.21 58.83  
+
+> ∆
+
+- - - - +3.80 +4.58 +2.90 +0.48 +2.94 
+
+(red box), (2) maps it to the most similar text label, and (3) retrieves a semantically matching patch only in the aug-mented view (red box). It highlights the model’s ability to maintain semantic consistency across different visual trans-formations and through the textual modality. 
+
+## 13. Hyperparameters in Eq. 16 
+
+Table 11 lists the cycle-consistency weights λ1 (T-I-T) and 
+
+λ2 (I-T-I) for each target dataset, determined by grid search on the validation split. All experiments use k = 10 for selecting anchor patches. 
+
+Table 11. Hyperparameters λ1 and λ2 for each dataset. ChestX ISIC2018 EuroSAT CropDiseases 
+
+λ1 3 3 1.5 1
+
+λ2 0.5 2 0.2 1.5

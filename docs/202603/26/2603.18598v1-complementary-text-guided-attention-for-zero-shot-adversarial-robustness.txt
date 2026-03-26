@@ -1,0 +1,1458 @@
+Title: Complementary Text-Guided Attention for Zero-Shot Adversarial Robustness
+
+URL Source: https://arxiv.org/pdf/2603.18598v1
+
+Published Time: Fri, 20 Mar 2026 00:56:21 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+> IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 1
+
+# Complementary Text-Guided Attention for Zero-Shot Adversarial Robustness 
+
+Lu Yu , Haiyang Zhang , and Changsheng Xu , Fellow, IEEE 
+
+Abstract —Due to the impressive zero-shot capabilities, pre-trained vision-language models (e.g., CLIP), have attracted widespread attention and adoption across various domains. Nonetheless, CLIP has been observed to be susceptible to ad-versarial examples. Through experimental analysis, we have ob-served a phenomenon wherein adversarial perturbations induce shifts in text-guided attention. Building upon this observation, we propose a simple yet effective strategy: Text-Guided Attention for Zero-Shot Robustness (TGA-ZSR) . This framework incorporates two components: Local Attention Refinement Module and Global Attention Constraint Module. Our goal is to maintain the generalization of the CLIP model and enhance its adversarial robustness: The Local Attention Refinement Module aligns the text-guided attention obtained from the target model via adver-sarial examples with the text-guided attention acquired from the original model via clean examples. This alignment enhances the model’s robustness. Additionally, the Global Attention Constraint Module acquires text-guided attention from both the target and original models using clean examples. Its objective is to maintain model performance on clean samples while enhancing overall robustness. However, we observe that the method occasionally focuses on irrelevant or spurious features, which can lead to suboptimal performance and undermine its robustness in certain scenarios. To overcome this limitation, we further propose a novel approach called Complementary Text-Guided Attention (Comp-TGA) . This method integrates two types of foreground attention: attention guided by the class prompt and reversed attention driven by the non-class prompt. These complementary attention mechanisms allow the model to capture a more comprehensive and accurate representation of the foreground. The experiments validate that TGA-ZSR and Comp-TGA yield 9.58% and 11.95% improvements respectively, in zero-shot robust accuracy over the current state-of-the-art techniques across 16 datasets. 
+
+Index Terms —Zero-shot adversarial robustness, vision-language models. 
+
+I. I NTRODUCTION 
+
+# LARGE-SCALE pre-trained vision-language models (VLMs) have showcased remarkable success in artificial intelligence by seamlessly integrating visual and textual 
+
+Received 7 July 2025; revised 8 February 2026; accepted 25 February 2026. ( Corresponding author: Changsheng Xu. ) Recommended for acceptance by J.Verbeek. This work was supported by the Beijing Natural Science Foundation L252032, in part by the National Natural Science Foundation of China under Grants 62476199, 62376196, U23A20387, Tianjin Natural Science Foundation under Grant 24JCJQJC00190. Lu Yu and Haiyang Zhang are with School of Computer Science and Engineering, Tianjin University of Technology, 300384, China (e-mail: luyu@email.tjut.edu.cn, zshy@stud.tjut.edu.cn). Changsheng Xu is with State Key Laboratory of Multimodal Artificial Intelligence Systems, Institute of Automation, Chinese Academy of Sciences, Beijing, 100190, China, and also with the School of Artificial Intelligence, University of the Chinese Academy of Sciences, Beijing, 100049, China (e-mail: csxu@nlpr.ia.ac.cn). Our code is available at https://github.com/zhyblue424/TGA-ZSR. Digital Object Identifier 10.1109/TPAMI.2026.3669252 
+
+data to understand complex multimodal information, such as CLIP [1]. Leveraging vast datasets and powerful architectures such as BERT [2] and its variants [3], [4], these models adeptly capture semantic relationships between images and texts, offering significant advantages across numerous applications. From image classification [5]–[7] and semantic segmentation [8] to image captioning [9] and vision question answering [10], pre-trained VLMs revolutionize how machines perceive and interact with multimodal information. Their importance lies in their ability to learn rich representations from varied data streams, enabling zero-shot learning and transfer learning across domains and tasks. Thus, ensuring the reliability of large-scale models is crucial. However, these models are vulnerable to adversarial attacks, as many other networks as demonstrated by recent studies [11], [12], even slight perturbations to input data can result in misclassification or altered outputs. Such attacks pose asignificant challenge, particularly in critical applications like autonomous vehicles [13], medical diagnosis [14], and maritime navigation [15], where the consequences of erroneous decisions can be severe. As these large-scale models become increasingly prevalent in real-world applications, understanding and mitigating the risks posed by adversarial attacks is essential to maintain trust and reliability in AI systems. Adversarial training [16]–[18] has emerged as a crucial technique in enhancing the robustness of deep learning models against adversarial attacks. By augmenting training data with adversarial examples generated through perturbations of input data, models are forced to learn more robust decision bound-aries, thereby improving their resilience to adversarial ma-nipulation. Given the rising significance of large-scale VLMs in various applications, understanding their vulnerability to adversarial attacks is essential. While adversarial training presents practical challenges when applied to downstream tasks, especially with large-scale models. Firstly, adversarial training typically involves generating adversarial examples during each training iteration, which increases the computa-tional overhead and may lead to overfitting on the training data. This phenomenon is exacerbated in large-scale models with vast parameter spaces, where fine-tuning becomes more susceptible to overfitting. Moreover, adversarial training may not adequately prepare models for all possible adversarial scenarios, potentially leaving them vulnerable to unknown data distributions encountered in real-world settings. Exploring zero-shot adversarial robustness in these models is particularly pertinent as it sheds light on their ability to generalize and perform reliably in unseen scenarios. Additionally, considering 
+
+0162-8828 © 2026 IEEE  
+
+> arXiv:2603.18598v1 [cs.CV] 19 Mar 2026 2IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026
+
+the multimodal nature of VLMs, the exploration of zero-shot adversarial robustness offers insights into the complex interactions between visual and textual modalities, paving the way for more robust and trustworthy multimodal AI systems. Text-guided Contrastive Adversarial Training (TeCoA) method [11] represents the pioneering effort in investigating the zero-shot adversarial robustness of large-scale VLMs. They aim to bolster CLIP’s zero-shot generalization capacity against adversarial inputs. While their primary focus lies on enhancing accuracy in the face of adversarial samples, this improvement comes at the expense of decreased performance on clean data. Subsequent work by PMG-AFT [12] builds upon this by intro-ducing a pre-trained model guided adversarial fine-tuning tech-nique, further enhancing both generalizability and adversarial robustness. However, despite the advancements made by both studies in enhancing CLIP’s zero-shot robustness, significant questions regarding the interpretability of adversarial attacks and the efficacy of adversarial training remain unanswered. Specifically, the mechanisms through which adversarial at-tacks influence network outputs and the reasons behind the effectiveness of adversarial training strategies remain elusive .In our paper, we delve into the text-guided attention shift phenomenon to shed light on how adversarial attacks alter model outputs. Leveraging these insights, we propose a simple yet effective strategy, TGA-ZSR, aimed at enhancing the robustness of the CLIP model and preserving its performance on clean examples. However, we observe that the original text-guided atten-tion occasionally focuses on irrelevant features, and the con-straints derived from these inaccurate attentions may hinder the model’s ability to enhance robustness. To address this limitation, we further propose Comp-TGA to obtain a more comprehensive attention mechanism. Specifically, we leverage both class prompts and non-class prompts to better distinguish between the foreground and background of an image. Class prompts (e.g. “This is a photo of a [class]” ) guide the model to emphasize the class-relevant features, ensuring that the attention remains focused on critical objects. In contrast, non-class prompts (e.g. “This is not a photo of a [class]” )encourage the model to differentiate the background from the foreground. By integrating complementary attention sources and refining the alignment process, our method enhances the model’s ability to focus on relevant features while filtering out noise and irrelevant details. Building on this, we design the Local Attention Refine-ment Module (LARM) to effectively filter out irrelevant or misleading information, thereby mitigating the influence of adversarial attacks that exploit weaknesses in the model’s decision-making process. Furthermore, to preserve the model’s generalization capability on clean images, we incorporate the Global Attention Constraint Module (GACM). This module ensures consistent performance on clean data while enhancing the model against adversarial disruptions. Specifically, LARM refines text-guided attention maps at the feature level by aligning the text-guided attention derived from adversarial examples in the target model with that obtained from clean examples in the original model, ensuring that the model fo-cuses on semantically consistent and discriminative regions. In contrast, GACM imposes global, model-level constraints that enforce consistency in the overall attention behavior between the origin and target models on clean examples. Together, these complementary modules enable the model to not only resist adversarial perturbations but also preserve its recognition performance on unperturbed inputs. Our main contributions are summarized as follows:  
+
+> •
+
+We introduce text-guided attention to enhance zero-shot robustness on vision-language models while maintaining performance on clean samples.  
+
+> •
+
+We propose a complementary text-guided attention mecha-nism that combines two types of foreground attention: one guided by class prompts and the other by non-class prompts. This fusion enables the model to identify a more accurate and comprehensive region of interest.  
+
+> •
+
+We improve the interpretability of adversarial attacks for zero-shot robustness on vision-language models through a text-guided attention mechanism.  
+
+> •
+
+The experimental results show that TGA-ZSR and Comp-TGA surpass previous state-of-the-art methods, establishing a new benchmark in model zero-shot robust accuracy. The initial version of this paper was accepted at the Thirty-Eighth Annual Conference on Neural Information Processing Systems [19]. Building upon the initial conference version, this extended manuscript introduces several significant improve-ments and contributions: (1) Methodological Advancements: 
+
+While the original TGA-ZSR framework leveraged text-guided attention to enhance adversarial robustness, we observed that such attention mechanisms can occasionally be inaccurate, leading to suboptimal performance. In this extended ver-sion, we propose complementary text-guided attention (Comp-TGA), a refined mechanism designed to yield a more compre-hensive and accurate representation of the foreground. This enhancement further boosts the model’s adversarial robustness. 
+
+(2) Expanded Related Work: We have expanded the related work and experimental comparison sections to include recent and relevant approaches such as LAAT [20] and TTC [21]. Notably, TTC is a test-time adaptation method, and our com-parisons with it further demonstrate the superior effectiveness and robustness of our approach. (3) More Experiments: 
+
+Additional experiments have been conducted, including the effects of different prompts and comparisons with a broader set of methods. II. R ELATED WORK 
+
+A. Pre-trained Vision-language Models 
+
+In recent years, advancements in computer vision [22]–[24] have primarily relied on training models with image-label pairs to recognize predefined object categories. However, these ap-proaches often overlook the inherent semantic connections be-tween textual descriptions and visual content. Motivated by the remarkable progress witnessed in natural language processing (NLP), exemplified by breakthroughs like Transformer [25], BERT [2], and GPT-3 [26], researchers are increasingly drawn to the prospect of using textual data to enhance the capabilities of DNNs. These methodologies are referred to as VLMs [1], [27], [28] and one prominent approach is to directly learn YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 3
+
+the semantic similarity between images and corresponding textual descriptions through image-text pairs. By aligning the embeddings of these two modalities, models like CLIP [1], ALIGN [27], BLIP [29], Visual-BERT [30], and ALBEF [31] aim to achieve superior performance across various tasks. CLIP [1] leverages a vast dataset of 400 million image-text pairs sourced from the internet and employs contrastive loss to effectively align the embeddings of both modalities, thereby enhancing the model’s capabilities. Experimental re-sults underscore the significant performance gains achieved by incorporating textual information into the model, with zero-shot performance surpassing that of earlier deep neural network architectures. However, despite its impressive zero-shot accuracy, experiments [11], [12] reveal vulnerabilities to adversarial examples, resulting in a notable decline in robustness. 
+
+B. Adversarial Robustness 
+
+Deep neural networks have been found to be vulnerable to adversarial examples [32]–[35], which can fool DNNs to produce false outputs, rendering trained models unreliable. To bolster robustness against such adversarial attacks, various ad-vanced methods have been proposed, including data augmenta-tion [36]–[39], adversarial training [16]–[18], [40], progressive self-distillation [41], randomization strategy [42], [43], and ad-versarial purification [44]–[49]. While these strategies aim to improve DNNs’ adversarial robustness, they often come with increased complexity or limited generalizability. Adversarial training [16]–[18], [40] stands out as one of the most widely used and effective approaches for improving adversarial ro-bustness. It follows a min-max optimization framework, where the inner maximization step generates adversarial examples to maximize the model’s loss, and the outer minimization step updates model parameters to minimize this worst-case loss, enhancing resistance to adversarial attacks. After the emergence of CLIP [1], many subsequent works [50]–[52] have utilized CLIP as a backbone, yet little attention has been given to studying its adversarial robustness. CLIP is shown to be susceptible to adversarial examples [11] as well, posing a significant threat to downstream tasks utilizing CLIP as a backbone. Hence, investigating the adversarial robustness of CLIP is crucial. 
+
+C. Zero-shot Adversarial Robustness for VLMs 
+
+The visual-language model, trained on both image and text data, serves as a foundational model for various tasks. How-ever, it has shown vulnerability to adversarial examples [11], [12], and training from scratch is time-intensive. TeCoA [11] was the first to explore zero-shot adversarial robustness for VLMs, aiming to enhance CLIP’s adversarial robustness by minimizing the cross-entropy loss between image logits and targets. While TeCoA solely utilizes cross-entropy loss, yield-ing only marginal performance improvements, PMG-AFT [12] extends this approach by minimizing the distance between features of adversarial examples and those of the pre-trained model. FARE [53] primarily focuses on maintaining high clean accuracy while improving model robustness, achieving this by constraining the distance between the original and target model embeddings. LAAT [20] addresses the subop-timal performance caused by the naive use of text encoders and enhances adversarial robustness through an expansion algorithm. TTC [21] leverages the image encoder to generate perturbations that effectively counteract adversarial examples during inference. Since background cues play a critical role in model predictions [54], we further observe that adversarial perturbations introduce significant shifts in attention maps compared with clean examples. Leveraging this insight, we enhance model robustness by constraining it with text-guided attention. III. M ETHODOLOGY 
+
+A. Preliminaries and Problem Setup 
+
+Following the previous works [11], [12], we choose the CLIP model as the pre-trained VLMs for the image classifica-tion task. Given an image-text pair (x, t), where x represents an image and t represents a textual prompt, CLIP learns to encode both the image and the text into fixed-dimensional embeddings. Let f (x) denote the embedding of the image 
+
+x and g(t) denote the embedding of the text prompt t, y is the one-hot vector label. For training or fine-tuning on the downstream tasks, we use the cross-entropy loss, denoted as 
+
+L(x, t, y).
+
+L(x, t, y) = −Ei,j 
+
+
+
+yij log exp(cos( f (x)i, g (t)j )) /τ )
+
+P 
+
+> k
+
+exp(cos( f (x)i, g (t)k)) /τ )
+
+
+
+(1) where we set yij = 1 if the image-text pair is positive, otherwise, yij = 0. τ is the temperature parameter and 
+
+cos indicates calculating the cosine similarity of the two embeddings. 
+
+Adversarial Attacks. Adversarial attacks are a concerning phenomenon where small, often imperceptible perturbations are intentionally applied to input data with the aim of deceiv-ing a model into producing incorrect outputs, which can be mathematically expressed as: 
+
+xa = x + δ, 
+
+s.t. F(xa)̸ = y, ∥δ∥∞ ≤ ε. (2) Here, F represents the classification model, δ represents the adversarial perturbation, y is the ground truth of the original input, and ε defines the strength of adversarial perturbation. These perturbations are crafted with the goal of causing the model to misclassify or generate erroneous predictions while appearing indistinguishable to human observers. The Projected Gradient Descent (PGD) [33] method is an iterative approach for crafting adversarial examples. It starts with the original input data and then iteratively adjusts the data in the direction that maximizes the model’s loss function while ensuring the perturbed data remains within a specified perturbation budget. Mathematically, the PGD attack can be expressed as follows: 
+
+xa+1 = Π x+S(xa + ε · sign( ▽xa L(xa, t, y))) (3) Here, L represents the loss function, x denotes the original input data, ε controls the magnitude of perturbation, and ▽xL
+
+represents the gradient of the loss function with respect to 4 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 Adv. image attention  Adv . image  Ori . image attention  Ori . image 
+
+german  shepherd  standard poodle  standard  poodle  golden retriever  chihuahua  goldfish goose  goose 
+
+jinrikisha  chimpanzee  swimming  trunks  chihuahua  egyptian  cat  cauliflower  albatross  birdhouse  
+
+> Fig. 1. The four rows depict the original image, its associated attention map, the generated adversarial example, and the attention map of the adversarial example. Labels in black indicate the ground truth, while those in red represent misclassified labels for the adversarial examples.
+
+the input data. By adding or subtracting ε times the sign of this gradient to the original input data, the PGD attack generates adversarial examples that lead to misclassification or incorrect predictions by the model. Πx+S makes the perturbed data remain within an ε-neighborhood of the original input, preventing the generated adversarial examples from straying too far. S is a set of allowed perturbations that formalizes the manipulative power of the adversary. 
+
+Adversarial Examples Generation and Adversarial Train-ing. The optimization objective for crafting adversarial exam-ples aims to maximize the loss of model fθ with respect to a perturbed input xa, which can be formulated as: 
+
+xa = argmax 
+
+> xa
+
+L(fθ (xa, t, y)) (4) Adversarial training is a technique to generate adversarial examples from the original training data and then use these examples to train the model, forcing it to learn to resist ad-versarial perturbations. To adapt the model to the downstream tasks, we apply adversarial fine-tuning on one target model towards robustness with the following loss: 
+
+θ = argmin 
+
+> θ
+
+J (fθ (xa, t, y)) (5) Where J represents the total loss function used for training the model. 
+
+Zero-Shot Adversarial Robustness. In this paper, we inves-tigate the zero-shot adversarial robustness of CLIP model, which refers to the ability of these models to maintain performance and reliability even when encountering unseen adversarial samples during inference, with only adversarial fine-tuning the original CLIP model on one target dataset, such as Tiny-ImageNet. 
+
+B. Text-Guided Attention based Interpretation of Adversarial Attacks 
+
+Text-Guided Attention. Attention mechanisms [50], [55], [56] play a crucial role in enhancing vision model performance across various tasks. At its core, attention enables models to focus on relevant parts of the input data while suppressing irrelevant information. Similarly, in VLMs, by incorporating textual guidance, the models can effectively focus on relevant visual features while processing language, thus facilitating more accurate and coherent multimodal understanding. Ad-ditionally, text-guided attention enhances interpretability by providing insights into the model’s decision-making process, fostering trust and understanding in complex multimodal sys-tems. Thus, we investigate the impact of text-guided attention on enhancing and interpreting zero-shot adversarial robustness in VLMs in this paper. We define the text-guided attention as follows: 
+
+A(x) = fg (x) · g(t)⊤, A ∈ RP ×1 (6) Where fg (x) represents the global image feature before the pooling operation of f (x), and P denotes the dimension of the attention embeddings. We reshape A to R√P ×√P to obtain the YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 5Original  Text -Guided  Clean  
+
+> Attention  Example
+> Fig. 2. Examples of original text-guided attention for CLIP. These reveal that the attention mechanism occasionally focuses on irrelevant regions.
+> Fig. 3. The framework overview of Complementary Text-Guided Attention.
+
+attention map, which is then resized to A ∈ RH×W . Finally, we apply a normalization operation ( norm ) on A to obtain the final text-guided attention map. 
+
+Interpretation of Adversarial Attacks. The previous research has predominantly focused on bolstering the zero-shot robust-ness of Vision-Language Models (VLMs), yet the reasons leading to misclassifications induced by adversarial attacks remain unclear. This paper aims to shed light on interpreting the impact of adversarial attacks on VLMs. By employing Eq. 6, we compute the text-guided attention for both the original image ( Ori. image ) and its corresponding adversarial counterpart ( Adv. image ), as depicted in Fig. 1. Remarkably, despite the subtle discrepancies imperceptible to the human eye between the adversarial example and the original image, the former is misclassified (labels in red). However, a signifi-cant difference emerges in the respective text-guided attention maps. Specifically, we observe a notable shift in the text-guided attention of the adversarial example, characterized by instances of displacement towards other objects, backgrounds, or even disappearance. For instance, while the original images in the first, second, and fourth columns pay attention to their subjects’ heads, in their adversarial counterparts, attention diverges elsewhere. In the third column, the attention shift leads from the correct object to an incorrect one, resulting in misclassification. In the fifth and seventh columns, the attention in their adversarial counterparts is redirected towards the background. Clean Class Non -Class Complementary             
+
+> Example Attention Attention Attention
+> bear  lobster  eagle  penguin
+> Fig. 4. Visualization of different attention mechanisms. The complementary text-guided attention fusion generates asignificantly more accurate and effective attention representation, addressing the limitations of the original text-guided attention.
+
+C. Complementary Text-Guided Attention based Interpretation of Adversarial Attacks 
+
+We further observe that the original text-guided attention occasionally focuses on the irrelevant features (as shown in Fig. 2), and the constraints derived from these inaccurate atten-tions may hinder the model’s ability to enhance robustness. To capture a more accurate representation of the foreground, we introduce a complementary fusion mechanism that integrates two sources of foreground information (as shown in Fig. 3). By leveraging both direct foreground attention and an alternative foreground attention derived from background attention, it enhances the model’s focus on the relevant features. First, we introduce class prompts (e.g. “This is a photo of a [class]” ) to guide the model’s attention toward the foreground, where the class attention is obtained using text-guided attention, as defined in Eq. 6. To obtain the background of the examples, we introduce non-class prompts (e.g. “This is not a photo of a [class]” for each image) to compute the non-class attention, defined as follows: 
+
+Anon (x) = fg (x) · g(tnon )⊤, Anon ∈ RP ×1 (7) where tnon represents the non-class prompts and g(tnon ) de-notes the text embeddings of tnon . Subsequently, an attention map in RH×W is derived from Anon ∈ RP ×1 through a transformation process. Then, we reverse the non-class attention to obtain an alternative foreground representation, which is achieved by subtracting it from the all-one matrix 1. The complementary attention fusion can be expressed as: 
+
+Acomp (x) = A(x) ⊙ (1 − Anon (x)) (8) 6 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026  
+
+> Fig. 5. An overview of our TGA-ZSR framework: We generate adversarial examples and feed them into the target image encoder. To enhance the adversarial robustness of the CLIP model and maintain its generalization, we introduce text-guided attention. This involves refining the framework for adversarial examples through the Local Attention Refinement Module and constraining the model to prevent significant drift via the Global Attention Constraint Module.
+
+where ⊙ denotes the Hadamard product, which is element-wise multiplication. This strategy enables the model to simultaneously capture two types of foreground attention, refining and ensuring the accuracy of the foreground representation. By distinguishing relevant features from irrelevant ones, it enhances the model’s ability to focus on a more accurate foreground. The Fig. 4 provides a comparative visualization of different attention mechanisms. The second column illustrates several failure cases of the original text-guided attention, which tends to drift away from the target object, revealing its limitations. The third column presents non-class attention, which iden-tifies background regions, while the fourth column fuses both complementary attention mechanisms, effectively refining the focus on the target semantic regions. Notably, we provide visualizations across a diverse range of object categories, such as penguin, eagle, lobster, and bear, as well as complex multi-object images, including lobster & corn and bear & fish. The results demonstrate that the complementary attention mechanism consistently captures class-relevant information, even in challenging environments. 
+
+D. Model Training 
+
+The semantic information embedded within text represen-tations is preserved through a frozen text encoder, offering invaluable guidance when adversarial perturbations disrupt relevant visual features, which has not been explored for zero-shot robustness of vision-language models. We introduce the Local Attention Refinement Module, designed to effectively filter out irrelevant information, thereby mitigating the impact of adversarial attacks seeking to exploit vulnerabilities in the model’s decision-making process. Moreover, to maintain model’s ability to generalize effectively on clean images, we introduce the Global Attention Constraint Module. This module ensures consistent performance on clean data while enhancing the model against adversarial disruptions. Addition-ally, employing text-guided attention enhances interpretability, offering crucial insights into how the model integrates and processes information across modalities. This interpretability not only instills trust in the model’s predictions but also facilitates the detection and mitigation of adversarial attacks. Our approach 1 presents a comprehensive framework (as shown in Fig. 5) for enhancing model robustness to adversarial perturbations while concurrently improving interpretability. We will introduce the details as follows. 
+
+Local Attention Refinement Module. Based on the insights gained in Section III-B, we propose a local attention re-finement module aimed at enhancing the robustness of the model. This module is designed to rectify the text-guided attention of adversarial samples, which often leads to altered  
+
+> 1TGA-ZSR and Comp-TGA share the same framework, with the primary distinction being the approach used to obtain attention. YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 7
+
+predictions. Our approaches align the adversarial attention map with that of the clean samples, known for their high-accuracy attention distribution. This simple yet effective strategy serves to mitigate the impact of adversarial perturbations on the model’s predictions. We take the generated adversarial sample xa to the target model f tar g (·) and the clean sample x to the original model 
+
+f ori g (·) and obtain the adversarial attention map A(xia)tar 
+
+and the clean attention map A(xi)ori respectively. The local attention refinement loss LLARM is thus defined as: 
+
+LLARM = 1
+
+N ·
+
+> N
+
+X
+
+> i=0
+
+∥A (xia)tar − A (xi)ori ∥2 (9) where ∥∥ 2 denotes the L2 distance computation between two attention maps. In TGA-ZSR, the attention maps 2 are defined as follows: 
+
+A(xa)tar = f tar g (xa) · g(t)⊤
+
+A(x)ori = f ori g (x) · g(t)⊤ (10) In contrast, the attention maps in Comp-TGA include an additional refinement step and are formulated as: 
+
+A(xa)tar = A(xa)tar ⊙ (1 − Anon (xa)tar )= ( f tar g (xa) · g(t)⊤) ⊙ (1 − (f tar g (xa) · g(tnon )⊤)) 
+
+A(x)ori = A(x)ori ⊙ (1 − Anon (x)ori )= ( f ori g (x) · g(t)⊤) ⊙ (1 − (f ori g (x) · g(tnon )⊤)) 
+
+(11) 
+
+Global Attention Constraint Module. The Local Attention Refinement module serves to enhance the robustness of the models, consequently improving the accuracy of adversarial samples. However, this enhancement comes with a trade-off: it may marginally sacrifice the accuracy on clean samples due to shifts in model parameters. To preserve the general-ization capability of pre-trained VLMs, we introduce a Global Attention Constraint Module. This module aims to mitigate performance drops on clean images, thereby ensuring the overall effectiveness and reliability of the model. Specifically, we input the clean sample x into the target model f tar g (·), adversarially fine-tuned on the Tiny-ImageNet dataset, to acquire the text-guided attention map A(x)tar .Concurrently, the original text-guided attention map outputted from the original CLIP model f ori g (·) is denoted as A(x)ori .To ensure the preservation of important parameters for clean images, we enforce an L2 distance constraint between these two attention maps. The global attention constraint loss LGACM 
+
+is formulated as: 
+
+LGACM = 1
+
+N ·
+
+> N
+
+X
+
+> i=0
+
+A(xi)tar − A (xi)ori 2 (12) In TGA-ZSR, the attention maps are computed as: 
+
+A(x)tar = f tar g (x) · g(t)⊤
+
+A(x)ori = f ori g (x) · g(t)⊤ (13) 
+
+> 2We only compute the attention map for the image corresponding to the text prompt of the ground-truth label.
+
+while in Comp-TGA, the attention maps are given by: 
+
+A(x)tar = A(x)tar ⊙ (1 − Anon (x)tar )= ( f tar g (x) · g(t)⊤) ⊙ (1 − (f tar g (x) · g(tnon )⊤)) 
+
+A(x)ori = A(x)ori ⊙ (1 − Anon (x)ori )= ( f ori g (x) · g(t)⊤) ⊙ (1 − (f ori g (x) · g(tnon )⊤)) 
+
+(14) Thus, the final loss function, shared by both TGA-ZSR and Comp-TGA, can be represented as: 
+
+Ltotal = LCE + α · LLARM + β · LGACM (15) IV. E XPERIMENTS 
+
+A. Experimental Setup 
+
+Datasets. Our experiments begin with training the pre-trained CLIP model on the Tiny-ImageNet [57]. Then we evaluate the model’s zero-shot adversarial robustness across 15 subsequent datasets, followed by previous studies, such as TeCoA [11] and PMG-AFT [12]. These datasets include several com-monly used classfication datasets, including CIFAR-10 [58], CIFAR-100 [58], STL-10 [59], ImageNet [57], Caltech-101 [60], and Caltech-256 [61]. Additionally, fine-grained image classification datasets such as StanfordCars [62], Flow-ers102 [63], Food101 [64], FGVCAircraft [65], and Oxford-Pets [66] are included. Furthermore, the scene recognition dataset SUN397 [67], the medical image dataset PCAM [68], the satellite image classification dataset EuroSAT [69] and the texture recognition dataset DTD [70] are incorporated for comprehensive evaluation. 
+
+Implementation Details. Following the protocol of previous works [12], we fine-tuned the CLIP model on the adversarial samples of Tiny-ImageNet [57] as ‘adversarial fine-tuning’ 
+
+and subsequently evaluated its performance across 15 datasets and Tiny-ImageNet itself. We employ ViT-B/32 as the back-bone in CLIP and utilize the SGD optimizer to minimize loss. During adversarial fine-tuning, we update all parameters of the image encoder with a learning rate of 1e-4, weight decay of 0, momentum of 0.9, and a batch size of 128. We utilize l∞ norm PGD-2 [33] with 2 iterations to generate adversarial examples, with an attack strength ε of 1/255 and the attack step size is 1/255. To evaluate zero-shot adversarial inference, we employ 
+
+l∞ norm PGD-100 [33] with 100 iterations, attack step of 1/255, and a batch size of 256 to generate adversarial examples for verifying CLIP’s adversarial robustness. Additionally, to assess the model’s robustness under different attack strengths, we perform inference using adversarial strengths ε of 1/255, 2/255, and 4/255. The hyperparameters α and β are set to 0.08 and 0.05 respectively in Eq. 15 in the main experiments of TGA-ZSR, and the same values are used for the CW attack. For the AutoAttack [71] experiments, α and β are set to 0.08 and 0.009. For Comp-TGA, we adopt a similar configuration, setting α and β to 0.10 and 0.10 for both the PGD and CW attacks, and adjusting them to 0.10 and 0.07 for the AutoAttack setting. We conducted the experiment utilizing the RTX 3090, which required a training period ranging from 3 to 4 hours. 8 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+TABLE I ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255 OF PGD [33]. W E PERFORMED SEVERAL DIFFERENT METHODS ON 
+
+TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 DATASETS .THE OPTIMAL ACCURACY IS HIGHLIGHTED IN BOLD , WHILE THE SECOND -BEST ACCURACY IS UNDERLINED . T HE VALUES IN PARENTHESES REPRESENT THE STANDARD DEVIATION .
+
+Zero-shot datasets Methods 
+
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+
+ARobust 
+
+CLIP [1] 0.88 2.42 0.26 26.11 1.00 6.60 3.84 1.19 2.02 0.05 0.00 1.24 19.88 12.60 0.20 0.11 4.90 FT-Clean 13.55 19.92 4.94 40.00 0.82 0.64 2.40 0.68 2.66 0.05 0.03 1.08 14.95 9.69 0.09 1.32 7.05 FT-Adv. 51.59 38.58 21.28 69.55 17.60 12.55 34.97 19.92 15.90 11.95 1.83 17.26 50.73 40.18 8.42 48.88 28.83 TeCoA [11] 37.57 30.30 17.53 67.19 19.70 14.76 36.44 22.46 17.45 12.14 1.62 18.18 55.86 41.88 8.49 47.39 28.06 FARE [53] 23.88 21.25 10.72 59.59 8.30 10.97 24.56 15.48 10.96 0.14 0.84 10.54 45.96 34.35 4.38 10.17 18.25 LAAT [20] 52.71 35.49 21.32 67.79 18.51 12.64 35.54 19.29 11.38 12.60 1.38 18.43 55.85 41.23 6.60 37.47 28.02 PMG-AFT [12] 47.11 46.01 25.83 74.51 22.21 19.58 41.62 23.45 15.05 12.54 1.98 21.43 62.42 45.99 11.72 48.64 32.51 TGA-ZSR (ours) 63.95  
+
+> (±0.11)
+
+61.45  
+
+> (±0.67)
+
+35.27  
+
+> (±0.07)
+
+84.22  
+
+> (±0.21)
+
+33.22  
+
+> (±0.39)
+
+33.97  
+
+> (±0.20)
+
+57.75  
+
+> (±0.76)
+
+34.55  
+
+> (±0.35)
+
+22.08  
+
+> (±0.16)
+
+14.27  
+
+> (±0.26)
+
+4.75  
+
+> (±0.27)
+
+28.74  
+
+> (±0.11)
+
+70.97  
+
+> (±0.42)
+
+60.06  
+
+> (±0.46)
+
+20.40  
+
+> (±0.68)
+
+47.76  
+
+> (±0.35)
+
+42.09  
+
+> (±0.12)
+
+Comp-TGA (ours) 69.22  
+
+> (±0.84)
+
+70.46  
+
+> (±1.53)
+
+42.26  
+
+> (±1.21)
+
+86.23  
+
+> (±0.66)
+
+34.61  
+
+> (±1.39)
+
+33.57  
+
+> (±1.03)
+
+60.09  
+
+> (±1.90)
+
+35.84  
+
+> (±1.34)
+
+23.90  
+
+> (±0.63)
+
+16.64  
+
+> (±0.88)
+
+5.41  
+
+> (±0.12)
+
+29.47  
+
+> (±1.07)
+
+72.16  
+
+> (±0.47)
+
+60.83  
+
+> (±1.17)
+
+22.17  
+
+> (±1.09)
+
+48.56  
+
+> (±0.19)
+
+44.46  
+
+> (±0.76)
+
+TABLE II ZERO -SHOT CLEAN ACCURACY . W E PERFORMED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 DATASETS .
+
+Zero-shot datasets Methods 
+
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+
+AClean 
+
+CLIP [1] 57.26 88.06 60.45 97.04 57.26 83.89 87.41 65.47 40.69 42.59 20.25 59.15 85.34 81.73 52.02 52.09 64.42 
+
+FT-Clean 79.04 84.55 54.25 93.78 46.80 47.10 80.98 46.43 30.32 24.39 9.30 44.40 78.69 70.81 31.15 47.89 54.37 FT-Adv. 73.83 68.96 39.69 86.89 33.37 27.74 60.10 33.45 23.14 16.49 4.86 32.06 67.41 57.72 18.11 49.91 43.36 TeCoA [11] 63.97 66.14 36.74 87.24 40.54 35.11 66.15 38.75 25.53 17.13 6.75 37.09 74.63 62.50 24.65 50.01 45.81 FARE [53] 77.54 87.58 62.80 94.33 49.91 70.02 81.47 57.10 36.33 22.69 14.19 51.78 84.04 77.50 44.35 46.07 59.85 LAAT [20] 73.96 63.09 39.32 84.65 35.62 26.50 58.84 32.61 19.68 19.50 3.78 33.31 72.66 58.43 16.01 51.58 43.10 PMG-AFT [12] 67.11 74.62 44.68 88.85 37.42 37.47 66.34 35.66 21.17 17.76 4.71 35.93 76.70 61.96 25.21 49.99 46.60 TGA-ZSR (ours) 75.72  
+
+> (±0.12)
+
+86.46  
+
+> (±0.26)
+
+56.52  
+
+> (±0.35)
+
+93.48  
+
+> (±0.19)
+
+51.99  
+
+> (±0.25)
+
+57.59  
+
+> (±0.34)
+
+77.32  
+
+> (±0.30)
+
+48.08  
+
+> (±0.37)
+
+29.06  
+
+> (±0.35)
+
+24.24  
+
+> (±0.49)
+
+11.93  
+
+> (±0.27)
+
+48.04  
+
+> (±0.06)
+
+80.70  
+
+> (±0.09)
+
+74.74  
+
+> (±0.18)
+
+36.62  
+
+> (±1.03)
+
+49.58  
+
+> (±0.17)
+
+56.44  
+
+> (±0.08)
+
+Comp-TGA (ours) 76.07  
+
+> (±0.09)
+
+84.46  
+
+> (±0.34)
+
+55.64  
+
+> (±0.34)
+
+92.88  
+
+> (±0.17)
+
+51.47  
+
+> (±0.09)
+
+54.01  
+
+> (±0.46)
+
+76.49  
+
+> (±0.63)
+
+46.07  
+
+> (±0.54)
+
+29.43  
+
+> (±0.54)
+
+23.25  
+
+> (±0.59)
+
+11.30  
+
+> (±0.56)
+
+46.08  
+
+> (±0.09)
+
+80.50  
+
+> (±0.60)
+
+73.31  
+
+> (±0.22)
+
+36.55  
+
+> (±0.36)
+
+49.46  
+
+> (±0.12)
+
+55.44  
+
+> (±0.22)
+
+Evaluation Metrics. Consistent with previous work, we report the average Robustness Accuracy ARobust and Clean Accuracy 
+
+AClean across all datasets to assess the model’s performance on adversarial and clean examples, respectively. To further capture the trade-off between robustness and generalization exhibited by different methods, we further report the metric 
+
+AOverall , which reflects the overall performance by averaging 
+
+ARobust and AClean .
+
+B. Main Results 
+
+To validate the effectiveness of our approaches, we conduct comparisons with several state-of-the-art methods such as TeCoA [11], PMG-AFT [12], FARE [53], LAAT [20], and TTC [21]. Additionally, we extend the comparison to include CLIP (the original pre-trained CLIP model), FT-Adv. (adver-sarial fine-tuning using the contrastive loss of the original CLIP) and FT-Clean (fine-tuning on clean examples with the contrastive loss of the original CLIP) for a comprehensive evaluation. We evaluate the robustness of several approaches against PGD attack with a perturbation bound of ε = 1 /255 .
+
+Adversarial Zero-shot Robust Accuracy. Table I shows that our proposed method, Comp-TGA, achieves a substan-tial improvement of 39.56% in ARobust over the original CLIP model, outperforming its predecessor TGA-ZSR, which achieves 37.19%. Compared to the current state-of-the-art method, PMG-AFT, Comp-TGA achieves an improvement of 11.95% in ARobust , while TGA-ZSR also shows a solid 9.58% improvement. These results highlight the effectiveness of our progressive design: Built upon TGA-ZSR, Comp-TGA further improves its robustness through the integration of complementary text-guided attention mechanisms. In general, our methods are superior to all the other methods on most datasets except for a comparable result on the PCAM dataset. In addition, we obtain the best result on Tiny-ImageNet, which is not a strict zero-shot test. It indicates that our methods are robust to adversarial attacks on both seen and unseen datasets. 
+
+Zero-shot Clean Accuracy. Table II illustrates the model’s accuracy for clean examples using different methods. Our improved method, Comp-TGA, achieves a gain of 8.84% in 
+
+AClean over PMG-AFT and 1.07% over FT-Clean, while its predecessor, TGA-ZSR, also yields solid improvements of 9.84% and 2.07%, respectively. Similar to Table I, zero-shot clean accuracy exhibits improvement not only on an indi-vidual dataset but across all datasets. However, we observed that our methods are 4.41% and 3.41% lower than that of FARE in AClean , respectively. It is important to note that FARE prioritizes preserving zero-shot clean accuracy. In con-trast, our methods maintain competitive clean accuracy while achieving significantly better robustness. Notably, Comp-TGA, despite slightly lower clean accuracy than TGA-ZSR, achieves YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 9
+
+TABLE III ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255 OF AUTO ATTACK [71]. W E PERFORMED SEVERAL DIFFERENT METHODS ON 
+
+TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 DATASETS .                                                                                                                                                           
+
+> Zero-shot datasets Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> ARobust
+> CLIP [1] 0.02 0.01 0.08 0.03 0.04 0.01 0.00 0.03 0.16 0.12 0.06 0.04 0.43 0.10 0.11 0.22 0.09 FT-Clean 0.08 0.03 0.01 0.91 0.09 0.04 0.06 0.03 0.48 0.02 0.03 0.12 1.38 0.66 0.03 0.03 0.25 FT-Adv. 50.48 37.55 20.39 69.14 16.25 11.23 33.91 18.54 19.95 11.59 1.65 16.21 49.90 39.24 7.57 48.84 28.28 TeCoA [11] 35.03 28.18 16.09 66.08 17.41 13.05 34.81 20.80 15.37 11.40 1.32 16.32 54.54 40.15 7.15 47.12 26.55 FARE [53] 28.59 23.37 13.58 60.70 9.72 13.88 27.72 15.48 9.15 0.25 0.87 12.07 47.45 36.68 6.77 10.23 19.78 LAAT [20] 51.88 34.82 20.99 67.41 17.59 12.03 34.97 18.38 11.06 11.99 1.35 17.52 55.19 40.75 6.11 37.47 27.47 PMG-AFT [12] 44.26 44.12 23.66 73.90 19.63 17.25 39.25 20.87 13.72 11.99 1.68 19.17 60.57 44.25 9.59 48.53 30.78 TGA-ZSR (ours) 49.49
+> (±0.09)
+> 40.69
+> (±0.14)
+> 22.30
+> (±0.08)
+> 71.97
+> (±0.08)
+> 20.14
+> (±0.19)
+> 15.41
+> (±0.15)
+> 39.82
+> (±0.57)
+> 21.35
+> (±0.10)
+> 16.81
+> (±0.30)
+> 11.31
+> (±0.10)
+> 2.34
+> (±0.30)
+> 19.22
+> (±0.06)
+> 57.65
+> (±0.50)
+> 45.73
+> (±0.13)
+> 10.14
+> (±0.29)
+> 48.01
+> (±0.60)
+> 30.77
+> (±0.07)
+> Comp-TGA (ours) 53.00
+> (±0.04)
+> 42.18
+> (±0.01)
+> 23.58
+> (±0.06)
+> 73.04
+> (±0.59)
+> 20.47
+> (±0.09)
+> 15.30
+> (±0.02)
+> 40.28
+> (±0.18)
+> 22.37
+> (±0.04)
+> 17.17
+> (±0.21)
+> 12.28
+> (±0.90)
+> 3.43
+> (±0.03)
+> 19.47
+> (±0.07)
+> 57.58
+> (±0.39)
+> 45.11
+> (±0.30)
+> 10.24
+> (±0.02)
+> 47.05
+> (±0.58)
+> 31.41
+> (±0.10)
+
+TABLE IV ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255 OF CW [72]. W E PERFORMED SEVERAL DIFFERENT METHODS ON 
+
+TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 DATASETS .                                                                                                                                                           
+
+> Zero-shot datasets Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> ARobust
+> CLIP [1] 0.21 0.36 0.10 10.59 1.16 0.82 1.23 1.09 2.18 0.01 0.00 1.14 13.50 7.36 2.36 0.07 3.64 FT-Clean 1.26 0.98 0.14 9.98 1.09 2.05 0.49 0.75 2.50 0.03 0.03 1.22 7.93 5.16 1.42 1.93 2.20 FT-Adv. 51.65 38.49 20.97 69.29 16.87 11.54 34.78 18.82 15.05 11.77 1.74 16.86 50.48 39.78 8.02 48.78 28.43 TeCoA [11] 35.74 30.14 16.76 66.35 18.20 13.36 36.33 21.17 15.11 11.58 1.50 16.86 54.86 40.62 8.07 47.86 27.16 FARE [53] 24.40 21.35 9.98 60.38 8.55 10.13 25.31 16.08 12.39 1.80 1.09 9.68 45.46 34.07 4.13 10.75 18.47 LAAT [20] 52.88 35.56 21.54 67.56 18.25 12.38 35.73 18.54 11.01 12.74 1.47 18.08 55.78 41.28 6.93 37.46 27.95 PMG-AFT [12] 44.59 44.86 24.15 74.11 19.99 17.33 39.88 20.95 13.51 12.09 1.47 19.51 60.99 44.46 10.57 48.59 31.07 TGA-ZSR (ours) 63.73
+> (±0.65)
+> 60.55
+> (±0.77)
+> 34.66
+> (±0.43)
+> 84.46
+> (±1.08)
+> 31.34
+> (±1.48)
+> 32.84
+> (±0.94)
+> 56.97
+> (±1.98)
+> 33.05
+> (±0.62)
+> 21.13
+> (±0.67)
+> 13.83
+> (±0.44)
+> 4.56
+> (±0.03)
+> 27.41
+> (±1.23)
+> 69.80
+> (±0.95)
+> 59.48
+> (±0.44)
+> 19.50
+> (±1.00)
+> 47.59
+> (±0.83)
+> 41.24
+> (±0.73)
+> Comp-TGA (ours) 68.89
+> (±0.98)
+> 70.36
+> (±1.68)
+> 42.07
+> (±1.15)
+> 86.13
+> (±0.67)
+> 34.35
+> (±1.29)
+> 33.90
+> (±1.10)
+> 60.42
+> (±0.90)
+> 35.72
+> (±1.47)
+> 23.07
+> (±0.52)
+> 16.67
+> (±0.75)
+> 5.31
+> (±0.19)
+> 29.47
+> (±1.08)
+> 72.11
+> (±0.62)
+> 60.70
+> (±1.17)
+> 23.07
+> (±1.47)
+> 48.52
+> (±0.22)
+> 44.42
+> (±0.84)
+
+stronger adversarial robustness, making it the more balanced and practically effective solution. 
+
+C. Experiments on More Attack Types 
+
+Results against AutoAttack. AutoAttack [71] stands out as a strong attack method for assessing model robustness. We follow TeCoA and PMG-AFT to verify the perturbation bound ε of 1/255 in the standard version of AutoAttack. The results are summarized in Table III. We can see that the original CLIP model experienced a significant performance decline, decreasing to 0.09% in ARobust . While all methods exhibit a performance decline, our approaches remain highly competitive, achieving either the best or second-best results across most datasets. Notably, Comp-TGA surpasses TGA-ZSR in terms of average accuracy, further demonstrating its effectiveness against stronger adversarial attacks. 
+
+Results against CW Attack. CW attack [72] is an optimization-based approach designed to generate small per-turbations to input data, causing the model to make incorrect predictions while keeping the perturbed input visually similar to the original. We further evaluate the robustness of our approaches against this challenging attack, using a perturbation bound of ε = 1/255 . The results, shown in Table IV, demonstrate that Comp-TGA significantly outperforms the state-of-the-art method PMG-AFT, achieving an improvement of 13.35% in ARobust . Its predecessor, TGA-ZSR, also achieves a solid gain of 10.17%. 
+
+Results against Adaptive Attack. To better assess robust-ness under worst-case conditions, we follow the simple yet stronger principle adopted in the prior study [73]. Specifically, we assume a standard white-box threat model, where the adversary has full access to the model architecture, param-eters, and any necessary additional information. Under this setting, adversarial training is still conducted using PGD-based perturbations, while evaluation is carried out using constructed adaptive attacks tailored to the model structure and optimization objectives for all methods. Detailed descriptions of the adaptive attack design and experimental settings are provided in Appendix B. Table V shows that under adaptive attacks with ϵ = 1 /255 , the performance of all methods drops noticeably. Nevertheless, our method consistently outperforms all baselines across almost all zero-shot datasets. While prior approaches and standard adversarial fine-tuning exhibit lim-ited robustness and poor cross-dataset generalization, TGA-ZSR achieves substantial and stable improvements, indicating stronger resistance to worst-case attacks. Comp-TGA further boosts performance and attains the best overall robustness ac-curacy ARobust , demonstrating that explicitly preserving robust feature and attention structures leads to more reliable zero-shot robustness. These results confirm that the gains are systematic rather than arising from overfitting to specific attack algorithms 10 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+TABLE V ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255 OF ADAPTIVE ATTACK . W E PERFORMED SEVERAL DIFFERENT METHODS ON 
+
+TINY -I MAGE NET AND EVALUATED ACROSS 16 DATASETS . T HE OPTIMAL ACCURACY IS HIGHLIGHTED IN BOLD , WHILE THE SECOND -BEST ACCURACY IS UNDERLINED .
+
+Zero-shot datasets Methods 
+
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+
+ARobust 
+
+FT-Adv. 51.00 39.90 21.24 68.71 15.95 10.38 34.07 17.81 13.46 11.69 1.26 16.16 51.03 38.35 6.11 42.84 27.50 TeCoA [11] 37.57 30.30 17.53 67.19 19.70 14.76 36.44 22.46 17.45 12.14 1.62 18.18 55.86 41.88 8.49 47.39 28.06 FARE [53] 22.64 20.57 10.63 58.39 8.33 10.75 24.45 15.48 10.80 0.15 0.84 10.52 45.51 34.02 4.32 3.10 17.53 LAAT [20] 49.27 34.60 19.74 66.13 17.58 11.38 35.00 18.15 9.63 8.84 1.62 17.06 55.13 40.20 5.48 38.08 26.74 PMG-AFT [12] 44.19 44.67 23.96 74.05 19.88 17.25 39.85 20.83 13.35 12.03 1.56 19.42 60.74 44.39 10.12 30.81 29.82 TGA-ZSR (ours) 60.53 57.46 31.87 81.46 30.46 30.73 54.62 31.79 21.60 13.76 4.26 25.95 68.28 57.37 17.26 45.35 39.55 Comp-TGA (ours) 66.65 66.84 39.70 84.38 32.63 30.88 56.06 33.68 22.71 16.02 4.56 26.90 70.31 58.93 20.07 48.13 42.40 
+
+TABLE VI COMPARISON WITH TEST -TIME DEFENSE (TTC). Z ERO -SHOT ROBUST AND CLEAN ACCURACY ON 16 DATASETS . W E PERFORMED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 
+
+DATASETS UNDER PGD [33], CW [72] AND AUTO ATTACK [71] WITH THE SAME ATTACK STRENGTH .
+
+Zero-shot datasets Attack Methods 
+
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+
+Average 
+
+PGD TTC [21] 24.06 30.37 17.24 77.63 42.25 61.13 60.73 41.75 29.31 10.58 13.59 38.99 65.23 59.73 35.46 50.13 41.14 TGA-ZSR (ours) 63.95 61.45 35.27 84.22 33.22 33.97 57.75 34.55 22.08 14.27 4.75 28.74 70.97 60.06 20.40 47.76 42.09 Comp-TGA (ours) 69.22 70.46 42.26 86.23 34.61 33.57 60.09 35.84 23.90 16.64 5.41 29.47 72.16 60.83 22.17 48.56 44.46 
+
+CW TTC [21] 21.86 28.52 17.22 73.00 40.13 57.81 58.84 39.18 27.29 10.50 13.71 36.97 63.91 57.94 33.06 50.66 39.41 TGA-ZSR (ours) 63.73 60.55 34.66 84.46 31.34 32.84 56.97 33.05 21.13 13.83 4.56 27.41 69.80 59.48 19.50 47.59 41.24 Comp-TGA (ours) 68.89 70.36 42.07 86.13 34.35 33.90 60.42 35.72 23.07 16.67 5.31 29.47 72.11 60.70 23.07 48.52 44.42 
+
+AutoAttack TTC [21] 4.93 3.13 6.77 5.51 7.19 5.05 6.41 10.46 8.03 15.89 3.51 6.51 10.25 7.26 4.96 5.65 6.97 TGA-ZSR (ours) 49.49 40.69 22.30 71.97 20.14 15.41 39.82 21.35 16.81 11.31 2.34 19.22 57.65 45.73 10.14 48.01 30.77 Comp-TGA (ours) 53.00 42.18 23.58 73.04 20.47 15.30 40.28 22.37 17.17 12.28 3.43 19.47 57.58 45.11 10.24 47.05 31.41 
+
+Clean TTC [21] 51.53 85.39 59.57 96.65 53.51 82.25 83.02 64.33 36.70 53.21 17.94 48.70 85.59 79.58 47.98 57.74 62.73 
+
+TGA-ZSR (ours) 75.72 86.46 56.52 93.48 51.99 57.59 77.32 48.08 29.06 24.24 11.93 48.04 80.70 74.74 36.62 49.58 56.44 Comp-TGA (ours) 76.07 84.46 55.64 92.88 51.47 54.01 76.49 46.07 29.43 23.25 11.30 46.08 80.50 73.31 36.55 49.46 55.44 
+
+AOverall 
+
+TTC [21] 25.60 36.85 25.20 63.20 35.77 51.56 52.25 38.93 25.33 22.55 12.19 32.79 56.24 51.13 30.36 41.04 37.56 TGA-ZSR (ours) 63.22 62.29 37.19 83.53 34.17 34.95 57.97 34.26 22.27 15.91 5.90 30.85 69.78 60.00 21.67 48.24 42.64 Comp-TGA (ours) 66.80 66.87 40.89 84.57 35.23 34.20 59.32 35.00 23.39 17.21 6.36 31.12 70.59 59.99 23.01 48.40 43.93 
+
+or datasets. 
+
+D. Comparison with Test-Time Defense 
+
+Our proposed methods are based on fine-tuning, and thus, the previous experiments primarily focused on comparisons with similar methods, such as TeCoA [11], FARE [53], LAAT [20], and PMG-AFT [12]. However, to provide a more comprehensive evaluation of our approaches, we also compare them with the TTC defense method, which does not require training, using a perturbation bound of 1/255. As shown in the experiments in Table VI, due to the fact that TTC does not involve training or model modification, it achieves relatively high clean accuracy—only 1.69% lower in AClean 
+
+compared to the original CLIP, and 6.29% and 7.29% higher than our methods, TGA-ZSR and Comp-TGA, respectively. However, the lack of training also results in poor robustness under adversarial attacks. In particular, under the AutoAttack setting, TTC performs 24.44% and 23.80% worse in ARobust 
+
+compared to our methods. More importantly, when considering the overall robustness across all three attack types along with clean accuracy, our method Comp-TGA achieves the best trade-off, outperforming TTC by 6.37% in AOverall , while TGA-ZSR also outperforms TTC by 5.08%. 
+
+E. Ablation Study 
+
+Different Types of Attentions. To comprehensively eval-uate the contributions of various attention mechanisms, we conducted experiments comparing vision-based attention and different types of prompt-guided attention under PGD attack with a perturbation bound of 1/255. 
+
+1) Comparison of vision-based attention and text-guided at-tention: To validate the important role of text-guided attention in our methods, we conducted experiments by replacing it with vision-based attention. We employ Grad-CAM [74], a widely adopted method, for generating attention maps based on vi-sion. Table VII demonstrates that replacing the text-guided attention with vision-based attention yields results that are still comparable to the state-of-the-art method PMG-AFT in terms of both zero-shot robust accuracy and clean accuracy. This finding validates the effectiveness of the overall pipeline of our YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 11 
+
+TABLE VII COMPARISON OF VISION -BASED ATTENTION AND OUR TEXT -GUIDED ATTENTION . W E EVALUATE THE STATE -OF -THE -ART METHOD PMG-AFT 
+
+> ALONGSIDE OUR PIPELINE
+
+, INCORPORATING TWO DIFFERENT TYPES OF ATTENTION MECHANISMS ON TINY -I MAGE NET AND EVALUATING PERFORMANCE ACROSS 16 DATASETS .                                                                                                                                         
+
+> Zero-shot datasets Test Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> Average
+> Robust PMG-AFT [12] 47.11 46.01 25.83 74.51 22.21 19.58 41.62 23.45 15.05 12.54 1.98 21.43 62.42 45.99 11.72 48.64 32.51 Vision-based 52.81 40.46 22.66 70.26 19.50 13.74 37.67 19.78 16.97 11.79 2.64 18.08 55.64 42.45 8.88 38.11 29.47 TGA-ZSR (ours) 63.95 61.45 35.27 84.22 33.22 33.97 57.75 34.55 22.08 14.27 4.75 28.74 70.97 60.06 20.40 47.76 42.09 Comp-TGA (ours) 69.22 70.46 42.26 86.23 34.61 33.57 60.09 35.84 23.90 16.64 5.41 29.47 72.16 60.83 22.17 48.56 44.46
+> Clean PMG-AFT [12] 67.11 74.62 44.68 88.85 37.42 37.47 66.34 35.66 21.17 17.76 4.71 35.93 76.70 61.96 25.21 49.99 46.60 Vision-based 74.31 70.77 41.03 87.24 36.91 30.07 62.52 33.89 24.10 16.26 5.70 33.59 72.35 59.75 20.50 51.29 45.02 TGA-ZSR (ours) 75.72 86.46 56.52 93.48 51.99 57.59 77.32 48.08 29.06 24.24 11.93 48.04 80.70 74.74 36.62 49.58 56.44
+> Comp-TGA (ours) 76.07 84.46 55.64 92.88 51.47 54.01 76.49 46.07 29.43 23.25 11.30 46.08 80.50 73.31 36.55 49.46 55.44
+
+TABLE VIII COMPARISON OF DIFFERENT PROMPT -GUIDED ATTENTION IN 
+
+COMP -TGA. W E TRAINED SEVERAL DIFFERENT METHODS ON 
+
+TINY -I MAGE NET USING PGD WITH ε = 1 /255 , AND EVALUATED THEM ACROSS 16 DATASETS UNDER PGD WITH THE SAME ATTACK STRENGTH .              
+
+> Class Prompts Non-class Prompts Other Prompts ARobust AClean AOverall
+> ✓41.45 56.48 48.98
+> ✓✓43.24 55.10 49.17
+> ✓✓44.46 55.44 49.95
+
+methods. Furthermore, our text-guided attention significantly improves the average accuracy, demonstrating the advantage of incorporating textual guidance. 
+
+2) Comparison of different prompt-guided attention in Comp-TGA: Comp-TGA integrates two types of foreground attention by two distinct prompts. Therefore, to evaluate the contributions of different prompt-guided attention, we con-ducted experiments using Class Prompts, Non-Class Prompts, and Other Prompts (e.g. “This is the background of the photo”). These experiments presented in Table VIII demon-strate the advantages of complementary attention fusion through comparisons with the first row and the other two rows. Furthermore, the comparison between the second and third rows highlights the importance of class prompts with non-class prompts. 
+
+Effect of Attack Strength. Table IX provides a compre-hensive view of model performance across multiple attack strengths (ε = 1/255, 2/255, 4/255, and 8/255). The re-sults show that all methods exhibit decreasing accuracy as 
+
+ϵ increases. LAAT [20] enhances the differences between category text embeddings through an expansion algorithm, while PMG-AFT [12] relies on a pre-trained model for guided adversarial fine-tuning. Although both methods achieve some improvements on certain tasks, they incur high computational costs (PMG-AFT memory usage is 18449 Mb compared to our 16265 Mb and 16293 Mb, as reported in the Table XI) or long training times (LAAT training time per batch is 3.47 seconds compared to our 0.96 and 1.10 seconds, as reported in the Table XI), and they fail to maintain zero-shot generalization and robustness across different attacks and tasks. Their zero-shot generalization (clean accuracy) is typically 8 to 10 points lower than ours, and they struggle to maintain robustness under stronger attacks such as CW, AutoAttack, and APGD, as well as cross-task benchmarks like object detection. 3 In general, our methods achieve the highest average robust accuracy with lower computational cost and demonstrate stronger cross-scenario adaptability and scalability. 
+
+Effect of Each Component. We conducted several experi-ments on Comp-TGA to thoroughly evaluate the effectiveness of each component under PGD attack with a perturbation bound of 1/255, as summarized in Table X. Starting from the CLIP baseline, the low robust accuracy indicates high vulnerability to adversarial perturbations. Using LCE alone significantly enhances the model’s robustness through standard adversarial training, but it also results in a notable decrease in clean accuracy compared to the original CLIP model. Comp-TGA incorporates a complementary attention mechanism that fuses multiple text-guided attention sources. This extension consistently yields additional gains. Specifically, integrating the Local Attention Refinement module in Comp-TGA further enhances both metrics by refining attention regions and guid-ing the model toward semantically relevant areas, which leads to improvements of 1.24% in ARobust and 1.71% in AClean .When the Global Attention Constraint module is further added, Comp-TGA achieves an additional 13.77% gain in ARobust 
+
+and 10.47% in AClean , demonstrating that enforcing attention consistency between clean and adversarial examples stabilizes model behavior and achieves a better robustness-generalization balance. 
+
+Trade-off between Robust and Clean Accuracy. Achieving the balance between robustness and clean accuracy is crucial in adversarial training. Overfitting in models tends to yield high robustness but low clean accuracy, whereas underfitting typically results in the opposite scenario. As shown in Fig. 6 
+
+> 4
+
+, methods positioned close to the dotted line excel in either adversarial accuracy or clean accuracy, yet they often struggle to strike a balance between robustness and clean accuracy. In contrast, our methods demonstrate not only an enhancement 
+
+> 3
+
+Additional experiments on APGD are provided in Appendix D, and experiments with object detection in Appendix C. 
+
+> 4
+
+The point size is computed as size = s × (ARobust + AClean ), where s
+
+is a scaling factor applied consistently to all methods to ensure that the sizes are comparable across the figure. 12 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+TABLE IX ZERO -SHOT ROBUST ACCURACY UNDER PGD [33] ATTACKS WITH ε = 1/255, 2/255, 4/255, AND 8/255 AND CLEAN ACCURACY . W E PERFORMED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 DATASETS .Test ε CLIP [1] FT-Clean FT-Adv. TeCoA [11] FARE [53] LAAT [20] PMG-AFT [12] TGA-ZSR (ours) Comp-TGA (ours) Robust                                                         
+
+> 1/255 4.90 7.05 28.83 28.06 18.25 28.02 32.51 42.09 44.46
+> 2/255 3.25 5.93 16.65 14.20 4.43 17.24 19.64 11.48 15.20
+> 4/255 2.81 5.66 5.72 3.97 2.94 10.27 5.65 7.49 9.96
+> 8/255 2.42 5.42 2.20 1.66 2.64 8.49 0.82 5.95 8.61
+> Clean —64.42 54.37 43.36 45.81 59.85 43.10 46.60 56.44 55.44 Average —15.56 15.69 19.35 18.74 17.62 21.42 21.04 24.69 26.73
+
+TABLE X ABLATION STUDY OF EACH COMPONENT IN COMP -TGA. W E TRAINED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET USING PGD WITH 
+
+ε = 1 /255 , AND EVALUATED THEM ACROSS 16 DATASETS UNDER PGD 
+
+> WITH THE SAME ATTACK STRENGTH
+
+.
+
+Methods ARobust AClean AOverall 
+
+CLIP 4.90 64.42 34.66 + LCE 29.45 44.97 37.21 
+
+Comp-TGA 
+
++ LLARM 30.69 46.68 38.69 + LGACM 44.46 55.44 49.95 
+
+Fig. 6. The trade-off between robustness and clean accuracy. Each point on the graph represents a method, with the size of the point quantitatively reflecting the trade-off between robustness and clean accuracy. Larger points indicate methods that achieve a more favorable balance between robustness and clean accuracy. 
+
+in the model’s robustness but also the maintenance of clean accuracy, resulting in an overall superior performance. 
+
+F. Computational Overhead and Time Efficiency 
+
+We have evaluated our methods against others in terms of memory usage, training time, and test time, and the results are summarized in Table XI. Among the baselines, FARE [53] stands out for its efficiency, largely because it adopts alightweight fine-tuning strategy that avoids text processing and dual-branch structures. In contrast, TGA-ZSR and Comp-TGA incorporate text-guided attention and a dual-branch de-sign to improve robustness and preserve generalization. This additional structure naturally increases computational cost and 
+
+TABLE XI COMPARISON OF MEMORY USAGE , TRAINING TIME , AND OVERALL ACCURACY .
+
+Methods Memory Train time Overall usage (per batch) Accuracy 
+
+CLIP [1] 0 Mb 0.00s 34.66% FT-Clean 6561 Mb 0.21s 30.71% FT-Adv. 10859 Mb 0.60s 36.10% TeCoA [11] 12873 Mb 0.65s 36.94% FARE [53] 9821 Mb 0.25s 39.05% LAAT [20] 15527 Mb 3.47s 35.56% PMG-AFT [12] 18449 Mb 1.06s 39.56% TGA-ZSR (ours) 16265 Mb 0.96s 49.27% Comp-TGA (ours) 16293 Mb 1.10s 49.95% 
+
+leads to longer training times than FARE. However, our methods achieve substantially stronger robustness while main-taining clean accuracy. The performance gap becomes more pronounced under stronger attacks, where FARE degrades more severely. This indicates that the additional training time in our methods is not redundant but supports a significantly better robustness generalization balance. Comp-TGA further strengthens this balance, improving performance over TGA-ZSR while keeping memory usage nearly identical and in-creasing training time only slightly. At test time, all methods have comparable inference cost except for TTC [21]. Although TTC requires no training, it generates perturbations online during inference, which results in a substantially longer test-time latency than the other approaches. It is worth noting that to improve the scalability and memory efficiency of our methods, we optimized the original implementation with a particular focus on reducing memory consumption and improving computational efficiency. These improvements do not alter the core methodology or theoretical foundations of the approach, but rather enhance its imple-mentation efficiency. Compared to the conference version of TGA-ZSR [19], the optimized implementation of TGA-ZSR reduces memory usage during training by 23.37% and improves training efficiency by 14.94%. V. C ONCLUSION AND LIMITATIONS 
+
+In this paper, we discovered that adversarial attacks lead to a shift in text-guided attention. Building on this observa-tion, we introduce a text-guided approach, TGA-ZSR, which incorporates two key components to perform adversarial fine-YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 13 
+
+tuning and constrain the model. This strategy prevents model drift while enhancing model robustness. Extensive experi-ments validate the performance of TGA-ZSR, which not only improves CLIP’s zero-shot adversarial robustness but also maintains zero-shot clean accuracy on clean examples, gaining a favorable balance. However, we observe that text-guided attention occasionally attends to irrelevant features, resulting in suboptimal performance. Therefore, we further propose a novel approach called Comp-TGA, which integrates two complementary types of foreground attention. This allows the model to capture a more accurate representation of the foreground. 
+
+Limitations. We use a simple text-guided attention mechanism by multiplying the text embedding and vision embedding, which is effective against most attack types. However, for more challenging attacks such as AutoAttack, the improvement re-mains limited. Moreover, while we provide initial evaluations with adaptive attacks, which are crucial for faithfully assess-ing worst-case robustness, these attacks may require further refinement to fully capture the model’s true vulnerability. This indicates that while our approaches show promise, they may require further refinement to enhance robustness under stronger adversarial scenarios. 
+
+Border Impact. Large-scale pre-trained vision-language mod-els (VLMs) like CLIP [1] integrate visual and textual data, revolutionizing applications such as image classification, se-mantic segmentation, and vision question answering. While these models excel in zero-shot learning and transfer learning, they are vulnerable to adversarial attacks, posing risks in critical applications like autonomous vehicles and medical diagnosis. Adversarial training improves robustness but has practical challenges, including increased computational over-head and potential overfitting. Exploring zero-shot adversarial robustness is essential to ensure reliability. REFERENCES [1] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in International conference on machine learning . PMLR, 2021, pp. 8748–8763. [2] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “Bert: Pre-training of deep bidirectional transformers for language understanding,” in North American Chapter of the Association for Computational Linguistics ,2019, pp. 4171–4186. [3] Y. Cui, W. Che, T. Liu, B. Qin, S. Wang, and G. Hu, “Revisiting pre-trained models for Chinese natural language processing,” in Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: Findings , 2020, pp. 657–668. [4] Y. Liu, M. Ott, N. Goyal, J. Du, M. Joshi, D. Chen, O. Levy, M. Lewis, L. Zettlemoyer, and V. Stoyanov, “Roberta: A robustly optimized bert pretraining approach,” arXiv preprint arXiv:1907.11692 , 2019. [5] P. Gao, S. Geng, R. Zhang, T. Ma, R. Fang, Y. Zhang, H. Li, and Y. Qiao, “Clip-adapter: Better vision-language models with feature adapters,” 
+
+International Journal of Computer Vision , vol. 132, no. 2, pp. 581–595, 2024. [6] L. Yu, Z. Tao, H. Yao, J. Van de Weijer, and C. Xu, “Exploiting the semantic knowledge of pre-trained text-encoders for continual learning,” 
+
+arXiv preprint arXiv:2408.01076 , 2024. [7] Z. Tao, L. Yu, H. Yao, S. Huang, and C. Xu, “Class incremental learning for light-weighted networks,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 34, no. 12, pp. 12 210–12 220, 2024. [8] Y. Rao, W. Zhao, G. Chen, Y. Tang, Z. Zhu, G. Huang, J. Zhou, and J. Lu, “Denseclip: Language-guided dense prediction with context-aware prompting,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 18 082–18 091. [9] R. Mokady, A. Hertz, and A. H. Bermano, “Clipcap: Clip prefix for image captioning,” arXiv preprint arXiv:2111.09734 , 2021. [10] M. Parelli, A. Delitzas, N. Hars, G. Vlassis, S. Anagnostidis, G. Bach-mann, and T. Hofmann, “Clip-guided vision-language pre-training for question answering in 3d scenes,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 5606–5611. [11] C. Mao, S. Geng, J. Yang, X. Wang, and C. Vondrick, “Understanding zero-shot adversarial robustness for large-scale models,” in The Eleventh International Conference on Learning Representations , 2023, pp. 7058– 7076. [12] S. Wang, J. Zhang, Z. Yuan, and S. Shan, “Pre-trained model guided fine-tuning for zero-shot adversarial robustness,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2024, pp. 24 502—-24 511. [13] D. Wei, T. Gao, Z. Jia, C. Cai, C. Hou, P. Jia, F. Liu, K. Zhan, J. Fan, Y. Zhao et al. , “Bev-clip: Multi-modal bev retrieval method-ology for complex scene in autonomous driving,” arXiv preprint arXiv:2401.01065 , 2024. [14] J. Liu, Y. Zhang, J.-N. Chen, J. Xiao, Y. Lu, B. A Landman, Y. Yuan, A. Yuille, Y. Tang, and Z. Zhou, “Clip-driven universal model for organ segmentation and tumor detection,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 21 152–21 164. [15] S. Li, X. Cheng, F. Shi, H. Zhang, H. Dai, H. Zhang, and S. Chen, “A novel robustness-enhancing adversarial defense approach to ai-powered sea state estimation for autonomous marine vessels,” IEEE Transactions on Systems, Man, and Cybernetics: Systems , vol. 55, no. 1, pp. 28–42, 2024. [16] A. Shafahi, M. Najibi, M. A. Ghiasi, Z. Xu, J. Dickerson, C. Studer, L. S. Davis, G. Taylor, and T. Goldstein, “Adversarial training for free!” in Advances in neural information processing systems , vol. 32, 2019, pp. 3358–3369. [17] D. Wu, S.-T. Xia, and Y. Wang, “Adversarial weight perturbation helps robust generalization,” in Advances in neural information processing systems , vol. 33, 2020, pp. 2958–2969. [18] S. Zheng, Y. Song, T. Leung, and I. Goodfellow, “Improving the robustness of deep neural networks via stability training,” in Proceedings of the IEEE conference on computer vision and pattern recognition ,2016, pp. 4480–4488. [19] L. Yu, H. Zhang, and C. Xu, “Text-guided attention is all you need for zero-shot robustness in vision-language models,” in Advances in Neural Information Processing Systems , vol. 37, 2024, pp. 96 424–96 448. [20] X. Li, W. Zhang, Y. Liu, Z. Hu, B. Zhang, and X. Hu, “Language-driven anchors for zero-shot adversarial robustness,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 24 686–24 695. [21] S. Xing, Z. Zhao, and N. Sebe, “Clip is strong enough to fight back: Test-time counterattacks towards zero-shot adversarial robustness of clip,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025. [22] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby, “An image is worth 16x16 words: Transformers for image recognition at scale,” in ICLR , 2021, pp. 611– 631. [23] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 770–778. [24] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, “Swin transformer: Hierarchical vision transformer using shifted windows,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 10 012–10 022. [25] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” in Advances in neural information processing systems , vol. 30, 2017, pp. 96 424– –96 448. [26] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al. , “Language models are few-shot learners,” in Advances in neural information processing systems , vol. 33, 2020, pp. 1877–1901. [27] C. Jia, Y. Yang, Y. Xia, Y.-T. Chen, Z. Parekh, H. Pham, Q. Le, Y.-H. Sung, Z. Li, and T. Duerig, “Scaling up visual and vision-language 14 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+representation learning with noisy text supervision,” in International conference on machine learning . PMLR, 2021, pp. 4904–4916. [28] L. Yao, R. Huang, L. Hou, G. Lu, M. Niu, H. Xu, X. Liang, Z. Li, X. Jiang, and C. Xu, “Filip: Fine-grained interactive language-image pre-training,” in International Conference on Learning Representations ,2022, pp. 9613–9633. [29] J. Li, D. Li, C. Xiong, and S. Hoi, “Blip: Bootstrapping language-image pre-training for unified vision-language understanding and generation,” in International conference on machine learning . PMLR, 2022, pp. 12 888–12 900. [30] D. Qi, L. Su, J. Song, E. Cui, T. Bharti, and A. Sacheti, “Imagebert: Cross-modal pre-training with large-scale weak-supervised image-text data,” arXiv preprint arXiv:2001.07966 , 2020. [31] J. Li, R. Selvaraju, A. Gotmare, S. Joty, C. Xiong, and S. C. H. Hoi, “Align before fuse: Vision and language representation learning with momentum distillation,” in Advances in neural information processing systems , vol. 34, 2021, pp. 9694–9705. [32] C. Szegedy, W. Zaremba, I. Sutskever, J. Bruna, D. Erhan, I. Good-fellow, and R. Fergus, “Intriguing properties of neural networks,” in 
+
+International Conference on Learning Representations , 2014, pp. 1–14. [33] A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to adversarial attacks,” in International Conference on Learning Representations , 2018, pp. 4138–4160. [34] S.-M. Moosavi-Dezfooli, A. Fawzi, and P. Frossard, “Deepfool: a simple and accurate method to fool deep neural networks,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 2574–2582. [35] L. Yu and V. Rieser, “Adversarial textual robustness of visual dialog,” in 
+
+Findings of 61st Annual Meeting of the Association for Computational Linguistics 2023 . Association for Computational Linguistics, 2023, pp. 3422–3438. [36] L. Li and M. W. Spratling, “Data augmentation alone can improve adver-sarial training,” in The Eleventh International Conference on Learning Representations , 2023, pp. 23 591–23 613. [37] H. Wang, C. Xiao, J. Kossaifi, Z. Yu, A. Anandkumar, and Z. Wang, “Augmax: Adversarial composition of random augmentations for robust training,” in Advances in neural information processing systems , vol. 34, 2021, pp. 237–250. [38] L. Li, J. Qiu, and M. Spratling, “Aroid: Improving adversarial robustness through online instance-wise data augmentation,” International Journal of Computer Vision , vol. 133, no. 2, pp. 929–950, 2025. [39] L. Yu, M. Nikandrou, J. Jin, and V. Rieser, “Quality-agnostic image captioning to safely assist people with vision impairment,” in Proceed-ings of the Thirty-Second International Joint Conference on Artificial Intelligence , 2023, pp. 6281–6289. [40] H. Zhang, Y. Yu, J. Jiao, E. Xing, L. El Ghaoui, and M. Jordan, “Theoretically principled trade-off between robustness and accuracy,” in International conference on machine learning . PMLR, 2019, pp. 7472–7482. [41] A. Andonian, S. Chen, and R. Hamid, “Robust cross-modal represen-tation learning with progressive self-distillation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2022, pp. 16 430–16 441. [42] M. Dong and C. Xu, “Adversarial robustness via random projection filters,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 4077–4086. [43] Y. Ma, M. Dong, and C. Xu, “Adversarial robustness through random weight sampling,” in Advances in Neural Information Processing Sys-tems , vol. 36, 2023, pp. 37 657–37 669. [44] W. Nie, B. Guo, Y. Huang, C. Xiao, A. Vahdat, and A. Anandkumar, “Diffusion models for adversarial purification,” in International Confer-ence on Machine Learning . PMLR, 2022, pp. 16 805–16 827. [45] M. Lee and D. Kim, “Robust evaluation of diffusion-based adversarial purification,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 134–144. [46] Z. Yang, Z. Xu, J. Zhang, R. I. Hartley, and P. Tu, “Adversarial purification with the manifold hypothesis,” in AAAI Conference on Artificial Intelligence , 2022, pp. 16 379–16 387. [47] X. Li, W. Sun, H. Chen, Q. Li, Y. Liu, Y. He, J. Shi, and X. Hu, “Adbm: Adversarial diffusion bridge model for reliable adversarial purification,” in The Thirteenth International Conference on Learning Representations (ICLR), 2025. , 2025, pp. 37 427–37 449. [48] X. Li, H. Chen, and X. Hu, “On the importance of backbone to the adversarial robustness of object detectors,” IEEE Transactions on Information Forensics and Security , vol. 20, pp. 2387–2398, 2025. [49] X. Li, Z. Wang, B. Zhang, F. Sun, and X. Hu, “Recognizing object by components with human prior knowledge enhances adversarial robust-ness of deep neural networks,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 7, pp. 8861–8873, 2023. [50] Z. Guo, R. Zhang, L. Qiu, X. Ma, X. Miao, X. He, and B. Cui, “Calip: Zero-shot enhancement of clip with parameter-free attention,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 37, 2023, pp. 746–754. [51] H. Yao, R. Zhang, and C. Xu, “Visual-language prompt tuning with knowledge-guided context optimization,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 6757–6767. [52] L. Yu, H. Han, Z. Tao, H. Yao, and C. Xu, “Language guided concept bottleneck models for interpretable continual learning,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 14 976–14 986. [53] C. Schlarmann, N. D. Singh, F. Croce, and M. Hein, “Robust clip: Unsupervised adversarial fine-tuning of vision embeddings for robust large vision-language models,” in International Conference on Machine Learning , 2024, pp. 43 685–43 704. [54] X. Li, J. Li, T. Dai, J. Shi, J. Zhu, and X. Hu, “Rethinking nat-ural adversarial examples for classification models,” arXiv preprint arXiv:2102.11731 , 2021. [55] T. Li, F. Qiao, M. Ma, and X. Peng, “Are data-driven explanations robust against out-of-distribution data?” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 3821–3831. [56] Y. Li, H. Wang, Y. Duan, H. Xu, and X. Li, “Exploring visual inter-pretability for contrastive language-image pre-training,” arXiv preprint arXiv:2209.07046 , 2022. [57] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei, “Imagenet: A large-scale hierarchical image database,” in 2009 IEEE conference on computer vision and pattern recognition . Ieee, 2009, pp. 248–255. [58] A. Krizhevsky, G. Hinton et al. , “Learning multiple layers of features from tiny images,” University of Toronto, Tech. Rep., 2009. [Online]. Available: http://www.cs.toronto.edu/~kriz/cifar.html [59] A. Coates, A. Ng, and H. Lee, “An analysis of single-layer networks in unsupervised feature learning,” in Proceedings of the fourteenth international conference on artificial intelligence and statistics , 2011, pp. 215–223. [60] L. Fei-Fei, R. Fergus, and P. Perona, “Learning generative visual models from few training examples: An incremental bayesian approach tested on 101 object categories,” in 2004 conference on computer vision and pattern recognition workshop . IEEE, 2004, pp. 178–178. [61] G. Griffin, A. Holub, and P. Perona, “Caltech-256 object category dataset,” California Institute of Technology, Tech. Rep. 7694, 2007. [Online]. Available: http://authors.library.caltech.edu/7694 [62] J. Krause, M. Stark, J. Deng, and L. Fei-Fei, “3d object representations for fine-grained categorization,” in Proceedings of the IEEE interna-tional conference on computer vision workshops , 2013, pp. 554–561. [63] M.-E. Nilsback and A. Zisserman, “Automated flower classification over a large number of classes,” in 2008 Sixth Indian conference on computer vision, graphics & image processing . IEEE, 2008, pp. 722–729. [64] L. Bossard, M. Guillaumin, and L. Van Gool, “Food-101–mining discriminative components with random forests,” in Computer Vision– ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part VI 13 . Springer, 2014, pp. 446–461. [65] S. Maji, E. Rahtu, J. Kannala, M. Blaschko, and A. Vedaldi, “Fine-grained visual classification of aircraft,” arXiv preprint arXiv:1306.5151 ,2013. [66] O. M. Parkhi, A. Vedaldi, A. Zisserman, and C. Jawahar, “Cats and dogs,” in 2012 IEEE conference on computer vision and pattern recog-nition . IEEE, 2012, pp. 3498–3505. [67] J. Xiao, J. Hays, K. A. Ehinger, A. Oliva, and A. Torralba, “Sun database: Large-scale scene recognition from abbey to zoo,” in 2010 IEEE computer society conference on computer vision and pattern recognition . IEEE, 2010, pp. 3485–3492. [68] B. S. Veeling, J. Linmans, J. Winkens, T. Cohen, and M. Welling, “Rotation equivariant cnns for digital pathology,” in Medical Image Computing and Computer Assisted Intervention–MICCAI 2018: 21st International Conference, Granada, Spain, September 16-20, 2018, Proceedings, Part II 11 . Springer, 2018, pp. 210–218. [69] P. Helber, B. Bischke, A. Dengel, and D. Borth, “Eurosat: A novel dataset and deep learning benchmark for land use and land cover classi-fication,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 12, no. 7, pp. 2217–2226, 2019. YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 15 
+
+[70] M. Cimpoi, S. Maji, I. Kokkinos, S. Mohamed, and A. Vedaldi, “Describing textures in the wild,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2014, pp. 3606–3613. [71] F. Croce and M. Hein, “Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks,” in International conference on machine learning . PMLR, 2020, pp. 2206–2216. [72] N. Carlini and D. Wagner, “Towards evaluating the robustness of neural networks,” in 2017 ieee symposium on security and privacy (sp) . Ieee, 2017, pp. 39–57. [73] F. Tramèr, N. Carlini, W. Brendel, and A. M ˛ adry, “On adaptive attacks to adversarial example defenses,” in Proceedings of the 34th International Conference on Neural Information Processing Systems , 2020, pp. 1633– 1645. [74] R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra, “Grad-cam: Visual explanations from deep networks via gradient-based localization,” in Proceedings of the IEEE international conference on computer vision , 2017, pp. 618–626. [75] S. Gao, Z.-Y. Li, M.-H. Yang, M.-M. Cheng, J. Han, and P. Torr, “Large-scale unsupervised semantic segmentation,” IEEE transactions on pattern analysis and machine intelligence , vol. 45, no. 6, pp. 7457– 7476, 2022. [76] Z. Wang, X. Ning, and M. Blaschko, “Jaccard metric losses: Optimizing the jaccard index with soft labels,” in Advances in Neural Information Processing Systems , vol. 36, 2023, pp. 75 259–75 285. [77] J. Weston and C. Watkins, “Multi-class support vector machines,” Technical Report CSD-TR-98-04, Department of Computer Science, Royal . . . , Tech. Rep., 1998. [78] P. Awasthi, A. Mao, M. Mohri, and Y. Zhong, “Theoretically grounded loss functions and algorithms for adversarial robustness,” in Interna-tional Conference on Artificial Intelligence and Statistics . PMLR, 2023, pp. 10 077–10 094. [79] T.-Y. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ramanan, P. Dollár, and C. L. Zitnick, “Microsoft coco: Common objects in context,” in European conference on computer vision . Springer, 2014, pp. 740–755. [80] X. Gu, T.-Y. Lin, W. Kuo, and Y. Cui, “Open-vocabulary object detec-tion via vision and language knowledge distillation,” in International Conference on Learning Representations , 2022, pp. 15 099–15 118. [81] S. Ren, K. He, R. Girshick, and J. Sun, “Faster r-cnn: Towards real-time object detection with region proposal networks,” IEEE transactions on pattern analysis and machine intelligence , vol. 39, no. 6, pp. 1137–1149, 2016. 
+
+Lu Yu is currently an associate professor at Tianjin University of Technology, Tianjin, China. Before that She was a post-doc at Heriot Watt Univer-sity, Edinburgh, UK. She received her Ph.D in computer science from Autonomous University of Barcelona, Barcelona, Spain in 2019 and master degree from Northwestern Polytechnical University in 2015, Xi’an, China. Her research interests in-clude continual learning, metric learning, multi-model learning and color representation learning. 
+
+Haiyang Zhang received the bachelor’s degree in Mathematics and Applied Mathematics from Tianjin University of Commerce, Tianjin, China, in 2022. Currently, he is pursuing the Ph.D. degree at Tianjin University of Technology, Tianjin, China. His re-search interests include deep learning and adversarial robustness. 
+
+Changsheng Xu (M’97–SM’99–F’14) is a Profes-sor in State Key Laboratory of Multimodal Ar-tificial Intelligence Systems (MAIS), Institute of Automation, Chinese Academy of Sciences. His research interests include multimedia content anal-ysis/indexing/retrieval, pattern recognition and com-puter vision. He has held 50 granted/pending patents and published over 400 refereed research papers in these areas. Dr. Xu has served as associate editor, guest editor, general chair, program chair, area/track chair and TPC member for over 20 IEEE and ACM prestigious multimedia journals, conferences and workshops, including IEEE Trans. on Multimedia, ACM Trans. on Multimedia Computing, Communica-tions and Applications and ACM Multimedia conference. He is IEEE Fellow, IAPR Fellow and ACM Distinguished Scientist. YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 1
+
+APPENDIX AQUANTITATIVE M IOU OF DIFFERENT TYPES OF ATTENTION 
+
+To quantitatively evaluate the quality of the attention maps, we intend to measure their alignment with ground-truth regions using the Intersection over Union (IoU) metric .However, our experiments primarily focus on image classifi-cation tasks, which do not inherently provide segmentation la-bels. Therefore, standard metrics from semantic segmentation cannot be directly used to evaluate the quality of attention. To demonstrate the advantages of text-guided attention and com-plementary text-guided attention, we establish standardized statistics and provide quantitative metrics on the validation sets of ImageNet-S-50, ImageNet-S-300, and ImageNet-S-919 [75], which include ground truth masks for semantic segmentation tasks. This allows us to quantitatively analyze the spatial focus of the attention maps. In conventional semantic segmentation tasks, the IoU is typically used to evaluate the accuracy of predicted masks. For a binary predicted mask ˆM ∈ { 0, 1}p and the ground truth mask M ∈ { 0, 1}p, IoU is defined as: 
+
+IoU = | ˆM ∩ M|| ˆM ∪ M| =
+
+P 
+
+> i,j
+
+ˆMij Mij 
+
+P 
+
+> ij
+
+ˆMij + Mij − ˆMij Mij 
+
+(1) However, our attention maps A are continuous values in 
+
+[0 , 1] , representing the model’s attention strength at each spatial location rather than binary predictions. This makes the standard IoU inapplicable and could result in substantial information loss. To quantify how well the attention focuses on the target regions while preserving continuous information, we adopt a soft Jaccard IoU [76] metric: 
+
+softIoU = 
+
+P 
+
+> i,j
+
+Aij Mij 
+
+P 
+
+> ij
+
+Aij + Mij − Aij Mij 
+
+(2) This metric compares the weighted intersection and union between the attention map and the ground truth mask, provid-ing a smooth measure of attention distribution over the target region and avoiding errors introduced by simple binarization. Moreover, the soft IoU can be averaged over the entire validation set to obtain an overall evaluation of the model’s spatial attention distribution. The experimental results are shown in Table A1. We eval-uate different types of attention, namely text-guided atten-tion (TGA) and complementary text-guided attention (Comp-TGA), on both the original CLIP model (ori.) and the finetuned CLIP model (tar.). Overall, the IoU in the finetuned CLIP model is higher than in the original model. For TGA, the IoU on adversarial examples is lower than on clean examples, sup-porting our claim that adversarial attacks can shift text-guided attention, as illustrated in Fig. 1. Aligning attention based on this observation improves model performance, reflected by the higher IoU in the finetuned CLIP model compared to the orig-inal model, demonstrating the effectiveness of our approach. Our improved method, Comp-TGA, further increases the IoU relative to TGA, enabling the model to focus more accurately on the correct object, consistent with Fig. 4. APPENDIX BEXPERIMENTS ON THE ADAPTIVE ATTACK 
+
+To better assess robustness under worst-case conditions, we therefore revisit our evaluation protocol, following the simple yet stronger principle adopted in the prior study [73]. Specifically, we assume a standard white-box threat model, where the adversary has full access to the model architecture, parameters, and any necessary additional information. Under this setting, adversarial training is still conducted using PGD-based perturbations, while evaluation is carried out using constructed adaptive attacks tailored to the model structure and optimization objectives for all methods. These adaptive attacks directly target the actual training objectives and inference pathways of the models, thereby reducing the potential biases induced by relying on a single gradient-based attack algorithm. The detailed design of the adaptive attacks and analysis are presented below. To align with the adaptive attack principle [73], we design attack objectives that are explicitly matched to the defense strategies of different methods, rather than relying on a single fixed loss. Based on the form of the optimization objective, the adaptive attacks used in our evaluation can be broadly categorized into two types: Cross-Entropy-based attacks and Log-Sum-Exp-based attacks. 
+
+Cross-Entropy-based attacks directly optimize the cross-entropy loss and are naturally aligned with defenses whose training objectives are explicitly classification-driven or rely on prompt-level modifications. In such cases, cross-entropy provides a faithful and sufficiently strong adaptive objective that directly targets the model’s decision boundary. 
+
+• TeCoA [11] fine-tunes CLIP on adversarial examples using the cross-entropy loss. During evaluation, adversarial examples are generated by directly optimizing the cross-entropy loss, which corresponds to the standard PGD [33] method. 
+
+max  
+
+> ∥δ∥≤ ϵ
+
+LCE (x + δ, t, y) (3) where δ denotes the adversarial perturbation bounded by ϵ, x+
+
+δ denotes the adversarial example, t denotes the text prompt, 
+
+y is the ground-truth label and LCE is the cross-entropy loss. 
+
+• LAAT [20] enhances adversarial robustness through a textual expansion algorithm that augments the original text prompts. To properly evaluate its robustness, we design a prompt-aware adaptive attack that operates from the text prompt perspective. During evaluation, adversarial examples are generated by directly optimizing the cross-entropy loss with respect to the modified text prompts, thereby explicitly targeting the textual modification mechanism of LAAT. 
+
+max  
+
+> ∥δ∥≤ ϵ
+
+LCE (x + δ, tother , y) (4) where tother denotes the modified text prompts. 
+
+Log-Sum-Exp-based attacks optimize a Log-Sum-Exp (LSE) margin objective over text prompts. This objective serves as a smooth approximation of max-margin loss and adaptively emphasizes the most confusing non-target prompts. Compared to traditional Sum Loss [77], which uniformly penalizes all non-target classes, the LSE formulation focuses on the most confusing text prompts, thereby providing a 2 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026                                               
+
+> TABLE A1 QUANTITATIVE M IOUOF DIFFERENT TYPES OF ATTENTION ON IMAGE NET -S-50, I MAGE NET -S-300, AND IMAGE NET -S-919 [75]. Type ImageNet-S-50 ImageNet-S-300 ImageNet-S-919 TGA Comp-TGA TGA Comp-TGA TGA Comp-TGA ori. tar. ori. tar. ori. tar. ori. tar. ori. tar. ori. tar. Clean Examples 0.3104 0.3117 0.3630 0.3648 0.3090 0.3078 0.3662 0.3677 0.2907 0.2914 0.3509 0.3568 Adversarial Examples 0.3033 0.3121 0.3632 0.3646 0.2980 0.3064 0.3657 0.3676 0.2834 0.2903 0.3516 0.3569
+
+stronger and more stable surrogate for worst-case optimization. This formulation mimics the potency of the C&W loss [72] while maintaining gradient stability through the temperature parameter τ , leading to a more reliable assessment of adver-sarial consistency [78]. The attack is formulated as: 
+
+max 
+
+> |δ|≤ ϵ
+
+
+
+τ ·log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ )−f (x+δ)·g(tm)⊤
+
+(5) where δ denotes the adversarial perturbation bounded by ϵ,
+
+f (x + δ) denotes the embedding of the adversarial example 
+
+x + δ, g(t) denotes the embedding of the text prompt t, m
+
+denotes the ground-truth class and n̸ = m denotes non-target classes. The temperature parameter τ controls the sharpness of the soft margin. To adhere more closely to the adaptive attack principle, we extend the attack objective by augmenting the base LSE loss with method-specific terms that directly target the defense mechanisms of each baseline. 
+
+• FT-Adv. fine-tunes CLIP on adversarial examples using the original contrastive loss. During evaluation, adversarial examples are generated by directly optimizing a margin-based loss over text prompts. 
+
+max 
+
+> ∥δ∥≤ ϵ
+
+(τ · log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ ) − f (x + δ) · g(tm)⊤)
+
+(6) where δ denotes the adversarial perturbation bounded by ϵ,
+
+f (x + δ) denotes the embedding of the adversarial example 
+
+x + δ, g(t) denotes the embedding of the text prompt t, m
+
+denotes the ground-truth class and n̸ = m denotes non-target classes. The temperature parameter τ controls the sharpness of the soft margin. 
+
+• FARE [53] constrains the distance between the original and target model embeddings. During evaluation, adversarial examples are generated by directly optimizing a margin-based loss over text prompts and an instance-level feature deviation. The combined loss ensures the attack aligns with both the classification and feature stability objectives of the defended model. 
+
+max 
+
+> ∥δ∥≤ ϵ
+
+(τ · log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ ) − f (x + δ) · g(tm)⊤
+
++ λ · (τ · log X
+
+> i̸=j
+
+exp( f (x + δ) · f ori (xi)⊤
+
+τ )
+
+− f (x + δ) · f ori (xj )⊤)) 
+
+(7) where f ori (xi) denotes the corresponding image embedding extracted by the original frozen model from the clean input xi.
+
+i denotes the matching original image and i̸ = j denotes other instances in the batch. The temperature parameter τ controls the sharpness of the soft margin. 
+
+• PMG-AFT [12] aligns the features of adversarial and clean examples in the target model by minimizing their KL diver-gence. During evaluation, adversarial examples are generated by directly optimizing a margin-based loss over text prompts and the KL divergence. The combined loss ensures the attack aligns with both the classification and optimization objectives of the defended model. 
+
+max 
+
+> ∥δ∥≤ ϵ
+
+(τ · log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ ) − f (x + δ) · g(tm)⊤
+
++ λ · LKL (softmax( f (x + δ) · g(t)⊤)∥softmax( f (x) · g(t)⊤))) 
+
+(8) where softmax( ·, ·) denotes the softmax operation. 
+
+• TGA-ZSR improves model adversarial robustness by align-ing the attention maps of adversarial examples in the target model with those of clean examples in the original model. Dur-ing evaluation, adversarial examples are generated by directly optimizing a margin-based loss over text prompts together with an L2 loss that enforces attention-map consistency between the two models. 
+
+max 
+
+> ∥δ∥≤ ϵ
+
+(τ · log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ ) − f (x + δ) · g(tm)⊤
+
++ λ · ∥A (x + δ)tar − A (x)ori ∥2)
+
+where, A(x) = fg(x) · g(t)⊤
+
+(9) we feed the adversarial sample x + δ into the target model and the clean example x into the original model, obtaining the adversarial attention map A(x + δ)tar and the clean attention map A(x)ori , respectively. Here, fg(x) represents the global image feature before the pooling operation of f (x).
+
+• Comp-TGA improves model adversarial robustness by aligning the complementary attention maps of adversarial examples in the target model with those of clean examples in the original model. During evaluation, adversarial examples are generated by directly optimizing a margin-based loss over text prompts together with an L2 loss that enforces attention-YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 3
+
+TABLE A2 ZERO -SHOT ROBUST M IOU ON IMAGES ATTACKED WITH PGD [33] ε = 8 /255 AND CLEAN M IOU. W E PERFORMED SEVERAL DIFFERENT METHODS ON 
+
+MS COCO [79]. Methods CLIP [1] FT-Clean FT-Adv. TeCoA [11] FARE [53] LAAT [20] PMG-AFT [12] TGA-ZSR (ours) Comp-TGA (ours) Robust 0.2767 0.3247 0.3826 0.4477 0.2569 0.4505 0.4481 0.4604 0.4612 
+
+Clean 0.3819 0.3752 0.3873 0.4537 0.3944 0.4551 0.4546 0.4691 0.4689 Average 0.3293 0.3500 0.3850 0.4507 0.3257 0.4528 0.4514 0.4648 0.4651 
+
+TABLE A3 ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255 OF APGD [71]. T HE OPTIMAL ACCURACY IS HIGHLIGHTED IN BOLD , WHILE THE SECOND -BEST ACCURACY IS UNDERLINED .                                                                                                                                                         
+
+> Zero-shot datasets Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> ARobust
+> CLIP [1] 0.02 0.02 0.06 0.40 0.07 0.03 0.00 0.03 0.27 0.06 0.06 0.51 0.73 0.32 3.89 0.06 0.41 FT-Clean 0.15 0.02 0.01 1.79 0.22 0.04 0.03 0.07 0.75 0.01 0.03 0.50 2.59 1.49 2.41 0.01 0.63 FT-Adv. 52.46 39.63 21.57 69.53 17.27 11.76 34.86 18.95 15.21 11.86 1.80 17.22 50.87 40.16 8.38 48.79 28.77 TeCoA [11] 36.71 31.88 17.25 66.56 18.64 13.52 36.50 21.30 15.05 11.59 1.68 17.25 55.41 41.12 8.81 47.88 27.57 FARE [53] 28.59 23.28 13.55 60.69 9.73 13.93 27.80 15.56 9.20 0.25 1.08 12.18 47.52 36.64 8.86 3.43 19.52 LAAT [20] 53.49 36.67 22.05 67.81 18.59 12.51 36.00 18.70 11.22 12.79 1.53 18.44 56.05 41.65 7.28 37.46 28.27 PMG-AFT [12] 45.20 45.85 24.73 74.28 20.34 17.58 40.31 21.21 13.51 12.13 1.71 19.86 61.28 44.79 11.06 48.49 31.40 TGA-ZSR (ours) 52.09 43.50 23.97 72.35 21.83 16.57 41.13 21.83 17.23 11.36 3.12 20.56 58.09 46.98 12.71 46.46 31.86 Comp-TGA (ours) 54.41 44.60 24.90 73.09 21.94 16.05 41.91 21.96 18.13 12.57 3.97 20.71 58.21 46.32 12.02 48.35 32.45
+
+map consistency between the two models. 
+
+max 
+
+> ∥δ∥≤ ϵ
+
+(τ · log X
+
+> n̸=m
+
+exp( f (x + δ) · g(tn)⊤
+
+τ ) − f (x + δ) · g(tm)⊤
+
++ λ · ∥A (x + δ)tar − A (x)ori ∥2)
+
+where, A(x) = A(x) ⊙ (1 − Anon (x)) = ( fg(x) · g(t)⊤) ⊙ (1 − (fg(x) · g(tnon )⊤)) 
+
+(10) where tnon represents the non-class prompts and g(tnon ) de-notes the text embeddings of tnon . Here, the attention map denotes a complementary attention map that integrates two forms of foreground attention: attention guided by the class prompt and reversed attention driven by the non-class prompt. The related experiments are presented in Section IV-C of the main paper. As part of this initial exploration, the adaptive attacks we initially design for each method may require further refinement. Nevertheless, this exploration provides a clear signal that adaptive evaluation is crucial for faithfully assessing zero-shot adversarial robustness. The experimental design also points to an important future direction of evaluating zero-shot adversarial robustness under genuine worst-case conditions rather than relying on simple attacks that may lead to a false sense of robustness. We highlight this issue in the Limitations section, aiming to offer insights that may inform future method design and evaluation protocols and promote more reliable robustness research in the field. APPENDIX CEXPERIMENTS ON OBJECT DETECTION 
+
+We further examine its robustness in these broader contexts. Nevertheless, since CLIP [1] was not inherently designed for dense or multimodal tasks, adapting it to such scenarios typically requires integration with additional task-specific ar-chitectures (e.g., detectors or decoders). In line with this, we extended our analysis to object detection by coupling CLIP with corresponding models. Importantly, since our goal is to evaluate the adversarial robustness of the proposed method on other tasks, we adopt a zero-shot setting for the downstream evaluations. Inspired by ViLD [80], we integrate CLIP with Faster R-CNN [81] to establish a zero-shot object detection framework. Specifically, Faster R-CNN is first used to generate candidate bounding boxes for each image. The corresponding regions are then cropped and individually fed into CLIP, which predicts the object category by selecting the crop whose visual feature is most similar to the text embedding of each class. To evaluate CLIP’s robustness, we apply PGD [33] attack with ϵ = 8 /255 on the cropped images. The performance is evaluated on the 2017 version of the MS COCO [79] dataset, which contains 5000 test images across 80 object categories, using the IoU metric. As shown in Table A2, our proposed methods, TGA-ZSR and Comp-TGA, achieve the best performance across all metrics. Specifically, Comp-TGA attains a robust mIoU of 0.4612 and a clean mIoU of 0.4689, outperforming prior approaches such as LAAT [20] and PMG-AFT [12]. These results demonstrate that our approach effec-tively balances zero-shot robustness and generalization. APPENDIX DADDITIONAL ATTACK TYPE 
+
+For a more comprehensive and rigorous assessment, we additionally evaluated the models under the adaptive gradient-based APGD [34] attack as shown in Table A3. These experi-ments provide a broader perspective on the model’s robustness across different attack types, allowing us to better understand 4 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+TABLE A4 ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 1/255, 2/255 AND 4/255 OF PGD [33]. W E PERFORMED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET , USING ε OF 1/255 OF PGD TO GENERATE ADVERSARIAL EXAMPLES FOR TRAINING , AND EVALUATED THEM ACROSS 16 
+
+DATASETS . W E REPRESENT THE AVERAGE ACCURACY ACROSS VARIOUS ATTACK STRENGTHS .                                                                                                                                                           
+
+> Zero-shot datasets Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> ARobust
+> CLIP [1] 0.64 2.15 0.12 20.35 0.52 5.94 2.97 0.72 0.71 0.03 0.00 0.71 14.28 9.18 0.11 0.04 3.65 FT-Clean 12.44 18.80 4.65 37.16 0.43 0.52 2.03 0.41 0.92 0.02 0.01 0.54 13.02 7.96 0.03 0.44 6.21 FT-Adv. 29.33 18.10 11.06 45.13 8.58 5.65 16.45 10.15 9.72 9.82 0.83 8.81 33.43 24.14 3.80 38.06 17.07 TeCoA [11] 18.17 12.78 8.12 39.87 8.90 6.53 16.61 11.04 10.07 9.88 0.63 8.43 34.94 23.92 3.45 33.20 15.41 FARE [53] 12.41 9.09 4.23 33.72 2.98 4.75 9.67 5.52 4.26 0.05 0.28 3.90 23.97 16.95 1.48 3.43 8.54 LAAT [20] 33.52 26.32 12.87 60.35 9.13 6.03 19.22 9.86 6.65 9.97 0.63 9.69 38.66 26.87 2.97 23.39 18.51 PMG-AFT [12] 25.30 21.71 13.29 47.69 11.42 9.49 20.68 12.86 9.45 10.65 0.90 11.28 41.86 28.38 5.40 37.88 19.27 TGA-ZSR (ours) 33.18
+> (±0.24)
+> 27.49
+> (±0.28)
+> 14.43
+> (±0.24)
+> 56.48
+> (±0.20)
+> 12.24
+> (±0.45)
+> 12.57
+> (±0.48)
+> 24.50
+> (±0.59)
+> 13.04
+> (±0.45)
+> 9.51
+> (±0.57)
+> 7.07
+> (±0.62)
+> 1.61
+> (±0.12)
+> 11.47
+> (±0.34)
+> 40.84
+> (±0.70)
+> 32.37
+> (±0.14)
+> 6.73
+> (±0.55)
+> 18.98
+> (±1.21)
+> 20.16
+> (±0.39)
+> Comp-TGA (ours) 39.54
+> (±0.57)
+> 37.28
+> (±0.92)
+> 19.36
+> (±0.42)
+> 61.80
+> (±0.59)
+> 13.63
+> (±0.45)
+> 13.66
+> (±0.38)
+> 28.41
+> (±0.78)
+> 14.48
+> (±0.65)
+> 11.07
+> (±0.46)
+> 8.78
+> (±0.26)
+> 1.95
+> (±0.06)
+> 12.60
+> (±0.35)
+> 45.71
+> (±0.48)
+> 35.08
+> (±0.43)
+> 7.75
+> (±0.36)
+> 20.21
+> (±0.87)
+> 23.21
+> (±0.36)
+
+TABLE A5 ZERO -SHOT ROBUST ACCURACY ON IMAGES ATTACKED WITH ε OF 8/255 OF PGD [33]. T HE OPTIMAL ACCURACY IS HIGHLIGHTED IN BOLD , WHILE THE SECOND -BEST ACCURACY IS UNDERLINED .
+
+Zero-shot datasets Methods 
+
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+
+ARobust 
+
+CLIP [1] 0.22 1.55 0.02 14.03 0.22 4.88 1.80 0.34 0.00 0.00 0.00 0.36 9.29 5.83 0.09 0.00 2.42 FT-Clean 10.76 16.20 4.38 34.40 0.19 0.40 1.72 0.21 0.00 0.03 0.00 0.23 11.66 6.53 0.00 0.00 5.42 FT-Adv. 5.56 1.53 1.32 13.48 0.06 0.02 0.57 0.11 0.48 0.00 0.00 0.11 8.43 3.43 0.00 0.16 2.20 TeCoA [11] 1.56 0.32 0.21 9.46 0.06 0.10 0.93 0.15 0.21 0.00 0.00 0.17 9.34 3.94 0.01 0.04 1.66 FARE [53] 5.14 2.26 0.61 15.36 0.14 1.33 1.85 0.20 0.00 0.00 0.00 0.23 9.28 5.74 0.03 0.00 2.64 LAAT [20] 15.06 20.55 6.25 55.33 0.66 0.80 5.67 0.24 0.96 0.04 0.00 1.11 15.32 10.90 0.03 2.93 8.49 PMG-AFT [12] 0.43 0.15 0.04 3.98 0.03 0.02 0.00 0.03 0.80 0.00 0.00 0.05 5.09 1.63 0.01 0.09 0.82 TGA-ZSR (ours) 13.13 5.76 2.49 33.59 0.74 1.07 5.86 0.98 0.21 0.00 0.00 1.59 17.41 12.34 0.05 0.00 5.95 Comp-TGA (ours) 20.56 14.17 5.45 41.28 1.25 1.98 9.24 1.40 0.48 0.00 0.00 2.39 23.25 16.20 0.10 0.00 8.61 
+
+both the strengths and potential vulnerabilities of the fine-tuned models. Overall, this multi-faceted evaluation strategy ensures that our robustness claims are not limited to specific attack configurations and offers a more complete characteri-zation of model behavior under adversarial conditions. APPENDIX EEXPERIMENTS WITH DIFFERENT ATTACK STRENGTHS 
+
+Table A4 reports robust accuracy inder moderate pertur-bations (ϵ = 1/255, 2/255, and 4/255) while Table A5 focuses on stronger perturbations ( ϵ = 8/255). By merging them, Table VIII provides a comprehensive view of model performance across the full range of attack strengths. The results show that all methods exhibit decreasing accuracy as 
+
+ϵ increases. LAAT [20] enhances the differences between category text embeddings through an expansion algorithm, while PMG-AFT [12] relies on a pre-trained model for guided adversarial fine-tuning. Although both methods achieve some improvements on certain tasks, they incur high computational costs (PMG-AFT memory usage is 18449 Mb compared to our 16265 Mb and 16293 Mb) or long training times (LAAT training time per batch is 3.47 seconds compared to our 0.96 and 1.10 seconds), and they fail to maintain zero-shot generalization and robustness across different attacks and tasks. Their zero-shot generalization (clean accuracy) is typically 8 to 10 points lower than ours, and they struggle to maintain robustness under stronger attacks such as CW, AutoAttack, and APGD, as well as cross-task benchmarks like object detection. In contrast, our methods underperform under some high perturbation levels, but they achieve the highest average robust accuracy with lower computational cost and demonstrate stronger cross-scenario adaptability and scalability. APPENDIX FCLEAN ACCURACY UNDER AUTO ATTACK SETTING 
+
+We randomly split the Tiny-ImageNet training set, using 80% for training and the remaining 20% for validation to select the optimal hyperparameters. The model was trained on the entire training set using adversarial examples generated by PGD with ε = 1 /255 , and validated under PGD with the same attack strength. Optimal hyperparameters ( α=0.08, 
+
+β=0.009 for TGA-ZSR and α=0.10, β=0.07 for Comp-TGA) were selected based on validation performance. We further provide both robust and clean accuracy under AutoAttack [71] in Table A6 to offer a more complete view of the model’s performance. The results show that both clean and robust accuracy remain strong. Adjusting the parameters to AutoAt-YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 5
+
+TABLE A6 ZERO -SHOT ROBUST UNDER AUTO ATTACK [71] AND CLEAN ACCURACY ACROSS 16 DATASETS . T HE OPTIMAL ACCURACY IS HIGHLIGHTED IN BOLD ,
+
+> WHILE THE SECOND
+
+-BEST ACCURACY IS UNDERLINED .                                                                                                       
+
+> Zero-shot datasets Test Methods
+> Tiny-ImageNet
+> CIFAR-10
+> CIFAR-100
+> STL-10
+> SUN397
+> Food101
+> Oxfordpets
+> Flowers102
+> DTD
+> EuroSAT
+> FGVC-Aircraft
+> ImageNet
+> Caltech-101
+> Caltech-256
+> StanfordCars
+> PCAM
+> Average Robust PMG-AFT [12] 44.26 44.12 23.66 73.90 19.63 17.25 39.25 20.87 13.72 11.99 1.68 19.17 60.57 44.25 9.59 48.53 30.78 TGA-ZSR (ours) 49.49 40.69 22.30 71.97 20.14 15.41 39.82 21.35 16.81 11.31 2.34 19.22 57.65 45.73 10.14 48.01 30.77 Comp-TGA (ours) 53.00 42.18 23.58 73.04 20.47 15.30 40.28 22.37 17.17 12.28 3.43 19.47 57.58 45.11 10.24 47.05 31.41
+> Clean PMG-AFT [12] 67.11 74.62 44.68 88.85 37.42 37.47 66.34 35.66 21.17 17.76 4.71 35.93 76.70 61.96 25.21 49.99 46.60 TGA-ZSR (ours) 76.58 79.24 48.35 90.78 44.27 40.39 69.86 39.73 26.22 19.22 8.88 40.08 76.17 67.14 29.96 49.90 50.42
+> Comp-TGA (ours) 76.82 76.36 45.88 90.30 42.24 36.19 67.94 38.78 26.64 18.63 8.35 37.97 75.82 64.81 25.54 50.73 48.94
+
+TABLE A7 ZERO -SHOT ROBUST ACCURACY UNDER PGD [33] AND CLEAN ACCURACY ACROSS 16 DATASETS ON TGA-ZSR. W E PERFORMED SEVERAL DIFFERENT HYPERPARAMETERS ON TINY -I MAGE NET AND EVALUATED ACROSS 16 DATASETS .
+
+αβ 0 10 −3 10 −2 10 −1
+
+0 29.45 29.54 30.25 26.72 
+
+10 −3 29.55 29.61 30.30 26.71 
+
+10 −2 30.24 30.32 31.12 27.44 
+
+10 −1 31.44 31.59 31.43 31.10 
+
+(a) Zero-shot robust accuracy on TGA-ZSR. 
+
+αβ 0 10 −3 10 −2 10 −1
+
+0 44.97 45.06 46.08 58.98 
+
+10 −3 45.09 45.17 46.16 58.84 
+
+10 −2 46.18 46.27 47.02 59.18 
+
+10 −1 50.42 40.52 50.69 56.26 
+
+(b) Zero-shot clean accuracy on TGA-ZSR. 
+
+TABLE A8 ZERO -SHOT ROBUST ACCURACY UNDER PGD [33] AND CLEAN ACCURACY ACROSS 16 DATASETS ON COMP -TGA. W E PERFORMED SEVERAL DIFFERENT HYPERPARAMETERS ON TINY -I MAGE NET AND EVALUATED ACROSS 16 DATASETS .
+
+αβ 0 10 −3 10 −2 10 −1
+
+0 29.45 29.43 29.58 42.69 
+
+10 −3 29.50 29.53 29.58 42.65 
+
+10 −2 29.53 29.57 29.67 42.74 
+
+10 −1 30.36 30.37 29.84 44.46 
+
+(a) Zero-shot robust accuracy on Comp-TGA. 
+
+αβ 0 10 −3 10 −2 10 −1
+
+0 44.97 45.01 45.22 55.19 
+
+10 −3 44.96 45.02 45.20 55.21 
+
+10 −2 45.21 45.25 45.33 55.26 
+
+10 −1 46.16 46.25 46.33 55.44 
+
+(b) Zero-shot clean accuracy on Comp-TGA. 
+
+tack still produces solid results, with clean accuracy remaining higher than PMG-AFT, suggesting that the method maintains generalization while strengthening robustness. APPENDIX GTHE ANALYSIS OF HYPERPARAMETER EFFECTS 
+
+We extended our hyperparameter experiments by evaluating 
+
+α, β ∈ { 0, 10 −3, 10 −2, 10 −1} on both TGA-ZSR and Comp-TGA. The results in Table A7 and A8 reveal consistent trends across both TGA-ZSR and Comp-TGA. As α and β increase, moderate weighting leads to simultaneous improvements in both robust and clean accuracies. However, excessively large values result in performance degradation. Building upon the ablation results presented in Table X of the paper and the extended ablation results in Table A7 and A8, we further visualize the influence of α and β as contour heatmaps in Fig. A1 and Fig. A2, where the x-axis and y-axis correspond to α and β, respectively, and the color indicates the averaged performance over all datasets. These visualizations clearly illustrate the impact of α and β on model performance. They also reveal the sensitivity of our methods to these hyperparameters, and Comp-TGA shows lower sensitivity than TGA-ZSR, which further supports the advantages of our improved design. APPENDIX HEFFECT OF HYPER -PARAMETERS 
+
+Following the protocol of previous works (TeCoA [11], PMG-AFT [12], FARE [53]), we fine-tuned the CLIP model on adversarial samples from a single dataset (Tiny-ImageNet in our case) for ‘adversarial fine-tuning’ and subsequently 6 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE, 2026 
+
+(a) Zero-shot robust accuracy. (b) Zero-shot clean accuracy. (c) Zero-shot overall accuracy. 
+
+Fig. A1. Zero-shot robust accuracy under PGD [33] and clean accuracy across 16 datasets for TGA-ZSR. Several different hyperparameter settings were explored on Tiny-ImageNet and evaluated across 16 datasets. 
+
+(a) Zero-shot robust accuracy. (b) Zero-shot clean accuracy. (c) Zero-shot overall accuracy. 
+
+Fig. A2. Zero-shot robust accuracy under PGD [33] and clean accuracy across 16 datasets for Comp-TGA. Several different hyperparameter settings were explored on Tiny-ImageNet and evaluated across 16 datasets. TABLE A9 ABLATION STUDY ON HYPER -PARAMETERS . W E TRAINED SEVERAL DIFFERENT METHODS ON TINY -I MAGE NET USING PGD WITH ε = 1 /255 , 
+
+> AND EVALUATED THEM ACROSS
+
+16 DATASETS UNDER PGD WITH THE SAME ATTACK STRENGTH .
+
+Methods α β ARobust AClean AOverall 
+
+TGA-ZSR 0.07 0.05 40.43 56.86 48.65 0.08 0.04 37.28 55.96 46.62 0.08 0.06 40.16 56.88 48.52 0.09 0.05 32.31 54.63 43.47 0.08 0.05 42.09 56.44 49.27 
+
+Comp-TGA 0.10 0.09 44.22 55.29 49.76 0.10 0.11 44.06 55.80 49.93 0.09 0.10 44.11 55.12 49.61 0.11 0.10 43.76 55.49 49.62 0.10 0.10 44.46 55.44 49.95 
+
+evaluated its performance across 15 datasets, including Tiny-ImageNet itself. Thus, we only need to tune hyperparameters on just the training dataset. We randomly selected 80% of the training set for training and the remaining 20% for validation to choose the hyperparameters. The model was trained on the entire training set using adversarial examples generated by PGD with ε = 1 /255 , and validated under PGD with the same attack strength. Optimal hyperparameters ( α=0.08, 020 40 60 0.00 0.25 0.50 0.75 1.00 1.25 3.25 3.50 CLIP FT-Clean FT-Adv. TeCoA FARE LAAT PMG-AFT TGA-ZSR Comp-TGA Train time per batch (s) Overall Accuracy (%) 
+
+Fig. A3. The trade-off between train time and overall accuracy. Each point represents a method, with ● indicating the baseline models and ★ marking our methods to provide a clear visual distinction. 
+
+β=0.05 for TGA-ZSR and α=0.10, β=0.10 for Comp-TGA) were selected based on validation performance. After deter-mining the optimal values on the Tiny-ImageNet validation set, we further analyze the sensitivity of these hyperparameters by applying the same configurations across 16 datasets in total. Table A9 reports the performance of TGA-ZSR and Comp-TGA on 16 datasets under different hyper-parameter YU et al.: COMPLEMENTARY TEXT-GUIDED ATTENTION FOR ZERO-SHOT ADVERSARIAL ROBUSTNESS 7
+
+settings. The highlighted rows indicate the selected optimal hyperparameters, which consistently achieve the best or near-best results across these datasets. APPENDIX ITHE TRADE -OFF BETWEEN TRAIN TIME AND OVERALL ACCURACY 
+
+In our experiments in Fig. A3 comparing efficiency and overall accuracy across different approaches, FARE [53] achieves high efficiency by relying on a lightweight fine-tuning strategy that skips text processing and dual-branch structures. By contrast, TGA-ZSR and Comp-TGA leverage text-guided attention and a dual-branch architecture to enhance robustness while preserving generalization. Although this design incurs higher training costs compared to FARE, it delivers substan-tially higher overall accuracy. The advantage becomes even clearer under stronger attacks, where FARE’s performance drops more sharply. These observations demonstrate that the modest increase in training time for our methods directly translates into a superior balance between robustness and generalization. In particular, Comp-TGA further refines this balance through improved attention fusion, highlighting its effectiveness as a robust and efficient solution.

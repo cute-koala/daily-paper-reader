@@ -1,0 +1,1040 @@
+Title: FineViT: Progressively Unlocking Fine-Grained Perception with Dense Recaptions
+
+URL Source: https://arxiv.org/pdf/2603.17326v1
+
+Published Time: Thu, 19 Mar 2026 00:44:03 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# FineViT: Progressively Unlocking Fine-Grained Perception with Dense Recaptions 
+
+Peisen Zhao Xiaopeng Zhang * Mingxing Xu Ruoyu Sun Zewei Du Dunzheng Wang Guanghao Zheng Haohang Xu Zhibo Zhang Yuhang Zhang Yi Ai Lin Liu Qi Tian #
+
+Huawei Inc. 
+
+ABSTRACT 
+
+While Multimodal Large Language Models (MLLMs) have experienced rapid advance-ments, their visual encoders frequently remain a performance bottleneck. Conventional CLIP-based encoders struggle with dense spatial tasks due to the loss of visual details caused by low-resolution pretraining and the reliance on noisy, coarse web-crawled image-text pairs. To overcome these limitations, we introduce FineViT , a novel vision encoder specifically designed to unlock fine-grained perception. By replacing coarse web data with dense recaptions, we systematically mitigate information loss through a progressive training paradigm.: first, the encoder is trained from scratch at a high native resolution on billions of global recaptioned image-text pairs, establishing a robust, detail rich semantic foundation. Subsequently, we further enhance its local perception through LLM alignment, utilizing our curated FineCap-450M dataset that comprises over 450 million high quality local captions. Extensive experiments validate the effectiveness of the progressive strategy. FineViT achieves state-of-the-art zero-shot recognition and retrieval performance, especially in long-context retrieval, and consistently outperforms multimodal visual encoders such as SigLIP2 and Qwen-ViT when integrated into MLLMs. We hope FineViT could serve as a powerful new baseline for fine-grained visual perception. 
+
+Keywords vision encoder · fine-grained perception · dense recaptions 
+
+## 1 Introduction 
+
+The rapid evolution of Multimodal Large Language Models (MLLMs) has fundamentally altered the landscape of artificial intelligence. As the reasoning capabilities of Large Language Models (LLMs) have scaled exponentially, the visual component of MLLMs has frequently lagged behind, serving as a bottleneck to overall performance. For a significant period, the visual encoder of MLLMs was treated as a static artifact, typically a pre-trained Vision Transformer (ViT) such as CLIP [ 1], and connected to the LLMs via a lightweight adapter [ 2 ]. While this paradigm facilitates rapid convergence, it imposes severe structural     
+
+> * Project Lead, #Corresponding Author: tian.qi1@huawei.com ,§Repo: https://github.com/PeisenZhao/FineViT
+> arXiv:2603.17326v1 [cs.CV] 18 Mar 2026
+
+FineViT TECHNICAL REPORT Human : <image> Give an elaborate explanation of the image 
+
+> you see.
+> GPT: The image features a brown and white dog with floppy ears
+> sitting upright on a red and white patterned dog bed. The dog is
+> wearing a red collar with a silver tag and ...
+> Human: <image> Extract the text from the coordinate box [121,
+> 808, 191, 837].
+> GPT: Dunelm
+> Human: <image>Retrieve the location coordinates [xmin, ymin,
+> xmax, ymax] for the text string "Laydey Katabella".
+> GPT: [2, 960, 161, 996]
+> Human: <image> Please provide the bounding box coordinate
+> [xmin, ymin, xmax, ymax] of the region this sentence describes:
+> "A brown and white dog with floppy ears sits upright on a red
+> and white patterned cushion. The dog wears a red collar with..."
+> GPT: [410, 199, 602, 899]
+> Human: <image> What is depicted within the bounding box: [712,
+> 0, 756, 663] ?
+> GPT: A tall, vertical wooden pole with a light brown, smooth
+> surface stands against a plain white wall. At the bottom right, ...
+> Original Caption:
+> “easy home made dog bed ”
+> Recaption:
+> bbox2str
+> str2bbox
+> ocr2bbox
+> bbox2ocr
+
+(a) (b) 
+
+Figure 1: (a) Construction of rich QA training data from FineCap-450M, highlighting detailed local-level tasks. (b) FineViT performance boost in multimodal tasks enabled by FineCap-450M local-task pre-training. limitations due to the post alignment of different pretrained modalities, and suffer limited performance especially for spatial visual tasks. The core challenge for designing visual encoders in MLLMs lies in the loss of detailed information inherent in current CLIP-based models and the modality gap dilemma when aligning visual models to well-trained LLMs. As for the loss of detailed information, traditional visual encoders, designed primarily for image classification or retrieval, enforce rigid constraints on input resolution, typically resizing images to fixed squares ( e.g. , 224 × 224 or 336 × 336 ). This preprocessing step, while computationally convenient for batch processing, functions as a lossy compression algorithm that obliterates the fine details necessary for dense tasks such as Optical Character Recognition (OCR) and small object grounding. Furthermore, information loss is exacerbated by the reliance on low-quality annotated data. Since CLIP-based models require large-scale image-text pairs, where the data is usually sourced through web crawling with simple filtering mechanisms. Such an approach has facilitated large-scale data collection, exemplified by collections like LAION-400M [ 3 ], it has inadvertently compromised data quality. These internet crawled pairs frequently exhibit misalignments between images and their corresponding textual content, and the textual descriptions are often brief and lack detailed information. Finally, the modality alignment challenge is exacerbated by a fundamental mismatch in training objectives, where visual encoders are typically pre-trained using contrastive learning, which focuses on global semantic alignment, whereas LLMs are optimized via an autoregressive objective. This discrepancy creates a fragmented training paradigm where the pre-training and alignment phases operate under different principles. Consequently, it makes the alignment process opaque and particularly challenging when scaling to large LLMs. To address these challenges, this paper revisits the design principles of visual foundation models and introduces FineViT , a top leading vision encoder trained from scratch and specifically tailored for fine-grained perception . Our primary contribution is a progressive training recipe paired with large-scale, fine-grained recaptioned data, which endows the encoder with robust feature representation while embedding precise perception. Specifically, the encoder is first trained with large scale contrastive learning at a 448 × 448 
+
+native-resolution on billions of recaptioned image-text pairs . Unlike raw captioned datasets such as LAION-400M [ 3], our recaptioned data provide dense descriptive detail, while the higher resolution preserves critical spatial information during encoding. Consequently, FineViT achieves exceptional zero-shot recognition and retrieval performance relative to CLIP-based counterparts. To further empower the fine-grained capabilities 
+
+2FineViT TECHNICAL REPORT 
+
+required by MLLMs, we align the encoder with LLMs using our curated FineCap-450M dataset, comprising over 450 million local captions spanning natural scenes and diverse text-rich environments. To the best of our knowledge, this represents the largest fine-grained annotated dataset to date. As illustrated in Figure 1, equipped with this high-quality data and a robust training strategy, FineViT matches the zero-shot classification and retrieval performance of current SOTA encoders like SigLIP2 [ 4] and Seed-ViT [ 5 ]. When integrated into MLLMs, FineViT outperforms multimodal models such as Qwen3-VL [ 6] and Intern3.5-VL [ 7 ]. We release FineViT to the community as a powerful baseline for fine-grained visual perception. The core contributions of this paper are summarized below: 
+
+• We introduce FineViT, a trained from scratch visual encoder at a native, high resolutional training paradigm, and progressively unlocking the fine-grained perception capabilities. 
+
+• To drive the training of FineViT, we construct FineCap-450M, the largest fine-grained dataset to date which comprise over 450 million high quality region captions. 
+
+• FineViT matches SOTA models like SigLIP2 [ 4 ] in zero-shot tasks and excels in long-context retrieval. When integrated into MLLMs, it consistently outperforms multimodal encoders like Qwen-ViT and InternViT. 
+
+## 2 Related Work 
+
+2.1 Visual Foundation Models 
+
+Early MLLMs predominantly rely on off-the-shelf visual encoders, such as CLIP [ 1 ], to align visual and textual semantic spaces. The widely adopted CLIP visual backbone [ 1 ], which aligns image and text representations by maximizing the cosine similarity of matched pairs in a shared embedding space, has proven more effective than previous self-supervised models [ 8 ] that lack semantic alignment with text. To address the inefficiency of training large-scale CLIP models from scratch, EVA-CLIP [ 9, 10 ] bridges the gap between generative self-supervised learning and discriminative semantic alignment. It achieves this by regressing the features of a pre-trained CLIP model from masked image patches, allowing for efficient scaling to billions of parameters. Furthermore, recognizing that scaling CLIP is bottlenecked by the pairwise softmax loss, which requires large batch sizes for stable training, SigLIP [ 11 ] replaces this objective with a simple pairwise sigmoid loss. This decouples the batch size from the objective, enabling efficient scaling and improved zero-shot performance. Most recently, SigLIP2 [ 4 ] addresses the limited spatial precision of these contrastive models by incorporating auxiliary dense supervision losses, including masked prediction and self-distillation, forcing the encoder to retain local features. 
+
+2.2 Vision Models Evolution in MLLMs 
+
+To overcome the modality gap and resolution constraints of the CLIP series, recent state-of-the-art MLLMs increasingly employ visual encoders trained from scratch. These models prioritize native resolution process-ing, dense supervision, and deep LLM alignment. For instance, InternViT [ 12 , 13 , 14 ] adopts a continuous learning paradigm, progressively aligning the encoder as a trainable prefix to handle high resolution inputs (e.g., 448px tiles) and dense OCR tasks. Similarly, the Qwen-ViT series [ 15 ] utilizes a Naive Resolution mechanism to process images at their native aspect ratios. By converting images into variable-length token sequences and incorporating window attention with 2D-RoPE, it efficiently mitigates the quadratic computa-tional costs of high-resolution attention. Meanwhile, Seed-ViT [ 5] emphasizes data quality, pre-training on massive interleaved corpora and detailed synthetic recaptions rather than noisy web text. Challenging standard 
+
+3FineViT TECHNICAL REPORT 
+
+Table 1: Architectural details of FineViT. 
+
+Model Depth Patch Size Hidden Size Interm. Size Heads Activation Pos. Embed 
+
+FineViT 28 14 1536 4608 16 SiLU 2D RoPE contrastive approaches, AIMv2 [ 16 ] introduces a visual encoder pre-trained via a multimodal autoregressive objective. By simultaneously predicting the next image patch and text token, AIMv2 ensures token level dense supervision, yielding highly robust features for localization and recognition. 
+
+## 3 Methods 
+
+3.1 Model Architecture 
+
+Following the architecture of native-resolution visual encoders [ 5 , 15 ], we employ 2D Rotary Positional Embeddings [ 17 ] (2D RoPE) to encode the positional information of the input patches, setting the patch size to 14 × 14 . To facilitate efficient spatial compression in subsequent stages, input images are resized to the nearest resolution with a multiple of 28 × 28 pixels. By stacking multiple Transformer blocks composed of attention mechanisms and Feed-Forward Networks (FFN), we construct a 28 -layer visual encoder with approximately 0.86 billion parameters. The detailed architecture is presented in Table 1. 
+
+3.2 Training Recipe 
+
+To mitigate biases introduced by pretrained models, FineViT is trained from scratch. Contemporary training paradigms for visual encoders typically fall into two categories: self-supervised learning via visual pretext tasks ( e.g. , masked image modeling [ 18 ], next scale prediction [ 19 ]) and language supervised learning (e.g. , image text contrastive learning [ 1], autoregressive pretraining [ 16 ]). To stabilize the training process and systematically investigate encoder properties across different training stages, we employ a three stage curriculum learning strategy, i.e. , MIM initialization, large scale contrastive learning, and LLM alignment. This strategy progresses from establishing foundational visual perception via pretext tasks to achieving complex visual understanding through LLM alignment. Furthermore, we progressively scale the input resolution throughout these stages to enhance the model’s ability to capture fine-grained visual details. The training stages are illustrated in Figure 2 and detailed below. 
+
+Stage I: Initialization with MIM. In the initial phase, we employ Masked Image Modeling (MIM) to pretrain the visual encoder. This process equips the model with preliminary spatial awareness and geometric reasoning capabilities through the reconstruction of masked regions. Following EVA [ 20 ] and MVP [ 21 ], we define the reconstruction target within the feature space to enhance learning efficiency. To isolate the visual encoder’s learning process from label and language supervision, we conduct this phase entirely on a large-scale, unlabeled image dataset. Specifically, we utilize DINOv3 [ 22 ], a robust self-supervised vision model, as the teacher network T to provide the target features. Following a 75% masking strategy at 256 ×256 
+
+resolution, the model is optimized via the loss function in Eq. 1. Here, M refers to the masked patches, and 
+
+Φ( ·) represents our visual encoder: 
+
+LMIM = X
+
+> i∈M
+
+∥Φ( x)i − T (x)i∥22 (1) 
+
+4FineViT TECHNICAL REPORT FineViT  
+
+> Token Merger Text Tokenizer
+> LLM
+> Q: Describe in detail what is shown in the image
+> Q: Describe the content
+> contained within the
+> bounding box coordinates
+> [29, 40, 85, 64] in no
+> more than 10 words.
+
+Stage I: Masked Image Modeling                             
+
+> FineViT
+> Projector
+> Patchify
+> Mask
+> MIM Loss:
+> !"#"
+> DINO v3
+> The image shows a
+> room that appears to
+> be designed for a baby.
+> The central piece is a
+> white crib with
+> wooden slats sides, …
+> FineViT Text Encoder
+> +----
+> -+---
+> --+--
+> ---+-
+> ----+
+> SigLIP Loss: !$%
+> Q: Please provide the
+> bounding box coordinate
+> of the region this
+> sentence describes: A
+> white crib in a nursery .
+> Local (Bbox2String) Local (String2Bbox)
+> A: The image shows a room that appears to be designed for a baby. The central
+> piece is a white crib with wooden slats sides, positioned against the wall…
+> A: A white crib in a nursery .A: [29, 40, 85, 64]
+> Global
+> Local (Bbox2String) Local (String2Bbox)
+
+Stage II: Contrastive Pretraining Stage III: LLM Alignment   
+
+> /
+> Token Pooler
+> Global
+> MLLM Loss: !"%%"
+
+Figure 2: Illustration of FineViT training stages. Stage I utilizes a Masked Image Modeling (MIM) loss to establish foundational visual perception. Stage II implements a SigLIP loss via large-scale image-text contrastive learning to bridge the gap between visual features and semantic concepts. Finally, Stage III integrates a Large Language Model (LLM) at high resolution to train the model on global and local Question-Answering (QA) tasks, ensuring a robust sensitivity to fine-grained visual details. 
+
+Stage II: Large Scale Contrastive Learning. During this phase, we introduce text supervision and employ large scale contrastive learning to further optimize the visual encoder Φ( ·). Specifically, the visual branch is initialized with the MIM pretrained model from Stage I, while the text branch is initialized using the weights of the SigLIP2 [ 4 ] Giant model. Given that the text encoder is already well-aligned with visual features, we initially freeze its parameters and selectively unfreeze them for joint fine-tuning in later steps. In contrast to SigLIP2, which incorporates native resolution only during the final stage of training, FineViT maintains native resolution throughout the entire contrastive learning process . This approach allows the model to inherently adapt to image data with diverse resolutions and aspect ratios. As training progresses, the maximum resolution is scaled from 336 2 to 448 2 pixels. Furthermore, to overcome the context limitations of standard CLIP-based models ( e.g. , 64 –77 tokens), which hinder the processing of detailed recaptioned datasets, we progressively extend the text context length from 64 to 256 tokens. The Stage II objective is defined in Eq. 2, where zi,j denotes the pairwise similarity between image xi and text tj , and yi,j ∈ { 1, −1}
+
+indicates whether the pair is a positive or negative match. 
+
+LCL = − 1
+
+n
+
+nX
+
+i=1 
+
+nX
+
+j=1 
+
+log ( σ(zi,j · yi,j )) , zi,j = τ (Φ( xi) · Ψ( tj ) + b) (2) 
+
+Stage III: LLM Autoregrresion with Multi-Granularity Alignment. In Stage III, we employ a generative training objective to integrate visual features into the MLLM architecture. Beyond global image-text alignment, we enhance fine-grained perception by leveraging over 450 million region-level QA samples as shown in Figure 1(a). Specifically, tasks such as bbox-to-string and string-to-bbox are reformulated into a unified sequence-to-sequence format, enabling the model to interconvert between region captions and spatial coordinates. Besides bbox-to-ocr and ocr-to-bbox are also designed for training character recognition capabilities. To capture intricate details, the input resolution is scaled to 1K. As formulated in Eq. 3, the model is optimized via a standard autoregressive loss, where the visual features from Φ( x) are mapped into 
+
+5FineViT TECHNICAL REPORT Data Pool:     
+
+> LAION, COYO, CC3M,
+> CC12M.YFCC15M, …
+> Filtering:
+> keep short size > 224px;
+> p-Hash Dedup
+> Stage II:
+> 1.56B samples
+> Image Caption:
+> Qwen2.5 -7B, Inter3 -VL -
+> 8B, MiniCPM -V-8B
+> Filtering:
+> Caption check: remove
+> repeated or null caption
+> Stage III:
+> 454M regions
+> Filtering:
+> keep short size > 448px;
+> Blurry, Dark, Saturation
+> check
+> Global &
+> Region Caption:
+> Qwen3VL -32B
+> Region Detection:
+> using Grounding -DINO,
+> Confidence score > 0.3,
+> NMS, Category Balance
+> Stage I:
+> 1.8B samples
+> Add Data:
+> Rich text images and
+> Documents
+> OCR:
+> PaddleOCR
+
+Figure 3: The pipeline of data curation and recaption. the language space through a trainable projector g(·). yi represents the target tokens. 
+
+LMLLM = −
+
+> L
+
+X
+
+> i=1
+
+log P (yi | y<i , g (Φ( x))) (3) 
+
+3.3 Training Data 
+
+In this section, we provide a detailed explaination of the data used at different training stages. As noted in [ 23 ], current large scale web crawled data such as LAION-400M [ 3] frequently exhibit misaliged image-text pairs, and often, the textual descriptions are brief and lack detailed information, which is limited for fine-grained perception tasks. In our data pipeline, instead of using its raw captions, all image-text pairs are recaptioned ,while the caption granularity and quality are progressively improved as the training stages proceed. Detailed descriptions of the data are provided in the appendix. 
+
+Data Source. For source data, we collect a diversity of the open-source dataset, covering MS COCO [ 24 ], CC3M [ 25 ], CC12M [ 26 ], YFCC15M [ 1], LAION [ 3 ], wukong [ 27 ], datacomp [ 28 ], COYO [ 29 ], SBU [ 30 ]and Flickr30k [ 31 ] etc. , as well as extra data that crawled from the internet. After simple filtering and deduplication, where images with shorter size less than 224 are abandoned, and the nearly-identical samples are deduplicated based on the p-Hash value. As a result, we conclude with around 1.8B unlabeled samples, which are used for Stage I MIM initialization training .
+
+Global Recaption Data. The raw caption data are usually noisy, and often lack detailed information of the image. To obtain detailed annotations, the collected 1.8B samples are feeded into MLLMs for recaption. To ensure diversity and avoid the recaptioner bias a single model, we randomly recaption the billion level data with three models, i.e., Qwen2.5-7B [ 15 ], Intern3-VL-8B[ 14 ], and MiniCPM-V-8B[ 32 ]. The recaptions further undergo a rule based filtering, we check the recaptions and remove those samples with repetitions and null captions. This produces 1.56 B recaptioned samples. The recaptioned 1.56 B samples are used for Stage II large scale contrastive learning. 
+
+Multi-Granulaity Recaption Data FineCap-450M. To empower the model with fine-grained perception ability, we enhance the annotation granularity to region level, and deliberately design a region annotation pipeline for stage III training. The while pipeline is illustrated in Figure 3 
+
+• High quality images. We further sample high-quality images from a pool of 1.56 B candidates. The filtering process initially removes images with a short side smaller than 448 pixels. Following [ 33 ], we discard blurry or out-of-focus images, excessively bright or dark images, and unnaturally high color saturation images, This step roughly excludes 3% unqualified images. Beyond natural images, the dataset also incorporates document-like samples as described in [34]. 
+
+6FineViT TECHNICAL REPORT 
+
+Table 2: Detailed information for FineCap-450M. Global Caption Local Caption Rich-text OCR Doc OCR # total regions # images avg. token # regions avg. token # categories # regions avg. token # regions avg. token 63M 211.25 226M 56.58 631,252 142M 3.88 86M 4.33 454M 
+
+• Multi-granulaity recaption. We further annotate the high quality images at both the global and region levels. At this stage, we utilize Qwen3-VL 32B for recaptioning to optimally balance computational complexity and performance. For region level annotation, we first extract nouns from the global recaptions and use Grounding DINO [ 35 ] to generate candidate bounding boxes. We filter out candidate boxes with confidence scores below 0.3 and apply non-maximum suppression (NMS) to merge the remaining ones. To maintain category balance, we sample the bounding boxes based on their frequencies. The remaining boxes are then utilized for local captioning. To better incorporate contextual information, we follow [ 36 ]and generate local captions conditioned on the global context. Specifically, we input both the local crop and the entire global image into MLLM, prompting it to describe the local details using the global context. Ultimately, this pipeline yields a total of 226 million annotated regions covering over 600 , 000 categories. 
+
+• Rich text images and Documents. We notice that for rich text regions in natural images, the local captions often return inaccurate annotations or simply as "text" caption. To enhance the text recognition ability in natural images, we use PaddleOCR [ 37 ] to detect text, and replace the captions obtained with MLLMs. While for document images, we also utilize PaddleOCR for localized text detection and add it to the dataset. 
+
+Dataset Details. As a result, we have annotated global descriptions for 63 million images, alongside more than 450 million regions spanning natural, text-rich, and document-only scenarios, noted as FineCap-450M .The detailed data summarization is shown in Table 2. As far as we know, FineCap-450M is the largest recaptioned data covering fine-grained annotations. 
+
+## 4 Experiments 
+
+This section begins by detailing the implementation details and evaluation benchmarks for FineViT. Then we systematically assess the performance of the proposed model across each training stage. To demonstrate its comparative advantage, we evaluate FineViT against the SigLIP2 baseline and investigate its cross model adaptability by integrating it with LLMs of varying scales. 
+
+4.1 Experimental Setup 
+
+Implementation Details. The training pipeline for FineViT follows a progressive three stage paradigm, as detailed in Table 3. Stage I performs self-supervised pretraining via MIM on 1.8B samples with a batch size of 
+
+4, 096 to establish foundational representations. Stage II transitions to large scale contrastive learning to align visual features with linguistic semantics, processing approximately 9.3B samples with a batch size of 49 , 152 .Finally, Stage III targets LLM alignment by scaling the visual input to 1K resolution, applying a refined learning rate of 1.0 × 10 −5. All experiments utilize DeepSpeed ZeRO-2 with BF16 precision, employing the AdamW optimizer and a cosine learning rate scheduler. For multimodal understanding evaluation, the FineViT-VL model is trained on a curated dataset of 80 M high quality SFT samples. This dataset is merged from LLaVA-OneVision-1.5 [ 38 ], FineVision [ 39 ], and Eagle2 [ 40 ], with a 6M subset utilized for ablation 
+
+7FineViT TECHNICAL REPORT 
+
+Table 3: Overview of FineViT training details. 
+
+Training Stage Stage I: MIM Stage II: Contrastive Learning Stage III: LLM Align 
+
+Samples Seen 1.8B 9.3B 0.5B Batch Size 4,096 49,152 4,096 Resolution 256 × 256 within 448 × 448 within 1000 × 1000 
+
+Learning Rate 1.0 × 10 −3 1.0 × 10 −4 1.0 × 10 −5
+
+Training Modules ViT ViT, text encoder ViT, projector, LLM Table 4: Comparison on Zero-shot Classification and Retrieval benchmarks.                                            
+
+> Model Params Zero-shot Classification Zero-shot Retrieval
+> IN-1k val IN v2 IN REAL COCO T2I COCO I2T FLICKR T2I FLICKR I2T SigLIP-so400m/14 [11] 0.4B 83.2 77.1 87.5 52.0 70.2 80.5 93.5 SigLIP2-so400m/14 [4] 0.4B 84.1 78.7 88.1 55.8 71.7 85.7 94.9 SigLIP2-g/16 [4] 1B 85.0 79.8 88.5 56.1 72.8 86.0 95.4 Seed-ViT/14 [5] 0.5B 83.6 77.6 -----
+> FineViT/14 0.86B 84.2 75.5 88.7 60.7 80.7 84.8 96.7
+
+studies. Comprehensive details regarding the data composition and training protocols are provided in the appendix. 
+
+Evaluation Benchmarks. We conduct extensive experimental evaluations across successive training stages, dividing the benchmarks into two primary categories: (i) discriminative tasks (classification and retrieval) and (ii) generative multimodal understanding. For discriminative tasks, we evaluate zero-shot classification performance on ImageNet-1k [ 41 ], ImageNet-v2 [ 42 ], and ImageNet-R [ 43 ]. Cross-modal evaluations include text-to-image and image-to-text retrieval tasks on five datasets, including COCO [ 44 ], Flickr30k [ 45 ], and the more recent DCI [ 46 ], IIW [ 47 ], and Urban-1k [ 48 ]. Regarding multimodal understanding, the evaluation protocols span four distinct sub-domains. (1) General Visual Question Answering (VQA): MMBench [ 49 ], MMStar [ 50 ], and HallusionBench [ 51 ]. (2) Multimodal Reasoning: MMMU [ 52 ], MathVista [ 53 ], MMVet [54 ], SEEDBench [ 55 ], and ScienceQA [ 56 ]. (3) OCR & Chart: AI2D [ 57 ], OCRBench [ 58 ], DocVQA [ 59 ], ChartQA [ 60 ], InfoVQA [ 61 ], and TextVQA [ 62 ]. (4) Grounding & Counting: BLINK [ 63 ], CountBenchQA [64 ], PointBench [ 65 ], the RefCOCO series [ 66 ], VisualWebBench [ 67 ], and FSC-147 [ 68 ]. OCRBench scores are normalized to a [0, 100] scale to ensure consistency during averaging. For the FSC-147 counting task, scores are integrated into the final average as 100 − FSC-147 val , with individual errors capped at 100 .Results for RefCOCO series represent the mean performance over the validation and test splits of each dataset. To ensure fair comparison, all multimodal understanding tasks are benchmarked using the standard VLMEvalKit [69] framework. 
+
+4.2 Main Results 
+
+As shown in Table 4, we compare FineViT against state-of-the-art vision language models, including SigLIP, SigLIP2, and Seed-ViT. Despite having fewer parameters than the SigLIP2-g (1B) variant, FineViT achieves competitive or superior performance across most metrics. Specifically, on the ImageNet-1k validation set, FineViT attains a top-1 accuracy of 84 .2% , surpassing SigLIP-so400m ( 83 .2% ) and Seed-ViT ( 83 .6% ). 
+
+8FineViT TECHNICAL REPORT 
+
+Table 5: Comparison on Long text Zero-shot Retrieval benchmarks. 
+
+Model Params Long-text Zero-shot Retrieval 
+
+DCI T2I DCI I2T IIW T2I IIW I2T Urban-1k T2I Urban-1k I2T SigLIP-so400m/14 [11] 0.4B 61.5 63.3 91.8 92.5 73.8 74.7 SigLIP2-so400m/14 [4] 0.4B 66.8 66.9 95.6 94.8 75.6 78.1 LongCLIP-L/14 [48] 0.3B 63.8 56.2 96.1 94.1 84.0 81.1 FixCLIP-L/14 [70] 0.3B 74.2 72.0 98.2 97.9 96.3 93.7 
+
+FineViT/14 0.86B 84.8 83.4 99.7 99.8 99.1 98.9 It is a marina with many small boats docked in it . It is a marina                                                                                                                                                                                                        
+
+> with many small boats docked in it .Near the front there are a
+> lot of small blue boats .There is aguy working on of them near
+> the front, and also one on the right side .On the boats on the
+> right there are some random things in the boats .Most of the
+> center shows the water .There are different types of boats on
+> the left and the right .There are sailboats on the left .Above the
+> sky is mostly cloudy with alittle blue .It is day, but not very
+> sunny .There are alot of birds in the sky, especially on the left .
+> The boats on the left back are alittle bigger .Many of the boats
+> seem weathered .
+> Large buildings are on land with abody of water in the
+> foreground .There is abridge on the left side of the image .A
+> collection of buildings on land .The buldings are all large
+> skyscrapers with balconies .There is abridge to the left side of
+> the image .Water surrounds the foreground and the left side as
+> well .There is apier in the bottom middle that is made of wood .
+> People are walking around at the bottom of the image .There
+> are two cranes and aboat on the bottom left of the image .
+
+SigLIP2 ❌LongCLIP ❌FineViT ✔
+
+SigLIP2 ❌LongCLIP ❌FineViT ✔
+
+Figure 4: Illustration on long text zero-shot retrieval. Distinctive attributes within the long caption are highlighted in orange to help identify the correct image. FineViT demonstrates remarkable improvements on retrieval benchmarks. On MS COCO, FineViT achieves a text-to-image (T2I) score of 60 .7% and an image-to-text (I2T) score of 80 .7% , significantly outperforming SigLIP2-so400m by margins of 4.9% and 9.0% , respectively. Similar trends are observed on Flickr30K, where FineViT sets a new state-of-the-art of 96 .7% in I2T retrieval. Zero-shot Classification and Retrieval. Long text Zero-shot Retrieval. Benefiting from dense recaptions, FineViT supports long text retrieval. To evaluate its capability in handling complex and dense textual descriptions, we benchmark FineViT on three long text retrieval datasets: DCI, IIW, and Urban-1K. The results, summarized in Table 5, highlight the exceptional fine-grained understanding capabilities of our method. Compared to baselines specifically optimized for text alignment, such as FixCLIP, FineViT achieves substantial gains. Notably, on the challenging DCI dataset, our model reaches 84 .8% in T2I retrieval, exceeding FixCLIP ( 74 .2% ) by over 10 points and the SigLIP2 baseline ( 66 .8% ) by 18 points. On the Urban-1K benchmark, FineViT approaches saturation with near perfect scores ( 99 .1% T2I/ 98 .9% I2T), demonstrating robust alignment between visual features and detailed textual captions. Several visual comparisons are shown in Figure 4. Additional visualization results are provided in the appendix. 
+
+Multimodal Understanding Tasks. To evaluate the efficacy of FineViT-VL, we conduct a comprehensive comparison against leading small scale VLMs, including Qwen3-VL, Intern3.5-VL, and Aquila-VL. As shown in Table 6, with a language model size of approximately 1.7B, FineViT yields competitive results across the General QA and Multimodal Reasoning benchmarks. Notebly, FineViT-VL achieves substantial 
+
+9FineViT TECHNICAL REPORT 
+
+Table 6: Performance comparison across vision language models on various multimodal understanding benchmarks. Aquila-VL uses Qwen2.5 1.5B LLM, all others utilize Qwen3 1.7B LLM as language backbone. 
+
+All results are evaluated using the standard VLMEvalKit [69] framework and identical APIs. 
+
+Task Benchmark FineViT-VL Qwen3-VL [6] Intern3.5-VL [7] Aquila-VL [71] 
+
+General General VQA MMBench dev _en _v11 79.33 76.47 76.08 75.69 MMStar 60.87 56.60 57.33 54.53 HallusionBench 46.54 51.89 48.18 42.07 Multimodal Reasoning MMMU val 44.33 44.11 49.33 43.77 MathVista mini 67.70 55.10 61.50 59.30 MMVet 55.05 60.18 65.20 40.22 SEEDBench img 77.44 74.78 75.31 73.90 ScienceQA test 95.93 86.47 91.17 95.33 Average 65.90 63.20 65.51 60.60 Local OCR & Chart AI2D test 82.25 76.46 79.01 75.06 OCRBench 841 869 835 772 DocVQA test 93.41 93.47 89.49 74.29 ChartQA test 85.60 77.72 80.76 76.52 InfoVQA test 72.20 71.98 70.79 46.67 TextVQA val 83.26 80.77 76.72 76.27 Grounding & Counting BLINK count 67.50 63.33 65.00 66.67 CountBenchQA 93.84 86.65 70.22 80.69 PointBench 70.21 64.89 60.63 63.29 RefCOCO avg 90.60 88.04 88.28 63.51 RefCOCO+ avg 85.78 80.07 82.49 57.69 RefCOCOg avg 88.81 85.43 85.28 58.71 VisualWebBench 61.26 60.24 44.85 41.43 100-FSC-147 val 81.39 76.27 77.50 70.43 Average 81.44 78.02 75.32 66.32 
+
+performance gain in localized tasks, outperforming the second-best competitor by an average margin of 
+
+3.42% . For OCR and Chart Understanding, FineViT-VL exhibits marked advantages on the AI2D and ChartQA benchmarks, demonstrating its robust capability in parsing complex visual structures and dense textual information. Beyond text centric understanding, FineViT-VL also demonstrates superior spatial awareness in Grounding and Counting benchmarks, such as CountBenchQA and the RefCOCO series. We attribute this local precision to the large-scale, multi-granularity alignment training enabled by FineCap-450M. This approach captures fine visual details and precise instance level dependencies that are often overlooked by standard global alignment methods. 
+
+4.3 Ablation Study 
+
+Comparison of Vision Encoders across Various LLM Scales. Table 7 presents a comprehensive quantitative evaluation of FineViT against the SigLIP2-naflex baseline across diverse multimodal benchmarks. We instantiate these vision encoders with various LLMs to verify their scalability and compatibility. While both encoders exhibit comparable performance on global level VQA tasks ( e.g. , MMBench, MMStar), FineViT demonstrates a decisive advantage in local perception tasks. Specifically, when paired with Qwen3-1.7B, FineViT achieves a substantial average margin of 11 .31% over SigLIP2 in local centric benchmarks. This 
+
+10 FineViT TECHNICAL REPORT 
+
+Table 7: Benchmarking multimodal performance of vision encoders and LLMs 
+
+Task Benchmark LLM: Qwen3-1.7B LLM: Qwen3-8B 
+
+FineViT SigLIP2-naflex FineViT SigLIP2-naflex General General VQA MMBench dev _en _v11 66.25 66.87 74.54 76.32 MMStar 44.60 44.73 55.93 56.60 HallusionBench 30.04 30.74 39.83 39.08 Multimodal Reasoning MMMU val 41.22 41.44 45.89 48.56 MathVista mini 49.00 43.20 58.80 60.50 MMVet 32.66 28.90 43.12 40.41 SEEDBench img 72.33 71.52 75.53 74.76 ScienceQA test 78.14 80.07 84.58 86.17 Average 51.78 50.93 59.78 60.30 
+
+Local OCR & Chart AI2D test 70.85 68.43 77.23 77.49 OCRBench 704 533 698 550 DocVQA test 83.49 64.07 83.84 73.05 ChartQA test 73.00 63.48 75.20 75.16 InfoVQA test 52.40 39.60 54.52 48.55 TextVQA val 75.65 67.74 77.91 72.26 Grounding & Counting BLINK count 57.50 51.67 72.50 62.50 CountBenchQA 83.37 77.82 85.01 71.66 PointBench 65.43 59.04 70.21 63.83 RefCOCO avg 78.93 67.61 85.53 81.92 RefCOCO+ avg 68.00 57.34 76.35 74.32 RefCOCOg avg 76.67 64.16 82.78 80.06 VisualWebBench 57.11 41.29 58.92 50.75 100-FSC-147 val 68.20 47.10 59.02 53.57 Average 70.07 58.76 73.49 67.15 performance gap is most pronounced in OCR and document understanding, for instance, FineViT yields an absolute improvement of 18 .52% on DocVQA and 13 .68% on InfoVQA. These results suggest that FineViT better preserves the high resolution spatial features essential for textual and structural recognition. The performance gain persists across different LLM capacities. Transitioning from the 1.7B to the 8BQwen3 variant, FineViT consistently outperforms SigLIP2 in grounding and counting tasks, such as BLINK-Count ( +10 .0% ) and CountBenchQA ( +13 .35% ). Notably, FineViT shows superior sample efficiency in grounding, as evidenced by its consistent lead across all RefCOCO variants. This indicates that our architectural refinements facilitate a more precise alignment between visual tokens and linguistic queries, thereby mitigating the spatial ambiguity often encountered in complex multimodal reasoning. 
+
+Effectiveness of Progressive Training Stages. We systematically evaluate the contribution of each training phase in Table 8. While Stage I (MIM) constructs a robust foundational representation, it lacks the high-level semantic discriminability required for complex reasoning. The subsequent Stage II (contrastive learning) bridges this gap, yielding substantial gains in general VQA. However, the global nature of contrastive 
+
+11 FineViT TECHNICAL REPORT 
+
+Table 8: Multimodal performance of FineViT across different training stages. 
+
+Task Benchmark Stage I: MIM Stage II: CL Stage III: Align 
+
+General General VQA MMBench dev _en _v11 62.15 67.18 69.97 MMStar 43.73 46.00 49.20 HallusionBench 27.48 32.45 34.13 Multimodal Reasoning MMMU val 37.44 40.33 41.44 MathVista mini 44.60 48.20 52.70 MMVet 27.80 36.65 35.83 SEEDBench img 71.77 73.31 74.34 ScienceQA test 75.21 80.52 81.01 Average 48.77 53.08 54.83 
+
+Local OCR & Chart AI2D test 65.90 69.11 71.70 OCRBench 417 681 745 DocVQA test 64.26 79.85 85.33 ChartQA test 67.16 73.00 77.56 InfoVQA test 35.18 48.70 56.25 TextVQA val 50.84 73.82 77.35 Grounding & Counting BLINK count 55.00 56.67 60.00 CountBenchQA 56.47 72.07 90.76 PointBench 54.79 59.04 67.55 RefCOCO avg 77.93 72.93 83.70 RefCOCO+ avg 66.47 63.18 73.87 RefCOCOg avg 76.59 69.51 80.92 VisualWebBench 39.98 53.03 56.21 100 −FSC-147 val 48.04 48.57 70.33 Average 57.12 64.80 73.29 
+
+objectives occasionally suppresses instance-level spatial sensitivity, as evidenced by performance fluctuations in grounding tasks ( e.g. , RefCOCO). Crucially, the introduction of Stage III, enriched by our large scale FineCap-450M dataset, effectively enhancing the spatial perceptions. This improvement is most prominent in spatially dense benchmarks: the OCRBench score surges from 681 to 745 , and CountBenchQA exhibits a remarkable 18 .69% improvement. These results demonstrate that the synergy between our multi-stage pipeline and the FineCap-450M corpus not only alleviates the localization bottleneck but also empowers FineViT with superior granularity in document parsing and visual grounding. 
+
+Frozen vs. Unfrozen Visual Backbone. To investigate the contribution of visual feature adaption, we compare the performance of frozen vs. unfrozen FineViT. The results, categorized by task type and sorted by relative gain, are illustrated in Figure 5. Unfreezing the vision encoder yields the most significant gains in 
+
+Local tasks ( e.g. , RefCOCO, ChartQA). While a frozen encoder suffices for general tasks, updating the visual backbone is indispensable for benchmarks demanding fine-grained visual features and exact positioning. 
+
+12 FineViT TECHNICAL REPORT 
+
+Figure 5: Performance distribution: unfrozen vs frozen FineViT. 
+
+## 5 Conclusion 
+
+In this paper, we introduced FineViT, a state-of-the-art vision encoder trained from scratch to address the limitations of coarse-grained perception in existing visual foundation models. To achieve precise visual understanding, we propose a progressive training paradigm driven by our curated FineCap-450M dataset, the largest fine-grained annotated dataset to date. FineViT effectively captures intricate spatial relationships and dense visual details. Extensive evaluations demonstrate that FineViT matches the zero-shot performance of leading models like SigLIP2, while uniquely excelling in long-context retrieval. Furthermore, when integrated into MLLMs, FineViT consistently outperforms contemporary architectures such as SigLIP2 and Qwen-ViT. We would release FineViT and the FineCap-450M dataset to advance research in fine-grained visual perception. Limitation. FineViT is currently restricted to static images, leaving its potential for video-based temporal reasoning to be explored in future work. 
+
+13 FineViT TECHNICAL REPORT 
+
+## References 
+
+[1] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pages 8748–8763. PmLR, 2021. [2] Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. Llava-next: Improved reasoning, ocr, and world knowledge, January 2024. [3] Christoph Schuhmann, Richard Vencu, Romain Beaumont, Robert Kaczmarczyk, Clayton Mullis, Aarush Katta, Theo Coombes, Jenia Jitsev, and Aran Komatsuzaki. Laion-400m: Open dataset of clip-filtered 400 million image-text pairs. arXiv preprint arXiv:2111.02114 , 2021. [4] Michael Tschannen, Alexey Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Alabdulmohsin, Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, et al. Siglip 2: Multilingual vision-language encoders with improved semantic understanding, localization, and dense features. arXiv preprint arXiv:2502.14786 , 2025. [5] Dong Guo, Faming Wu, Feida Zhu, Fuxing Leng, Guang Shi, Haobin Chen, Haoqi Fan, Jian Wang, Jianyu Jiang, Jiawei Wang, et al. Seed1. 5-vl technical report. arXiv preprint arXiv:2505.07062 , 2025. [6] Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 , 2025. [7] Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu, Linglin Jing, Shenglong Ye, Jie Shao, et al. Internvl3. 5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 , 2025. [8] Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for unsuper-vised visual representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9729–9738, 2020. [9] Quan Sun, Yuxin Fang, Ledell Wu, Xinlong Wang, and Yue Cao. Eva-clip: Improved training techniques for clip at scale. arXiv preprint arXiv:2303.15389 , 2023. [10] Quan Sun, Jinsheng Wang, Qiying Yu, Yufeng Cui, Fan Zhang, Xiaosong Zhang, and Xinlong Wang. Eva-clip-18b: Scaling clip to 18 billion parameters. arXiv preprint arXiv:2402.04252 , 2024. [11] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 11975–11986, 2023. [12] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, et al. Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24185–24198, 2024. 
+
+14 FineViT TECHNICAL REPORT 
+
+[13] Zhe Chen, Weiyun Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Erfei Cui, Jinguo Zhu, Shenglong Ye, Hao Tian, Zhaoyang Liu, et al. Expanding performance boundaries of open-source multimodal models with model, data, and test-time scaling. arXiv preprint arXiv:2412.05271 , 2024. [14] Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su, Jie Shao, et al. Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 , 2025. [15] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 , 2025. [16] Enrico Fini, Mustafa Shukor, Xiujun Li, Philipp Dufter, Michal Klein, David Haldimann, Sai Aitharaju, Victor G Turrisi da Costa, Louis Béthune, Zhe Gan, et al. Multimodal autoregressive pre-training of large vision encoders. In Proceedings of the Computer Vision and Pattern Recognition Conference ,pages 9641–9654, 2025. [17] Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer: Enhanced transformer with rotary position embedding. Neurocomputing , 568:127063, 2024. [18] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, and Ross Girshick. Masked autoen-coders are scalable vision learners. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 16000–16009, 2022. [19] Keyu Tian, Yi Jiang, Zehuan Yuan, Bingyue Peng, and Liwei Wang. Visual autoregressive modeling: Scalable image generation via next-scale prediction. Advances in neural information processing systems ,37:84839–84865, 2024. [20] Yuxin Fang, Wen Wang, Binhui Xie, Quan Sun, Ledell Wu, Xinggang Wang, Tiejun Huang, Xinlong Wang, and Yue Cao. Eva: Exploring the limits of masked visual representation learning at scale. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 19358– 19369, 2023. [21] Longhui Wei, Lingxi Xie, Wengang Zhou, Houqiang Li, and Qi Tian. Mvp: Multimodality-guided visual pre-training. In European conference on computer vision , pages 337–353. Springer, 2022. [22] Oriane Siméoni, Huy V Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Michaël Ramamonjisoa, et al. Dinov3. arXiv preprint arXiv:2508.10104 , 2025. [23] Xianhang Li, Haoqin Tu, Mude Hui, Zeyu Wang, Bingchen Zhao, Junfei Xiao, Sucheng Ren, Jieru Mei, Qing Liu, Huangjie Zheng, et al. What if we recaption billions of web images with llama-3? arXiv preprint arXiv:2406.08478 , 2024. [24] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C. Lawrence Zitnick. Microsoft coco: Common objects in context. In David Fleet, Tomas Pajdla, Bernt Schiele, and Tinne Tuytelaars, editors, Computer Vision – ECCV 2014 , pages 740–755, Cham, 2014. Springer International Publishing. [25] Piyush Sharma, Nan Ding, Sebastian Goodman, and Radu Soricut. Conceptual captions: A cleaned, hypernymed, image alt-text dataset for automatic image captioning. In Iryna Gurevych and Yusuke Miyao, editors, Proceedings of the 56th Annual Meeting of the Association for Computational Linguis-tics (Volume 1: Long Papers) , pages 2556–2565, Melbourne, Australia, July 2018. Association for Computational Linguistics. [26] Soravit Changpinyo, Piyush Sharma, Nan Ding, and Radu Soricut. Conceptual 12M: Pushing web-scale image-text pre-training to recognize long-tail visual concepts. In CVPR , 2021. 
+
+15 FineViT TECHNICAL REPORT 
+
+[27] Jiaxi Gu, Xiaojun Meng, Guansong Lu, Lu Hou, Niu Minzhe, Xiaodan Liang, Lewei Yao, Runhui Huang, Wei Zhang, Xin Jiang, Chunjing XU, and Hang Xu. Wukong: A 100 million large-scale chinese cross-modal pre-training benchmark. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Systems , volume 35, pages 26418–26431. Curran Associates, Inc., 2022. [28] Samir Yitzhak Gadre, Gabriel Ilharco, Alex Fang, Jonathan Hayase, Georgios Smyrnis, Thao Nguyen, Ryan Marten, Mitchell Wortsman, Dhruba Ghosh, Jieyu Zhang, Eyal Orgad, Rahim Entezari, Giannis Daras, Sarah M Pratt, Vivek Ramanujan, Yonatan Bitton, Kalyani Marathe, Stephen Mussmann, Richard Vencu, Mehdi Cherti, Ranjay Krishna, Pang Wei Koh, Olga Saukh, Alexander Ratner, Shuran Song, Hannaneh Hajishirzi, Ali Farhadi, Romain Beaumont, Sewoong Oh, Alex Dimakis, Jenia Jitsev, Yair Carmon, Vaishaal Shankar, and Ludwig Schmidt. Datacomp: In search of the next generation of multimodal datasets. In Thirty-seventh Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2023. [29] Minwoo Byeon, Beomhee Park, Haecheon Kim, Sungjun Lee, Woonhyuk Baek, and Saehoon Kim. Coyo-700m: Image-text pair dataset. https://github.com/kakaobrain/coyo-dataset , 2022. [30] Vicente Ordonez, Girish Kulkarni, and Tamara Berg. Im2text: Describing images using 1 million captioned photographs. In J. Shawe-Taylor, R. Zemel, P. Bartlett, F. Pereira, and K.Q. Weinberger, editors, Advances in Neural Information Processing Systems , volume 24. Curran Associates, Inc., 2011. [31] Peter Young, Alice Lai, Micah Hodosh, and Julia Hockenmaier. From image descriptions to visual denotations: New similarity metrics for semantic inference over event descriptions. Transactions of the Association for Computational Linguistics , 2:67–78, 2014. [32] Yuan Yao, Tianyu Yu, Ao Zhang, Chongyi Wang, Junbo Cui, Hongji Zhu, Tianchi Cai, Haoyu Li, Weilin Zhao, Zhihui He, et al. Minicpm-v: A gpt-4v level mllm on your phone. arXiv preprint arXiv:2408.01800 , 2024. [33] Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng-ming Yin, Shuai Bai, Xiao Xu, Yilei Chen, et al. Qwen-image technical report. arXiv preprint arXiv:2508.02324 , 2025. [34] Guanghao Zheng, Bowen Shi, Mingxing Xu, Ruoyu Sun, Peisen Zhao, Wenrui Dai, Junni Zou, Hongkai Xiong, XIAOPENG ZHANG, Qi Tian, et al. Granvit: A fine-grained vision model with autoregressive perception for mllms. In The Fourteenth International Conference on Learning Representations , 2025. [35] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In European conference on computer vision , pages 38–55. Springer, 2024. [36] Baifeng Shi, Boyi Li, Han Cai, Yao Lu, Sifei Liu, Marco Pavone, Jan Kautz, Song Han, Trevor Darrell, Pavlo Molchanov, et al. Scaling vision pre-training to 4k resolution. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9631–9640, 2025. [37] Cheng Cui, Ting Sun, Manhui Lin, Tingquan Gao, Yubo Zhang, Jiaxuan Liu, Xueqing Wang, Zelun Zhang, Changda Zhou, Hongen Liu, et al. Paddleocr 3.0 technical report. arXiv preprint arXiv:2507.05595 , 2025. [38] Xiang An, Yin Xie, Kaicheng Yang, Wenkang Zhang, Xiuwei Zhao, Zheng Cheng, Yirui Wang, Songcen Xu, Changrui Chen, Chunsheng Wu, Huajie Tan, Chunyuan Li, Jing Yang, Jie Yu, Xiyao Wang, Bin Qin, Yumeng Wang, Zizhen Yan, Ziyong Feng, Ziwei Liu, Bo Li, and Jiankang Deng. Llava-onevision-1.5: Fully open framework for democratized multimodal training. In arXiv , 2025. 
+
+16 FineViT TECHNICAL REPORT 
+
+[39] Luis Wiedmann, Orr Zohar, Amir Mahla, Xiaohan Wang, Rui Li, Thibaud Frere, Leandro von Werra, Aritra Roy Gosthipaty, and Andrés Marafioti. Finevision: Open data is all you need. arXiv preprint arXiv:2510.17269 , 2025. [40] Zhiqi Li, Guo Chen, Shilong Liu, Shihao Wang, Vibashan VS, Yishen Ji, Shiyi Lan, Hao Zhang, Yilin Zhao, Subhashree Radhakrishnan, Nadine Chang, Karan Sapra, Amala Sanjay Deshmukh, Tuomas Rintamaki, Matthieu Le, Ilia Karmanov, Lukas Voegtle, Philipp Fischer, De-An Huang, Timo Roman, Tong Lu, Jose M. Alvarez, Bryan Catanzaro, Jan Kautz, Andrew Tao, Guilin Liu, and Zhiding Yu. Eagle 2: Building post-training data strategies from scratch for frontier vision-language models, 2025. [41] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition ,pages 248–255. Ieee, 2009. [42] Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do imagenet classifiers generalize to imagenet? In International conference on machine learning , pages 5389–5400. PMLR, 2019. [43] Lucas Beyer, Olivier J Hénaff, Alexander Kolesnikov, Xiaohua Zhai, and Aäron van den Oord. Are we done with imagenet? arXiv preprint arXiv:2006.07159 , 2020. [44] Xinlei Chen, Hao Fang, Tsung-Yi Lin, Ramakrishna Vedantam, Saurabh Gupta, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco captions: Data collection and evaluation server. arXiv preprint arXiv:1504.00325 , 2015. [45] Bryan A Plummer, Liwei Wang, Chris M Cervantes, Juan C Caicedo, Julia Hockenmaier, and Svetlana Lazebnik. Flickr30k entities: Collecting region-to-phrase correspondences for richer image-to-sentence models. In Proceedings of the IEEE international conference on computer vision , pages 2641–2649, 2015. [46] Jack Urbanek, Florian Bordes, Pietro Astolfi, Mary Williamson, Vasu Sharma, and Adriana Romero-Soriano. A picture is worth more than 77 text tokens: Evaluating clip-style models on dense captions. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 26700–26709, 2024. [47] Roopal Garg, Andrea Burns, Burcu Karagol-Ayan, Yonatan Bitton, Ceslee Montgomery, Yasumasa Onoe, Andrew Bunner, Ranjay Krishna, Jason Michael Baldridge, and Radu Soricut. Imageinwords: Unlocking hyper-detailed image descriptions. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 93–127, 2024. [48] Beichen Zhang, Pan Zhang, Xiaoyi Dong, Yuhang Zang, and Jiaqi Wang. Long-clip: Unlocking the long-text capability of clip. In European conference on computer vision , pages 310–325. Springer, 2024. [49] Yuan Liu, Haodong Duan, Yuanhan Zhang, Bo Li, Songyang Zhang, Wangbo Zhao, Yike Yuan, Jiaqi Wang, Conghui He, Ziwei Liu, et al. Mmbench: Is your multi-modal model an all-around player? In 
+
+European conference on computer vision , pages 216–233. Springer, 2024. [50] Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Jiaqi Wang, Yu Qiao, Dahua Lin, et al. Are we on the right way for evaluating large vision-language models? 
+
+Advances in Neural Information Processing Systems , 37:27056–27087, 2024. [51] Tianrui Guan, Fuxiao Liu, Xiyang Wu, Ruiqi Xian, Zongxia Li, Xiaoyu Liu, Xijun Wang, Lichang Chen, Furong Huang, Yaser Yacoob, et al. Hallusionbench: an advanced diagnostic suite for entangled 
+
+17 FineViT TECHNICAL REPORT 
+
+language hallucination and visual illusion in large vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 14375–14385, 2024. [52] Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, et al. Mmmu: A massive multi-discipline multimodal understanding and reasoning benchmark for expert agi. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9556–9567, 2024. [53] Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chunyuan Li, Hannaneh Hajishirzi, Hao Cheng, Kai-Wei Chang, Michel Galley, and Jianfeng Gao. Mathvista: Evaluating mathematical reasoning of foundation models in visual contexts. arXiv preprint arXiv:2310.02255 , 2023. [54] Weihao Yu, Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Zicheng Liu, Xinchao Wang, and Lijuan Wang. Mm-vet: Evaluating large multimodal models for integrated capabilities. arXiv preprint arXiv:2308.02490 , 2023. [55] Bohao Li, Rui Wang, Guangzhi Wang, Yuying Ge, Yixiao Ge, and Ying Shan. Seed-bench: Bench-marking multimodal llms with generative comprehension. arXiv preprint arXiv:2307.16125 , 2023. [56] Pan Lu, Swaroop Mishra, Tanglin Xia, Liang Qiu, Kai-Wei Chang, Song-Chun Zhu, Oyvind Tafjord, Peter Clark, and Ashwin Kalyan. Learn to explain: Multimodal reasoning via thought chains for science question answering. Advances in Neural Information Processing Systems , 35:2507–2521, 2022. [57] Aniruddha Kembhavi, Mike Salvato, Eric Kolve, Minjoon Seo, Hannaneh Hajishirzi, and Ali Farhadi. A diagram is worth a dozen images. In European conference on computer vision , pages 235–251. Springer, 2016. [58] Yuliang Liu, Zhang Li, Mingxin Huang, Biao Yang, Wenwen Yu, Chunyuan Li, Xu-Cheng Yin, Cheng-Lin Liu, Lianwen Jin, and Xiang Bai. Ocrbench: on the hidden mystery of ocr in large multimodal models. Science China Information Sciences , 67(12):220102, 2024. [59] Minesh Mathew, Dimosthenis Karatzas, and CV Jawahar. Docvqa: A dataset for vqa on document images. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pages 2200–2209, 2021. [60] Ahmed Masry, Do Xuan Long, Jia Qing Tan, Shafiq Joty, and Enamul Hoque. Chartqa: A benchmark for question answering about charts with visual and logical reasoning. arXiv preprint arXiv:2203.10244 ,2022. [61] Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, and CV Jawahar. Infographicvqa. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 1697–1706, 2022. [62] Amanpreet Singh, Vivek Natarajan, Meet Shah, Yu Jiang, Xinlei Chen, Dhruv Batra, Devi Parikh, and Marcus Rohrbach. Towards vqa models that can read. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8317–8326, 2019. [63] Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A Smith, Wei-Chiu Ma, and Ranjay Krishna. Blink: Multimodal large language models can see but not perceive. In European Conference on Computer Vision , pages 148–166. Springer, 2024. [64] Lucas Beyer, Andreas Steiner, André Susano Pinto, Alexander Kolesnikov, Xiao Wang, Daniel Salz, Maxim Neumann, Ibrahim Alabdulmohsin, Michael Tschannen, Emanuele Bugliarello, Thomas Un-terthiner, Daniel Keysers, Skanda Koppula, Fangyu Liu, Adam Grycner, Alexey Gritsenko, Neil Houlsby, Manoj Kumar, Keran Rong, Julian Eisenschlos, Rishabh Kabra, Matthias Bauer, Matko 
+
+18 FineViT TECHNICAL REPORT 
+
+Bošnjak, Xi Chen, Matthias Minderer, Paul Voigtlaender, Ioana Bica, Ivana Balazevic, Joan Puigcerver, Pinelopi Papalampidi, Olivier Henaff, Xi Xiong, Radu Soricut, Jeremiah Harmsen, and Xiaohua Zhai. PaliGemma: A versatile 3B VLM for transfer. arXiv preprint arXiv:2407.07726 , 2024. [65] Long Cheng, Jiafei Duan, Yi Ru Wang, Haoquan Fang, Boyang Li, Yushan Huang, Elvis Wang, Ainaz Eftekhar, Jason Lee, Wentao Yuan, Rose Hendrix, Noah A. Smith, Fei Xia, Dieter Fox, and Ranjay Krishna. Pointarena: Probing multimodal grounding through language-guided pointing, 2025. [66] Licheng Yu, Patrick Poirson, Shan Yang, Alexander C Berg, and Tamara L Berg. Modeling context in referring expressions. In European conference on computer vision , pages 69–85. Springer, 2016. [67] Junpeng Liu, Yifan Song, Bill Yuchen Lin, Wai Lam, Graham Neubig, Yuanzhi Li, and Xiang Yue. Visualwebbench: How far have multimodal llms evolved in web page understanding and grounding? 
+
+arXiv preprint arXiv:2404.05955 , 2024. [68] Viresh Ranjan, Udbhav Sharma, Thu Nguyen, and Minh Hoai. Learning to count everything. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 3394– 3403, 2021. [69] Haodong Duan, Junming Yang, Yuxuan Qiao, Xinyu Fang, Lin Chen, Yuan Liu, Xiaoyi Dong, Yuhang Zang, Pan Zhang, Jiaqi Wang, et al. Vlmevalkit: An open-source toolkit for evaluating large multi-modality models. In Proceedings of the 32nd ACM international conference on multimedia , pages 11198–11201, 2024. [70] Bingchao Wang, Zhiwei Ning, Jianyu Ding, Xuanang Gao, Yin Li, Dongsheng Jiang, Jie Yang, and Wei Liu. Fix-clip: Dual-branch hierarchical contrastive learning via synthetic captions for better understanding of long text. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 20694–20704, 2025. [71] Shuhao Gu, Jialing Zhang, Siyuan Zhou, Kevin Yu, Zhaohu Xing, Liangdong Wang, Zhou Cao, Jintao Jia, Zhuoyi Zhang, Yixuan Wang, et al. Infinity-mm: Scaling multimodal performance with large-scale and high-quality instruction data. arXiv preprint arXiv:2410.18558 , 2024. [72] Luis Wiedmann, Orr Zohar, Amir Mahla, Xiaohan Wang, Rui Li, Thibaud Frere, Leandro von Werra, Aritra Roy Gosthipaty, and Andrés Marafioti. Finevision: Open data is all you need, 2025. [73] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Ziwei Liu, and Chunyuan Li. Llava-onevision: Easy visual task transfer, 2024. [74] Shuhao Gu, Jialing Zhang, Siyuan Zhou, Kevin Yu, Zhaohu Xing, Liangdong Wang, Zhou Cao, Jintao Jia, Zhuoyi Zhang, Yixuan Wang, Zhenchong Hu, Bo-Wen Zhang, Jijie Li, Dong Liang, Yingli Zhao, Songjing Wang, Yulong Ao, Yiming Ju, Huanhuan Ma, Xiaotong Li, Haiwen Diao, Yufeng Cui, Xinlong Wang, Yaoqi Liu, Fangxiang Feng, and Guang Liu. Infinity-mm: Scaling multimodal performance with large-scale and high-quality instruction data, 2025. [75] Yi Zhang, Bolin Ni, Xin-Sheng Chen, Heng-Rui Zhang, Yongming Rao, Houwen Peng, Qinglin Lu, Han Hu, Meng-Hao Guo, and Shi-Min Hu. Bee: A high-quality corpus and full-stack suite to unlock advanced fully open mllms, 2025. 
+
+19 FineViT TECHNICAL REPORT 
+
+## Appendix A Data Statistics 
+
+This section details the construction and filtering protocols used to develop the multi-stage training corpus for FineViT, alongside granular distribution analyses and visualizations. FineViT employs a progressive data refinement strategy across its training trajectory. As delineated in Table 9, we curated this extensive dataset by aggregating and processing diverse open-source and internal data sources to ensure high data quality and distributional diversity. Table 9: Detailed information of the data at different FineViT training stages.                  
+
+> Stage Rules Data Source Data Size
+> Stage I image : short ⩾224, remove duplicates COCO [24], CC3M [25], CC12M [26], YFCC15M [1], LAION [3], wukong [27], datacomp [28], COYO [29], SBU [30], Flickr30k [31] 1.8B images Stage II caption : remove repeated or null captions 1.56B image-text pairs Stage III
+> image : short ⩾448, ratio ∈[1/3, 3], Blurry, Dark, Saturation check
+> region : bbox area ⩾1% ,confidence scores ⩾0.3, NMS with IoU = 0 .7,label balance previous stage data; additional OCR data from: FineVision [72], LLaVA-OneVision [73], Eagle 2 [40], Infinity-MM [74], LLaVA-OneVision-1.5-Instruct [38] 80M images 454M regions
+
+• Stage I (1.8B images) : We initialised our corpus with 1.8B images sourced from a comprehensive mixture of datasets, including COCO, CC12M, LAION, and Datacomp. To alleviate the impact of low-quality and redundant samples, we filtered the corpus by a minimum spatial dimension of 224 pixels and performed p-Hash-based deduplication, ensuring a diverse and high-fidelity training distribution. 
+
+• Stage II (1.56B iamge-text pairs) : Building upon the initial corpus, we refined image-text alignment through a large-scale synthetic recaptioning pipeline. To mitigate the inductive biases of individual models, the 1.8B samples were processed via an ensemble of three MLLMs: Qwen2.5-7B [ 15 ], Intern3-VL-8B [ 14 ], and MiniCPM-V-8B [ 32 ], with images stochastically assigned to each. By filtering out non-informative, null, or repetitive captions, we distilled the dataset into 1.56 B high-quality image-text pairs, thereby alleviating potential noise during the contrastive learning phase. 
+
+• Stage III (80M images & 454M regions) : To facilitate fine-grained visual perception, we prioritize high-resolution samples ( ≥ 448 pixels) within a constrained aspect ratio range of [1 /3, 3] . This corpus underwent a rigorous perceptual quality assessment to exclude degraded samples, including those with significant motion blur, extreme low-light conditions, or oversaturation. For region-level localization, we first extract noun phrases from global recaptions and utilize Grounding-DINO [ 35 ] to generate candidate bounding boxes. To ensure localization quality, we prune candidates with confidence scores below 0.3 or those occupying less than 1% of the total image area. Redundant detections are further consolidated via class-agnostic Non-Maximum Suppression (NMS) with an IoU threshold of 0.7. To address class imbalance, we implement a stratified frequency-based sampling strategy across 10M-image batches. Categories with fewer than 1, 000 instances are fully retained, while over-represented classes are downsampled proportionally, 
+
+20 FineViT TECHNICAL REPORT 
+
+Figure 6: Resolution distribution of 1.56 B images used at stage II. capped at a maximum of 100 , 000 instances per batch. This ensures a more uniform distribution across the taxonomy. To generate context-aware local descriptions, we adopt a dual-stream prompting strategy inspired by [ 36 ]. By feeding both the localized crop and the global context into the Qwen3-VL 32B Model, we elicit captions that capture intricate local details while maintaining global semantic coherence. This pipeline culminated in a curated dataset comprising 80 M images and 454 M dense region-text pairs, providing a robust foundation for high-fidelity spatial reasoning. 
+
+A.1 Data Statistics of Stage II: 1.56B images 
+
+Figure 7: Category distribution. As shown in Figure 6, given the vast scale of our full dataset, we performed a comprehensive statistical analysis on a representative subset of 10 6 samples to characterize the underlying data distribu-tion. The resolution density plot reveals a diverse spatial range, with image dimensions capped at 4096 pixels. Analysis of the cumu-lative pixel distribution indicates that 2.5% , 87 .2% , and 97 .5% of the images fall below the thresholds of 256 × 256 , 512 × 512 , and 
+
+1024 × 1024 , respectively. This hierarchical distribution ensures a balanced representation of both low-resolution features and high-definition details. Furthermore, the aspect ratio distribution exhibits a prominent peak at 1.0 (square) while spanning a broad spectrum (capped at 3.0 for visualization). This geometric diversity enables the model to generalize effectively across the various framing and cropping scenarios typical of real-world applications. 
+
+A.2 Data Statistics of Stage III: FineCap 450M 
+
+This section introduces the class-balanced sampling of region bboxes, as well as the distribution of region bboxes and their corresponding text. 
+
+Region-level Category Distribution. Figure 7 illustrates the distribution of bounding boxes across categories before and after sampling. Notably, the post-sampling curve exhibits a more balanced profile, significantly mitigating class imbalance. Following this sampling strategy, we obtained 226 M bounding boxes of gereral regions spanning 63 , 125 classes. By integrating 142 M general OCR and 86M Document OCR boxes, the final dataset comprises 454 M bounding boxes across 80 M images (consisting of 63 M general and 17 MOCR-specific images). 
+
+21 FineViT TECHNICAL REPORT 
+
+Token Length Distribution. Figure 8 illustrates the token length distributions for global and local captions, as well as general and document OCR. Specifically, global captions typically span between 150 and 300 
+
+tokens, whereas local captions cluster near 50 . In contrast, OCR-related tokens are significantly shorter, with the majority falling below 10 .
+
+Figure 8: Token Length Distribution of of FineCap-450M. 
+
+Relative Bounding Box Area Distribution. Figure 9 illustrates the distribution of the area ratios for the bounding boxes of general, general OCR, and document OCR relative to the entire image. The area ratios of general bounding boxes are predominantly concentrated below 10% or near 100% . In contrast, owing to the inherent nature of textual content, OCR-derived bounding boxes typically occupy a much smaller proportion of the total image area. 
+
+Figure 9: Relative bounding box area distribution of FineCap-450M. 
+
+Bounding Box Aspect Ratio Distribution. Figure 10 illustrates the aspect ratio distributions across different types of bounding box (general, general OCR, and Doc OCR). General bounding boxes exhibit a relatively balanced distribution, with a noticeable concentration around an aspect ratio of 1:1 (equilateral). In contrast, OCR-derived bounding boxes are predominantly elongated, reflecting the inherent linear structure of textual content. 
+
+Figure 10: Bounding box aspect ratio distribution of FineCap-450M. 
+
+22 FineViT TECHNICAL REPORT Huawei Proprietary - Restricted Distribution 1
+
+> RGB
+> 196/0/84
+
+公司辅助色 
+
+> RGB
+> 203/55/120
+> RGB
+> 237/109/0
+> RGB
+> 153/54/54
+> RGB
+> 98/178/48
+> RGB
+> 242/137/68
+> PANTONE 185C
+> RGB
+> 199/0/11
+
+公司色 
+
+> PANTONE 186C
+> RGB
+> 200/16/46
+> RGB
+> 127/0/1
+> RGB
+> 52/200/0
+> RGB
+> 48/181/197
+> RGB
+> 129/193/95
+> RGB
+> 253/211/81
+> RGB
+> 86/196/210
+> RGB
+> 211/57/65
+> RGB
+> 211/56/89
+> 2
+> 1
+> 2
+> 1
+> 2
+> 1
+> 2
+> 2
+> RGB
+> 0/0/0
+> RGB
+> 89/87/87
+> RGB
+> 137/137/
+> 137
+> R
+> 18
+
+Human: <image> Narrate the contents of the image with precision 
+
+GPT: The image shows a group of penguins in an enclosure, likely at a zoo or aquarium. In the foreground, two 
+
+young penguins stand on a textured, ribbed mat made of gray plastic or rubber strips. One penguin faces 
+
+forward with a light yellowish -white chest and dark gray back, while the other faces slightly to the side with a 
+
+dark greenish -black back and a small green tag on its flipper. Behind them, several other penguins are visible, 
+
+some standing on rocky terrain and others near a blue water pool. The rocks are brown and weathered, 
+
+forming part of the enclosure's structure. A black metal pole is visible in the center, possibly part of a barrier or 
+
+support. The background includes a bright blue water area, suggesting a pool or tank. The bottom of the image 
+
+features a black banner with white text reading 'Best Winter Destinations In New England' in a mix of bold and 
+
+cursive fonts. The overall scene is well -lit, suggesting indoor or daytime lighting. 
+
+Human: <image> Identify the text content within the coordinate box [66, 798, 958, 878]. 
+
+GPT: Best Winter Destinations 
+
+Human: <image> Retrieve the location coordinates [ xmin , ymin , xmax , ymax ] for the text string "In New England". 
+
+GPT: [113, 876, 870, 970] 
+
+Human: <image> What is depicted within the bounding box: [629, 0, 663, 317] ? 
+
+GPT: A vertical, dark gray, cylindrical object with a smooth surface and slightly rounded edges, standing upright. 
+
+The object appears to be a pole or post, with a uniform color and texture throughout its visible length. 
+
+Human: <image> Describe the content contained within the bounding box coordinates [0, 186, 196, 740]. 
+
+GPT : A close -up of a rough, textured rock formation with earthy brown and gray tones, featuring irregular shapes 
+
+and small crevices. To the right, a portion of a black, ribbed mat is visible, partially obscured by the rock. 
+
+Human: <image> Based on the description "A young penguin with dark, mottled feathers and a light -colored 
+
+chest stands on a rocky surface, its head turned slightly to the side. A small green band is visible on its left leg, 
+
+and a black pole is positioned above it, partially obscuring the view.", predict the corresponding bounding box 
+
+[xmin , ymin , xmax , ymax ]. 
+
+GPT: [410, 208, 1000, 571] 
+
+Human: <image> Based on the description "A young penguin with a dark gray head and back, and a pale cream -
+
+colored chest, stands on a gray, ribbed mat. Its small, pink feet are visible, and it has a short, dark beak with a 
+
+slightly tilted head posture.", predict the corresponding bounding box [ xmin , ymin , xmax , ymax ]. 
+
+GPT: [242, 399, 524, 701] 
+
+Human: <image> Give a short summary of the content within [560, 380, 870, 731]. 
+
+GPT: A young penguin with dark, speckled feathers and a lighter underbelly stands on a textured, gray mat. It has 
+
+a small green band on its left flipper and is positioned in front of a rough, brown stone wall. Huawei Proprietary - Restricted Distribution 1
+
+> RGB
+> 196/0/84
+
+公司辅助色 
+
+> RGB
+> 203/55/120
+> RGB
+> 237/109/0
+> RGB
+> 153/54/54
+> RGB
+> 98/178/48
+> RGB
+> 242/137/68
+> PANTONE 185C
+> RGB
+> 199/0/11
+
+公司色 
+
+> PANTONE 186C
+> RGB
+> 200/16/46
+> RGB
+> 127/0/1
+> RGB
+> 52/200/0
+> RGB
+> 48/181/197
+> RGB
+> 129/193/95
+> RGB
+> 253/211/81
+> RGB
+> 86/196/210
+> RGB
+> 211/57/65
+> RGB
+> 211/56/89
+> RGB
+> 221/128/170
+> RGB
+> 191/128/130
+> RGB
+> 246/183/140
+> RGB
+> 176/216/156
+> RGB
+> 253/227/181
+> RGB
+> 148/218/226
+> RGB
+> 226/129/137
+> RGB
+> 226/129/152
+> RGB
+> 0/0/0
+> RGB
+> 89/87/87
+> RGB
+> 137/137/
+> 137
+> RGB
+> 181/181/
+> 181
+> R
+> 22
+
+Human: <image> Explain the various aspects of the image before you 
+
+GPT: The image displays a clean, modern kitchen countertop scene. In the foreground, there is a rectangular 
+
+wooden cutting board made of light brown bamboo with visible grain patterns. On top of the cutting board 
+
+rests a block of pale yellow cheese with a slightly orange rind, positioned near the top edge. A small, metallic 
+
+cheese knife with a flat, spatula -like blade and a curved handle lies diagonally across the board. Partially 
+
+underneath the cutting board is a dark gray, textured cloth napkin or kitchen towel with a small black label in 
+
+the corner featuring white text. In the background, two potted plants are visible against a white tiled 
+
+backsplash with thin gray grout lines. The plant on the left is in a white ceramic pot with a textured, ribbed 
+
+surface, while the plant on the right is in a square, light brown wooden planter. Both plants have long, thin, 
+
+green grass -like leaves. The countertop is white and smooth, and the overall lighting is bright and even, 
+
+suggesting a well -lit indoor environment. 
+
+Human: <image> What are the bounding box coordinates [ xmin , ymin , xmax , ymax ] for the region described as 
+
+"A dark gray, textured fabric napkin with a small black tag in the corner. The tag features white text, partially 
+
+legible as "BOS," with a stylized design above it."? 
+
+GPT: [836, 704, 941, 753] 
+
+Human: <image> Please provide the bounding box coordinate [ xmin , ymin , xmax , ymax ] of the region this 
+
+sentence describes: "A wooden cutting board with a natural grain pattern holds a block of pale yellow cheese 
+
+and a stainless steel cheese knife with a curved blade and elongated handle. The board rests partially on a dark 
+
+gray textured cloth with a small black tag bearing white text in the corner." 
+
+GPT: [45, 487, 939, 756] 
+
+Human: <image> What is in this bounding box: [460, 625, 999, 824]? 
+
+GPT: A dark gray, textured fabric napkin with a black rectangular tag in the corner, featuring white text that reads 
+
+"BAMBOO" and a small logo above it. The napkin lies flat beneath a wooden cutting board, with its edge slightly 
+
+folded and visible stitching along the border. 
+
+Human: <image> Provide a description of the visual content in the coordinates [0, 0, 300, 288]. 
+
+GPT: A close -up of a green, grass -like plant with long, slender leaves growing densely in a white, textured pot. The 
+
+background consists of a white tiled wall with visible grout lines. 
+
+Human: <image> Give a short summary of the content within [41, 277, 229, 418]. 
+
+GPT: A white ceramic pot with a textured, leaf -like embossed pattern covering its surface. The pot has a rounded, 
+
+slightly tapered shape with a smooth, glossy finish. 
+
+Human: <image> Provide a description of the visual content in the coordinates [630, 227, 841, 416]. 
+
+GPT: A square wooden planter with a warm, medium -brown finish and visible horizontal grain patterns. The 
+
+planter has clean, straight edges and a smooth surface, with a small dark label affixed to the lower right corner. 
+
+Human: <image> What is the estimated bounding box [ xmin , ymin , xmax , ymax ] for the entity "A stainless steel 
+
+cheese knife with a smooth, elongated handle and a flat, rectangular blade rests on a wooden surface. The knife 
+
+has a polished, metallic finish and is positioned diagonally, with the blade pointing toward the bottom right 
+
+corner." in an image? 
+
+GPT: [164, 494, 551, 628] 
+
+Figure 11: Illustration of FineCap-450M. To prevent an excessive number of regions, we randomly sample a subset for better visualization. 
+
+A.3 Illustration of FineCap-450M 
+
+Figures 11 and 12 present additional samples from the FineCap-450M dataset. In these visualizations, global captions are displayed in white text boxes, while local captions corresponding to specific regions are shown in colored boxes.As illustrated in Figure 11, which features natural scenes, each key entity is precisely localized using bounding boxes [xmin , y min , x max , y max ]. These annotations span a spectrum from coarse-grained objects (e.g., animals) to fine-grained elements, such as local identification tags, slender mechanical rods, or specific brand logos. Beyond simple category labels, the annotations provide rich 
+
+23 FineViT TECHNICAL REPORT Huawei Proprietary - Restricted Distribution 1
+
+> RGB
+> 196/0/84
+
+公司辅助色 
+
+> RGB
+> 203/55/120
+> RGB
+> 237/109/0
+> RGB
+> 153/54/54
+> RGB
+> 98/178/48
+> RGB
+> 242/137/68
+> PANTONE 185C
+> RGB
+> 199/0/11
+
+公司色 
+
+> PANTONE 186C
+> RGB
+> 200/16/46
+> RGB
+> 127/0/1
+> RGB
+> 52/200/0
+> RGB
+> 48/181/197
+> RGB
+> 129/193/95
+> RGB
+> 253/211/81
+> RGB
+> 86/196/210
+> RGB
+> 211/57/65
+> RGB
+> 211/56/89
+> 22
+> 19
+> 24
+> 17
+> 25
+> 14
+> 22
+> 22
+> RGB
+> 0/0/0
+> RGB
+> 89/87/87
+> RGB
+> 137/137/
+> 137
+> R
+> 181
+> 1
+
+Human: <image> Provide a detailed description of the given image 
+
+GPT: The image is a stylized, flat -design illustration with a light cream -colored background. 
+
+Dominating the upper portion is the text 'IDENTIFY PROSPECTS' in bold, dark blue, uppercase letters 
+
+with a thin red outline and a slight 3D effect created by a subtle shadow. Below the text, a large, 
+
+abstract red shape resembling a speech bubble or a megaphone's opening extends from the bottom 
+
+right, curving upward. Inside this red shape, near the bottom center, is a yellow megaphone with a 
+
+black outline and a small black handle. Above the megaphone's opening, three curved black lines 
+
+represent sound waves emanating from it. The overall composition suggests a theme of 
+
+communication or announcement, with the megaphone symbolizing broadcasting or calling out to 
+
+potential prospects. The design uses clean lines, minimal shading, and a limited color palette of 
+
+cream, red, yellow, dark blue, and black. 
+
+Human: <image> What text is in the coordinate box [37, 87, 677, 374]? 
+
+GPT: IDENTIFY 
+
+Human: <image> Return the bounding box coordinates [ xmin , ymin , xmax , ymax ] for the text 
+
+"PROSPECTS". 
+
+GPT: [227, 197, 953, 502] 
+
+Human: <image> Get the text within the bounding box [285, 406, 708, 561] 
+
+GPT: BIGSTOCK 
+
+Human: <image> Output the coordinates [ xmin , ymin , xmax , ymax ] that define the area of the text 
+
+"www.bigstock.com· 263061061". 
+
+GPT: [271, 961, 723, 991] Huawei Proprietary - Restricted Distribution 1
+
+> RGB
+> 196/0/84
+
+公司辅助色 
+
+> RGB
+> 203/55/120
+> RGB
+> 237/109/0
+> RGB
+> 153/54/54
+> RGB
+> 98/178/48
+> RGB
+> 242/137/68
+> PANTONE 185C
+> RGB
+> 199/0/11
+
+公司色 
+
+> PANTONE 186C
+> RGB
+> 200/16/46
+> RGB
+> 127/0/1
+> RGB
+> 52/200/0
+> RGB
+> 48/181/197
+> RGB
+> 129/193/95
+> RGB
+> 253/211/81
+> RGB
+> 86/196/210
+> RGB
+> 211/57/65
+> RGB
+> 211/56/89
+> RGB
+> 0/0/0
+> RGB
+> 89/87/87
+> RGB
+> 137/137/
+> 137
+
+Human: <image> Extract and output the text located within the rectangular area specified by the 
+
+coordinates [60, 547, 368, 563]. 
+
+GPT: 5. Applying Materials and Textures 
+
+Human: <image> Locate the exact position of the text 4.Adding Details with Modifiers in the image. 
+
+What is the bounding box of this text? 
+
+GPT: [59, 469, 344, 485] 
+
+Human: <image> Extract and output the text located within the rectangular area specified by the 
+
+coordinates [53, 236, 570, 250]. 
+
+GPT: Familiarize yourself with the Blender interface through tutorials 
+
+Human: <image> For the text string • Switch to 'Shading’ workspace, find and return its bounding box 
+
+location in the image. Provide the coordinates as a list of four integers. 
+
+GPT: [49, 577, 311, 593] 
+
+Figure 12: Illustration of FineCap-450M. To prevent an excessive number of regions, we randomly sampled a subset for visualization descriptions of textures (e.g., "ribbed," "mottled"), materials (e.g., "bamboo," "stainless steel"), and specific physical postures. Consequently, entity localization is driven by relative positioning and descriptive context rather than mere object recognition.For text-dense and document-only images, as shown in Figure 12, the dataset provides exact coordinate mappings across diverse font styles and hierarchical structures, enabling models to parse and recognize specific textual content with high granularity. 
+
+## B Training for MLLM 
+
+B.1 Main Results 
+
+80M SFT Data for MLLM Training. To endow FineViT with multimodal understanding ability, we curate a large scale of high-quality supervised fine-tuning (SFT) dataset and fine-tune the model after LLM alignment stage. This dedicated SFT dataset consists of approximately 80M QA samples collected from open-source datasets including FineVision [ 72 ], LLaVA-OneVision-1.5-Instruct [ 38 ], Eagle 2 [ 40 ], Infinity-MM [ 74 ], 
+
+24 FineViT TECHNICAL REPORT 
+
+Figure 13: (a) Ratio of different type of data. (b)Multimodal data distribution. LLaVA-OneVision [ 73 ], and Honey-Data [ 75 ]. The ratio of different type of data ( i.e. , text-only, multimodal, and CoT) is shown in Figure 13(a). Following FineVision, we also categorize the multimodal QA samples into eight subcategories i.e. , Captioning & Knowledge, Chart & Table, General VQA, Grounding & Counting, Mathematics, Naive OCR, OCR QA, Science, and the distribution of different type of multimodal data is illustrated in Figure 13(b). 
+
+Training Recipe. To enable a rigorous comparison with other small-scale VLMs, we fine-tuned our model, FineViT-VL, using the curated 80 M SFT dataset following the stage III, LLM alignment stage. The supervised fine-tuning (SFT) is conducted in two consecutive phases. In Phase I, the model is trained with a batch size of 1024 and a learning rate of 1 × 10 −5, with the maximum token length capped at 4096 . In Phase II, to enhance the model’s capacity for processing extended contexts, we increase the maximum token length to 
+
+10240 , while maintaining the learning rate at 1 × 10 −5 and adjusting the batch size to 512 .
+
+B.2 Ablation Studies 
+
+In this part, we elaborate the detailed experimental setting for ablation studies presented in the main text. 
+
+Comparison of Vision Encoders across Various LLM Scales (Table 7.) To make a fair and comprehensive comparison with SigLIP2-naflex ( i.e. , the native-resolution version of SigLIP2) and better evaluate the effectiveness of vision encoder in MLLM, we freeze the vision encoder during MLLM training and set the maximum resolution of images fed into different ViTs the same i.e. , within 1000 × 1000 . Specifically, 10M InfinityMM [ 74 ] caption data is firstly used to train a two-layer projector with batch size 512 and learning rate 
+
+1.0 × 10 −3. Then, 6M SFT randomly sampled from the aforementioned 80M SFT data is adopted to jointly train the projector and LLM, with batch size 256 and learning rate 1.0 × 10 −5. We compare the performance vision encoders with various LLM scales i.e. , Qwen3-1.7B and Qwen3-8B. 
+
+Effectiveness of Progressive Training Stages (Table 8.) We systematically evaluate the contribution of each training phase. To fully unlock the potential of the vision encoder in training MLLM, a three-stage training paradigm [ 38 ] is adopted. Firstly, the same 10M InfinityMM caption data is used to train a two-layer MLP projector with batch size 512 and learning rate 1.0 × 10 −3. Then, 8M global caption data randomly sampled from the LLaVA-OneVision-1.5-Mid-Traning dataset [ 38 ] is adopted to jointly train the ViT and projector with batch size 512 and learning rate 2.0 × 10 −5. Finally, the same 6M SFT data mentioned above is used for full parameter training with batch size 256 and learning rate 1.0 × 10 −5.
+
+25 FineViT TECHNICAL REPORT A fountain in the middle of a large open square between two sides with large buildings . Some people and lamps 
+
+can be seen nearby . This is a photo of a stone fountain with statues around it with a large building on its left and a
+
+large, more ornate building on its right . The stone fountain has a crafted base with a symbol in its middle and has 
+
+black benches surrounding it . There are people standing and walking around in the background between the 
+
+buildings . Smaller sections of a building can be seen on either end . The sky has a lot of thin clouds and there‘s a
+
+mountain or hill range in the background . There are also little building roof coverings on each side, perhaps for the 
+
+people to take shade in or sit under . There are multiple street lights behind the stone fountain as well .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔Several stone buildings are visible beneath a pure blue sky during midday . The central building has multiple castle -
+
+style spires . The scene depicts four stone buildings during midday . The camera is pointed at the sky at 
+
+approximately a 45 degree angle . The central stone building features a highly decorative medieval castle 
+
+architecture made out of khaki stone and spires on its roof . The three other stone buildings are shorter in size . The 
+
+left most building has shadows of the central building's spires projected onto its side .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔Sky scrapper tops under cloudy skies in the day under a field of gray . Five tall sky hitting buildings under a cloudy 
+
+sky in gray . The first and left most with a rounded top and straight sides, the second with a black box area above 
+
+the normal panel areas with a reflection appearing in the top of its front panel area . The third one is behind the one 
+
+with the most prominence with an antenna poking up from its highest rooftop . The most prominent one, that 
+
+works as a center piece with triangular panel patterns that combine to make a mildly pointed top that has a dark 
+
+rounded build area over it with a pointed top over eighteen slits that can be seen in the center top angular wall . It 
+
+also reflects one of the surrounding skyscraper buildings and the front panel reflects the visible clouds in the sky . Its 
+
+bottom area, under the triangular top areas have excessively ribbed windows . Finally there is the right most 
+
+skyscraper whose side wall and front wall both reflect the cloudy sky . Though the side wall, turned towards the 
+
+triangular skyscraper, is a bit darker .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔
+
+Figure 14: Long-text Zero-shot Retrieval. Distinctive attributes within the long caption are highlighted in orange to help identify the correct image. 
+
+26 FineViT TECHNICAL REPORT Two children are standing on side by side on the same step of an outdoor staircase . To the left and behind the boys 
+
+is a woman with a purse under her right arm . Two young boys stand side by side on the same step of a stone 
+
+staircase . The boy on the left is looking to his left and is holding an object to his mouth . The boy on the right is 
+
+looking to his right . There is a woman partially visible on the left side of the image . She has a light purple purse 
+
+under her right arm . One of the lower stone steps is broken , giving it an uneven appearance . The steps also appear 
+
+to be wet and are shining brightly . At the top of the steps is a stone wall with an opening in the center .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔People stand and visit with each other on the side of a poorer looking street in a city . This is the scene of a life in a
+
+city . There is a roadway where there are a couple of vehicles parked, but none are traveling . Sidewalks line the 
+
+roadway on both sides . On the right side, the buildings are mostly white or lighter in color . The buildings on the left 
+
+side vary more in color . Some are white as well, but there is also a green building and some are blue . Near the 
+
+green building, there is a woman wearing pink pants standing in the doorway . She has her hands on her hips . There 
+
+is a man wearing a red shirt standing near her . Another person is nearby as well . There is a vehicle parked on the 
+
+curb near these people . Behind this vehicle is a bicycle .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔It shows a curving street with some greenery on the left and boats and big buildings on the right . It shows a
+
+curving street with some greenery on the left and boats and big buildings on the right . The walkway is wide with 
+
+tan tiles . In the middle is a pole, and then a sign, and a garbage can . Behind that is a red stand and then more items .
+
+On the left is some greenery . Boats can be seen on the right . There are many buildings in the background, a lot 
+
+with glass, windows and balconies .
+
+SigLIP2 ❌LongCLIP ❌Ours ✔
+
+Figure 15: Long-text Zero-shot Retrieval. Distinctive attributes within the long caption are highlighted in orange to help identify the correct image. 
+
+27 FineViT TECHNICAL REPORT 
+
+## C More Illustration 
+
+C.1 Long-text Zero-shot Retrieval 
+
+To further evaluate the performance of FineViT in long-text zero-shot retrieval, we provide additional visual comparisons with other state-of-the-art models (LongCLIP and SigLIP2) in Figure 14 and Figure 15. As illustrated in the qualitative results, FineViT consistently retrieves the exact matching images by accurately capturing the fine-grained visual details and dense spatial relationships described in multi-sentence prompts. While baseline models often struggle to distinguish between visually similar scenes, FineViT excels at comprehending complex architectural structures (such as medieval spires or reflective skyscrapers) , precise human-object configurations (like two boys standing on a specific stone step) , and nuanced contextual cues within cluttered urban environments (such as specific clothing colors or small street signs). These comparisons underscore our model’s superior capability in bridging the gap between lengthy, highly descriptive language and intricate visual features. 
+
+28

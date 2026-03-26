@@ -1,0 +1,453 @@
+Title: CREG: Compass Relational Evidence for Interpreting Spatial Reasoning in Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2603.20475v1
+
+Published Time: Tue, 24 Mar 2026 00:15:33 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# CREG: Compass Relational Evidence for Interpreting Spatial Reasoning in Vision-Language Models 
+
+Kaizhen Tan 
+
+Heinz College of Information Systems and Public Policy Carnegie Mellon University Pittsburgh, PA, USA 
+
+kaizhent@cmu.edu 
+
+## Abstract 
+
+Vision-language models (VLMs) perform strongly on spatial reasoning benchmarks, yet how they encode directional relations remains poorly understood. Existing attribution methods such as GradCAM and attention rollout reveal where a model attends, but not what direction it infers between objects. We introduce C REG (Com-pass Relational Evidence Graph), a training-free interpretability framework that projects multi-layer contrastive Grad ×Act attributions into a reference-centered po-lar coordinate system, producing a directional evidence distribution over compass sectors. To evaluate directional explanations, we propose three metrics: Direction Alignment Error (DAE), Edge Accuracy (EA), and Causal Occlusion Score (COS). On Qwen2-VL-7B across VSR and COCO-Pairs, C REG consistently outperforms standard attribution baselines; on COCO-Pairs, prediction-targeted C REG achieves DAE 55 .5◦ and EA 0.553 , improving over attention rollout by 16 .1◦ in angular error and 0.120 in EA. Causal occlusion experiments on 540 samples across both datasets further support the faithfulness of these directional explanations (COS 
+
+≥ +0 .42 ). The gains are smaller on Qwen2-VL-2B, suggesting that C REG benefits from the more structured spatial representations that emerge at larger scales. Over-all, our results show that contrastive, multi-layer attribution can expose directional evidence more faithfully than standard saliency-based explanations in VLM spatial reasoning. 
+
+## 1 Introduction 
+
+Representative vision-language models (VLMs) such as Qwen2-VL [Wang et al., 2024], LLaVA [Liu et al., 2023b], and InternVL [Chen et al., 2024] can often answer simple spatial prompts such as “the cup is to the left of the bottle” or “the cat is above the keyboard.” Yet the internal mechanisms by which these models encode and reason about directional spatial relations remain largely opaque. Existing interpretability tools—GradCAM [Selvaraju et al., 2017], attention rollout [Abnar and Zuidema, 2020], and gradient-based saliency [Sundararajan et al., 2017]—reveal where a model attends in an image, but not what directional relation it infers between two objects. A saliency heatmap may highlight both the cup and the bottle, but it cannot tell us whether the model is encoding “left-of,” “right-of,” or something else entirely. This gap between “attention location” and “relational evidence” is precisely where spatial interpretability breaks down. We introduce C REG (Compass Relational Evidence Graph), a training-free framework that converts standard token-level attributions into directional evidence . The key idea is a polar coordinate projection: given a reference object A and a target object B in an image, C REG projects multi-layer contrastive Grad ×Act attributions into a reference-centered polar coordinate system, producing a 
+
+> Preprint.
+> arXiv:2603.20475v1 [cs.CV] 20 Mar 2026
+
+normalized directional distribution ˆP (θ) over K compass sectors. This distribution directly answers the question: “In which direction does the model’s spatial evidence concentrate?” CREG builds on three design choices, each validated by ablation: 1. Contrastive gradient target. Rather than computing gradients with respect to a single class logit, C REG uses the difference zgt − zneg (where zneg is the predicted or second-highest logit; see §3.2), which isolates directional evidence from class-general features. This contributes a 
+
+20 .5◦ reduction in angular error. 2. Multi-layer aggregation. Attribution signals from multiple transformer layers are combined with magnitude-based softmax weights (no learned parameters), capturing both low-level spatial features and high-level relational abstractions. 3. Gaussian-weighted polar binning. Vision-token attributions are aggregated into K angular sectors with distance-dependent Gaussian weighting, producing a smooth, interpretable compass distribution. To rigorously evaluate directional explanations, we propose three metrics: Direction Alignment Error (DAE) , which measures the angular gap between the predicted and true compass directions; 
+
+Edge Accuracy (EA) , which tests whether the peak sector falls within the correct quadrant; and 
+
+Causal Occlusion Score (COS) , which validates faithfulness by comparing model confidence drops when occluding the indicated vs. opposite directions. On Qwen2-VL-7B across two benchmarks—VSR [Liu et al., 2023a] (240 samples) and COCO-Pairs (300 samples with native bounding boxes)—C REG substantially outperforms all baselines. On COCO-Pairs, prediction-targeted C REG achieves DAE 55 .5◦ and EA 0.553 , reducing angular error by 16 .1◦ compared to attention rollout ( 71 .6◦ / 0.433 ). On the smaller Qwen2-VL-2B, the advantage diminishes: baselines perform comparably, suggesting that C REG ’s contrastive multi-layer approach benefits from the more structured representations that emerge at larger scales. Causal occlusion experiments on 540 total samples across both datasets support faithfulness (COS ≥ +0 .42 ). Prediction-targeted attribution outperforms ground-truth-targeted, suggesting better alignment with the model’s internal decision signal. Our contributions are: • CREG , a training-free interpretability framework that converts VLM attributions into reference-centered directional evidence distributions. • A directional evaluation protocol (DAE, EA, COS) for quantifying the faithfulness of spatial explanations. • Empirical analysis across 2 models, 2 datasets, and 7 baselines showing that C REG achieves the best directional alignment on the larger model, with causal occlusion supporting faith-fulness and prediction-targeted attribution suggesting genuine alignment with the model’s decision signal. 
+
+## 2 Related Work 
+
+Spatial reasoning in VLMs. Spatial relation understanding has emerged as a key challenge for VLMs. Benchmarks such as VSR [Liu et al., 2023a], WhatsUp [Kamath et al., 2023], Spa-tialSense [Yang et al., 2019], and SpatialBench [Cai et al., 2024] probe complementary aspects of spatial understanding, ranging from pairwise relation recognition in natural images to broader depth-aware and embodied spatial QA. Recent work has shown that VLMs often fail at spatial reasoning despite strong general VQA performance [Liu et al., 2023a, Kamath et al., 2023], and mechanistic analyses suggest that misallocated visual attention is one contributing factor [Chen et al., 2025]. Our work is complementary: rather than improving accuracy, we aim to interpret how VLMs represent spatial direction internally. 
+
+Attribution methods and faithfulness evaluation. Standard attribution methods project model computations onto input features to identify influential regions. GradCAM [Selvaraju et al., 2017] computes gradient-weighted activation maps; attention rollout [Abnar and Zuidema, 2020] aggregates attention weights across layers; integrated gradients [Sundararajan et al., 2017] accumulate gradients 2along an interpolation path; transformer-specific methods [Chefer et al., 2021] propagate relevance through attention layers. These methods produce 2D saliency maps indicating where the model looks. A growing body of work has questioned whether such saliency explanations are truly faithful [Ade-bayo et al., 2018], proposing evaluation protocols based on input perturbation [Petsiuk et al., 2018, Hooker et al., 2019]. For relational tasks, knowing where is insufficient—we need to know what relation the model infers between located regions. C REG addresses this gap by projecting token-level attributions into a relation-centric coordinate system, with COS providing a direction-specific faithfulness test. 
+
+Spatial and relational interpretability. Recent work has begun to analyze spatial reasoning through the lens of model internals. Tong et al. [Tong et al., 2024] document systematic visual grounding failures in multimodal LLMs, while Chen et al. [Chen et al., 2025] trace image-text attention patterns during spatial reasoning and show that inference-time attention adjustment can improve performance. Our approach is different: C REG is purely analytical (no model modification), operates as a post-hoc interpretability tool, and produces directional evidence distributions rather than attention maps or modified predictions. The polar projection idea draws on classical work on visual representation [Marr, 1982], where spatial structure is treated as a core component of scene understanding. 
+
+## 3 Method: CREG 
+
+Given an image containing a reference object A and a target object B with known bounding boxes, CREG computes a directional evidence distribution ˆP (θ) that summarizes how the VLM’s internal representations encode the spatial relation between A and B. The method is entirely training-free and architecture-agnostic, requiring only access to hidden states and gradients. 
+
+3.1 Problem Setup 
+
+We consider the task of spatial relation classification. Given an image I, object names and bounding boxes for A (reference) and B (target), the VLM is prompted to classify the relation into one of four cardinal directions: left , right , above , below . The VLM produces logits zc for each class 
+
+c ∈ { 1, 2, 3, 4} at the last token position. 
+
+3.2 Attribution Targets 
+
+We define two attribution modes and a contrastive mechanism. Let zc denote the logit for class c and let ˆc = arg max c zc be the model’s prediction. 
+
+GT-targeted attribution. The gradient target is the ground-truth class logit: τgt = zgt . This asks: “what features support the correct answer?” 
+
+Prediction-targeted attribution. The gradient target is the predicted class logit: τpred = zˆc. This asks: “what features drive the model’s actual decision?” When ˆc = gt, both modes are identical. 
+
+Contrastive formulation. In either mode, C REG uses a contrastive target that subtracts the strongest competing logit to isolate direction-specific evidence from class-general features: 
+
+τ = ztgt − zneg , zneg =
+
+zˆc if ˆc̸ = tgt (gt-targeted) 
+
+z2nd otherwise (1) where ztgt ∈ { zgt , z ˆc} depending on the chosen mode, and z2nd is the second-highest logit. The gradient ∇hτ isolates features that distinguish the targeted direction from the model’s best alternative, suppressing direction-invariant contributions. 33.3 Multi-Layer Grad ×Act Aggregation 
+
+For a set of transformer layers L = {l1, . . . , l L} (default: last 4 layers), we compute per-token relevance scores at each layer: 
+
+r(l) 
+
+> j
+
+= X
+
+> d
+
+g(l) 
+
+> j,d
+
+· h(l) 
+
+> j,d
+
+, j ∈ V (2) where g(l) = ∇h(l) τ is the gradient at layer l, h(l) is the hidden state, and V is the set of vision token indices. Each layer’s relevance vector is normalized to [0 , 1] .Layers are aggregated with softmax weights proportional to signal magnitude: 
+
+wl = exp(max j r(l) 
+
+> j
+
+)
+
+P 
+
+> l′
+
+exp(max j r(l′) 
+
+> j
+
+) , rj = X
+
+> l
+
+wl · r(l) 
+
+> j
+
+(3) 
+
+3.4 Polar Projection and Compass Binning 
+
+The combined relevance scores {rj }j∈V are mapped to a 2D token grid of size Hg × Wg (using the VLM’s image grid dimensions when available, or inferred via factorization of |V| ). Each grid cell 
+
+(u, v ) with u ∈ { 1, . . . , H g }, v ∈ { 1, . . . , W g } is assigned pixel coordinates (xuv , y uv ) by linearly mapping grid positions to image dimensions, and inherits relevance ruv from the corresponding vision token. We define a polar coordinate system centered on the reference object A’s bounding box center 
+
+(xA, y A):
+
+θuv = atan2 (−(yuv − yA), x uv − xA) , ρuv = p(xuv − xA)2 + ( yuv − yA)2 (4) where the convention θ = 0 ◦ corresponds to “right” and θ = 90 ◦ to “up.” The compass distribution is computed by aggregating relevance into K uniform angular sectors (default K = 8 , sector width 45 ◦) with Gaussian distance weighting: 
+
+P (θk) = 
+
+P 
+
+> (u,v )∈Sk
+
+ruv · exp  −ρ2 
+
+> uv
+
+/2σ2P
+
+> k′
+
+P 
+
+> (u,v )∈Sk′
+
+ruv · exp( −ρ2 
+
+> uv
+
+/2σ2) (5) where Sk is the set of grid cells whose angle θuv falls in sector k, σ = σr · rmax · dAB controls the spatial spread, and rmax = ρr · dAB defines the maximum radius of influence ( dAB is the Euclidean distance between A and B centers, σr = 0 .6, ρr = 2 .0). The output ˆP (θ) = [ P (θ1), . . . , P (θK )] is a normalized distribution over compass directions, directly interpretable as “the model’s directional evidence points X% to the right, Y % upward, etc.” 
+
+## 4 Evaluation Protocol 
+
+We propose three metrics to evaluate directional attribution quality. Each metric captures a different aspect of faithfulness and is validated against expected behavior under a random baseline. 
+
+Direction Alignment Error (DAE). DAE measures the circular angular distance between the predicted compass peak direction and the geometric ground truth: DAE =
+
+
+
+(ˆθpeak − θtrue + 180 ◦) mod 360 ◦
+
+− 180 ◦ (6) where ˆθpeak is the center angle of the sector with maximum P (θk), and θtrue = atan2 (−(yB −
+
+yA), x B − xA) is the geometric direction from A to B. DAE ∈ [0 ◦, 180 ◦]; lower is better. Under uniform random assignment over K = 8 sectors, the expected DAE is ≈ 90 ◦.4Image +          
+
+> Query
+> VLM
+> Forward
+> Contrastive
+> Grad ×Act
+> Multi-layer
+> Aggregation
+> Polar
+> Projection
+> AB
+> h(l)
+> AR
+> U
+> L
+> D
+> "B is right of A" hidden states rj= | gjhj|polar projection P()
+
+Figure 1: C REG pipeline overview. An image with reference/target objects is fed through a VLM. Contrastive Grad ×Act signals from multiple layers are aggregated and projected into a reference-centered polar coordinate system, producing the compass distribution ˆP (θ).
+
+Edge Accuracy (EA). EA is the fraction of samples where the peak direction falls within ±45 ◦ of the true direction (i.e., the correct 90 ◦-wide quadrant): EA = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1[DAE i ≤ 45 ◦] (7) Under random assignment with K = 8 , the expected EA is ≈ 0.25 . EA provides a binary, easily interpretable measure of whether the attribution “got the direction right.” 
+
+Causal Occlusion Score (COS). COS tests whether the attributed direction is causally relevant to the model’s prediction. We occlude the image region in the indicated sector (filling with grey) and re-run inference. Let ∆Sk denote the change in log-probability of the ground-truth class after occluding sector k:
+
+∆Sk = log pk(gt ) − log p0(gt ), COS = ∆ Sopp − ∆Strue (8) where log p0(gt ) is the unoccluded baseline log-probability, and log pk(gt ) is the log-probability after occluding sector k. If the attribution is faithful, occluding the true direction should cause a larger confidence drop than occluding the opposite direction, i.e., ∆Strue < ∆Sopp ≤ 0, yielding COS > 0.For example, if occluding the true sector causes a −0.47 drop and the opposite sector causes only a 
+
+−0.06 drop, then COS = −0.06 − (−0.47) = +0 .41 .
+
+Metric validation. We verify that all metrics behave as expected under controlled conditions. A random-sector baseline achieves DAE ≈ 90 ◦, EA ≈ 0.22 , consistent with theoretical expectations (for K = 8 sectors with uniformly random peaks, the expected DAE is 1
+
+> K
+
+PK−1 
+
+> i=0
+
+min( i · 45 ◦, 360 ◦ −
+
+i · 45 ◦) = 90 ◦, and the expected EA is 2 
+
+> K
+
+= 0 .25 ; the slight deviation from 0.25 reflects the finite sample size and non-uniform true-direction distribution). On synthetic images with known object placements, C REG achieves DAE = 52 .7◦, EA = 0 .75 , and VLM accuracy = 1 .0, confirming that the pipeline functions correctly when the spatial signal is unambiguous. 
+
+## 5 Experiments 
+
+5.1 Setup Models. We evaluate on two VLMs from the Qwen2-VL family [Wang et al., 2024]: Qwen2-VL-7B-Instruct (8.29B params) and Qwen2-VL-2B-Instruct (2.21B params). Both use bfloat16 5true 
+
+> peak
+> True
+> ±45°
+
+EA=1 Occlude        
+
+> true sector
+> 0.48
+> Occlude
+> opposite
+> 0.06
+> Strue Sopp
+> COS =Sopp Strue > 0
+> (a) DAE (b) Edge Accuracy (c) Causal Occlusion Score
+
+Figure 2: Intuition behind our evaluation metrics. (a) DAE: angular distance between the compass peak and the true A → B direction. (b) EA: whether the peak falls within ±45 ◦ of the truth. (c) COS: occluding the true-direction sector should cause a larger confidence drop than occluding the opposite sector. precision on a single NVIDIA A800-80GB GPU with no fine-tuning. Comparing two model scales allows us to test whether C REG ’s advantages depend on model capacity. 
+
+Datasets. We evaluate on two benchmarks: • VSR [Liu et al., 2023a]: 240 COCO-based spatial reasoning samples with bounding boxes obtained by matching subject/object names to COCO instance annotations (21.2% coverage, 100% box validity; see Appendix A.2). • COCO-Pairs : 300 samples constructed directly from COCO val2017 object annotations, with native bounding boxes (no heuristic matching). We select pairs of different-category objects with clear directional dominance ( > 1.5× displacement ratio), balanced across four classes (75 per class). COCO-Pairs serves as a complementary benchmark with guaranteed box quality and balanced class distribution. 
+
+Baselines. All baselines share the same polar projection and compass binning post-processing (Eq. 5 with identical K, σ, and rmax ). The only difference between methods is the per-token relevance signal rj fed into the projection. We compare: • Random : uniform random relevance. • GradCAM [Selvaraju et al., 2017]: gradient-weighted activation map from the last vision encoder layer, upsampled to the token grid. Target: zgt .• Gradient norm : ℓ2 norm of ∇h(−2) zgt per vision token. • Integrated Gradients [Sundararajan et al., 2017]: accumulated gradients along a linear interpolation path (50 steps) from a zero baseline to the actual hidden state at layer −2.Target: zgt .• Attention rollout [Abnar and Zuidema, 2020]: multiplicative aggregation of attention matrices across all layers, extracting the last-token-to-vision-token row. • Single-layer Grad ×Act : Grad ×Act at layer −2 only (no multi-layer aggregation, no contrastive target). • Geometry oracle : relevance set to 1 at the true B location and 0 elsewhere (theoretical ceiling). 6Table 1: Directional attribution on Qwen2-VL-7B across two benchmarks. 95% bootstrap CIs for CREG . Pred-targeted C REG consistently achieves the best DAE and EA.                                                    
+
+> VSR (n=240) COCO-Pairs (n=300)
+> Method DAE ↓EA ↑DAE ↓EA ↑
+> Geo. oracle 0.01.000 0.01.000
+> CREG (pred) 64 .8[58 ,72] .458 [.39 , . 53] 55 .5[50 ,61] .553 [.50 , . 61]
+> CREG (gt) 68 .3[61 ,76] .438 [.38 , . 50] 57 .1[52 ,62] .523 [.47 , . 58]
+> Attn. rollout 75 .2.392 71 .6.433
+> Grad norm 86 .3.300 76 .4.377
+> Integ. Grad 86 .9.292 78 .2.373
+> GradCAM 96 .8.196 84 .9.310
+> Random 91 .8.221 91 .2.217
+
+Table 2: Cross-model comparison: 2B vs. 7B on both benchmarks (gt-targeted C REG and strongest baseline).                         
+
+> VSR COCO-Pairs Model Method DAE ↓EA ↑DAE ↓EA ↑
+> 7B CREG 68 .3.438 57 .1.523
+> Best baseline 75 .2.392 71 .6.433
+> 2B CREG 71 .9.429 63 .8.503
+> Best baseline 69 .5.442 62 .3.503
+
+5.2 Main Results 
+
+Table 1 presents the main results on Qwen2-VL-7B. C REG (pred-targeted) achieves the best directional alignment on both benchmarks. On COCO-Pairs, the improvement over attention rollout is particularly strong: DAE 55 .5◦ vs. 71 .6◦ (−16 .1◦), EA 0.553 vs. 0.433 (+0 .120 ). The consistent advantage across two independent datasets confirms that C REG ’s gains are not dataset-specific. Table 2 compares model scales. On Qwen2-VL-7B, C REG clearly outperforms all baselines ( −6.9◦
+
+DAE on VSR, −14 .5◦ on COCO-Pairs vs. best baseline). On Qwen2-VL-2B, however, C REG does 
+
+not outperform the best baseline: on VSR the best baseline achieves lower DAE ( 69 .5◦ vs. 71 .9◦), and on COCO-Pairs both methods tie at 63 .8◦/62 .3◦ DAE. This scale-dependent pattern suggests that CREG ’s contrastive multi-layer approach benefits from the more structured spatial representations that emerge in larger models. In smaller models, spatial features may be less differentiated across layers, reducing the advantage of multi-layer contrastive aggregation. 
+
+5.3 GT-Targeted vs. Prediction-Targeted Attribution 
+
+Table 3 addresses a key methodological concern: does C REG explain what the model actually computes , or merely find evidence for the correct answer? On both datasets, pred-targeted C REG 
+
+outperforms gt-targeted, especially on incorrect samples (VSR: 66 .8◦ vs. 74 .7◦; COCO-Pairs: 61 .7◦
+
+vs. 64 .5◦). This suggests that C REG better captures the model’s internal decision signal when targeting the predicted class. On correct samples, both modes yield identical results as expected, since ˆc = gt. 
+
+5.4 Causal Faithfulness 
+
+Table 4 provides evidence for causal relevance of the attributed direction on both benchmarks. Occluding the C REG -indicated direction substantially reduces model confidence ( ∆Strue ≈ − 0.47 ), while occluding the opposite direction has minimal effect ( ∆Sopp ≈ − 0.04 ). The consistent positive COS across datasets ( +0 .417 on VSR, +0 .446 on COCO-Pairs) suggests that C REG identifies a direction that is relevant to the model’s prediction, though we note that this uses a single grey-fill occlusion strategy and does not constitute a definitive causal proof. 7Table 3: Correct-only vs. incorrect-only analysis on Qwen2-VL-7B. Pred-targeted attribution explains the model’s actual decision.                              
+
+> GT-targeted Pred-targeted Subset DAE ↓EA ↑DAE ↓EA ↑
+> VSR (VLM ACC = 55.8%)
+> All (n=240) 68 .3.438 64 .8.458
+> Correct (n=134) 63 .2.515 63 .2.515
+> Incorrect (n=106) 74 .7.340 66 .8.387
+> COCO-Pairs (VLM ACC = 41.3%)
+> All (n=300) 57 .1.523 55 .5.553
+> Correct (n=124) 46 .6.645 46 .6.645
+> Incorrect (n=176) 64 .5.438 61 .7.489
+
+Table 4: Causal Occlusion Score on both benchmarks (Qwen2-VL-7B, full datasets). 
+
+n ∆Strue ∆Sopp COS ↑
+
+VSR 240 −0.476 −0.060 +0.417 
+
+COCO-Pairs 300 −0.464 −0.018 +0.446 
+
+5.5 Ablation Study 
+
+Table 5: removing contrastive targeting degrades DAE by 20 .5◦, confirming it is the most critical component. Multi-layer aggregation contributes 2.6◦; K is robust. 
+
+## 6 Analysis and Limitations 
+
+6.1 VLMs Lack Flip Equivariance in Spatial Representations 
+
+A natural desideratum for spatial attribution is flip equivariance : horizontally flipping an image should mirror the compass distribution accordingly. We test this by flipping images and bounding boxes, re-running C REG , and computing the Pearson correlation between the original and correctly mirrored compass distributions. Surprisingly, the correlation is near zero ( r = −0.065 , n = 60 ). This suggests that VLMs encode spatial direction through position-dependent features (e.g., absolute patch positions, asymmetric attention patterns) rather than geometric invariants. This observation is consistent with prior evidence that multimodal LLMs exhibit systematic visual grounding shortcomings [Tong et al., 2024] and suggests that improving spatial equivariance may require architectural changes to VLM vision encoders. 
+
+6.2 Per-Class Analysis 
+
+The per-class VLM accuracy on VSR shows an asymmetry: left (73 .8% ) and right (67 .4% ) are substantially more accurate than above (58 .7% ) and below (30 .0% ). This horizontal-vertical gap may reflect training data biases or differences in how vision transformers encode vertical vs. horizontal spatial relationships. Notably, the below class is particularly weak, suggesting a systematic blind spot in vertical reasoning that merits further investigation. Figure 4 visualizes this asymmetry. 
+
+6.3 Does CREG Interpret Relational Reasoning or Merely Localize Objects? 
+
+A natural concern is whether C REG ’s directional scores primarily reflect target-object localization —i.e., simply highlighting object B and letting the polar projection do the geometric work—rather than interpreting internal relational reasoning. Several observations address this concern, though we acknowledge it is not fully resolved. 8Table 5: Ablation on VSR (60 samples, Qwen2-VL-7B). Default: K = 8 , 4-layer, contrastive. 
+
+Configuration DAE ↓ EA ↑
+
+CREG (default) 61 .8 .483 
+
+K = 4 sectors 60 .9 .517 
+
+Single layer ( l = −2) 64 .4 .467 
+
+No contrastive 82 .3 .333 R   
+
+> UR
+> U
+> UL
+> L
+> DL
+> D
+> DR
+> R
+> UR
+> U
+> UL
+> L
+> DL
+> D
+> DR
+> R
+> UR
+> U
+> UL
+> L
+> DL
+> D
+> DR
+> (a) Strong peak at R (b) Diffuse (no signal) (c) Wrong peak (L vs R)
+> Blue arrow = true geometric direction (A B)
+
+Figure 3: Compass distribution ˆP (θ) examples. Red arrow = true direction. (a) Strong peak at correct direction. (b) Diffuse: no clear directional signal. (c) Wrong peak direction. First, all baselines share the same polar projection post-processing (Eq. 5). Since the only difference is the per-token relevance signal, C REG ’s improvements over baselines cannot be attributed to the polar geometry alone—they must reflect a better relevance signal. Second, the geometry oracle (which places all relevance at object B’s location) achieves perfect DAE = 0 ◦, showing that pure localization is sufficient for directional scoring. However, the gap between C REG (DAE 55 .5◦) and the oracle (DAE 0◦) indicates that C REG does not simply localize 
+
+B—it captures a diffuse, multi-region attribution pattern that partially but imperfectly aligns with the true direction. Third, the prediction-targeted vs. gt-targeted comparison (§5.3) shows that C REG ’s directional signal tracks the model’s actual prediction, not just the geometric ground truth. On incorrect samples, pred-targeted DAE ( 66 .8◦) is lower than gt-targeted ( 74 .7◦), suggesting that the relevance pattern reflects the model’s internal decision signal rather than a generic object-localization response. Nevertheless, we acknowledge that disentangling relational interpretation from direction-aware localization remains an open challenge. Future work should include control experiments such as: uniform relevance inside the target box (pure localization baseline), randomized reference centers, and subject/object swap tests to more rigorously isolate relational evidence from geometric artifacts. 
+
+6.4 On the Choice of Attribution Target 
+
+A critical methodological consideration is whether attribution should target the ground-truth class or the model’s actual prediction. When VLM accuracy is below 100%, gt-targeted attribution risks extracting evidence for the correct answer that the model does not actually rely on. Our experiments (§5.3) show that prediction-targeted C REG achieves lower DAE than gt-targeted, especially on incorrect samples (DAE 66 .8◦ vs. 74 .7◦). This suggests that prediction-targeted attribution better aligns with the model’s internal decision signal, and we recommend it as the default for interpretability applications. On correct samples, both modes produce identical results, since the predicted and ground-truth classes coincide. 9Left Right Above Below 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> VLM Accuracy (%)
+> 73.8
+> 67.4
+> 58.7
+> 30.0
+
+(a) Per-class VLM Accuracy     
+
+> Random (25%)
+> Left Right Above Below
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120
+> DAE (degrees)  77.5°
+> 62.0° 63.8°
+> 79.0°
+
+(b) Per-class DAE 
+
+> Random (~90°)
+
+Figure 4: Per-class analysis on VSR. (a) VLM accuracy is much higher for horizontal relations than vertical ones, with below at only 30%. (b) DAE shows a similar pattern—vertical relations have higher angular error. Dashed lines indicate random baselines. True 
+
+> CREG
+> A
+> Success: DAE = 15°
+> True
+> CREG
+> A
+> Failure: DAE = 155°
+
+Figure 5: Success vs. failure illustration. Green arrow = true direction; colored arrow = C REG peak. Left: CREG correctly identifies the right direction (DAE = 15 ◦). Right: CREG peak points opposite to the true direction (DAE = 155 ◦). 
+
+6.5 Limitations 
+
+• Single model family. We evaluate on Qwen2-VL (7B and 2B). While C REG requires only hidden states and gradients, generalization to architecturally different VLMs (LLaVA, InternVL) remains to be verified. • Scale-dependent advantage. On Qwen2-VL-2B, C REG does not outperform the best baseline, indicating that the method’s benefits may depend on the model having sufficiently structured spatial representations. • Two benchmarks from COCO. Both VSR and COCO-Pairs are based on COCO images. Evaluation on datasets with different image distributions (e.g., synthetic scenes, indoor environments) would strengthen generalization claims. • Moderate absolute improvement. CREG ’s best DAE ( 55 .5◦ on COCO-Pairs) is substan-tially better than baselines ( 71 –91 ◦) but remains far from the geometry oracle ( 0◦), reflecting fundamental challenges in interpreting spatial reasoning. • Four cardinal relations only. Depth, distance, and containment are not addressed. • COS limitations. The occlusion uses a single grey-fill strategy with only one control condition (opposite-sector occlusion). Different intervention operators (blur, inpainting, patch drop) and additional controls (adjacent-sector occlusion) may yield different results. We do not claim definitive causal proof; COS provides supportive evidence that the attributed direction is relevant to the model’s prediction. 10 • Statistical coverage. We report 95% bootstrap confidence intervals for C REG in the main table but do not provide formal significance tests for all pairwise comparisons. The ablation study uses 60 samples; while directionally informative, wider-scale ablations would strengthen the component analysis. 
+
+## 7 Conclusion 
+
+We introduced C REG , a training-free framework for interpreting spatial reasoning in vision-language models. By projecting contrastive multi-layer Grad ×Act attributions into a reference-centered polar coordinate system, C REG transforms opaque token-level saliency into interpretable directional evidence distributions. On Qwen2-VL-7B across two benchmarks (VSR and COCO-Pairs), C REG 
+
+substantially outperforms all standard attribution baselines on directional alignment metrics, with causal occlusion experiments supporting the faithfulness of the attributed directions on 540 samples. On the smaller Qwen2-VL-2B, the advantage diminishes, suggesting that C REG ’s approach benefits from the more structured spatial representations that emerge at larger model scales. Prediction-targeted attribution achieves lower DAE than gt-targeted, suggesting better alignment with the model’s internal decision signal. CREG opens several directions for future work: extending to depth and distance relations, evaluating on architecturally diverse VLMs (e.g., LLaVA, InternVL) to test cross-architecture generality, test-ing on non-COCO-derived benchmarks to strengthen generalization claims, and designing control experiments (e.g., randomized reference centers, subject/object swap tests) to more rigorously dis-entangle relational interpretation from direction-aware localization. More robust causal validation through alternative intervention operators (blur, inpainting) would further strengthen the faithfulness evidence. 
+
+## References 
+
+Samira Abnar and Willem Zuidema. Quantifying attention flow in transformers. In ACL , 2020. Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt, and Been Kim. Sanity checks for saliency maps. In NeurIPS , 2018. Wenxiao Cai, Yaroslav Ponomarenko, Jianhao Yuan, Xiaoqi Li, Wankou Yang, Hao Dong, and Bo Zhao. Spatialbot: Precise spatial understanding with vision language models. arXiv preprint arXiv:2406.13642 , 2024. Hila Chefer, Shir Gur, and Lior Wolf. Transformer interpretability beyond attention visualization. In 
+
+CVPR , 2021. Shiqi Chen, Tongyao Zhu, Ruochen Zhou, Jinghan Zhang, Siyang Gao, Juan Carlos Niebles, Mor Geva, Junxian He, Jiajun Wu, and Manling Li. Why is spatial reasoning hard for vlms? an attention mechanism perspective on focus areas. In Proceedings of the 42nd International Conference on Machine Learning , pages 9910–9932, 2025. Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, Bin Li, Ping Luo, Tong Lu, Yu Qiao, and Jifeng Dai. Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 24185–24198, 2024. Sara Hooker, Dumitru Erhan, Pieter-Jan Kindermans, and Been Kim. A benchmark for interpretability methods in deep neural networks. In Advances in Neural Information Processing Systems , 2019. Amita Kamath, Jack Hessel, and Kai-Wei Chang. What’s “up” with vision-language models? investigating their struggle with spatial reasoning. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , 2023. Fangyu Liu, Guy Emerson, and Nigel Collier. Visual spatial reasoning. Transactions of the Association for Computational Linguistics , 11:635–651, 2023a. 11 Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. In Advances in Neural Information Processing Systems , 2023b. David Marr. Vision: A Computational Investigation into the Human Representation and Processing of Visual Information . MIT Press, 1982. Vitali Petsiuk, Abir Das, and Kate Saenko. RISE: Randomized input sampling for explanation of black-box models. In BMVC , 2018. Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh, and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localiza-tion. In ICCV , 2017. Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In ICML ,2017. Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide shut? exploring the visual shortcomings of multimodal llms. In CVPR , 2024. Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. Kaiyu Yang, Olga Russakovsky, and Jia Deng. Spatialsense: An adversarially crowdsourced bench-mark for spatial relation recognition. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 2051–2060, 2019. 12 A Appendix 
+
+A.1 Prompt Sweep 
+
+We evaluated three prompt templates on a 30-sample development subset of VSR (Table 6). Prompt A achieves the highest VLM accuracy and is used for all main experiments. Table 6: Prompt sweep results on VSR development subset (30 samples). 
+
+Prompt Template VLM ACC DAE 
+
+A: “In this image, where is the {tgt} relative to the {ref}? Choose one option: 1) to the left, 2) to the right, 3) above, 4) below. Answer with just the number.” 
+
+0.567 57 .9◦
+
+B: “Look at the image. Is the {tgt} to the left (1), right (2), above (3), or below (4) the {ref}? Answer with one number.” 
+
+0.367 64 .3◦
+
+C: “I can see two objects: {ref} and {tgt}. What is the spatial position of {tgt} relative to {ref}? Options: 1=left, 2=right, 3=above, 4=below. Answer:” 
+
+0.533 62 .9◦
+
+A.2 VSR Bounding Box Matching Audit 
+
+VSR annotations do not include bounding boxes. We obtain boxes by matching subject/object names from VSR captions to COCO instance segmentation categories. Table 7 reports the matching quality. Table 7: VSR bounding box matching audit. Coverage indicates the fraction of positive VSR samples where both subject and object names match a COCO category. Box validity indicates the fraction of matched samples with non-degenerate boxes. 
+
+Split Positive Matched Coverage / Validity 
+
+Test 1181 240 20.3% / 100% Dev 564 121 21.5% / 100% Train 3876 828 21.4% / 100% 
+
+Total 5621 1189 21.2% / 100% The 21% coverage reflects our conservative matching strategy: we require exact or substring matches between VSR entity names and COCO category labels. This produces a high-confidence subset where bounding boxes are reliable, at the cost of reduced sample size. 
+
+A.3 Implementation Details 
+
+CREG is implemented in Python using PyTorch. Key hyperparameters: • Compass sectors: K = 8 (sector width 45 ◦)• Hidden-state layers: {− 2, −3, −4, −5} (last 4 layers) • Gaussian σ = 0 .6 × rmax , where rmax = 2 .0 × dAB 
+
+• Gradient target: contrastive (Eq. 1) All baselines use the same polar projection framework (Eq. 5) with the same K, σ, and rmax settings. The only difference is the per-token relevance signal fed into the projection. Baseline-specific details: • GradCAM : We extract the gradient-weighted activation map from the last layer of the vision encoder (ViT). The spatial map is upsampled to the token grid resolution via bilinear interpolation. The gradient target is zgt .• Integrated Gradients : We use 50 interpolation steps along a linear path from a zero baseline to the actual hidden state at layer −2. The accumulated gradient magnitudes provide per-token relevance. The gradient target is zgt .13 • Attention rollout : Attention matrices from all layers are multiplied cumulatively (with identity residual added at each layer). We extract the row corresponding to the last text token and restrict to vision-token columns. • Gradient norm : The ℓ2 norm of ∇h(−2) zgt is computed per vision token at layer −2.Experiments run on a single NVIDIA A800-80GB GPU. The full 240-sample VSR evaluation (including all neural baselines) completes in approximately 4 minutes. No hyperparameter tuning was performed on the test sets; all hyperparameters ( K, σr , ρr , layer set) were fixed before evaluation based on preliminary experiments on a separate 30-sample development set. 14

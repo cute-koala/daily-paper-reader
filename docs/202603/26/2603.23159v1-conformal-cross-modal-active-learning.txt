@@ -1,0 +1,1199 @@
+Title: Conformal Cross-Modal Active Learning
+
+URL Source: https://arxiv.org/pdf/2603.23159v1
+
+Published Time: Wed, 25 Mar 2026 01:10:58 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Conformal Cross-Modal Active Learning 
+
+## Huy Hoang Nguyen 1, Cedric Jung 1,2, Shirin Salehi 3, Tobias Gl¨ uck 1, Anke Schmeink 3, Andreas Kugi 1,2 
+
+> 1
+
+AIT Austrian Institute of Technology 2 Automation & Control Institute, Technical University of Vienna  
+
+> 3
+
+Chair of Information Theory and Data Analytics (INDA), RWTH Aachen University 
+
+{huy-hoang.nguyen,cedric.jung,tobias.glueck,andreas.kugi }@ait.ac.at, 
+
+{shirin.salehi,anke.schmeink }@inda.rwth-aachen.de 
+
+## Abstract 
+
+Foundation models for vision have transformed vi-sual recognition with powerful pretrained representa-tions and strong zero-shot capabilities, yet their po-tential for data-efficient learning remains largely un-tapped. Active Learning (AL) aims to minimize anno-tation costs by strategically selecting the most informa-tive samples for labeling, but existing methods largely overlook the rich multimodal knowledge embedded in modern vision–language models (VLMs). We introduce 
+
+Conformal Cross-Modal Acquisition (CCMA) ,a novel AL framework that bridges vision and lan-guage modalities through a teacher–student architec-ture. CCMA employs a pretrained VLM as a teacher to provide semantically grounded uncertainty estimates, conformally calibrated to guide sample selection for a vision-only student model. By integrating multimodal conformal scoring with diversity-aware selection strate-gies, CCMA achieves superior data efficiency across multiple benchmarks. Our approach consistently out-performs state-of-the-art AL baselines, demonstrating clear advantages over methods relying solely on uncer-tainty or diversity metrics. 
+
+## 1. Introduction 
+
+In recent years, artificial intelligence has undergone a paradigm shift with the rise of foundation mod-els, such as DALL-E [34], GPT-3 [8], Dinov2 [30], trained on broad data at scale. While these mod-els provide powerful, transferable visual representa-tions, their development requires massive amounts of curated data and computation resources. This chal-lenge is especially pronounced in classification tasks, where large annotated datasets remain essential for high accuracy [11]. To alleviate annotation and train-ing costs, Active Learning (AL) has emerged as a com-pelling framework that aims to reduce annotation re-quirements by selecting the most informative samples for labeling [21, 26, 38, 39]. Pretrained visual features from foundation models have recently improved AL pipelines [9, 16, 44], but most existing approaches remain vision-only . Vision Language Models (VLMs) [6], such as CLIP [33], of-fer an untapped opportunity: their text–image align-ment captures high-level class semantics, suggesting that they could provide more informative signals for sample selection than standard visual features alone. Preliminary attempts to use VLMs for AL focus mostly on prompt tuning [4, 5], leaving unexplored how to ex-tract or quantify uncertainty from multimodal repre-sentations. A key challenge arises: VLM outputs are often mis-calibrated, domain-dependent, and not directly com-parable to task-specific classifier probabilities, limiting their direct use as uncertainty oracles. Conformal Pre-diction (CP) [1, 29, 42, 43, 45] offers an appealing solu-tion by providing distribution-free, per-sample uncer-tainty sets that remain valid regardless of model ar-chitecture or miscalibration. However, existing confor-mal AL methods [22, 28] operate strictly within a sin-gle modality and do not leverage cross-modal semantic structure. Likewise, existing VLM-based AL does not use CP to fuse information from different models. This gap motivates our research question: Can we incorporate the semantic structure of VLMs into an active learning acquisition function using distribution-free conformal calibration? We answer affirmatively by developing Conformal Cross-Modal Acquisi-tion (CCMA) , a novel AL framework that bridges vi-sion and language modalities through calibrated uncer-tainty estimation. CCMA employs a pretrained VLM as a teacher to generate semantically grounded predic-tion sets, which are conformally calibrated to provide distribution-free uncertainty estimates for guiding a vision-only student model. By integrating cross-modal conformal scoring with diversity-aware selection strate-
+
+> arXiv:2603.23159v1 [cs.CV] 24 Mar 2026
+
+gies, CCMA achieves superior data efficiency across multiple benchmarks. Our main contributions are as follows: 1. We propose a teacher–student conformal scor-ing mechanism that aligns vision-only predictions from a student model with text–image guidance from a pretrained VLM teacher. By construct-ing conformal prediction sets calibrated on held-out data, CCMA provides distribution-free, per-sample uncertainty that is robust across datasets and archi-tectures. 2. We introduce a selective subpooling strategy 
+
+based on clustering in CLIP [33] feature space, which preserves geometric diversity while substan-tially reducing the number of candidates to be scored. Combined with an uncertainty-weighted coverage objective, CCMA achieves an effective trade-off between scalability and informativeness, enabling efficient active selection without accuracy degradation. 3. We conduct extensive experiments on multiple image classification benchmarks, showing that CCMA consistently outperforms state-of-the-art ac-tive learning baselines across diverse domains and modalities. 4. We provide a detailed analysis of the role of VLMs in active learning, revealing that CCMA excels when meaningful teacher–student discrepancies ex-ist, while performance saturates once the teacher approaches oracle accuracy—transitioning the chal-lenge from uncertainty estimation to coverage opti-mization. 
+
+## 2. Related Works 
+
+2.1. Active Learning 
+
+In pool-based AL [14, 19, 41] and classification tasks, the AL problem can be defined as follows: The whole dataset at first presents a small labeled dataset part named L = {(xj , y j )}Mj=1 and a larger unlabeled part named U = {xi}Ni=1 , where M ≪ N , yi ∈ {0, 1}
+
+is the class label of xi for binary classification, or 
+
+yi ∈ { 1, . . . , C } for multi-class classification with C
+
+classes. The process involves selecting instances from the unlabeled dataset U in a greedy manner, guided by a set of informativeness metrics called acquisition func-tions . In each iteration t, a batch D∗ 
+
+> t
+
+of size B from U
+
+is selected based on the learned model M and an acqui-sition function A(x, M), and queries their labels from the oracle. Data samples can be selected according to their acquisition score by D∗ 
+
+> t
+
+= B
+
+argmax x∈U A(x, M), where the superscript B indicates selection of the top 
+
+B points. In general, to reduce computational costs, a subpool Dpool is drawn from the unlabeled dataset 
+
+U, on which the acquisition function will be computed: 
+
+D∗ 
+
+> t
+
+= B
+
+argmax x∈D pool A(x, M). 
+
+Acquisition functions. Uncertainty-based meth-ods query unlabeled instances where the model is most uncertain. Entropy [46] measures total predic-tive uncertainty by selecting samples with the high-est entropy, while Margins [36] examines the gap be-tween the top two class probabilities, selecting those with the smallest margin. Another Uncertainty base-line [25] selects samples with the lowest maximum pre-dicted probability. Beyond these point-estimate ap-proaches, Bayesian active learning by disagreement (BALD ) [14] targets examples that maximize mutual information between predictions and the parameter posterior. PowerBALD [23] extends this by account-ing for correlations among queried samples, thereby reducing the redundancy inherent in top-B selection strategies. Most recently, UHerding [3] maximizes an uncertainty-weighted coverage objective by using cali-brated uncertainties and a shrinking kernel to balance diversity at low budgets with pure uncertainty at high budgets. The choice between uncertainty-based and representativity/diversity-based acquisition func-tions reflects an exploration–exploitation trade-off, motivating hybrid approaches that combine or alternate between both [20, 47]. Mixup-based meth-ods, such as Alfa-mix [31], interpolate unlabeled samples to create synthetic queries, whereas our approach operates directly in feature space and uses probabilistic set constructions to guide informative selection. Representative-based methods aim to cover the data distribution. Classical approaches such as the k-center greedy method [12] and Coreset [40] minimize distances to cluster centers. Similarly, 
+
+Typiclust [18] queries typical points within clusters, while ProbCover [48] avoids outliers to improve representativeness. Leveraging clustering within asemantically meaningful feature space that is obtained via self-supervised learning further promotes diverse sampling. 
+
+2.2. Conformal prediction 
+
+Conformal prediction (CP) [45] provides distribution-free, finite-sample uncertainty quantification by pro-ducing prediction sets that contain the true label with user-specified coverage under the exchangeability as-sumption [42]. It has been explored in AL to quan-tify model uncertainty for regression [28] and classi-fication [27] tasks. One approach ranks samples by conformal uncertainty, selecting those with the small-est p-values or the largest nonconformity (CoPAL [22] δ(x)
+
+> Labeled Data
+> Unlabeled Data
+> x
+> U
+> L
+> deer
+> ship
+> truck
+> bird
+> ”A photo of a object”.
+
+Student 
+
+Teacher              
+
+> (VLM)
+> Entropy
+> Conformal Scoring
+> Final Selection
+> JS divergence
+> Teacher probabilities pT(c|x)
+> ΓS(x)ΓT(x)
+> Ω( x)
+> HS
+> Student probabilities pS(c|x)
+> Oracle
+> Annotated Samples
+> VLM space ϕ(x)
+> Subpool C
+> Text embeddings
+> Image embeddings
+> Softmax
+> W
+
+Figure 1. Overview of our proposed AL framework CCMA for image classification by exploring conformal prediction with multimodal uncertainty and diversity for efficient data acquisition . Given labeled data L and an unlabeled pool U, a frozen vision encoder (student) and a frozen VLM (teacher) serve as feature extractors, while a simple linear classifier is trained on the student features. (1) A selective subpool is formed via CLIP-space clustering. 
+
+(2–3) Student and teacher posteriors pS , pT are calibrated into conformal sets Γ S , ΓT . (4) Multimodal disagreement Ω( x)combines entropy and Jensen-Shannon (JS) divergence for uncertainty scoring δ(x). (5) Top-ranked samples are oversampled and clustered with uncertainty-weighted coverage for the final diverse selection. 
+
+and related CPAL variants [28]). Another approach aims to reduce annotation costs by querying candidate class sets that are guaranteed to include the true label, prioritizing examples with small yet reliable sets [17]. However, these methods are typically unimodal , assign-ing each example a scalar based on a single model’s conformity or set size, while addressing diversity only heuristically. 
+
+2.3. Active Learning in VLMs 
+
+Foundation models [6], including vision–language mod-els (VLMs), are trained on large unlabeled or noisy data, learning representations that enable strong zero-and few-shot performance. These properties make them natural candidates for active learning (AL), which seeks to maximize labeling efficiency. Although the two paradigms can complement each other [5], their integration remains mainly underexplored [16]. Yet, applying conventional AL frameworks to pretrained VLMs can sometimes degrade performance [4, 49], mo-tivating the development of AL strategies tailored to VLMs. For instance, [37] combines calibrated en-tropy with self- and neighbor-aware uncertainty to produce more reliable selection scores, narrowing the zero-shot–supervised gap of VLMs. Unlike their work, which applies AL for prompt tuning, we leverage cross-modal knowledge from VLM teachers to guide sample selection for vision-only students. 
+
+Concluding, while AL seeks to minimize annotation cost by selectively querying the most informative sam-ples, its effectiveness is often hindered by unreliable uncertainty estimates from purely vision-based models. Recent VLMs provide semantically rich, cross-modal representations that can guide AL toward more mean-ingful and transferable sample selection. In this paper, we address this limitation by introducing a conformal prediction framework that bridges the uncertainty gap between visual and textual modalities, thereby enhanc-ing both the efficiency and robustness of AL. 
+
+## 3. Our method: Conformal Cross-Model Acquisition (CCMA) 
+
+We propose a multi-modal conformal acquisition func-tion that integrates diversity sampling with uncertainty estimation, using a student-teacher disagreement score. The approach follows a five-stage process, as depicted in Fig. 1. 
+
+3.1. Diverse subpool selection 
+
+We adopt a compute-aware candidate selection strategy by compressing the unlabeled pool U into a smaller candidate set C of size |C| ≪ |U| . To construct C, we cluster the VLM image embeddings ϕ(x) : x ∈ U in ϕ-space (introduced in Sec. 3.2) and choose one or a few representative points from each cluster using k-Means. We then apply the subsequent steps of CCMA ex-clusively to C. This approach reduces the per-round scoring cost from O(|U| B) to O(|C| B) with |C| ≪ |U| ,while preserving coverage of the pool. Empirically, this diversity-selected subpool consistently outperforms an equally sized random subpool, yielding higher accuracy at low budgets and maintaining robustness without in-curring the high computation of full-pool selection. 
+
+3.2. Two predictors: student and teacher 
+
+For a given sample image x, we use image embeddings from pretrained VLM ϕ(x) ∈ Rd and text prototypes 
+
+{tc}Cc=1 ⊂ Rd, all ℓ2-normalized. The VLM teacher produces logits ℓT (c | x) = ϕ(x)⊤tc/τ , where τ is the temperature parameter. The posterior is then obtained via the softmax function: 
+
+pT (c | x) = exp( ℓT (c | x)) 
+
+∑Cc′=1 exp( ℓT (c′ | x)) . (1) The student classifier fS operates on a separate back-bone feature z(x) ∈ RD (e.g., extracted from DINOv2) and outputs class probabilities pS (c | x). The student consists of a feature adapter ψθ (·) and a linear classifi-cation head with weight matrix W ∈ RC×D with bias 
+
+b ∈ RC , hc(x) = W ψ θ
+
+(z(x)) + b, yielding: 
+
+pS (c | x) = exp (hc(x))∑Cc′=1 exp (hc′ (x)) . (2) We train the parameters θ, W, and b using cross-entropy loss on the labeled set and evaluate the best checkpoint to obtain {pS (c | x)}Cc=1 for all x in the candidate subpool. 
+
+3.3. Two calibrated set predictors (split conformal) 
+
+For conformal prediction calibration, we define the nonconformity score as am(x, c ) = − log pm(c | x),
+
+where pm(c | x) denotes the predicted probability of class c given input x, and m ∈ { T, S } refers to the teacher T and student S. In a calibration split Ccal ⊆ D ,we determine thresholds qm for either the target ex-pected set size sm or the marginal coverage 1 − αm.For size-targeted calibration, we find qm by bisection such that 1
+
+|C cal |
+
+∑
+
+> (x,y )∈C cal
+
+|{ c : am(x, c ) ≤ qm}| ≈ sm. (3) For coverage-targeted calibration, we set qm as the empirical (1 − αm)-quantile of nonconformity scores 
+
+{am(x, y ) : ( x, y ) ∈ C cal }, guaranteeing split-conformal marginal coverage ≥ 1 − αm, where αm ∈ [0 , 1] repre-sents the tolerated error rate. The set-valued predic-tors are then Γm(x) = {c ∈ [C] : am(x, c ) ≤ qm}. (4) We never force-add labels to Γ m(x); if sets are too small/large, we resolve qm to meet (3). Because the cal-ibration is split-conformal and applied independently to both modalities, this procedure is distribution-free and does not assume that the VLM teacher is well-calibrated or domain-aligned. Unlike prior AL meth-ods that rely on raw VLM logits or treat VLMs as oracle predictors [37], our calibration guarantees valid finite-sample coverage for both teacher and student, making the cross-modal guidance robust even under severe teacher miscalibration or distribution shift. 
+
+3.4. Cross-modal disagreement scoring 
+
+Given the conformal label sets Γ S (x) and Γ T (x), their union support is defined as Ω( x) = Γ S (x) ∪ ΓT (x) ⊆{1, . . . , C }. For any posterior pm(· | x) ∈ ∆C−1, with 
+
+m ∈ { T, S }, the distribution is renormalized over Ω( x): 
+
+pΩ
+
+> m
+
+(c | x) = pm(c | x) 1{c ∈ Ω( x)}
+
+∑ 
+
+> c′∈Ω( x)
+
+pm(c′ | x) , (5) with indicator function 1. Once the renormalized pos-teriors pΩ 
+
+> T
+
+and pΩ 
+
+> S
+
+are obtained, the Jensen–Shannon (JS) divergence between them is computed as: JS( pΩ 
+
+> T
+
+∥pΩ 
+
+> S
+
+) = 12 KL 
+
+(
+
+pΩ
+
+> T
+
+∥∥∥ pΩ 
+
+> T+pΩ
+> S
+> 2
+
+)
+
++ 12 KL 
+
+(
+
+pΩ
+
+> S
+
+∥∥∥ pΩ 
+
+> T+pΩ
+> S
+> 2
+
+)
+
+,
+
+(6) where KL( p ∥ r) is the Kullback–Leibler divergence be-tween distributions p and r. To dynamically balance the contributions of the student and teacher predic-tions, we introduce a parameter-free confidence gate. First, we define the top-1 confidence scores for the stu-dent and teacher models as conf S (x) = max c pS (c | x),
+
+and conf T (x) = max c pT (c | x), respectively. Using these confidences, the confidence gate weight is com-puted as 
+
+wjs (x) = conf T (x)conf T (x) + conf S (x) + ε ∈ [0 , 1] , (7) where ε > 0 is added for numerical stability. Intu-itively, wjs (x) increases when the teacher is more con-fident than the student, thereby giving the teacher a greater influence on the final prediction, and vice versa. In early AL rounds, the teacher typically ex-hibits higher confidence and thus contributes more strongly to the score, whereas in later rounds, the stu-dent naturally takes over as its predictions sharpen. This adaptivity arises without additional hyperparam-eters and avoids committing to either a fully teacher-driven or student-driven rule, leading to the final score: 
+
+δ(x) = wjs (x) JS 
+
+(
+
+pΩ
+
+> S
+
+∥∥∥ pΩ
+
+> T
+
+)
+
++ (1 − wjs (x)) HS
+
+(y | x),
+
+(8) where HS
+
+(y | x) is the entropy of the student’s predic-tions: 
+
+HS
+
+(y | x) = −
+
+> C
+
+∑
+
+> c=1
+
+pS (c | x) log pS (c | x). (9) 
+
+3.5. Uncertainty-weighted coverage selection 
+
+To construct a query batch of size B, we first define a candidate set 
+
+SκB = { xi ∈ U | ri ≤ κB } , ri = rank ↓(δ(xi)) where δ(xi) denotes the disagreement-based uncer-tainty score and κ ≥ 1 the oversampling factor. Hence, 
+
+SκB contains the κB most uncertain samples, from which the final batch S ⊆ SκB , |S| = B, is selected by maximizing the uncertainty-weighted coverage :
+
+F (S) = 1
+
+|U| 
+
+∑
+
+> u∈U
+
+δ(u) max  
+
+> s∈S
+
+kσ
+
+(ϕ(u), ϕ (s)), (10) where kσ is a similarity kernel on the embedding space 
+
+ϕ(·). The factor κ trades off efficiency and accuracy: a larger κ improves diversity and coverage at the cost of longer query time. 
+
+## 4. Experiments 
+
+4.1. Experimental Setups 
+
+Datasets. We evaluate our CCMA’s perfor-mance against a suite of state-of-the-art AL methods across several benchmark datasets: CI-FAR100 [24], Food101 [7], and DomainNet-Real [32], Caltech101 [13], Caltech256 [15] (see Appendix A). 
+
+Implementation details. We employ a frozen CLIP [33] ViT-L/14 [10] model as the teacher , where the text encoder provides class-wise prototypes for each downstream category using standard prompts such as “A photo of a [CLS].” (see Appendix B). For each sample, logits are computed via temperature-scaled cosine similarity between image and text embeddings as described in Section 3.2, with a fixed temperature 
+
+τ = 0 .01 (CLIP default) and τ = 0 .03 for ablations. The student is a frozen vision-only backbone from DI-NOv2 [30] followed by a linear classification head. For active learning, we follow the training protocol of [16], running t = 20 iterations with five seeds {1, 10, 100, 1000, 10000 }, and report the mean accuracy averaged over seeds. Unless otherwise stated, we fix the oversampling factor κ = 20, target set sizes sT = 3 and sS = 5, and investigate the sensitivity to κ in Section 4.4. Each query round acquires B samples, e.g., 
+
+B = 100 for CIFAR100. Linear heads are trained using AdamW with a learning rate of 10 −2, weight decay of 10 −2, and dropout rate ρ = 0 .75. 
+
+Baselines. We benchmark results using our method with eleven AL baselines: random sampling (Random), uncertainty-based (Entropy, Margins, Uncertainty, BALD, BADGE, PowerBALD denoted by pBALD, Alfa-mix), representation-based (Coreset, Typiclust, ProbCover). 
+
+4.2. Experimental Results 
+
+Result analysis. Across all datasets, CCMA com-petitively outperforms existing active learning strate-gies in both early- and late-stage acquisition, demon-strating its effectiveness in leveraging cross-modal un-certainty for sample selection (Table 1). On CI-FAR100 , CCMA achieves the highest final accuracy of 91 .6%, surpassing the strongest baseline (BADGE) by +0 .3% and maintaining a clear advantage throughout all acquisition rounds. Food101 and DomainNet-Real show similar trends, with CCMA reaching 90 .8% and 85 .5%, respectively, outperforming all compet-ing uncertainty- and diversity-based methods, includ-ing BALD, pBALD, and Coreset. The gains are slightly improved in the early iterations ( t ≤ 8), where most baselines suffer from unstable uncertainty esti-mates, whereas CCMA benefits from the calibrated teacher–student disagreement, which provides more re-liable per-sample confidence. Moreover, the improve-ments persist even in later rounds, indicating that CCMA does not merely focus on high-entropy regions but maintains semantic coverage through conformal calibration and diversity-aware selection. Notably, our conformal scoring adaptively balances the influence of teacher and student confidence, allowing the model to rely more on the student as its predictions become more reliable in later rounds, while still leveraging teacher guidance in early uncertain stages. This dynamic in-terplay enables CCMA to achieve a better balance be-Table 1. Mean accuracy averaged over 5 runs along with the standard deviation at AL iterations t for datasets CIFAR100 [24], Food101 [7], and DomainNet-Real [32] when utilizing the random initialization with DINOv2 ViT-g14 as the feature ex-tractor. Bold values represent the first-place mean accuracy at iteration t, with the second-place value underlined.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+
+> tRandom Uncertainty Entropy Margins BALD pBALD Coreset BADGE Alfa-mix ProbCover CCMA (ours)
+> CIFAR100 148 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.248 .0±2.2478 .7±1.674 .4±1.867 .0±1.282 .6±1.180 .4±0.583 .9±0.877 .9±0.984 .1±0.678 .8±1.477 .0±5.883 .4±1.2885 .8±0.784 .2±0.980 .7±2.287 .9±0.785 .2±0.488 .4±0.384 .3±1.088 .5±0.487 .7±0.881 .7±4.688 .7±0.616 89 .2±0.288 .9±0.887 .8±0.590 .7±0.288 .4±0.390 .6±0.288 .3±0.890 .8±0.190 .6±0.286 .3±2.691 .1±0.420 89 .8±0.289 .9±0.589 .4±0.191 .2±0.089 .6±0.391 .2±0.288 .9±0.691 .3±0.191 .2±0.288 .0±1.891 .6±0.2Food101 146 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.946 .8±1.9477 .0±1.163 .0±3.258 .6±1.575 .4±2.162 .2±2.478 .1±2.162 .8±3.776 .2±1.877 .7±1.682 .0±0.978 .1±0.9883 .8±0.376 .1±1.873 .0±2.484 .7±0.773 .8±2.385 .0±0.872 .8±2.984 .8±0.985 .1±1.186 .0±0.586 .1±0.516 87 .4±0.484 .8±1.581 .9±1.589 .2±0.882 .3±1.789 .3±0.380 .0±1.489 .3±0.389 .1±0.288 .4±0.390 .1±0.220 88 .2±0.386 .4±1.084 .5±0.990 .0±0.184 .3±1.190 .1±0.382 .8±1.190 .2±0.390 .2±0.188 .7±0.590 .8±0.2DomainNet-Real 144 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.844 .7±0.8473 .0±0.764 .0±1.158 .6±2.772 .9±0.569 .4±0.575 .7±0.669 .1±1.175 .5±0.672 .6±0.376 .3±0.677 .7±0.5879 .2±0.274 .3±0.670 .8±0.879 .4±0.576 .3±0.680 .8±0.275 .7±0.480 .8±0.178 .7±0.478 .9±0.882 .0±0.216 82 .1±0.380 .4±0.479 .0±0.483 .5±0.280 .9±0.483 .9±0.280 .3±0.584 .2±0.281 .7±0.579 .5±0.584 .6±0.220 82 .8±0.182 .2±0.280 .9±0.384 .8±0.082 .1±0.384 .7±0.281 .4±0.685 .0±0.182 .7±0.779 .7±0.585 .5±0.1
+
+tween exploration (via subpool diversity) and exploita-tion (via multimodal uncertainty), leading to consis-tent gains across acquisition cycles. 
+
+Label efficiency analysis. In Fig. 2a, on Food101 ,CCMA and ProbCover are the only methods able to reach 85% accuracy with fewer than 750 labeled sam-ples. ProbCover performs competitively in the very low-budget regime due to its coverage-driven selection, which encourages early diversity and helps the model learn coarse class boundaries with minimal supervision. However, as the labeling budget increases, its lack of calibrated uncertainty limits further improvement. In contrast, CCMA maintains strong performance across all budget levels, the only method that achieves 90% accuracy with fewer than 1.8K labeled samples, demon-strating its ability to exploit both uncertainty and di-versity in a calibrated multimodal manner. On the more challenging DomainNet-Real bench-mark, which features significant domain variability and cross-category visual shifts, CCMA stands out as the only method capable of rapidly reaching 80% accu-racy with fewer than 2K labeled samples, as shown in Fig. 2b. In contrast, other active learning base-lines require substantially more annotations to achieve comparable performance. At higher accuracy thresh-olds, where many AL methods fail to progress be-yond 85%, CCMA, Badge, and PowerBALD remain the only approaches able to reach this level, albeit with larger budgets exceeding 6K samples. These re-sults demonstrate that CCMA provides a favorable balance between early-stage label efficiency and sus-tained learning capacity, maintaining competitive per-formance even as the annotation budget increases. 
+
+4.3. When is the student better than the teacher in AL? 
+
+Modern active learning typically assumes a single learner, whereas CCMA introduces a teacher–student interaction in which a pretrained VLM teacher guides a vision-only student through conformal uncertainty cali-bration. But does this guidance always help, and under which conditions can the student surpass the teacher? To address this, we analyze benchmarks using two diagnostics: mean CCMA over-lap (μoverlap = 1
+
+> |U|
+
+∑ 
+
+> x∈U
+
+|ΓT (x) ∩ ΓS (x)|)and Top-1 disagreement fraction (dtop-1 =
+
+> 1
+> |U|
+
+∑ 
+
+> x∈U
+
+1[arg max pT (x)̸ = arg max pS (x)]) shown in Fig. 3. On CIFAR100 and Food-101, the growing overlap and gradual decay of disagreement indicate that the teacher and student maintain complementary uncertainties across several rounds. CCMA capi-talizes on this sustained mismatch, enabling more label-efficient learning and improved accuracy. In contrast, on Caltech101 and Caltech256, both overlap and disagreement flatten early, indicating that the student rapidly aligns with the teacher. Once this stage is reached, the teacher provides only a little new information, and the AL selection process becomes limited. As a result, uncertainty-based methods (e.g., BALD or BADGE) gain advantages in later rounds. This trend is reflected in the accuracy curves (Fig. 4), where CCMA outperforms Random and CCMA  
+
+> ProbCover
+> Alfamix
+> BADGE
+> Coreset
+> pBald
+> BALD
+> Margins
+> Entropy
+> Uncertainty
+> Random 0
+> 250
+> 500
+> 750
+> 1000
+> 1250
+> 1500
+> 1750
+> 2000 Target Accuracy
+> 80%
+> 85%
+> 90%
+> Labeled samples
+
+(a) Food101 
+
+> Labeled samples
+> 0
+> 1000
+> 2000
+> 3000
+> 4000
+> 5000
+> 6000
+> 7000
+> CCMA
+> ProbCover
+> Alfamix
+> BADGE
+> Coreset
+> pBald
+> BALD
+> Margins
+> Entropy
+> Uncertainty
+> Random
+> Target Accuracy
+> 80%
+> 85%
+> 90%
+
+(b) DomainNet-Real 
+
+Figure 2. Labels required to reach target accuracies of 80% (blue), 85% (orange), and 90% (green) on Food101 and DomainNet-Real. Lower values indicate higher label effi-ciency. CCMA consistently reaches each accuracy threshold with fewer labeled samples than uncertainty- and coverage-based baselines, demonstrating improved sample efficiency across both datasets, especially in low-budget regimes. 5 10 15 
+
+1
+
+1.5
+
+2
+
+AL iteration 
+
+> μoverlap
+
+(a) CCMA overlap 
+
+5 10 15 
+
+0
+
+0.2
+
+0.4
+
+AL iteration 
+
+> dtop-1
+
+(b) Fraction Top-1 Disagreement 
+
+CIFAR100 Caltech101 Caltech256 Food101 
+
+Figure 3. CCMA diagnostics in the overlap and the fraction Top-1 disagreement between teacher and student. 
+
+other baselines, and achieves the highest accuracy on Caltech256 under low-budget settings ( < 2K samples) before plateauing as teacher–student disagreement collapses. In contrast, on Caltech101, CCMA re-mains competitive but only slightly exceeds Coreset and TypiClust, consistent with its coverage-limited nature. Overall, these findings reveal that CCMA 1,000 
+
+> 2,000
+> 3,000
+> 4,000
+> 5,000 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1
+
+Samples      
+
+> Accuracy
+> Random Uncertainty
+> Entropy Margins
+> Coreset BALD
+> pBALD BADGE
+> Alfa-mix Typiclust
+> CCMA
+
+(a) Caltech256 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000 0.6
+> 0.7
+> 0.8
+> 0.9
+
+Samples      
+
+> Accuracy  Random Uncertainty
+> Entropy Margins
+> Coreset BALD
+> pBALD BADGE
+> Alfa-mix Typiclust
+> CCMA
+
+(b) Caltech101 
+
+Figure 4. Test mean accuracy over 5 seeds for CCMA with other AL methods on Caltech256 and Caltech101 datasets. 
+
+excels when meaningful teacher–student discrepancy persists—providing semantically grounded uncertainty signals that guide efficient exploration. Additional diagnostics, including JS divergence and confidence trends, are provided in the supplemental material for completeness (see Appendix F). 
+
+4.4. Impact of hyperparameter choice 
+
+The experiments on Food101 and CIFAR100, shown in Fig. 5, reveal that increasing κ from 1 to 20 substan-tially enhances accuracy, especially when the sample size is small. Beyond κ = 20, however, the perfor-mance gain plateaus, as higher values (e.g., 30) produce nearly identical accuracy curves. This suggests that 
+
+κ = 20 effectively captures the benefits of oversam-pling, with larger values offering negligible additional improvements. The student’s performance is directly tied to the clarity of the teacher’s signals. Fig. 6 demonstrates that a lower temperature parameter ( τ = 0 .01) pro-vides stronger, more informative supervision, enabling the student to achieve higher accuracy with fewer sam-ples. Conversely, a higher τ (τ = 0 .30) dilutes the teacher’s guidance. However, as labeled size increases, 500            
+
+> 1,000
+> 1,500
+> 2,000
+> 0.6
+> 0.8
+> Samples
+> Accuracy
+> κ= 1
+> κ= 10
+> κ= 15
+> κ= 20
+> κ= 30 (a) Food101 500
+> 1,000
+> 1,500
+> 2,000
+> 0.6
+> 0.8
+> Samples
+> Accuracy
+> κ= 1
+> κ= 10
+> κ= 15
+> κ= 20
+> κ= 30 (b) CIFAR100
+
+Figure 5. Effect of oversampling factor κ.250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+
+Samples 
+
+> Accuracy
+
+τ = 0 .01 
+
+τ = 0 .30 
+
+Without teacher 
+
+Figure 6. Motivation for investigating the impact of the teacher model in CCMA method. We report the CCMA’s accuracy in three different regimes when the teacher is con-fident ( τ = 0 .01), weak ( τ = 0 .30), and disabled on the Food101 benchmark. 
+
+the student trained without teacher guidance eventu-ally reaches the same high-τ teacher’s performance. The student ultimately benefits from strong initial guidance, but may outgrow the teacher’s utility as the labeled set grows. This motivates CCMA’s hybrid rule, which uses teacher–student disagreement early and stu-dent entropy once the student becomes more reliable. 
+
+4.5. Ablation study 
+
+On CIFAR100, Food101, and DomainNet-Real, teacher–student mismatch is initially informative, and CCMA exploits it to achieve the best accuracy and label efficiency. Ablations show both subpool and final diversity matter, while a parameter-free con-fidence gate preserves performance without dataset-specific tuning. Query-time overhead is minimal, mak-ing CCMA a practical, data-aware active learner that knows when to trust the teacher and when to trust itself. 
+
+Setup. We evaluate five query variants on CI-0 0.5 1 1.5 2 2.5 3
+
+> 0.78
+> 0.8
+> 0.82
+> 0.84
+> 0.86
+> V1
+> V2
+> V3
+> V4
+> V5
+> Mean query time per round (s)
+> AULC
+
+Figure 7. AULC over round vs mean query time per round on the CIFAR100 dataset. 
+
+FAR100 (5 seeds; mean): V1 (ours) —selective subpool + final diversity; V2—no subpool + final diversity; V3—random subpool + final diversity; V4—selective subpool, no diversity; V5—no subpool, no diversity. We report the metric Area Under Learning Curve (AULC) [35] over rounds, along with the mean query time/round as shown in Fig. 7. Across all variants, the component that most di-rectly lifts accuracy is the final diversity stage. Remov-ing only diversity (V4) depresses AULC from 0.859 
+
+to 0.809 , indicating that disagreement scoring alone is not sufficient to prevent redundancy in selected batches. By contrast, retaining diversity while alter-ing the scope of scoring primarily affects efficiency .Scoring the full pool with diversity (V2) is markedly faster than our default (V1), but the curated subpool in V1 yields a clear accuracy margin: + 0.031 AULC, at the cost of longer query time (3.02 s). A large ran-dom subpool with diversity (V3) provides a particu-larly attractive trade-off, achieving 0.835 AULC at only 0.51 s , which is roughly 6 × faster than V1 for a modest AULC loss of 2.4% . The ablations without diversity (V4, V5) consistently underperform their di-versified counterparts (V2, V3), reinforcing that cross-modal disagreement must be paired with within-batch coverage to convert informative uncertainty into label efficiency. Overall, the evidence supports the view that 
+
+diversity provides the accuracy gains while curated sub-pooling controls scale : our full method (V1) achieves the highest accuracy, while V3 provides the best op-tion under strict time budgets. 
+
+## 5. Conclusion 
+
+We proposed Conformal Cross-Modal Acquisition (CCMA) , an active learning framework that combines conformal teacher–student uncertainty with diversity-aware selection for efficient dataset curation. By lever-aging pretrained VLM guidance and calibrated predic-tion sets, CCMA provides more reliable selection sig-nals than vision-only baselines, yielding strong label efficiency across diverse benchmarks. Our findings also reveal when multimodal guidance is beneficial versus when coverage dominates, offering actionable insight into deploying VLMs for real-world AL. 
+
+Future work. We aim to extend CCMA to emerging-class and cross-domain settings, and to explore adap-tive teacher–student co-learning for more scalable mul-timodal active learning. 
+
+## References 
+
+[1] Anastasios N. Angelopoulos and Stephen Bates. Con-formal prediction: A gentle introduction. Foundations and Trends ® in Machine Learning , 16(4):494–591, 2023. 1 [2] Jordan Ash and Ryan P Adams. On warm-starting neural network training. Advances in neural infor-mation processing systems (NeurIPS) , 33:3884–3894, 2020. 12 [3] Wonho Bae, Gabriel L. Oliveira, and Danica J. Suther-land. Uncertainty herding: One active learning method for all label budgets. In International Con-ference on Learning Representations (ICLR) , 2025. 2 [4] Jihwan Bang, Sumyeong Ahn, and Jae-Gil Lee. Ac-tive prompt learning in vision language models. In 
+
+IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 27004–27014, 2024. 1, 3 [5] Javad Zolfaghari Bengar, Joost van de Weijer, Bart-lomiej Twardowski, and Bogdan Raducanu. Reduc-ing label effort: Self-supervised meets active learning. In IEEE/CVF International Conference on Computer Vision (CVPR) , pages 1631–1639, 2021. 1, 3 [6] Florian Bordes, Richard Yuanzhe Pang, Anurag Ajay, Alexander C Li, Adrien Bardes, Suzanne Petryk, Os-car Ma˜ nas, Zhiqiu Lin, Anas Mahmoud, Bargav Ja-yaraman, et al. An introduction to vision-language modeling. arXiv preprint arXiv:2405.17247 , 2024. 1, 3[7] Lukas Bossard, Matthieu Guillaumin, and Luc Van Gool. Food-101 – mining discriminative compo-nents with random forests. In European Conference on Computer Vision (ECCV) , pages 446–461, 2014. 5, 6, 19 [8] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh, Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Ma-teusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. In Advances in Neural Informa-tion Processing Systems (NeurIPS) , pages 1877–1901, 2020. 1 [9] Liangyu Chen, Yutong Bai, Siyu Huang, Yongyi Lu, Bihan Wen, Alan Yuille, and Zongwei Zhou. Mak-ing your first choice: to address cold start problem in medical active learning. In Medical Imaging with Deep Learning , pages 496–525, 2024. 1 [10] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In 
+
+International Conference on Learning Representations (ICLR) , 2021. 5 [11] Talfan Evans, Shreya Pathak, Hamza Merzic, Jonathan Schwarz, Ryutaro Tanno, and Olivier JHenaff. Bad students make great teachers: Active learning accelerates large-scale visual understanding. In European Conference on Computer Vision (ECCV) ,pages 264–280, 2024. 1 [12] Reza Zanjirani Farahani and Masoud Hekmatfar. Fa-cility location: Concepts, Models, algorithms and case studies . Springer Science & Business Media, 2009. 2 [13] Li Fei-Fei, Rob Fergus, and Pietro Perona. One-shot learning of object categories. IEEE Transactions on Pattern Analysis and Machine Intelligence , 28(4):594– 611, 2006. 5 [14] Yarin Gal, Riashat Islam, and Zoubin Ghahramani. Deep Bayesian active learning with image data. In In-ternational Conference on Machine Learning (ICML) ,pages 1183–1192, 2017. 2 [15] Gregory Griffin, Alex Holub, Pietro Perona, et al. Caltech-256 object category dataset. Technical report, California Institute of Technology Pasadena, 2007. 5 [16] Sanket Rajan Gupte, Josiah Aklilu, Jeffrey J Nirschl, and Serena Yeung-Levy. Revisiting active learning in the era of vision foundation models. Transactions on Machine Learning Research (TMLR) , 2024. 1, 3, 5 [17] Yeho Gwon, Sehyun Hwang, Hoyoung Kim, Jungseul Ok, and Suha Kwak. Enhancing cost efficiency in ac-tive learning with candidate set query. Transactions on Machine Learning Research (TMLR) , 2025. 3 [18] Guy Hacohen, Avihu Dekel, and Daphna Weinshall. Active learning on a budget: Opposite strategies suit high and low budgets. In International Conference on Machine Learning (ICML) , pages 8175–8195, 2022. 2, 16 [19] Neil Houlsby, Ferenc Huszar, Zoubin Ghahramani, and M´ at´ e Lengyel. Bayesian active learning for classifi-cation and preference learning. Computing Research Repository (CoRR) , 2011. 2 [20] C´ edric Jung, Shirin Salehi, and Anke Schmeink. Active learning with alternating acquisition functions: Bal-ancing the exploration-exploitation dilemma. In 2024 IEEE International Conference on Big Data (Big-Data) , pages 5755–5764, 2024. 2 [21] Vishal Kaushal, Rishabh Iyer, Suraj Kothawade, Ro-han Mahadev, Khoshrav Doctor, and Ganesh Ramakr-ishnan. Learning from less data: A unified data subset selection and active learning framework for computer vision. In IEEE Winter Conference on Applications of Computer Vision (WACV) , pages 1289–1299, 2019. 1 [22] Zahra Kharazian, Tony Lindgren, Sindri Magnusson, and Henrik Bostr¨ om. Copal: Conformal prediction in active learning an algorithm for enhancing remaining useful life estimation in predictive maintenance. In 
+
+Thirteenth Symposium on Conformal and Probabilistic Prediction with Applications , pages 195–217, 2024. 1, 2[23] Andreas Kirsch, Sebastian Farquhar, Parmida Atighe-hchian, Andrew Jesson, Fr´ ed´ eric Branchaud-Charron, and Yarin Gal. Stochastic batch acquisition: A sim-ple baseline for deep active learning. Transactions on Machine Learning Research (TMLR) , 2023. 2 [24] Alex Krizhevsky. Learning multiple layers of features from tiny images. 2009. 5, 6, 19 [25] David D. Lewis and Jason Catlett. Heterogenous un-certainty sampling for supervised learning. In Inter-national Conference on International Conference on Machine Learning (ICML) , page 148–156, 1994. 2 [26] Xiongquan Li, Xukang Wang, Xuhesheng Chen, Yao Lu, Hongpeng Fu, and Ying Cheng Wu. Unlabeled data selection for active learning in image classifica-tion. Scientific Reports , 14(1):424, 2024. 1 [27] L´ azaro Em´ ılio Makili, Jes´ us A. Vega S´ anchez, and Se-basti´ an Dormido-Canto. Active learning using con-formal predictors: Application to image classification. 
+
+Fusion Science and Technology , 62(2):347–355, 2012. 2[28] Sergio Matiz and Kenneth E. Barner. Conformal pre-diction based active learning by linear regression op-timization. Neurocomputing , 388:157–169, 2020. 1, 2, 3[29] Sayak Nag, Udita Ghosh, Calvin-Khang Ta, Sarosij Bose, Jiachen Li, and Amit K Roy-Chowdhury. Con-formal prediction and mllm aided uncertainty quantifi-cation in scene graph generation. In IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) , pages 11676–11686, 2025. 1 [30] Maxime Oquab, Timoth´ ee Darcet, Th´ eo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel HAZIZA, Francisco Massa, Alaaeldin El-Nouby, Mido Assran, Nicolas Ballas, Wo-jciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra, Michael Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Herve Jegou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bo-janowski. DINOv2: Learning robust visual features without supervision. Transactions on Machine Learn-ing Research (TMLR) , 2024. 1, 5, 12, 13 [31] Amin Parvaneh, Ehsan Abbasnejad, Damien Teney, Gholamreza (Reza) Haffari, Anton van den Hengel, and Javen Qinfeng Shi. Active learning by feature mix-ing. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 12237–12246, 2022. 2 [32] Xingchao Peng, Qinxun Bai, Xide Xia, Zijun Huang, Kate Saenko, and Bo Wang. Moment matching for multi-source domain adaptation. In IEEE Interna-tional Conference on Computer Vision (ICCV) , pages 1406–1415, 2019. 5, 6, 19 [33] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning trans-ferable visual models from natural language supervi-sion. In International Conference on Machine Learn-ing (ICML) , pages 8748–8763, 2021. 1, 2, 5, 12 [34] Aditya Ramesh, Mikhail Pavlov, Gabriel Goh, Scott Gray, Chelsea Voss, Alec Radford, Mark Chen, and Ilya Sutskever. Zero-shot text-to-image generation. In International Conference on Machine Learning (ICML) , pages 8821–8831, 2021. 1 [35] Oscar Reyes, Abdulrahman H Altalhi, and Sebasti´ an Ventura. Statistical comparisons of active learning strategies over multiple datasets. Knowledge-Based Systems , 145:274–288, 2018. 8 [36] Nicholas Roy and Andrew McCallum. Toward optimal active learning through sampling estimation of error reduction. In International Conference on Machine Learning (ICML) , pages 441–448, 2001. 2 [37] Bardia Safaei and Vishal M Patel. Active learning for vision-language models. In IEEE/CVF Winter Con-ference on Applications of Computer Vision (WACV) ,pages 4902–4912, 2025. 3, 4 [38] Shirin Salehi and Anke Schmeink. Is active learning green? an empirical study. In IEEE International Conference on Big Data (BigData) , pages 3823–3829, 2023. 1 [39] Shirin Salehi and Anke Schmeink. Data-centric green artificial intelligence: A survey. IEEE Transactions on Artificial Intelligence , 5:1973–1989, 2023. 1 [40] Ozan Sener and Silvio Savarese. Active learning for convolutional neural networks: A core-set approach. In 
+
+International Conference on Learning Representations (ICLR) , 2018. 2 [41] Burr Settles. Active learning literature survey. Com-puter Sciences Technical Report 1648, University of Wisconsin–Madison, 2009. 2 [42] Glenn Shafer and Vladimir Vovk. A tutorial on confor-mal prediction. Journal of Machine Learning Research (JMLR) , 9(3), 2008. 1, 2 [43] Julio Silva-Rodr´ ıguez, Ismail Ben Ayed, and Jose Dolz. Conformal prediction for zero-shot models. In 
+
+IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 19931–19941, 2025. 1[44] Alex Tamkin, Dat Nguyen, Salil Deshpande, Jesse Mu, and Noah Goodman. Active learning helps pretrained models learn the intended task. Advances in Neural Information Processing Systems (NeurIPS) , 35:28140– 28153, 2022. 1 [45] Vladimir Vovk, Alex Gammerman, and Glenn Shafer. 
+
+Algorithmic Learning in a Random World . Springer US, 2005. 1, 2 [46] Dan Wang and Yi Shang. A new active labeling method for deep learning. International Joint Con-ference on Neural Networks (IJCNN) , pages 112–119, 2014. 2 [47] Jiangyi Wang and Na Zhao. Uncertainty meets di-versity: A comprehensive active learning framework for indoor 3d object detection. In IEEE/CVF Con-ference on Computer Vision and Pattern Recognition (CVPR) , pages 20329–20339, 2025. 2 [48] Ofer Yehuda, Avihu Dekel, Guy Hacohen, and Daphna Weinshall. Active learning through a covering lens. 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 35:22354–22367, 2022. 2, 16 [49] Tianxiang Yin, Ningzhong Liu, and Han Sun. Towards cost-effective learning: A synergy of semi-supervised and active learning. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) ,pages 10163–10172, 2025. 3 Conformal Cross-Modal Active Learning 
+
+## Supplementary Material 
+
+## A. Implementation details 
+
+CIFAR100 contains 60K natural images (32 ×32) across 100 fine-grained categories, providing a standard benchmark for image classification under limited-label regimes. Food101 consists of 101K high-resolution food images with substantial intra-class variation. 
+
+DomainNet-Real is a subset of the large-scale Do-mainNet benchmark, with real-world images from 345 categories, and is used to assess robustness and cross-domain generalization. Caltech101 includes ∼9K im-ages from 101 object categories with relatively clean backgrounds, while Caltech256 extends this to 30K images over 256 categories with greater intra-class di-versity. At each active learning round, the acquisition batch size is set to the number of classes: B = 100 for CIFAR100, B = 101 for Food101, and B = 345 for DomainNet-Real. We follow a fully cold-start pro-tocol [2]: the student classifier is reinitialized and re-trained from scratch at every acquisition step. Both the VLM teacher and the student’s vision backbone remain frozen throughout; features for all datasets are extracted once via a single forward pass and subse-quently cached for all experiments. 
+
+## B. Text feature extraction from VLMs 
+
+For all experiments, the teacher model is a frozen CLIP ViT-L/14 [33] encoder that provides both image and text representations. To obtain class-wise text embed-dings, we follow the CLIP text encoder pipeline and construct prompts for each dataset category using mul-tiple natural language templates. Given a class name 
+
+c, we build prompts of the form “a photo of a {class }”, “a bright photo of a {class }”, etc. Each prompt is to-kenized and encoded with the CLIP text encoder, and the final class embedding is obtained by averaging the normalized embeddings across all templates. 
+
+Prompt templates. Unless otherwise stated, we use the following default set: 
+
+‘‘a photo of a {class }’’ ‘‘a photo of the {class }’’ ‘‘a blurry photo of a {class }’’ ‘‘a photo of one {class }’’ ‘‘a close-up photo of a {class }’’ ‘‘a rendition of a {class }’’ ‘‘a bright photo of a {class }’’ ‘‘a low resolution photo of a {class }’’ ‘‘a cropped photo of a {class }’’ ‘‘a clean photo of a {class }’’ 
+
+These templates follow the standard CLIP zero-shot classification protocol [33], ensuring semantically rich and diverse text representations. 
+
+Dataset-specific class mappings. To handle datasets with different class label formats (e.g., nu-meric labels or textual names), we extract class names using a unified loader: 
+
+• CIFAR100, Caltech101, Caltech256, Food101: class names are directly obtained from the torchvision library. 
+
+• DomainNet-Real: we normalize directory-based labels and map any non-alphanumeric identifiers via a lookup file. 
+
+• Custom datasets: if a mapping file (.txt) or ex-plicit class list is provided, the loader automatically uses it; otherwise, class names are inferred from folder names or dataset metadata. 
+
+Feature storage. For each dataset, the resulting text features are saved under the same feature cache as im-age embeddings with shape ( C, d ), where C is the num-ber of classes and d is the CLIP embedding dimension. Each embedding is ℓ2-normalized and averaged across all templates, providing stable, semantically grounded class prototypes. 
+
+## C. Image feature extraction 
+
+To enable computationally efficient and reproducible active learning, CCMA operates entirely in a frozen feature space. For all experiments, image embeddings are precomputed using pretrained vision backbones and stored in a shared cache. These embeddings are then used to train a simple linear classifier (student head) without updating the backbone weights. 
+
+Backbones. We employ pretrained models from stan-dard vision foundations: DINOv2 [30] for the student and CLIP ViT-L/14 [33] for the teacher. The student model serves as the vision-only encoder producing em-beddings z(x), while the teacher’s CLIP image encoder produces multimodal-aligned embeddings ϕ(x). Both backbones remain frozen throughout all active learning iterations. 
+
+Feature extraction and caching. Each dataset split (train/test) is passed through the frozen backbone once to extract image features. Given an image xi, the fea-ture vector fi = ϕ(xi) is computed after the global pooling layer and ℓ2-normalized. All extracted features and their class labels are stored in an HDF5 cache. This allows CCMA to reuse embeddings across rounds, significantly reducing compute time. 
+
+Linear classifier training. During active learning, only a linear classification head W ∈ RC×D is trained on top of the frozen student features. This design iso-lates the acquisition strategy from representation learn-ing, ensuring that improvements stem purely from bet-ter sample selection rather than feature fine-tuning. 
+
+## D. Active learning training on the stu-dent model 
+
+Architecture. The student model is a simple linear classifier hc(x) = W ψ θ
+
+(z(x))+b trained on top of the frozen DINOv2 [30] features. The classifier includes an optional dropout layer for Monte Carlo sampling and uncertainty estimation. No gradients are propagated to the backbone, making each training round efficient and stable. 
+
+Training loop. During each active learning iteration: 1. The student model is trained on the currently la-beled pool L using cross-entropy loss. 2. Dropout-based sampling and conformal calibration yield per-sample predictive sets Γ S (x) and Γ T (x). 3. The disagreement between teacher and student pos-teriors guides acquisition scoring. 4. Selected samples are labeled and added to L for the next round. 
+
+Prediction modes. The model supports multiple in-ference modes: 
+
+• "probs" – outputs softmax probabilities for uncertainty-based scoring. 
+
+• "embed" – returns intermediate embeddings for feature-space clustering. 
+
+• "grad" – computes gradient embeddings (e.g., for BADGE-style acquisition). This flexibility allows fair comparisons with diverse ac-tive learning strategies while maintaining a consistent linear classifier backbone. 
+
+## E. Implementation details of split-conformal calibration 
+
+In the main paper (Section 3.3), we introduced two cal-ibrated set predictors (one for the teacher ( m = T ) and one for the student ( m = S)) based on split-conformal calibration. Here, we provide additional details on the implementation, parameter settings, and rationale for the chosen target set sizes. 
+
+Nonconformity scores and calibration. For both predictors, the nonconformity score is defined as 
+
+am(x, c ) = − log pm(c | x),
+
+where pm(c | x) denotes the softmax probability as-signed to class c by model m ∈ { T, S }. A calibra-tion split Ccal (disjoint from the active pool) is used to compute empirical thresholds qm such that either the expected set size or the coverage constraint is satisfied. 
+
+Size-targeted calibration. We target a desired mean prediction set size sm by solving for the smallest thresh-old qm that satisfies 1
+
+|C cal |
+
+∑
+
+> (x,y )∈C cal
+
+|{ c : am(x, c ) ≤ qm}| ≈ sm.
+
+This threshold qm is obtained via bisection search on the sorted nonconformity scores, ensuring the average conformal set size matches the target sm.
+
+Practical thresholds. In all experiments, we fix the target set sizes as: 
+
+sS = 5 , sT = 3 .
+
+That is, the student predictor Γ S (x) includes the top 5 most probable classes on average, while the teacher predictor Γ T (x) includes the top 3. These choices were determined empirically to balance informativeness and calibration stability: - smaller sT yields sharper and more confident teacher sets, focusing guidance on the most relevant semantic hypotheses; - slightly larger sS
+
+encourages exploration and helps the student capture broader class uncertainty during early rounds. The calibrated thresholds qm are recomputed at each active learning iteration using the current model’s predictions on the calibration split, ensuring adaptivity as the student improves. 
+
+Coverage and reliability. Although our setup tar-gets fixed expected set sizes, we verify that the result-ing coverage (the fraction of samples whose true label lies in Γ m(x)) remains high across rounds: typically 0.90–0 .95 for the teacher and 0 .85–0 .90 for the student. This behavior is consistent with the conformal guaran-tee that for monotone am, quantile-based thresholds yield calibrated coverage independent of data distribu-tion. In summary, our conformal calibration procedure in-troduces no additional learnable parameters and incurs negligible computational overhead. The fixed target set sizes sT =3 and sS =5 were consistently used across all datasets (CIFAR-100, Food-101, DomainNet-Real, and Caltech variants) and yielded stable, reproducible conformal thresholds for both teacher and student pre-dictors. 
+
+## F. Identifying regimes where teacher sig-nals no longer help 
+
+A core challenge in multimodal active learning is de-termining when a VLM teacher provides meaningful 5 10 15 
+
+1
+
+1.5
+
+2
+
+AL iteration 
+
+> μoverlap (a) Mean CCMA overlap
+
+5 10 15 
+
+5
+
+6
+
+7
+
+8
+
+AL iteration  
+
+> Symmetric diff  |ΓT ∆Γ S |(b) Mean CCMA symmetric difference
+
+5 10 15 
+
+0
+
+0.2
+
+0.4
+
+AL iteration 
+
+> dtop-1
+
+CIFAR100 
+
+Caltech101 
+
+Caltech256 
+
+Food101 (c) Mean fraction Top-1 Disagreement 
+
+Figure 8. CCMA diagnostic curves across AL iterations. (a) Overlap between teacher and student conformal sets, measuring the agreement in predicted label supports. Higher overlap indicates stronger cross-modal consistency. (b) Symmetric differ-ence between the two sets, capturing the size of their disagreement region. Larger values reflect a persistent teacher–student mismatch. (c) Top-1 disagreement rate, the probability that the teacher and student assign different most-likely classes. These metrics reveal how the informativeness of teacher–student disagreement evolves: datasets like CIFAR100 and Food101 exhibit sustained mismatch (useful for CCMA), whereas Caltech101/256 align quickly, reducing the value of cross-modal uncertainty and shifting the problem toward coverage-based selection. 5 10 15 
+
+0.2
+
+0.3
+
+0.4
+
+AL iteration 
+
+> JS divergence
+> (a) JS Divergence 5
+> 10
+> 15
+
+0.7
+
+0.8
+
+0.9
+
+1
+
+AL iteration 
+
+> Student Top-1 confidence
+
+CIFAR100 
+
+Caltech101 
+
+Caltech256 
+
+Food101 (b) Student Top-1 Confidence 5
+
+> 10
+> 15
+
+0.45 
+
+0.5
+
+0.55 
+
+0.6
+
+0.65 
+
+AL iteration  
+
+> Teacher Top-1 confidence (c) Teacher Top-1 Confidence
+
+Figure 9. Teacher–student confidence dynamics across AL iterations. (a) JS divergence between teacher and student posteriors restricted to their shared support, quantifying cross-modal disagreement. (b) Student top-1 confidence, showing how quickly the student becomes certain as labeled data accumulates. (c) The teacher’s top-1 confidence, which remains relatively stable across iterations since the teacher is frozen. These curves highlight the regimes where CCMA is most effective: datasets like CIFAR100 and Food101 maintain moderate teacher–student disagreement (useful for cross-modal query scoring), whereas Caltech101/256 exhibit rapid confidence saturation and early agreement, reducing the benefit of disagreement-based acquisition. 
+
+guidance. To answer this, we track four complemen-tary diagnostics across AL iterations: (i) CCMA set overlap μoverlap = |ΓT ∩ ΓS | (Fig. 8a), (ii) symmetric difference |ΓT △ΓS | (Fig. 8b), (iii) Top-1 disagreement 
+
+dtop-1 (Fig. 8c), and (iv) JS divergence and predictive confidence trends (Fig. 9). 
+
+CIFAR100 and Food101. Across early and mid AL rounds, both disagreement and JS divergence de-cay gradually (Figs. 8c and 9a), indicating that the teacher continues to provide complementary informa-tion as the student improves. Overlap steadily in-creases while symmetric difference decreases (Figs. 8a 1,000 2,000 3,000 4,000 5,000 6,000         
+
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Samples
+> Accuracy
+> κ= 1
+> κ= 10
+> κ= 15
+> κ= 20
+> κ= 30 Figure 10. Effect of oversampling factor κon Domain-NetReal
+
+and 8b), showing convergence in a content-aware man-ner: the student learns semantics that the teacher ini-tially knows better. This persistent teacher–student mismatch keeps multimodal uncertainty informative, enabling CCMA to maintain strong gains throughout the budget. 
+
+Caltech101 and Caltech256. In contrast, these datasets display a fast alignment regime . The student rapidly becomes highly confident ( > 0.95 by ∼1k la-bels; Fig. 9b), and the teacher’s confidence remains nearly flat (Fig. 9c), suggesting that both models find Caltech classes relatively easy. JS divergence and top-1 disagreement collapse early (Figs. 9a and 8c), meaning the teacher adds almost no new information. Here, the symmetric difference stabilizes at a low level, and the overlap saturates quickly (Figs. 8b and 8a), reveal-ing that selection becomes coverage-dominated rather than uncertainty-driven. Accordingly, clustering-based methods outperform CCMA in later rounds. These diagnostics expose a previously unaddressed insight: VLM guidance is most valuable in regimes with persistent semantic mismatch . Once the teacher is ef-fectively “oracle-like,” relying on teacher–student dis-agreement harms selection efficiency. This transforms CCMA into a decision rule : use cross-modal con-formal uncertainty when divergence remains high, else transition toward pure coverage as mismatch vanishes. 
+
+## G. Impact of hyperparameter choice 
+
+Figure 10 illustrates the sensitivity of CCMA to the oversampling factor κ on the DomainNet-Real dataset. Recall that κ controls how many top-ranked candidates (by disagreement score) are retained before the final diversity-based clustering. Increasing κ enlarges this candidate set, potentially improving selection diversity Variant AULC Final@R Time/rd (s) AULC/s V1 0.859 0.915 3.015 0.285 V2 0.828 0.899 0.780 1.061 V3 0.835 0.906 0.512 1.629 V4 0.809 0.896 2.929 0.276 V5 0.793 0.885 0.583 1.360   
+
+> Table 2. Mean over 5 seeds. Final accuracy at the last round (Final@R), AULC computed over rounds, and AULC per second on the CIFAR100 dataset.
+
+at the cost of additional computation. We observe that performance improves significantly when moving from 
+
+κ = 1 (no oversampling) to κ = 10, confirming that moderate oversampling effectively stabilizes selection and enhances early learning. However, beyond κ = 10, accuracy gains saturate and slightly decline, indicating diminishing returns and possible noise amplification in large candidate pools. This trend contrasts with CI-FAR100 and Food101, where higher κ values (15–20) yielded more consistent improvements. Overall, κ = 10 provides the best trade-off between accuracy and effi-ciency for DomainNet-Real, balancing exploration and stability during sample acquisition. 
+
+## H. Ablation details 
+
+Table 2 reports the average performance across five seeds on CIFAR100, comparing several CCMA variants (V1–V5) that differ in their subpooling or diversity-selection configurations. We evaluate each variant in terms of the Area Under the Learning Curve (AULC), final accuracy at the last round (Final@R), mean com-putation time per active learning round, and overall efficiency measured as AULC per second. As shown, V1 achieves the highest overall accuracy and AULC, in-dicating the strongest acquisition quality, but requires the longest runtime due to full conformal and clustering operations. Conversely, lightweight variants (e.g., V3 and V5) attain slightly lower accuracy but significantly higher time-normalized efficiency (AULC/s), demon-strating that simplified selection can substantially ac-celerate active learning without drastic performance loss. These results emphasize that CCMA offers a con-trollable balance between computational cost and se-lection effectiveness, enabling adaptation to different practical budgets and latency constraints. 
+
+## I. All the experiments 
+
+For completeness, we attempted to include all rep-resentative active learning baselines in our experi-ments. However, two recent clustering-based ap-proaches, TypiClust [18] and ProbCover [48], could not be consistently evaluated across all datasets due to inherent constraints in their selection logic. In ad-dition, we conducted supplementary experiments by varying the teacher–student backbone configurations, specifically using DINOv2 ViT-L/14 and DINOv2 ViT-g/14 as students, and CLIP ViT-L/14 and 
+
+CLIP ViT-g/14 as teachers, to assess the robustness of CCMA across architectures. The corresponding re-sults are presented in Fig. 11, 12, 13, and 14. 
+
+TypiClust. This method clusters the unlabeled pool in feature space and prioritizes typical samples from dense regions for annotation. While effective at early stages with small budgets, TypiClust progressively de-pletes its set of available unlabeled “typical” samples, as the clustering density sharply decreases with each it-eration. Consequently, after several rounds (especially on larger datasets such as CIFAR100, Food101, and DomainNet-Real), the algorithm plateaus early and fails to generate new acquisition batches once all clus-ter centroids have been annotated. In such cases, Typ-iClust effectively terminates before reaching the full query budget, preventing a fair comparison in later ac-tive learning rounds. 
+
+ProbCover. ProbCover selects samples that maxi-mize coverage of high-uncertainty regions under a prob-abilistic diversity criterion. Its selection mechanism re-lies on computing representative subsets from the en-tire unlabeled pool, which becomes unstable or infea-sible when the pool is too small or lacks sufficient di-versity. This limitation is particularly pronounced in smaller datasets such as Caltech101 and Caltech256, where, after several acquisition rounds, the remaining unlabeled samples no longer satisfy the probabilistic coverage constraints. As a result, the method halts be-fore completing all iterations, leading to missing curves in our plots for these datasets. 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+
+Samples      
+
+> Accuracy
+> Random Uncertainty
+> Entropy Margins
+> Coreset BALD
+> pBALD BADGE
+> Alfa-mix CCMA
+> (a) CIFAR100 250
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+
+Samples      
+
+> Accuracy
+> Random Uncertainty
+> Entropy Margins
+> Coreset BALD
+> pBALD BADGE
+> Alfa-mix CCMA
+> (b) Food101 1,000
+> 2,000
+> 3,000
+> 4,000
+> 5,000
+> 6,000
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+
+Samples      
+
+> Accuracy
+> Random Uncertainty
+> Entropy Margins
+> Coreset BALD
+> pBALD BADGE
+> Alfa-mix CCMA
+> (c) DomainNet-Real
+
+Figure 11. Test mean accuracy over 5 seeds for CCMA with DINOv2 ViT-g14 as a student model and CLIP ViT-L14 as a teacher model with other AL methods on CIFAR100, Food101, and DomainNet-Real datasets. 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA (a) CIFAR100 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(b) Food101 1,000 
+
+> 2,000
+> 3,000
+> 4,000
+> 5,000
+> 6,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(c) DomainNet-Real 
+
+Figure 12. Test mean accuracy over 5 seeds for CCMA with DINOv2 ViT-g14 as a student model and CLIP ViT-g14 as a teacher model with other AL methods on CIFAR100, Food101, and DomainNet-Real datasets. 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(a) CIFAR100 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(b) Food101 1,000 
+
+> 2,000
+> 3,000
+> 4,000
+> 5,000
+> 6,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(c) DomainNet-Real 
+
+Figure 13. Test mean accuracy over 5 seeds for CCMA with DINOv2 ViT-L14 as a student model and CLIP ViT-L14 as a teacher model with other AL methods on CIFAR100, Food101, and DomainNet-Real datasets. 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA (a) CIFAR100 250 
+
+> 500
+> 750
+> 1,000
+> 1,250
+> 1,500
+> 1,750
+> 2,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+0.9
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(b) Food101 1,000 
+
+> 2,000
+> 3,000
+> 4,000
+> 5,000
+> 6,000
+
+0.5
+
+0.6
+
+0.7
+
+0.8
+
+Samples 
+
+> Accuracy
+
+Random Uncertainty 
+
+Entropy Margins 
+
+Coreset BALD 
+
+pBALD BADGE 
+
+Alfa-mix CCMA 
+
+(c) DomainNet-Real 
+
+Figure 14. Test mean accuracy over 5 seeds for CCMA with DINOv2 ViT-L14 as a student model and CLIP ViT-g14 as a teacher model with other AL methods on CIFAR100, Food101, and DomainNet-Real datasets. Table 3. Mean accuracy averaged over 5 runs along with the standard deviation at AL iterations t for datasets CIFAR100 [24], Food101 [7], and DomainNet-Real [32] when utilizing the random initialization with DINOv2 ViT-g14 as the feature ex-tractor. Bold values represent the first-place mean accuracy at iteration t with the second-place value underlined. 
+
+t Random Uncertainty Entropy Margins BALD pBALD Coreset BADGE Alfa-mix ProbCover CCMA (ours) 
+
+CIFAR100 1 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.2 48 .0 ± 2.22 64 .2 ± 2.4 62 .5 ± 2.4 56 .6 ± 3.0 69 .6 ± 0.5 67 .3 ± 1.0 71 .0 ± 1.3 64 .5 ± 2.1 71 .6 ± 1.1 64 .7 ± 2.8 70 .4 ± 6.6 67 .1 ± 1.53 73 .3 ± 2.1 69 .8 ± 1.6 61 .2 ± 3.4 78 .7 ± 1.0 75 .9 ± 0.9 79 .9 ± 0.7 74 .2 ± 1.6 79 .7 ± 1.0 73 .1 ± 2.3 74 .4 ± 6.6 78 .6 ± 1.34 78 .7 ± 1.6 74 .4 ± 1.8 67 .0 ± 1.2 82 .6 ± 1.1 80 .4 ± 0.5 83 .9 ± 0.8 77 .9 ± 0.9 84 .1 ± 0.6 78 .8 ± 1.4 77 .0 ± 5.8 83 .4 ± 1.25 81 .3 ± 0.5 78 .7 ± 1.1 71 .2 ± 1.1 85 .2 ± 1.1 82 .7 ± 0.7 85 .9 ± 0.5 80 .3 ± 0.9 86 .3 ± 0.6 82 .2 ± 0.5 78 .7 ± 5.8 85 .6 ± 0.96 83 .1 ± 0.4 81 .5 ± 0.9 76 .2 ± 0.2 86 .7 ± 0.9 84 .1 ± 0.6 87 .3 ± 0.3 82 .1 ± 0.9 87 .2 ± 0.3 84 .6 ± 1.0 79 .5 ± 5.4 87 .3 ± 0.77 85 .1 ± 0.6 83 .1 ± 0.6 78 .6 ± 2.3 87 .4 ± 0.7 84 .8 ± 0.7 88 .0 ± 0.6 83 .2 ± 1.2 87 .8 ± 0.3 86 .5 ± 0.8 80 .3 ± 5.2 88 .1 ± 0.68 85 .8 ± 0.7 84 .2 ± 0.9 80 .7 ± 2.2 87 .9 ± 0.7 85 .2 ± 0.4 88 .4 ± 0.3 84 .3 ± 1.0 88 .5 ± 0.4 87 .7 ± 0.8 81 .7 ± 4.6 88 .7 ± 0.69 86 .4 ± 0.5 85 .2 ± 0.6 82 .7 ± 1.2 88 .6 ± 0.7 86 .1 ± 0.3 89 .1 ± 0.2 85 .0 ± 0.8 89 .0 ± 0.2 88 .6 ± 0.4 82 .0 ± 4.4 89 .2 ± 0.510 87 .0 ± 0.4 86 .0 ± 0.5 84 .2 ± 1.1 89 .1 ± 0.6 86 .5 ± 0.3 89 .4 ± 0.3 85 .7 ± 0.6 89 .5 ± 0.3 88 .8 ± 0.2 83 .4 ± 3.5 89 .6 ± 0.511 87 .6 ± 0.7 86 .5 ± 0.8 85 .2 ± 0.7 89 .5 ± 0.4 86 .9 ± 0.4 89 .7 ± 0.1 86 .2 ± 0.6 89 .8 ± 0.3 89 .4 ± 0.2 84 .0 ± 3.6 89 .9 ± 0.512 88 .0 ± 0.4 87 .0 ± 0.9 86 .1 ± 0.6 89 .7 ± 0.6 87 .1 ± 0.6 90 .0 ± 0.2 86 .6 ± 0.8 90 .1 ± 0.2 89 .8 ± 0.2 84 .7 ± 3.2 90 .2 ± 0.313 88 .4 ± 0.4 87 .4 ± 0.9 86 .6 ± 0.6 90 .0 ± 0.3 87 .6 ± 0.5 90 .1 ± 0.3 87 .1 ± 1.0 90 .5 ± 0.2 90 .0 ± 0.3 85 .2 ± 2.9 90 .5 ± 0.414 88 .7 ± 0.2 88 .0 ± 0.6 87 .3 ± 0.4 90 .3 ± 0.2 87 .9 ± 0.5 90 .3 ± 0.1 87 .5 ± 0.9 90 .6 ± 0.0 90 .2 ± 0.2 85 .5 ± 2.8 90 .8 ± 0.415 88 .9 ± 0.3 88 .4 ± 0.6 87 .6 ± 0.3 90 .7 ± 0.1 88 .2 ± 0.2 90 .5 ± 0.3 87 .8 ± 0.8 90 .7 ± 0.2 90 .5 ± 0.2 85 .9 ± 2.7 90 .9 ± 0.416 89 .2 ± 0.2 88 .9 ± 0.8 87 .8 ± 0.5 90 .7 ± 0.2 88 .4 ± 0.3 90 .6 ± 0.2 88 .3 ± 0.8 90 .8 ± 0.1 90 .6 ± 0.2 86 .3 ± 2.6 91 .1 ± 0.417 89 .5 ± 0.1 89 .1 ± 0.8 88 .4 ± 0.4 91 .1 ± 0.2 89 .0 ± 0.2 90 .9 ± 0.2 88 .5 ± 0.7 91 .1 ± 0.1 90 .8 ± 0.2 86 .7 ± 2.3 91 .3 ± 0.318 89 .4 ± 0.1 89 .3 ± 0.6 88 .9 ± 0.5 91 .0 ± 0.2 89 .1 ± 0.3 91 .0 ± 0.1 88 .7 ± 0.7 91 .1 ± 0.1 90 .9 ± 0.1 86 .9 ± 2.1 91 .4 ± 0.219 89 .7 ± 0.2 89 .9 ± 0.6 89 .1 ± 0.5 91 .1 ± 0.2 89 .3 ± 0.3 91 .2 ± 0.1 88 .8 ± 0.8 91 .2 ± 0.1 91 .0 ± 0.1 87 .5 ± 1.9 91 .4 ± 0.320 89 .8 ± 0.2 89 .9 ± 0.5 89 .4 ± 0.1 91 .2 ± 0.0 89 .6 ± 0.3 91 .2 ± 0.2 88 .9 ± 0.6 91 .3 ± 0.1 91 .2 ± 0.2 88 .0 ± 1.8 91 .6 ± 0.2Food101 1 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.9 46 .8 ± 1.92 63 .9 ± 2.1 49 .9 ± 3.2 50 .0 ± 1.8 61 .8 ± 2.7 50 .8 ± 2.3 66 .0 ± 2.3 50 .5 ± 3.0 64 .6 ± 1.7 65 .3 ± 2.1 76 .9 ± 0.7 63 .5 ± 1.03 73 .1 ± 0.3 56 .8 ± 3.4 53 .6 ± 2.3 70 .4 ± 2.1 57 .1 ± 1.8 74 .1 ± 3.0 57 .8 ± 2.8 72 .8 ± 1.4 73 .6 ± 2.1 80 .2 ± 1.1 72 .9 ± 1.14 77 .0 ± 1.1 63 .0 ± 3.2 58 .6 ± 1.5 75 .4 ± 2.1 62 .2 ± 2.4 78 .1 ± 2.1 62 .8 ± 3.7 76 .2 ± 1.8 77 .7 ± 1.6 82 .0 ± 0.9 78 .1 ± 0.95 79 .6 ± 0.9 67 .5 ± 2.1 64 .7 ± 2.6 79 .4 ± 1.8 66 .0 ± 2.1 80 .2 ± 1.9 66 .3 ± 3.1 79 .7 ± 1.2 79 .8 ± 1.4 83 .7 ± 0.9 80 .8 ± 1.06 81 .3 ± 1.0 71 .3 ± 2.1 68 .5 ± 3.0 81 .1 ± 1.6 69 .3 ± 1.7 82 .2 ± 2.0 69 .2 ± 3.3 82 .3 ± 1.4 82 .0 ± 1.4 84 .7 ± 0.8 83 .2 ± 0.67 82 .8 ± 1.0 73 .7 ± 2.0 71 .3 ± 2.8 83 .7 ± 1.4 71 .8 ± 1.8 83 .6 ± 0.9 71 .4 ± 3.4 83 .7 ± 1.6 83 .6 ± 1.1 85 .7 ± 0.6 84 .6 ± 0.08 83 .8 ± 0.3 76 .1 ± 1.8 73 .0 ± 2.4 84 .7 ± 0.7 73 .8 ± 2.3 85 .0 ± 0.8 72 .8 ± 2.9 84 .8 ± 0.9 85 .1 ± 1.1 86 .0 ± 0.5 86 .1 ± 0.59 84 .5 ± 0.4 78 .2 ± 1.9 76 .0 ± 2.0 85 .7 ± 0.6 75 .6 ± 2.1 86 .1 ± 0.8 74 .0 ± 2.9 85 .6 ± 0.9 86 .4 ± 0.4 86 .3 ± 0.6 86 .8 ± 0.610 85 .1 ± 0.1 79 .3 ± 1.8 77 .2 ± 2.1 86 .6 ± 0.9 77 .3 ± 2.6 86 .6 ± 0.9 75 .3 ± 2.3 86 .5 ± 0.4 86 .8 ± 0.4 86 .7 ± 0.4 87 .7 ± 0.711 85 .8 ± 0.1 80 .3 ± 1.9 78 .1 ± 1.4 87 .4 ± 0.9 78 .3 ± 2.0 87 .5 ± 0.5 75 .6 ± 2.2 87 .3 ± 0.7 87 .6 ± 0.6 87 .3 ± 0.3 88 .3 ± 0.712 86 .4 ± 0.3 81 .0 ± 2.1 79 .1 ± 2.1 87 .7 ± 0.8 79 .4 ± 1.6 87 .6 ± 0.4 76 .8 ± 2.1 87 .8 ± 0.7 88 .0 ± 0.5 87 .4 ± 0.6 88 .9 ± 0.313 86 .8 ± 0.2 82 .4 ± 1.7 79 .8 ± 2.2 88 .3 ± 1.0 80 .3 ± 1.6 88 .1 ± 0.5 77 .4 ± 1.7 88 .3 ± 0.6 88 .6 ± 0.1 87 .8 ± 0.6 89 .3 ± 0.014 87 .1 ± 0.3 83 .0 ± 1.3 80 .7 ± 1.4 88 .5 ± 0.9 81 .0 ± 1.9 88 .4 ± 0.3 78 .3 ± 1.8 88 .6 ± 0.4 88 .9 ± 0.3 88 .3 ± 0.4 89 .5 ± 0.315 87 .3 ± 0.1 84 .1 ± 1.4 81 .5 ± 1.3 89 .0 ± 0.8 81 .5 ± 2.1 89 .0 ± 0.2 79 .3 ± 1.8 89 .0 ± 0.4 89 .2 ± 0.1 88 .4 ± 0.5 89 .8 ± 0.216 87 .4 ± 0.4 84 .8 ± 1.5 81 .9 ± 1.5 89 .2 ± 0.8 82 .3 ± 1.7 89 .3 ± 0.3 80 .0 ± 1.4 89 .3 ± 0.3 89 .1 ± 0.2 88 .4 ± 0.3 90 .1 ± 0.217 87 .7 ± 0.2 85 .2 ± 1.0 82 .9 ± 1.1 89 .2 ± 0.8 83 .0 ± 1.2 89 .5 ± 0.3 80 .8 ± 1.4 89 .5 ± 0.5 89 .8 ± 0.1 88 .7 ± 0.5 90 .3 ± 0.218 87 .9 ± 0.3 86 .0 ± 0.8 83 .7 ± 0.8 89 .5 ± 0.7 83 .4 ± 1.1 89 .7 ± 0.3 81 .4 ± 1.7 89 .7 ± 0.3 89 .9 ± 0.0 89 .0 ± 0.7 90 .4 ± 0.119 88 .1 ± 0.3 86 .2 ± 0.8 84 .1 ± 0.8 89 .9 ± 0.2 83 .9 ± 1.4 89 .9 ± 0.2 81 .9 ± 1.3 90 .0 ± 0.2 90 .1 ± 0.2 89 .2 ± 0.4 90 .5 ± 0.120 88 .2 ± 0.3 86 .4 ± 1.0 84 .5 ± 0.9 90 .0 ± 0.1 84 .3 ± 1.1 90 .1 ± 0.3 82 .8 ± 1.1 90 .2 ± 0.3 90 .2 ± 0.1 88 .7 ± 0.5 90 .8 ± 0.2DomainNet-Real 1 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.8 44 .7 ± 0.82 61 .8 ± 0.9 53 .4 ± 1.3 50 .4 ± 1.6 61 .9 ± 0.8 60 .2 ± 0.7 64 .9 ± 1.2 58 .9 ± 1.2 64 .8 ± 1.0 61 .6 ± 0.5 72 .6 ± 0.8 65 .1 ± 0.73 69 .2 ± 0.5 58 .9 ± 1.8 54 .2 ± 2.5 68 .6 ± 0.5 66 .4 ± 0.6 72 .6 ± 0.8 65 .4 ± 0.9 71 .9 ± 0.6 68 .6 ± 0.6 75 .1 ± 0.3 72 .1 ± 0.84 73 .0 ± 0.7 64 .0 ± 1.1 58 .6 ± 2.7 72 .9 ± 0.5 69 .4 ± 0.5 75 .7 ± 0.6 69 .1 ± 1.1 75 .5 ± 0.6 72 .6 ± 0.3 76 .3 ± 0.6 77 .7 ± 0.55 75 .5 ± 0.6 67 .8 ± 1.0 62 .5 ± 2.4 75 .4 ± 0.6 71 .8 ± 0.3 77 .6 ± 0.5 71 .7 ± 0.5 77 .6 ± 0.4 75 .2 ± 0.2 77 .7 ± 0.6 78 .9 ± 0.36 76 .9 ± 0.2 70 .4 ± 0.7 65 .7 ± 1.7 77 .1 ± 0.7 73 .8 ± 0.2 79 .0 ± 0.3 73 .6 ± 0.2 78 .8 ± 0.6 76 .7 ± 0.5 78 .2 ± 0.6 80 .2 ± 0.47 78 .1 ± 0.3 74 .3 ± 0.6 68 .7 ± 1.3 78 .4 ± 0.5 75 .3 ± 0.5 79 .9 ± 0.4 74 .8 ± 0.3 79 .8 ± 0.2 77 .8 ± 0.4 78 .7 ± 0.8 81 .5 ± 0.28 79 .2 ± 0.2 74 .3 ± 0.6 70 .8 ± 0.8 79 .4 ± 0.5 76 .3 ± 0.6 80 .8 ± 0.2 75 .7 ± 0.4 80 .8 ± 0.1 78 .7 ± 0.4 78 .9 ± 0.8 82 .0 ± 0.29 79 .8 ± 0.2 75 .5 ± 0.3 72 .6 ± 0.7 80 .3 ± 0.5 77 .4 ± 0.5 81 .4 ± 0.2 76 .7 ± 0.4 81 .6 ± 0.1 79 .1 ± 0.3 79 .4 ± 0.7 82 .6 ± 0.210 80 .2 ± 0.0 76 .8 ± 0.3 74 .2 ± 0.4 81 .2 ± 0.4 78 .3 ± 0.7 82 .0 ± 0.1 77 .3 ± 0.4 82 .2 ± 0.1 79 .6 ± 0.2 79 .3 ± 0.6 83 .2 ± 0.211 80 .8 ± 0.1 77 .5 ± 0.2 75 .5 ± 0.4 81 .8 ± 0.2 78 .8 ± 0.6 82 .5 ± 0.3 78 .2 ± 0.4 82 .6 ± 0.2 80 .2 ± 0.2 79 .4 ± 0.7 83 .6 ± 0.312 80 .3 ± 0.0 77 .5 ± 0.3 75 .6 ± 0.3 81 .1 ± 0.2 78 .6 ± 0.5 81 .9 ± 0.3 77 .8 ± 0.5 81 .7 ± 0.2 79 .8 ± 0.3 79 .3 ± 0.5 82 .6 ± 0.213 81 .0 ± 0.2 78 .4 ± 0.4 76 .8 ± 0.5 82 .0 ± 0.3 79 .4 ± 0.4 82 .6 ± 0.3 78 .8 ± 0.4 83 .0 ± 0.1 80 .4 ± 0.1 79 .6 ± 0.5 83 .6 ± 0.114 81 .4 ± 0.2 79 .4 ± 0.3 77 .7 ± 0.5 82 .8 ± 0.2 80 .2 ± 0.5 83 .1 ± 0.3 79 .4 ± 0.5 83 .4 ± 0.1 80 .8 ± 0.2 79 .4 ± 0.7 84 .0 ± 0.215 81 .9 ± 0.2 79 .9 ± 0.3 78 .3 ± 0.4 83 .3 ± 0.1 80 .6 ± 0.6 83 .5 ± 0.3 79 .8 ± 0.6 83 .8 ± 0.2 81 .4 ± 0.4 79 .4 ± 0.5 84 .5 ± 0.216 82 .1 ± 0.3 80 .4 ± 0.4 79 .0 ± 0.4 83 .5 ± 0.2 80 .9 ± 0.4 83 .9 ± 0.2 80 .3 ± 0.5 84 .2 ± 0.2 81 .7 ± 0.5 79 .5 ± 0.5 84 .6 ± 0.217 82 .2 ± 0.1 81 .0 ± 0.3 79 .5 ± 0.4 84 .0 ± 0.0 81 .2 ± 0.5 84 .2 ± 0.3 80 .6 ± 0.5 84 .3 ± 0.1 82 .0 ± 0.5 79 .4 ± 0.4 84 .9 ± 0.218 82 .4 ± 0.2 81 .6 ± 0.3 80 .0 ± 0.4 84 .3 ± 0.1 81 .6 ± 0.3 84 .4 ± 0.2 80 .9 ± 0.5 84 .6 ± 0.2 82 .3 ± 0.6 79 .6 ± 0.6 85 .2 ± 0.219 82 .7 ± 0.1 81 .9 ± 0.2 80 .3 ± 0.2 84 .6 ± 0.1 81 .7 ± 0.3 84 .6 ± 0.2 81 .1 ± 0.7 84 .9 ± 0.1 82 .6 ± 0.6 79 .7 ± 0.4 85 .4 ± 0.120 82 .8 ± 0.1 82 .2 ± 0.2 80 .9 ± 0.3 84 .8 ± 0.0 82 .1 ± 0.3 84 .7 ± 0.2 81 .4 ± 0.6 85 .0 ± 0.1 82 .7 ± 0.7 79 .7 ± 0.5 85 .5 ± 0.1Table 4. Test accuracy for our method ( CCMA ) with other AL strategies when utilizing the random initialization with DINOv2 ViT-g14 as the feature extractor. We show AL iterations t for datasets Caltech101 and Caltech256 when utilizing the random initialization. Bold values represent the first-place mean accuracy at iteration t with the second-place value underlined. 
+
+t Random Uncertainty Entropy Margins BALD pBALD Coreset BADGE Alfa-mix Typiclust CCMA (ours) 
+
+Caltech-256 1 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.5 57 .4 ± 1.52 76 .4 ± 1.4 70 .0 ± 1.6 66 .3 ± 1.6 78 .9 ± 1.0 78 .1 ± 0.6 82 .9 ± 1.1 81 .5 ± 1.1 83 .9 ± 0.8 75 .8 ± 1.0 75 .3 ± 1.8 82 .2 ± 1.03 83 .8 ± 1.4 77 .7 ± 2.8 72 .0 ± 1.5 86 .0 ± 0.9 85 .1 ± 0.5 90 .0 ± 0.3 87 .0 ± 0.5 89 .7 ± 0.6 83 .7 ± 0.7 84 .4 ± 1.0 90 .8 ± 0.84 87 .9 ± 1.0 83 .8 ± 1.3 76 .5 ± 1.9 89 .6 ± 0.5 87 .8 ± 0.7 92 .3 ± 0.5 89 .3 ± 0.7 92 .0 ± 0.3 88 .5 ± 0.9 88 .4 ± 1.3 93 .1 ± 0.45 90 .4 ± 0.7 87 .2 ± 1.3 80 .8 ± 1.9 92 .1 ± 0.5 90 .1 ± 0.7 93 .5 ± 0.2 90 .7 ± 0.7 93 .8 ± 0.4 90 .6 ± 0.7 91 .3 ± 1.5 94 .1 ± 0.26 92 .0 ± 0.3 89 .9 ± 1.4 84 .4 ± 1.4 93 .8 ± 0.3 91 .8 ± 0.8 94 .5 ± 0.2 92 .0 ± 0.6 94 .7 ± 0.5 92 .0 ± 0.4 92 .3 ± 0.5 94 .8 ± 0.17 92 .7 ± 0.4 92 .6 ± 1.0 87 .5 ± 1.2 94 .8 ± 0.4 93 .1 ± 0.7 95 .2 ± 0.3 92 .7 ± 0.7 95 .6 ± 0.4 92 .9 ± 0.4 93 .1 ± 0.2 95 .2 ± 0.18 93 .4 ± 0.3 93 .9 ± 0.8 89 .9 ± 1.3 95 .5 ± 0.1 94 .1 ± 0.4 95 .8 ± 0.2 93 .2 ± 0.8 96 .2 ± 0.3 93 .8 ± 0.5 93 .5 ± 0.3 95 .4 ± 0.19 94 .0 ± 0.3 95 .1 ± 0.5 91 .7 ± 1.0 96 .3 ± 0.1 94 .8 ± 0.5 96 .2 ± 0.2 93 .9 ± 0.6 97 .0 ± 0.3 94 .6 ± 0.7 94 .1 ± 0.3 95 .8 ± 0.010 94 .4 ± 0.2 96 .1 ± 0.3 93 .4 ± 0.7 96 .9 ± 0.2 95 .4 ± 0.2 96 .6 ± 0.2 94 .4 ± 0.5 97 .3 ± 0.3 95 .5 ± 0.9 94 .3 ± 0.3 95 .9 ± 0.011 94 .6 ± 0.1 96 .7 ± 0.2 94 .3 ± 0.8 97 .1 ± 0.1 95 .9 ± 0.3 97 .0 ± 0.3 94 .9 ± 0.3 97 .7 ± 0.3 95 .7 ± 0.9 94 .5 ± 0.3 96 .1 ± 0.012 94 .8 ± 0.1 97 .2 ± 0.3 95 .5 ± 0.7 97 .5 ± 0.2 96 .5 ± 0.2 97 .3 ± 0.1 95 .1 ± 0.3 98 .0 ± 0.2 96 .0 ± 0.9 94 .7 ± 0.2 96 .3 ± 0.113 95 .0 ± 0.2 97 .6 ± 0.3 96 .5 ± 0.6 97 .9 ± 0.2 97 .0 ± 0.2 97 .6 ± 0.1 95 .6 ± 0.2 98 .2 ± 0.1 96 .5 ± 1.1 94 .9 ± 0.2 96 .4 ± 0.014 95 .1 ± 0.2 98 .0 ± 0.1 97 .0 ± 0.6 98 .0 ± 0.2 97 .3 ± 0.2 98 .0 ± 0.1 95 .7 ± 0.3 98 .4 ± 0.1 96 .7 ± 1.0 95 .0 ± 0.1 96 .6 ± 0.015 95 .3 ± 0.1 98 .0 ± 0.2 97 .1 ± 0.4 98 .1 ± 0.1 97 .5 ± 0.3 97 .9 ± 0.1 96 .0 ± 0.2 97 .8 ± 0.2 97 .0 ± 0.8 95 .1 ± 0.0 96 .7 ± 0.016 94 .8 ± 0.1 97 .4 ± 0.2 97 .2 ± 0.3 97 .7 ± 0.1 97 .4 ± 0.3 97 .6 ± 0.1 95 .5 ± 0.2 97 .9 ± 0.2 96 .6 ± 0.5 94 .8 ± 0.9 96 .3 ± 0.117 95 .3 ± 0.1 98 .5 ± 0.2 98 .0 ± 0.3 98 .8 ± 0.1 98 .0 ± 0.1 98 .3 ± 0.0 96 .2 ± 0.1 98 .8 ± 0.1 97 .4 ± 0.5 95 .4 ± 0.1 96 .7 ± 0.018 95 .4 ± 0.2 98 .7 ± 0.2 98 .4 ± 0.3 99 .0 ± 0.1 98 .4 ± 0.2 98 .6 ± 0.0 96 .3 ± 0.2 99 .1 ± 0.2 97 .8 ± 0.5 95 .5 ± 0.1 96 .9 ± 0.119 95 .6 ± 0.1 98 .8 ± 0.2 98 .7 ± 0.3 99 .2 ± 0.1 98 .7 ± 0.1 98 .7 ± 0.0 96 .5 ± 0.3 99 .2 ± 0.1 98 .0 ± 0.4 95 .6 ± 0.0 97 .1 ± 0.020 95 .8 ± 0.1 99 .1 ± 0.1 98 .9 ± 0.3 99 .3 ± 0.0 98 .9 ± 0.0 98 .8 ± 0.1 96 .8 ± 0.1 99 .3 ± 0.0 98 .3 ± 0.4 95 .7 ± 0.1 97 .2 ± 0.1Caltech-101 1 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.0 61 .5 ± 2.02 77 .0 ± 1.4 75 .1 ± 3.1 71 .0 ± 2.2 82 .3 ± 2.5 82 .2 ± 2.0 85 .2 ± 1.0 88 .6 ± 1.4 86 .7 ± 1.1 76 .9 ± 2.7 76 .4 ± 2.0 75 .7 ± 1.73 84 .9 ± 2.2 83 .5 ± 1.2 79 .7 ± 1.5 88 .5 ± 0.8 88 .5 ± 1.3 90 .6 ± 0.5 90 .1 ± 0.5 90 .6 ± 0.8 84 .1 ± 1.8 83 .7 ± 1.2 82 .2 ± 0.84 89 .4 ± 0.9 87 .8 ± 0.6 85 .8 ± 1.5 90 .4 ± 0.8 90 .3 ± 0.6 92 .1 ± 0.7 90 .8 ± 0.7 92 .2 ± 0.7 88 .0 ± 1.5 88 .3 ± 0.4 86 .1 ± 0.65 90 .9 ± 0.3 89 .6 ± 0.5 88 .3 ± 1.4 92 .5 ± 0.8 91 .0 ± 0.5 93 .6 ± 0.7 90 .9 ± 0.7 94 .1 ± 0.8 89 .8 ± 1.5 90 .4 ± 1.1 90 .0 ± 0.76 92 .5 ± 0.5 91 .5 ± 0.6 89 .8 ± 0.8 94 .1 ± 0.7 91 .9 ± 0.7 94 .7 ± 0.7 91 .4 ± 0.6 95 .2 ± 0.5 91 .1 ± 0.7 91 .7 ± 0.6 91 .8 ± 0.97 93 .6 ± 0.7 93 .2 ± 0.4 91 .2 ± 0.6 94 .9 ± 0.6 93 .6 ± 0.6 95 .5 ± 0.7 91 .5 ± 0.6 95 .8 ± 0.7 92 .5 ± 0.5 92 .6 ± 0.9 92 .8 ± 0.98 94 .6 ± 0.7 94 .5 ± 0.5 92 .6 ± 1.1 95 .5 ± 0.9 94 .7 ± 0.4 96 .0 ± 0.7 91 .6 ± 0.8 96 .3 ± 0.8 92 .7 ± 0.6 93 .4 ± 0.4 94 .8 ± 0.19 95 .0 ± 0.3 95 .5 ± 0.5 94 .2 ± 1.1 95 .9 ± 1.1 95 .9 ± 0.5 96 .5 ± 0.7 92 .2 ± 0.8 96 .6 ± 0.6 93 .3 ± 0.8 93 .9 ± 0.3 93 .8 ± 0.510 95 .3 ± 0.3 96 .1 ± 0.5 95 .1 ± 0.7 96 .3 ± 1.0 96 .7 ± 0.7 96 .8 ± 0.8 92 .7 ± 0.8 96 .9 ± 0.7 94 .0 ± 1.2 94 .4 ± 0.6 94 .5 ± 0.511 95 .5 ± 0.3 96 .3 ± 0.7 95 .8 ± 0.8 96 .6 ± 1.0 97 .0 ± 0.6 97 .0 ± 0.5 92 .7 ± 0.9 97 .2 ± 0.7 95 .0 ± 1.7 94 .8 ± 0.5 95 .1 ± 0.412 95 .6 ± 0.4 96 .7 ± 0.7 96 .4 ± 0.8 97 .0 ± 0.9 97 .4 ± 0.6 97 .4 ± 0.6 93 .1 ± 1.0 97 .4 ± 0.6 95 .9 ± 1.5 94 .9 ± 0.5 95 .2 ± 0.613 95 .8 ± 0.4 96 .9 ± 0.6 96 .8 ± 0.6 97 .2 ± 0.9 97 .5 ± 0.6 97 .5 ± 0.6 94 .0 ± 0.9 97 .4 ± 0.8 96 .6 ± 1.2 95 .3 ± 0.4 95 .6 ± 0.314 96 .0 ± 0.3 97 .0 ± 0.2 97 .1 ± 0.4 97 .4 ± 0.8 97 .9 ± 0.4 97 .6 ± 0.4 94 .1 ± 0.6 97 .5 ± 0.7 97 .4 ± 0.4 95 .7 ± 0.2 95 .7 ± 0.315 96 .1 ± 0.4 97 .3 ± 0.5 97 .1 ± 0.3 97 .5 ± 0.7 98 .0 ± 0.4 98 .0 ± 0.6 94 .3 ± 0.6 97 .8 ± 0.8 98 .0 ± 0.3 95 .7 ± 0.1 95 .9 ± 0.216 96 .2 ± 0.2 97 .2 ± 0.5 97 .2 ± 0.3 97 .7 ± 0.6 98 .1 ± 0.3 98 .1 ± 0.6 94 .4 ± 0.5 97 .8 ± 0.8 98 .1 ± 0.3 95 .8 ± 0.1 96 .6 ± 0.217 96 .3 ± 0.4 97 .6 ± 0.5 97 .3 ± 0.3 97 .9 ± 0.5 98 .4 ± 0.3 98 .3 ± 0.6 94 .7 ± 0.7 98 .0 ± 0.8 98 .4 ± 0.1 96 .1 ± 0.1 96 .4 ± 0.218 96 .6 ± 0.2 98 .0 ± 0.8 97 .5 ± 0.2 98 .2 ± 0.5 98 .4 ± 0.5 98 .4 ± 0.7 94 .9 ± 0.6 98 .2 ± 0.7 98 .5 ± 0.0 96 .3 ± 0.2 96 .5 ± 0.219 96 .7 ± 0.1 98 .2 ± 0.6 97 .6 ± 0.2 98 .4 ± 0.3 98 .5 ± 0.5 98 .5 ± 0.8 95 .4 ± 0.7 98 .5 ± 0.3 98 .6 ± 0.1 96 .5 ± 0.1 96 .5 ± 0.120 96 .8 ± 0.3 98 .3 ± 0.6 98 .0 ± 0.4 98 .4 ± 0.5 98 .5 ± 0.5 98 .5 ± 0.7 95 .6 ± 0.5 98 .5 ± 0.4 98 .6 ± 0.0 96 .6 ± 0.1 96 .7 ± 0.2

@@ -1,0 +1,482 @@
+Title: Heuristic-inspired Reasoning Priors Facilitate Data-Efficient Referring Object Detection
+
+URL Source: https://arxiv.org/pdf/2603.24166v1
+
+Published Time: Thu, 26 Mar 2026 01:07:44 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Heuristic-inspired Reasoning Priors Facilitate Data-Efficient Referring Object Detection 
+
+## Xu Zhang 1 Zhe Chen 2, † Jing Zhang 3 Dacheng Tao 4, †
+
+> 1
+
+The University of Sydney, Australia 2La Trobe University, Australia  
+
+> 3
+
+Wuhan University, China 4 Nanyang Technological University, Singapore    
+
+> xzha0930@uni.sydney.edu.au zhe.chen@latrobe.edu.au {jingzhang.cv, dacheng.tao }@gmail.com
+
+## Abstract 
+
+Most referring object detection (ROD) models, especially the modern grounding detectors, are designed for data-rich conditions, yet many practical deployments, such as robotics, augmented reality, and other specialized domains, would face severe label scarcity. In such regimes, end-to-end grounding detectors need to learn spatial and se-mantic structure from scratch, wasting precious samples. We ask a simple question: Can explicit reasoning priors help models learn more efficiently when data is scarce? To explore this, we first introduce a Data-efficient Referring Object Detection (De-ROD) task, which is a benchmark protocol for measuring ROD performance in low-data and few-shot settings. We then propose the HeROD (Heuristic-inspired ROD), a lightweight, model-agnostic framework that injects explicit, heuristic-inspired spatial and seman-tic reasoning priors, which are interpretable signals de-rived based on the referring phrase, into 3 stages of a modern DETR-style pipeline: proposal ranking, prediction fusion, and Hungarian matching. By biasing both train-ing and inference toward plausible candidates, these priors promise to improve label efficiency and convergence per-formance. On RefCOCO, RefCOCO+, and RefCOCOg, HeROD consistently outperforms strong grounding base-lines in scarce-label regimes. More broadly, our results suggest that integrating simple, interpretable reasoning pri-ors provides a practical and extensible path toward bet-ter data-efficient vision–language understanding. Code at: https://github.com/xuzhang1199/HeROD. 
+
+## 1. Introduction 
+
+Referring Object Detection (ROD) [16, 31, 49] aims to lo-calize the specific object in an image that matches a nat-ural language description. While ROD and Referring Ex-pression Comprehension (REC) are often used interchange-  
+
+> †Corresponding authors. ‘bird on left’ Inaccurate Referring Result
+> Limited
+> Labels
+> Grounding
+> Detector
+> Data-efficient Referring Object Detection
+> Text
+> Image
+> ‘bird on left’ Correct Referring Results
+> Grounding
+> Detector
+> Text
+> Image
+> Injection
+> (a) Baseline End-to-end Grounding for Referring Object Detection (w/o Priors)
+> (b) Proposed HeROD with Heuristic-inspired Reasoning Priors
+> Heuristic-inspired
+> Reasoning Priors
+> Limited
+> Labels
+
+Figure 1. Conceptual illustration. (a) Without priors, grounding detectors trained with limited labels often ignore spatial/semantic cues (e.g., “on the left”). (b) HeROD injects heuristic-inspired reasoning priors (spatial + semantic), guiding the detector toward correct localization and improving data-efficient learning. 
+
+ably, we use the term ROD in this paper. Unlike generic object detection [11, 23, 27, 35, 36, 40], which identifies all instances from a fixed category set, ROD focuses on a single, linguistically specified target (e.g., “the person on the left wearing a red hat”). This requires not only ob-ject recognition but also fine-grained visual–semantic align-ment and spatial reasoning. Recent advances in multimodal transformers [41] have significantly improved ROD perfor-mance. Models such as GLIP [21] and Grounding DINO [26] leverage large-scale pre-training on image–text pairs to unify phrase grounding and object detection, achieving state-of-the-art results in data-rich scenarios. Despite these advances, adapting ROD models to new domains or deployment scenarios remains challenging when annotated data are scarce. Many practical applica-tions, such as robotics in unstructured environments or med-ical imaging with domain-specific terminology, cannot af-1
+
+> arXiv:2603.24166v1 [cs.CV] 25 Mar 2026
+
+ford the scale of labeled data typically required for com-mon pre-training or standard fine-tuning of related foun-dation models. In both low-data and full-data regimes, current grounding detectors primarily rely on end-to-end learning to implicitly acquire spatial relationships and vi-sual–semantic associations relevant to the task. This would force the model to “rediscover” basic concepts (e.g., rela-tive position, object attributes, inter-object relations) from task-specific examples. Under data-scarce conditions, this process can be highly sample-inefficient and prone to over-fitting. While large-scale pre-training imparts broad vi-sion–language alignment, fine-grained spatial cues, and complex attribute combinations, which are common in re-ferring expressions, are often underrepresented [4], leading to slower convergence and less precise localization when adapting with limited labels. Recognizing these limitations, we first introduce Data-efficient Referring Object Detection (De-ROD), a tailored benchmarking protocol for systematically evaluating ROD models in low-data and few-shot settings. De-ROD empha-sizes the need for models that generalize well with limited annotations, reflecting realistic deployment environments where large-scale, task-specific annotation is rarely feasi-ble. We believe that this setting has been largely overlooked in existing ROD research and presents significant potential for real-world applications. By addressing the De-ROD, our central insight is that the absence of explicit inductive biases leaves models to rely solely on implicit learning from scarce examples in De-ROD regimes. This motivates our research: to inject explicit reasoning signals ( i.e., interpretable cues about spatial layout and semantic content) into the detec-tion pipeline, so that models can focus on refining, rather than rediscovering, these fundamental relationships under limited supervision. To this end, we propose HeROD (Heuristic-inspired Re-ferring Object Detection), a lightweight, model-agnostic framework that reduces reliance on large training sets by injecting heuristic-inspired reasoning priors into the detec-tion pipeline. In classic heuristic search methods such as A* [12], search efficiency is greatly improved by heuristic costs that guide exploration toward promising candidates. Analogously, we define reasoning priors as explicit, inter-pretable spatial and semantic cues derived from the refer-ring phrase and image, which bias both training and infer-ence toward plausible regions. Prior work has shown that spatial cues are important for disambiguating referents [49], while semantic cues strongly influence grounding decisions [33]. In HeROD, spatial reasoning priors are implemented as cardinal directions and simple composites of positional likelihood maps, and semantic reasoning priors are real-ized as text-conditioned visual scores from a pretrained vi-sion–language model. These priors are injected into three phases of a modern DETR-style pipeline: proposal rank-ing, Hungarian matching, and final prediction fusion. By guiding the detector with reasoning priors, HeROD accel-erates convergence, improves label efficiency, and lowers the risk of overfitting in scarce-label regimes. Empirically, HeROD achieves consistent gains in low-data and few-shot settings, while remaining competitive in full-data training. Figure 1 conceptually illustrates how heuristic-inspired rea-soning priors facilitate more data-efficient ROD. 
+
+## 2. Related Work 
+
+Referring Object Detection and Grounding Models 
+
+ROD extends object detection by requiring the localiza-tion of a target object described by a natural language ex-pression. Unlike generic detectors [11, 27, 35, 36, 40], which predict all instances of predefined categories, ROD demands fine-grained visual–semantic alignment and spa-tial reasoning. Early REC/ROD approaches used modular attention mechanisms and multi-stage reasoning to process location, attribute, and relationship cues [33, 49]. The ad-vent of transformers revolutionized detection: DETR [2] framed detection as set prediction, eliminating anchors and NMS, with later variants improving convergence and repre-sentation quality through deformable attention [54], condi-tional queries [32], dynamic anchor boxes [24], denoising [20], and improved optimization [5]. In multimodal de-tection, CLIP [34] demonstrated the power of large-scale vision–language pretraining for zero-shot classification, in-spiring grounding-oriented detectors. MDETR [14] and DQ-DETR [25] directly align text and image features in an end-to-end modulated detection framework, but still re-quire extensive fine-tuning for ROD. GLIP [21] reformu-lates detection as phrase grounding, achieving strong zero-shot results but relying on the Dynamic Head [6], which limits end-to-end fusion. UNINEXT [47] proposes a uni-fied instance perception model, and Grounding DINO [26] fuses text and image features at multiple transformer stages to achieve state-of-the-art zero-shot detection. However, as shown in [26], even these strong foundation detectors degrade sharply on ROD without large-scale task-specific fine-tuning, revealing their sensitivity to data availability. 
+
+Data-Efficient and Few-Shot Object Detection Improv-ing detection performance under limited annotation has been studied in the few-shot object detection (FSOD) liter-ature. Meta-learning approaches such as FSRW [15], Meta-RCNN [45], and FSDView [46] transfer category knowl-edge from base to novel classes. Later works improved adaptation through feature embedding and transfer learn-ing, e.g., FSCE [38], UP-FSOD [43], and T-GSEL [53]. Another complementary direction is pretraining to improve generalization: DETReg [1] uses unsupervised region pri-ors with self-supervised feature encoders to reduce super-vision needs. While these methods improve data efficiency in generic detection, ROD poses additional challenges due 2to the need for robust text comprehension and cross-modal alignment. To our knowledge, no prior work has defined a dedicated benchmark for evaluating ROD in low-data and few-shot regimes. 
+
+Explicit Reasoning in Vision–Language Tasks Reason-ing over spatial and semantic cues has been explored in REC/ROD through learned modules, such as MattNet’s location and relationship branches [50] or scene-graph grounding methods [48]. Some zero-shot or few-shot vi-sion–language models incorporate external priors for im-proved grounding: TAS [39], for example, augments visual grounding with spatial heatmaps from text cues, while Iter-PrimE [42] iteratively refines attention maps using CLIP-based signals. These approaches, however, are typically designed for referring segmentation rather than detection, operate in purely zero-shot settings, or treat priors as post-processing rather than integrating them into training. In contrast, motivated by the importance of positional context [49] and visual–semantic attributes [33], our method injects explicit spatial and semantic priors into detectors. 
+
+## 3. De-ROD Formulation 
+
+To systematically evaluate a model’s ability to adapt under data-scarce real-world applications, we introduce the Data-efficient Referring Object Detection (De-ROD) bench-marking protocol. De-ROD measures ROD performance in two realistic scenarios: Low-data ROD , where training uses only a small percentage of the available dataset; and 
+
+Few-shot ROD , where the model must generalize to novel object categories with limited examples after training on abundant support categories. Formally, let Xi and yi de-note the i-th image–description pair and its correspond-ing annotation, respectively. The complete ROD dataset is D = {(Xi, y i) | i = 1 , . . . , N }, where N is the to-tal number of annotated samples. We define subsets of 
+
+D to simulate different levels of annotation availability. Let DDe = {Df s , D ld } denote the collection of all data-efficient subsets, where: (1) Dld (low-data subsets ) are formed by sampling a small percentage of the entire dataset without restricting to specific categories. (2) Df s (few-shot subsets ) contain a fixed number of novel-class examples and an abundant set of support-class examples. We use D(p)
+
+> sub
+
+to denote a subset of D containing p samples. In the few-shot setting, we follow common detection protocols [15], setting p ∈ { 0.5k , 1k , 2k } for novel-class fine-tuning data, and p ∈ { 1k , 2k } for support-class training data. This dif-fers from typical few-shot learning for classification, which only uses a few examples per class. Since object detection involves accurate localization, it would require more sam-ples for effective adaptation[15]. In the low-data setting, following [1], p represents a percentage of the full dataset. We consider p ∈ { 0.1% , 0.2% , 0.5% , 1% , 2% , 5% }, cov-ering a range from extremely scarce annotations to mod-estly scarce cases (5%), where annotation is more feasible but still limited. These settings provide a controlled and comprehensive framework for evaluating label efficiency in ROD. Additional details are provided in Sec. 12. It is worth mentioning that we also report the fully supervised results in the supplementary as a reference for overall robustness. 
+
+## 4. Our Approach 
+
+HeROD Overview: To achieve effective performance un-der the De-ROD, we propose HeROD (Heuristic-inspired Referring Object Detection ), a learning framework that aug-ments modern grounding detectors with explicit reasoning 
+
+heuristics . In our context, heuristics are interpretable sig-nals that encode priors about where the referred object is likely to appear and how it should visually correspond to the description. These signals are derived directly from the re-ferring phrase and the paired image, and they provide an in-ductive bias that complements the detector’s learned scores. The key idea is to bias both training and inference toward spatially and semantically plausible candidates, thereby im-proving label efficiency in data-scarce regimes. Formally, given a data sample Xi = ( Ii, d i) consist-ing of an image Ii and a natural language description di,modern grounding detectors assign each object candidate 
+
+oj ∈ Oi * a learned matching probability P (oj |Ii, d i). This score is computed entirely by the detector’s learned param-eters, typically without explicit inductive bias toward spa-tial or semantic cues. Without rich supervision, the lack of such priors may cause the model to under-utilize impor-tant information in di (e.g., “on the left,” “man in a blue shirt”) and converge slowly toward correct matches. In-spired by heuristic search algorithms such as A* [12] that injects heuristic estimates to facilitate search, we introduce heuristic signals H(oj , I i, d i) to guide candidate selection. The refined selection process is: 
+
+oi = arg max  
+
+> oj∈Oi
+
+H(oj , I i, d i) ⊕ P (oj |Ii, d i), (1) where H(·) aggregates two complementary compo-nents: spatial heuristics Hs(oj , d i) and visual heuristics 
+
+Hv (oj , d i, I i):
+
+H(oj , I i, d i) = Hs(oj , d i) ⊕ Hv (oj , d i, I i). (2) In the above 2 formulations, the operator ⊕ denotes the in-tegration rule for heuristic priors and detector outputs. Its form varies across pipeline stages: in candidate generation, 
+
+⊕ reduces to an additive operation for efficiency; in final prediction, it is realized as a learnable weighting module; and in loss, it modifies the Hungarian matching cost to bias supervision. Intuitively, spatial heuristics capture relative  
+
+> *Oiis the full detected object set.
+
+3“bird on left ” Spatial 
+
+> Reasoning
+> Prior
+> Initial
+> Grounding
+> Detection
+> Semantic
+> Reasoning
+> Prior
+> Reasoning Prior-
+> biased Detection
+
+Text 
+
+Encoder 
+
+Vision 
+
+Encoder 
+
+Text 
+
+Feature 
+
+Visual 
+
+Feature 
+
+Text Data 
+
+Image Data 
+
+Data Processing 
+
+> Heuristic-inspired
+> Reasoning Prior Processing
+> Object
+> Reference
+> Generation
+> Final
+> Prediction
+> Training
+> Loss
+
+Grounding Detection Pipeline Figure 2. HeROD pipeline. Text and image features are encoded, and spatial/semantic reasoning priors are derived from the phrase and image. These priors are injected into reference generation, final prediction, and training loss, guiding the detector toward plausible regions for more data-efficient learning. 
+
+location cues (e.g., “on the left,” “at the top”) that con-strain where the object is likely to appear [49], while vi-sual heuristics capture attribute- or relation-based cues (e.g., “man with a hat,” “blue bag”) that strengthen text–image alignment [33]. An overview of our approach is illustrated in Fig. 2, and the following sections detail the construction of Hs and Hv ,the design of stage-specific integration rules ⊕, and their implementation within existing grounding detectors. 
+
+Heuristic-inspired Spatial Prior Spatial descriptions are among the most common and interpretable cues in re-ferring expressions, yet they are usually underrepresented in current grounding detectors and difficult to learn from lim-ited annotations. For example, phrases such as “on the left” provide strong positional constraints, but grounding detec-tors normally have to rediscover such concepts purely from rich labeled data. To address this inefficiency, we explic-itly encode spatial priors as heuristic-inspired maps that can be directly injected into the detection process. Formally, we define a vocabulary T of spatial descriptors ( e.g. , “left,” “right,” “top,” “bottom,” or composites like “top left” or “bottom right”). Given a referring description di, we iden-tify relevant spatial terms (denoted as ti) by 
+
+ti = Split (di) ∩ T ,
+
+where Split is the operation that splits a string di. For in-stance, if di = “person on the left,” then ti = “left.” After extraction, each ti will be linked to a pre-calculated score map Ms(ti) aligned to the image plane, where higher values indicate a greater likelihood of containing the refer-ent. For example, the “left” map assigns higher scores to pixels closer to the left boundary, implemented via a linear or Gaussian decay across horizontal coordinates. Compos-ite terms are handled by combining their base maps through averaging or weighted fusion. Thus, given a candidate re-gion oj , we can compute its spatial prior by indexing the score map at the region center: 
+
+Hs(oj , d i) = Ms(ti)[ loc (oj )] , (3) where loc (oj ) is the center of oj , and Ms(ti)[ ·] returns the spatial relevance at a given image location. Intuitively, if di
+
+mentions “left”, objects nearer to the left edge of the image will receive higher prior values. This heuristic-inspired prior provides two benefits. First, it introduces an explicit and interpretable inductive bias: the model is guided toward spatially plausible regions without requiring additional annotations. Second, it improves label efficiency in data-scarce regimes, since basic spatial reason-ing (e.g., relative position) no longer needs to be re-learned from scratch. Visualizations of the constructed spatial prior maps are provided in Fig. 3 of the supplementary materials. 
+
+Heuristic-inspired Visual Prior Most referring expres-sions also specify visual attributes or object semantics (e.g., “man with a hat,”, “dog next to the bicycle”). Such cues 4are crucial for discriminating between multiple nearby can-didate objects, yet grounding detectors typically learn them implicitly from data. Similar to learning spatial cues, un-der limited annotations, this implicit learning can be inef-ficient. To alleviate this, we introduce a heuristic-inspired 
+
+visual prior Hv , which explicitly encodes the degree of vi-sual–semantic alignment between each candidate object oj
+
+and the referring phrase di. Formally, we compute: 
+
+Hv (oj , d i, I i) = Align (Ii, d i; oj ), (4) where Align (·) is a vision–language alignment function that measures how well the visual region corresponding to 
+
+oj matches the description di in the context of image Ii.A straightforward way of implementation is to use CLIP [34] by cropping each region oj and computing its similar-ity with di, but this is inefficient in detection pipelines with many proposals, as it requires repeated forward passes and scales poorly with the number of candidates. Instead, we adopt CLIPSeg [30], which takes the entire image and text once and produces dense, text-conditioned relevance maps. We obtain Hv (oj , d i, I i) by averaging the CLIPSeg scores inside each candidate box. This can yield interpretable pri-ors that guide evaluation and can scale efficiently across proposals, which are advantages over the typical CLIP-based models. When applying, since CLIPSeg is largely in-sensitive to spatial terms, we directly use raw input phrases without modification to prompt CLIPSeg. We would like to highlight that HeROD does more than add CLIPSeg as an ensemble. Raw CLIPSeg maps are coarse, and they alone cannot alter the learning dynamics of a grounding detec-tor; thus, a naive fusion gives only marginal gains. Instead, our framework integrates Hv into proposal ranking, match-ing, and prediction fusion, ensuring these signals shape both training and inference to improve data efficiency. To sum up, the spatial prior Hs and the visual prior 
+
+Hv supply complementary reasoning signals: Hs restricts search space by position, while Hv enforces semantic fi-delity to the description. By explicitly injecting them into learned detection, HeROD achieves more efficient and ro-bust adaptation in data-scarce regimes. Some extra justifi-cation about both priors are in Sec. 12 of the supplementary. 
+
+4.1. HeROD in DETR Pipeline 
+
+In a DETR-style pipeline, a Transformer translates visual and textual embeddings into detection outputs. HeROD is designed to be agnostic to different DETR variants and can be injected into three stages of this pipeline: (1) Object reference generation stage , which ranks candidate pro-posals to filter out irrelevant embeddings. This is founda-tional for efficient convergence [26, 54]. Here, spatial and visual priors adjust candidate scores before the top-N se-lection, steering early processing toward plausible regions. 
+
+(2) Final prediction stage , which helps the detector as-sign probabilities P (oj |Ii, d i) to each candidate. Here, we fuse these with H(oj , I i, d i) through a lightweight adaptive module, allowing the model to learn how to weight priors against network predictions for the final argmax selection. 
+
+(3) Training objectives based on Hungarian matching. In loss functions, priors are incorporated into the cost function, biasing supervision toward spatially and semantically con-sistent matches. Each stage presents different design chal-lenges. For instance, the reference stage relies on top-N se-lection rather than strict argmax, so priors must guide with-out discarding potentially useful proposals. In contrast, the final prediction stage benefits from an adaptive ⊕ that bal-ances heuristics and detector scores. Similarly, the match-ing loss requires a careful formulation to integrate priors without overwhelming learned signals. To address these differences, we employ stage-specific integration rules for ⊕ in Eq. (1), rather than a single static fusion. This adaptive design ensures that heuristic-inspired priors are injected effectively while preserving efficiency across the DETR pipeline. 
+
+Prior-injected Object Reference Generation: Rather than selecting the top-1 candidate, the reference generation stage samples the top-N proposals ranked by confidence scores [52]. This step is important for efficient conver-gence, since it determines which proposals are carried for-ward through the DETR pipeline. To guide this process, we inject our heuristic-inspired priors directly into the ranking. However, we found that it is non-trivial to design explicit supervision for this stage. As a result, we attempt to adopt a simple and efficient integration rule: ⊕ is directly instan-tiated as addition . Thus, for each candidate, its spatial and visual prior scores are summed with the detector’s confi-dence, biasing the top-N selection toward plausible regions without additional computational cost. Formally: 
+
+O′ 
+
+> i
+
+= T opN oj ∈O′
+
+> i
+
+ P (oj |Ii, d i)+ Hs(oj , d i)+ Hv (oj , d i, I i) ,
+
+(5) where T opN returns the N highest-scoring candidates from the initial set O′
+
+> i
+
+, and O′ 
+
+> i
+
+denotes the resulting reference set. This additive fusion maintains the efficiency of standard top-N sampling while allowing priors to shape candidate generation from the earliest stage of the pipeline. 
+
+Prior-injected Final Prediction: While simple additive fusion like Eq. 5 could suffice for reference generation, the final prediction stage involves a single top-1 decision with direct supervision from ground-truth annotations. This makes it possible, and beneficial, to use a more expressive integration of priors and detector scores. To achieve this, we implement ⊕ as a lightweight learnable module. Specif-ically, we concatenate the spatial prior Hs, visual prior Hv ,and detector confidence P (oj |Ii, d i), and feed them into a small multi-layer perceptron (MLP). The MLP learns to adaptively balance these signals, allowing the model to ad-5just how strongly it relies on priors versus detector outputs. This design maximizes flexibility while keeping extra com-plexity minimal. Formally, we have the following: 
+
+zj = M LP  Cat Hs(oj , d i), H v (oj , d i, I i), P (oj |Ii, d i) ,
+
+(6) where Cat [·] denotes concatenation and M LP is a small feed-forward network. Then, the final prediction is: 
+
+oi = arg max  
+
+> oj∈O′
+> i
+
+zj . (7) By learning this fusion, the detector can adaptively calibrate its reliance on explicit priors, improving robustness in data-scarce settings without introducing heavy computation. 
+
+Prior-injected Training Objectives: Beyond candidate generation and final prediction, we also inject priors into the learning objectives. Specifically, we modify the Hun-garian matching process [2, 37], which assigns ground-truth objects to final predictions. In standard DETR, the match-ing cost combines classification, box regression, and GIoU terms, but they may be unreliable at the beginning of train-ing, especially in data-scarce regimes where classification logits are noisy and box accuracies are weak. As a result, assignments may be unstable and hinder convergence. To address this, we incorporate heuristic-inspired priors into the matching cost so that supervision is biased toward pro-posals consistent with spatial and semantic cues. The mod-ified cost is: 
+
+Cost h = Cost cls + Cost bbox + Cost giou − H(oj , d i, I i),
+
+(8) where H(·) is the unified spatial and visual priors as dis-cussed before. The subtraction ensures that candidates better aligned with heuristic-inspired priors are preferred during matching, leading to more stable and semantically meaningful assignments early in training. Once the assign-ment is established, we also supervise the detector with a loss that integrates heuristic-inspired confidence: 
+
+Lh = Lcls (oi, o ∗ 
+
+> i
+
+) + Lbbox (oi, o ∗ 
+
+> i
+
+) + Lconf (oi, o ∗ 
+
+> i
+
+), (9) where o∗ 
+
+> i
+
+is the matched ground truth. Here, Lcls and 
+
+Lbbox follow standard DETR practice, while Lconf is a mean squared error loss between predicted confidence and the scores of heuristic-inspired priors, treated as soft la-bels. This encourages the model not only to predict the cor-rect box but also to align its confidence with prior-informed plausibility. 
+
+Further Discussions: Our novelty lies in (1) being the first to systematically define and study data-efficient ROD as a task, and (2) introducing a principled, interpretable framework for injecting explicit reasoning priors under se-vere label scarcity. The key insight is that making sim-ple cues explicit and actionable can substantially improve learning efficiency, instead of relying on implicit end-to-end learning to rediscover them from limited data. 
+
+## 5. Experiments 
+
+5.1. De-ROD Settings 
+
+To rigorously evaluate how grounding detectors adapt to ROD under limited supervision, we introduce the De-ROD 
+
+benchmark, which defines two primary data-scarce regimes: 
+
+low-data ROD and few-shot ROD . These conditions, in-spired by DETReg [1] and FSRW [15], explicitly test learn-ing efficiency when annotations are scarce. For complete-ness, we also report results in the fully supervised setting on the complete RefCOCO/+/g datasets [31, 49], which re-mains the standard evaluation protocol. This helps illustrate whether our method is not only effective in scarce-label regimes but also competitive when rich labels are available. 
+
+Low-data ROD. We simulate extremely limited supervi-sion by randomly sampling small percentages of the train-ing data, specifically 0.1%, 0.2%, 0.5%, 1%, 2%, and 5%. Each larger subset is a superset of the smaller ones to ensure fairness. Models are evaluated on the standard validation and test sets: RefCOCO/+ (validation, testA, testB) and Re-fCOCOg (validation, test). This protocol reflects realistic deployment scenarios, ranging from extremely scarce an-notations (0.1%) to modestly available data (5%). 
+
+Few-shot ROD. We further consider generalization from abundant support classes to scarce novel classes. Moti-vated by the human-centric bias in RefCOCO (testA con-tains humans, testB contains other objects), we define hu-mans as support classes ( Cs) and non-human categories as novel classes ( Cn). We construct support sets of 1k and 2k human pairs, and novel-class fine-tuning sets of 0.5k, 1k, and 2k non-human pairs, where larger sets subsume the smaller. Since novel classes have far fewer examples per category than humans, this qualifies as a few-shot regime. Evaluation follows RefCOCO’s official splits (testA for hu-mans, testB for non-humans), with validation results also reported. This setup complements the low-data protocol by explicitly stressing cross-class generalization. We select hu-mans as the support class ( Cs) because RefCOCO contains abundant human annotations (testA), while non-human ob-jects (testB) have fewer instances per class, making them a natural candidate for novel categories. This split reflects realistic deployment scenarios (e.g., robotics or AR), where systems often have rich supervision on frequently encoun-tered classes (humans, hands) but must adapt with few sam-ples to less common objects 
+
+5.1.1. Benchmark Metrics and Baselines 
+
+Following common practice in ROD, we report top-1 accu-racy , which measures whether the highest-scoring predic-tion matches the referred object. For baselines, we adopt two strong and complemen-tary detectors: (1) Grounding DINO [26], a widely rec-ognized foundation detector with superior zero-shot detec-tion ability, and (2) UNINEXT [47], a recent universal in-6Table 1. Top-1 accuracy comparison on the RefCOCO/+/g datasets for the low-data ROD. ∆ denotes the gain of HeROD over its baseline.                                                                                                                                                                                                                                                                                                                                                                
+
+> RefCOCO
+> 0.1% Data 0.2% Data 0.5% Data 1% Data 2% Data 5% Data Method val testA testB val testA testB val testA testB val testA testB val testA testB val testA testB UNINEXT 17.75 22.03 14.27 21.53 23.23 16.80 24.05 27.24 18.61 31.04 34.35 27.77 46.24 49.67 39.73 54.30 57.24 51.40 HeROD-U (ours) 25.60 33.20 18.47 31.59 36.45 25.26 35.75 41.24 32.11 47.89 53.51 40.12 59.45 65.21 52.99 65.33 70.53 58.74
+> ∆+7.85 +11.17 +4.20 +10.06 +13.22 +8.46 +11.70 +14.00 +13.5 +16.85 +19.16 +12.35 +13.21 +15.54 +13.26 +11.03 +13.29 +7.34 Grounding DINO 57.93 65.64 50.26 59.17 67.72 50.72 60.97 69.40 52.05 63.66 72.41 56.70 66.60 74.69 58.37 79.32 84.37 73.50 HeROD-G (ours) 70.82 76.95 64.67 73.37 78.13 66.52 74.32 79.53 67.32 77.91 82.91 72.33 79.43 84.64 73.41 82.51 87.63 78.25
+> ∆+12.89 +11.31 +14.41 +14.20 +10.41 +15.80 +13.35 +10.13 +15.27 +14.25 +10.50 +15.63 +12.83 +9.95 +15.04 +3.19 +3.26 +4.75
+> RefCOCO+
+> 0.1% Data 0.2% Data 0.5% Data 1% Data 2% Data 5% Data Method val testA testB val testA testB val testA testB val testA testB val testA testB val testA testB UNINEXT 16.60 20.36 12.38 19.68 23.72 14.60 20.59 24.50 15.44 26.10 28.50 22.05 26.85 30.42 23.83 34.51 37.25 29.13 HeROD-U (ours) 27.03 35.10 15.50 30.27 39.36 19.92 34.17 46.61 22.85 38.68 48.74 27.55 42.92 53.60 30.21 51.27 60.25 39.78
+> ∆+10.43 +14.74 +3.12 +10.59 +15.64 +5.32 +13.58 +22.11 +7.41 +12.58 +20.24 +5.50 +16.07 +23.18 +6.38 +16.76 +23.00 +10.65 Grounding DINO 61.68 69.56 51.05 63.30 72.35 52.16 66.32 74.55 54.12 68.24 76.93 56.33 69.95 78.89 58.87 71.90 80.86 62.00 HeROD-G (ours) 62.52 70.17 51.52 65.27 74.07 53.04 66.98 75.13 55.14 69.30 77.80 57.07 70.98 79.53 59.24 72.60 81.07 63.08
+> ∆+0.84 +0.61 +0.47 +1.97 +1.72 +0.88 +0.66 +0.58 +1.02 +1.06 +0.87 +0.74 +1.03 +0.64 +0.37 +0.70 +0.21 +1.08
+> RefCOCOg
+> 0.1% Data 0.2% Data 0.5% Data 1% Data 2% Data 5% Data Method val test val test val test val test val test val test UNINEXT 17.18 16.69 20.61 21.60 23.18 23.38 25.18 24.92 29.02 28.67 37.77 37.29 HeROD-U (ours) 20.65 20.53 28.82 28.41 30.17 31.73 32.72 33.24 41.05 41.06 51.00 51.57
+> ∆+3.47 +3.84 +8.21 +6.81 +6.99 +8.35 +7.54 +8.32 +12.03 +12.39 +13.23 +14.28 Grounding DINO 70.59 71.35 72.24 71.79 72.55 73.00 73.92 73.61 74.47 75.06 76.63 77.24 HeROD-G (ours) 72.20 72.93 73.96 74.31 75.22 75.55 76.04 76.62 77.21 77.40 78.76 79.07
+> ∆+1.61 +1.58 +1.72 +2.52 +2.67 +2.55 +2.12 +3.01 +2.74 +2.34 +2.13 +1.83
+
+Table 2. Top-1 accuracy comparison on the RefCOCO dataset for the few-shot ROD. 
+
+Method Support Data Support Set Training 2k Finetune 1k Finetune 0.5k Finetune val testA testB val testA testB val testA testB val testA testB Grounding DINO 2k 61.18 70.66 52.23 67.23 72.30 63.85 62.98 69.56 58.43 62.08 68.84 56.84 HeROD-G (ours) 2k 78.17 +10.94 80.50 +8.20 75.62 +11.77 76.90 +13.92 80.15 +10.59 74.31 +15.88 75.08 +13.00 78.75 +9.91 71.03 +14.19 
+
+Grounding DINO 1k 59.28 68.62 50.52 64.74 69.91 61.02 61.81 67.93 56.86 60.65 67.74 54.78 HeROD-G (ours) 1k 76.81 +12.07 79.51 +9.60 75.39 +14.37 75.56 +13.75 78.27 +10.34 73.54 +16.68 72.85 +12.20 76.91 +9.17 70.30 +15.52 
+
+stance perception model that achieves state-of-the-art ROD performance after fine-tuning on mixed datasets. We em-phasize that to the best of our knowledge, no prior work has evaluated truly data-efficient ROD; thus, HeROD es-tablishes the first benchmark in this regime. While newer detectors exist[44], they have not been developed and re-ported in low-data ROD. Meanwhile, cutting-edge ground-ing detectors are still mostly based on the architecture of Grounding DINO or UNINEXT, so we believe our com-parisons with these two well-established foundations pro-vide both fairness and reproducibility. For fairness, we instantiate HeROD on both baselines, denoted HeROD-G 
+
+(with Grounding DINO) and HeROD-U (with UNINEXT). Grounding DINO and HeROD-G use Swin-T [28] as image encoder, BERT [8] as text encoder, and DINO [52] as de-tector. UNINEXT and HeROD-U use ResNet-50 [13] and Deformable DETR [54]. All models are initialized with of-ficial pre-trained weights. Training and testing protocols are identical for baselines and HeROD variants. We train with AdamW [29], using learning rates of 1e −5 for the text encoder and 2e −5 for other modules, with a linear decay for the text encoder fol-lowing MDETR [14]. The image encoder is frozen to pre-serve its strong pretrained features. Low-data ROD train-ing runs for 5 epochs (10 epochs for 0.1%/0.2% subsets) with a drop after the penultimate epoch; few-shot ROD in-volves 3 epochs on the support set followed by 3 epochs of novel-class fine-tuning. All experiments are conducted on the same hardware with a batch size of 8. 
+
+5.2. Detailed Results 
+
+5.2.1. Overall Results Low-Data ROD. As shown in Tab. 1, HeROD consistently improves over the baseline detectors Grounding DINO and UNINEXT across all low-data regimes. Even at the ex-treme 0.1% training split, HeROD delivers a gain of up to 
+
+∆ = +12 .9 points on RefCOCO validation compared to Grounding DINO. The gains remain stable as the propor-tion of labeled data increases, confirming that the improve-ments are not isolated to the extreme regime but reflect a general advantage in label efficiency. These results indicate that our explicit priors bias the search space toward spatially and semantically plausible candidates, thereby accelerating convergence. The effect is analogous to heuristic search in A*, where guidance reduces exploration cost and leads to more efficient goal discovery. Importantly, the consistent ∆
+
+across RefCOCO/+/g demonstrates that HeROD provides a reliable mechanism for exploiting limited supervision. On RefCOCO+, the relative improvements over Ground-ing DINO are less pronounced than those on RefCOCO/g. We attribute this to the design of RefCOCO+, which ex-cludes absolute spatial cues from annotations [49]. As 7a result, the spatial priors in HeROD have less opportu-nity to contribute, while the remaining visual descriptions are often generic and therefore more likely to be already captured by strongly pretrained detectors such as Ground-ing DINO, leaving limited room for further improvement. This also explains the different gain magnitudes across baselines: UNINEXT benefits more consistently, whereas strong visual-semantic alignment in Grounding DINO leads to smaller but still consistent gains. Nevertheless, HeROD still remains effective on RefCOCO+ and provides measur-able value under extremely low-data settings where spatial guidance is less relevant and visual guidance is rough. We view this as motivation to extend HeROD with richer rela-tional priors in future work. 
+
+Few-Shot ROD. Following the common protocol in [15], we first train all models on a support set (human cat-egory) before fine-tuning on limited samples from novel classes (non-human). Results are presented in Tab. 2. We primarily conduct evaluation using Grounding DINO for two reasons. First, Grounding DINO represents the most widely adopted foundation-level grounding detector. Sec-ond, while other detectors (e.g., UNINEXT) are competitive under full-data regimes, they are not explicitly optimized for few-shot transfer and lack standardized evaluation pro-tocols for support vs. novel class splits. By anchoring the few-shot evaluation to Grounding DINO, we ensure both reproducibility and comparability. Importantly, we empha-size that our contributions are orthogonal to the choice of backbone. The HeROD framework is model-agnostic and could, in principle, be applied to other modern detectors or multimodal LLMs once consistent few-shot protocols are established. For now, Grounding DINO provides the most reliable testbed for analyzing few-shot behavior in ROD. Looking at the results, since both baselines and HeROD share the same support pretraining, their performance is identical at that stage. After fine-tuning, the baselines achieve moderate gains on novel classes (testB) but suffer degradation on support classes (testA), especially with 0.5k or 1k novel samples. This reflects overfitting to scarce novel data, which disrupts previously learned support-class repre-sentations. In contrast, HeROD maintains balanced perfor-mance: it improves detection on novel classes while pre-serving accuracy on support classes. Across all settings, HeROD yields consistent ∆ gains on both testA and testB, showing that our priors regularize adaptation by grounding the model in interpretable spatial and semantic signals. This allows the detector to adapt efficiently without catastrophic forgetting, a property that baseline detectors lack. 
+
+5.2.2. Ablation Study Pipeline Design. To validate the effectiveness of each de-sign choice in HeROD, we performed ablation studies on RefCOCO using only 1% of the training data. Results are shown in Tab. 3. We compare the baseline final prediction                                                 
+
+> Table 3. Ablation studies on the RefCOCO dataset for HeROD.
+> Hrepresents the heuristics. ‘Reference Gen’ and ‘Learning Proc’ represent Object Reference Generation and Learning Process. Reference Gen Final Prediction Learning Proc Performance w/o HOriginal w/o H63.66 w/o HHeuristic (static) w/ H64.78 w/o HHeuristic (adaptive) w/ H71.33 w/ HHeuristic (adaptive) w/ H77.91
+> Table 4. Ablation studies on the RefCOCO dataset for Hs,Hvin different stages of HeROD.
+> Reference Generation Final Prediction Performance
+> HsHvHsHv
+> ✓✓✓76.36
+> ✓✓✓74.93
+> ✓✓✓76.02
+> ✓✓✓72.43
+> ✓✓✓✓77.91
+
+with two variants of our prior-injected final prediction: a 
+
+static variant that fuses heuristic-inspired priors by direct addition, and an adaptive variant that employs a lightweight MLP to balance heuristics with detector scores under su-pervision. Both variants outperform the baseline, confirm-ing that explicit priors improve data efficiency. Moreover, the adaptive variant achieves the strongest performance, highlighting the value of learnable fusion guided by our heuristic-augmented loss. 
+
+Contribution of Each Stage. We further isolate the impact of prior injection at different stages of the DETR pipeline. As shown in Tab. 3, incorporating heuristics dur-ing reference generation yields clear gains by improving the quality of candidate proposals that enter later decoding lay-ers. This effect demonstrates that early-stage biasing and late-stage adaptive balancing are complementary. 
+
+Role of Spatial vs. Visual Priors. Ablation studies on the spatial and visual priors are presented in Tab. 4. Both components contribute positively: spatial priors help when positional cues are explicit in the phrase (e.g., “on the left”), while visual priors guide attribute-based match-ing (e.g., “man in a blue shirt”). Their combination provides the most consistent improvements, confirming our hypoth-esis that reasoning from both spatial layout and semantic attributes is necessary for robust data-efficient ROD. 
+
+5.2.3. Qualitative and More Results. 
+
+We provide further ablations and visualizations in Sec. 7 and Sec. 8 in supplementary materials. These include (1) extended ablations on the impact of CLIPSeg integration and loss weighting, (2) evaluation under cleaned and cor-rected ROD datasets, and (3) qualitative examples showing how injected priors redirect model attention toward plausi-ble regions, particularly in extremely low-data regimes. We also report results under full supervision in Tab. 5 and 8Sec. 7.1 (supplementary). In this regime, HeROD remains competitive and consistently outperforms its baselines: on RefCOCO/+/g, HeROD-G improves Grounding DINO by 
+
+∆ = +0 .7–1.0 points, and HeROD-U shows similar gains over UNINEXT. Compared with other ROD-specific de-tectors using backbones of similar complexity, HeROD achieves superior performance. Although the absolute im-provements are smaller than in scarce-data regimes, these results confirm that prior injection does benefit learning when abundant annotations are available. Further discus-sions (e.g., extensibility, limitations) are in Sec. 12 (supp). 
+
+## 6. Conclusion 
+
+We introduced De-ROD , the new benchmarking proto-col for evaluating ROD under data scarcity, and proposed 
+
+HeROD , a heuristic-inspired framework that injects explicit spatial and semantic priors into DETR-style detectors. By guiding both training and inference with interpretable pri-ors, HeROD improves label efficiency in low-data regimes. Our results demonstrate that reasoning before learning of-fers a practical path toward robust, data-efficient ROD. 
+
+Acknowledgement Mr Xu Zhang was supported by Australian Research Council Projects in part by FL170100117. Dr Dacheng Tao’s research is partially supported by NTU RSR and Start Up Grants. Dr Jing Zhang was supported by the New Generation Artificial Intelligence-National Science and Technology Major Project (2025ZD0123602). 
+
+## References 
+
+[1] Amir Bar, Xin Wang, Vadim Kantorov, Colorado J Reed, Roei Herzig, Gal Chechik, Anna Rohrbach, Trevor Dar-rell, and Amir Globerson. Detreg: Unsupervised pretrain-ing with region priors for object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14605–14615, 2022. 2, 3, 6 [2] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-end object detection with transformers. In European confer-ence on computer vision , pages 213–229. Springer, 2020. 2, 6[3] Jierun Chen, Fangyun Wei, Jinjing Zhao, Sizhe Song, Bo-huai Wu, Zhuoxuan Peng, S-H Gary Chan, and Hongyang Zhang. Revisiting referring expression comprehension eval-uation in the era of large multimodal models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition , pages 513–524, 2025. 1 [4] Jierun Chen, Fangyun Wei, Jinjing Zhao, Sizhe Song, Bo-huai Wu, Zhuoxuan Peng, S-H Gary Chan, and Hongyang Zhang. Revisiting referring expression comprehension eval-uation in the era of large multimodal models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition , pages 513–524, 2025. 2 [5] Zhe Chen, Jing Zhang, and Dacheng Tao. Recurrent glimpse-based decoder for detection with transformer. In 
+
+Proceedings of the IEEE/CVF conference on computer vi-sion and pattern recognition , pages 5260–5269, 2022. 2 [6] Xiyang Dai, Yinpeng Chen, Bin Xiao, Dongdong Chen, Mengchen Liu, Lu Yuan, and Lei Zhang. Dynamic head: Unifying object detection heads with attentions. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7373–7382, 2021. 2 [7] Jiajun Deng, Zhengyuan Yang, Tianlang Chen, Wengang Zhou, and Houqiang Li. Transvg: End-to-end visual ground-ing with transformers. In Proceedings of the IEEE/CVF international conference on computer vision , pages 1769– 1779, 2021. 1, 2 [8] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional trans-formers for language understanding. In Proceedings of the 2019 conference of the North American chapter of the asso-ciation for computational linguistics: human language tech-nologies, volume 1 (long and short papers) , pages 4171– 4186, 2019. 7 [9] Ye Du, Zehua Fu, Qingjie Liu, and Yunhong Wang. Visual grounding with transformers, 2022. 2 [10] Zhe Gan, Yen-Chun Chen, Linjie Li, Chen Zhu, Yu Cheng, and Jingjing Liu. Large-scale adversarial training for vision-and-language representation learning. Advances in Neural Information Processing Systems , 33:6616–6628, 2020. 2 [11] Ross Girshick. Fast r-cnn. In Proceedings of the IEEE inter-national conference on computer vision , pages 1440–1448, 2015. 1, 2 [12] Peter E Hart, Nils J Nilsson, and Bertram Raphael. A formal basis for the heuristic determination of minimum cost paths. 
+
+IEEE transactions on Systems Science and Cybernetics , 4 (2):100–107, 1968. 2, 3 [13] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceed-ings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. 7 [14] Aishwarya Kamath, Mannat Singh, Yann LeCun, Gabriel Synnaeve, Ishan Misra, and Nicolas Carion. Mdetr-modulated detection for end-to-end multi-modal understand-ing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 1780–1790, 2021. 2, 7, 1 [15] Bingyi Kang, Zhuang Liu, Xin Wang, Fisher Yu, Jiashi Feng, and Trevor Darrell. Few-shot object detection via feature reweighting. In Proceedings of the IEEE/CVF international conference on computer vision , pages 8420–8429, 2019. 2, 3, 6, 8 [16] Sahar Kazemzadeh, Vicente Ordonez, Mark Matten, and Tamara Berg. Referitgame: Referring to objects in pho-tographs of natural scenes. In Proceedings of the 2014 con-ference on empirical methods in natural language processing (EMNLP) , pages 787–798, 2014. 1 [17] Lei Ke, Mingqiao Ye, Martin Danelljan, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu, et al. Segment anything in high qual-ity. Advances in Neural Information Processing Systems , 36: 29914–29934, 2023. 4 
+
+9[18] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 ,2014. 4 [19] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-thing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 4015–4026, 2023. 4 [20] Feng Li, Hao Zhang, Shilong Liu, Jian Guo, Lionel M Ni, and Lei Zhang. Dn-detr: Accelerate detr training by intro-ducing query denoising. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 13619–13627, 2022. 2 [21] Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jian-wei Yang, Chunyuan Li, Yiwu Zhong, Lijuan Wang, Lu Yuan, Lei Zhang, Jenq-Neng Hwang, et al. Grounded language-image pre-training. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10965–10975, 2022. 1, 2 [22] Muchen Li and Leonid Sigal. Referring transformer: Aone-step approach to multi-task visual grounding. Advances in neural information processing systems , 34:19652–19664, 2021. 1, 2 [23] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Doll´ ar. Focal loss for dense object detection. In Pro-ceedings of the IEEE international conference on computer vision , pages 2980–2988, 2017. 1 [24] Shilong Liu, Feng Li, Hao Zhang, Xiao Yang, Xianbiao Qi, Hang Su, Jun Zhu, and Lei Zhang. Dab-detr: Dynamic anchor boxes are better queries for detr. arXiv preprint arXiv:2201.12329 , 2022. 2 [25] Shilong Liu, Shijia Huang, Feng Li, Hao Zhang, Yaoyuan Liang, Hang Su, Jun Zhu, and Lei Zhang. Dq-detr: Dual query detection transformer for phrase extraction and grounding. In Proceedings of the AAAI Conference on Arti-ficial Intelligence , pages 1728–1736, 2023. 2, 1 [26] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In Euro-pean conference on computer vision , pages 38–55. Springer, 2024. 1, 2, 5, 6, 3 [27] Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang Fu, and Alexander C Berg. Ssd: Single shot multibox detector. In European con-ference on computer vision , pages 21–37. Springer, 2016. 1, 2[28] Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In 
+
+Proceedings of the IEEE/CVF international conference on computer vision , pages 10012–10022, 2021. 7 [29] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. 7 [30] Timo L¨ uddecke and Alexander Ecker. Image segmenta-tion using text and image prompts. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7086–7096, 2022. 5 [31] Junhua Mao, Jonathan Huang, Alexander Toshev, Oana Camburu, Alan L Yuille, and Kevin Murphy. Generation and comprehension of unambiguous object descriptions. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 11–20, 2016. 1, 6 [32] Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, and Jingdong Wang. Conditional detr for fast training convergence. In Proceed-ings of the IEEE/CVF international conference on computer vision , pages 3651–3660, 2021. 2 [33] Yanyuan Qiao, Chaorui Deng, and Qi Wu. Referring ex-pression comprehension: A survey of methods and datasets. 
+
+IEEE Transactions on Multimedia , 23:4426–4440, 2020. 2, 3, 4 [34] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PmLR, 2021. 2, 5 [35] Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object de-tection. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 779–788, 2016. 1, 2 [36] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. Advances in neural information process-ing systems , 28, 2015. 1, 2 [37] Russell Stewart, Mykhaylo Andriluka, and Andrew Y Ng. End-to-end people detection in crowded scenes. In Proceed-ings of the IEEE conference on computer vision and pattern recognition , pages 2325–2333, 2016. 6 [38] Bo Sun, Banghuai Li, Shengcai Cai, Ye Yuan, and Chi Zhang. Fsce: Few-shot object detection via contrastive pro-posal encoding. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7352– 7362, 2021. 2 [39] Yucheng Suo, Linchao Zhu, and Yi Yang. Text augmented spatial aware zero-shot referring image segmentation. In 
+
+Findings of the Association for Computational Linguistics: EMNLP 2023 , pages 1032–1043, 2023. 3, 4, 5 [40] Zhi Tian, Chunhua Shen, Hao Chen, and Tong He. Fcos: Fully convolutional one-stage object detection. In Proceed-ings of the IEEE/CVF international conference on computer vision , pages 9627–9636, 2019. 1, 2 [41] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-reit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. 1 [42] Yuji Wang, Jingchen Ni, Yong Liu, Chun Yuan, and Yan-song Tang. Iterprime: Zero-shot referring image segmen-tation with iterative grad-cam refinement and primary word emphasis. In Proceedings of the AAAI Conference on Artifi-cial Intelligence , pages 8159–8168, 2025. 3, 4, 5 [43] Aming Wu, Yahong Han, Linchao Zhu, and Yi Yang. Universal-prototype enhancing for few-shot object detection. In Proceedings of the IEEE/CVF international conference on computer vision , pages 9567–9576, 2021. 2 
+
+10 [44] Junfeng Wu, Yi Jiang, Qihao Liu, Zehuan Yuan, Xiang Bai, and Song Bai. General object foundation model for images and videos at scale. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pages 3783–3795, 2024. 7 [45] Xiongwei Wu, Doyen Sahoo, and Steven Hoi. Meta-rcnn: Meta learning for few-shot object detection. In Proceedings of the 28th ACM international conference on multimedia ,pages 1679–1687, 2020. 2 [46] Yang Xiao, Vincent Lepetit, and Renaud Marlet. Few-shot object detection and viewpoint estimation for objects in the wild. IEEE transactions on pattern analysis and machine intelligence , 45(3):3090–3106, 2022. 2 [47] Bin Yan, Yi Jiang, Jiannan Wu, Dong Wang, Ping Luo, Ze-huan Yuan, and Huchuan Lu. Universal instance percep-tion as object discovery and retrieval. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15325–15336, 2023. 2, 6 [48] Sibei Yang, Guanbin Li, and Yizhou Yu. Cross-modal re-lationship inference for grounding referring expressions. In 
+
+Proceedings of the IEEE/CVF conference on computer vi-sion and pattern recognition , pages 4145–4154, 2019. 3 [49] Licheng Yu, Patrick Poirson, Shan Yang, Alexander C Berg, and Tamara L Berg. Modeling context in referring expres-sions. In European conference on computer vision , pages 69–85. Springer, 2016. 1, 2, 3, 4, 6, 7 [50] Licheng Yu, Zhe Lin, Xiaohui Shen, Jimei Yang, Xin Lu, Mohit Bansal, and Tamara L Berg. Mattnet: Modular at-tention network for referring expression comprehension. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 1307–1315, 2018. 3, 1, 2 [51] Seonghoon Yu, Paul Hongsuck Seo, and Jeany Son. Zero-shot referring image segmentation with global-local con-text features. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 19456– 19465, 2023. 4, 5 [52] Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M Ni, and Heung-Yeung Shum. Dino: Detr with improved denoising anchor boxes for end-to-end object detection. arXiv preprint arXiv:2203.03605 , 2022. 5, 7 [53] Xu Zhang, Zhe Chen, Jing Zhang, Tongliang Liu, and Dacheng Tao. Learning general and specific embedding with transformer for few-shot object detection. International Journal of Computer Vision , 133(2):968–984, 2025. 2 [54] Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai. Deformable detr: Deformable trans-formers for end-to-end object detection. arXiv preprint arXiv:2010.04159 , 2020. 2, 5, 7 
+
+11 Heuristic-inspired Reasoning Priors Facilitate Data-Efficient Referring Object Detection 
+
+# Supplementary Material 
+
+## 7. Additional Ablation Studies 
+
+7.1. Data-Rich Setting. 
+
+Although our primary focus is label-scarce regimes, we also benchmark HeROD under full supervision to assess whether prior injection harms performance when abundant annotations are available. Results are shown in Tab. 5. Compared with classical ROD models such as MAttNet [50], TransVG [7], and RefTR [22], foundation-style de-tectors like MDETR [14], DQ-DETR [25], and Grounding DINO [26] achieve substantially higher accuracy across Re-fCOCO/+/g. Our HeROD variants, which simply inject rea-soning priors into these backbones, match or surpass the strongest baselines. For example, HeROD-G improves over Grounding DINO by +0.7 to +1.0 points across the three datasets, while HeROD-U achieves consistent gains over UNINEXT. Although these margins are smaller than those in scarce-data regimes (likely reflecting the near-saturation of current detectors in full-data training) they confirm two important points: (1) reasoning priors provide measurable benefits even when abundant labels are available, and (2) our inte-gration does not compromise performance in the data-rich case. This is important because explicit priors might restrict model flexibility under full supervision. Instead, HeROD maintains or slightly improves accuracy, confirming that the injected reasoning priors are complementary to learned fea-tures rather than competing with them. 
+
+7.2. Impact of Pre-trained CLIPSeg 
+
+To further examine the role of CLIPSeg, we compare our approach with a direct fusion baseline where CLIPSeg em-beddings are simply added to Grounding DINO (see Tab. 6). This naive strategy yields only a marginal gain of +0.33 
+
+points. By contrast, our full HeROD framework achieves a much larger improvement of +14.25 points under the same setting. This comparison highlights that CLIPSeg alone is insuf-ficient for improving data-efficient ROD: its relevance maps are often coarse and do not directly influence the learning dynamics of the detector. In addition, further fusing spatial priors yields a modest gain of +0.77 over the baseline, con-firming the priors are informative. The much larger gains of HeROD show that the benefit mainly comes from structured integration rather than naive fusion. In HeROD, however, CLIPSeg is reinterpreted as a visual reasoning prior and in-tegrated systematically into the pipeline, affecting proposal ranking, prediction fusion, and the training objective. This principled integration allows CLIPSeg signals to guide both learning and inference, demonstrating that our gains come not from plugging in a pretrained model, but from explic-itly embedding heuristic-inspired priors into the detection process. 
+
+7.3. Overall Impact of Spatial and Visual Priors 
+
+To examine the contributions of spatial ( Hs) and visual (Hv ) reasoning priors, we conduct an ablation study over the full HeROD pipeline (Tab. 7). Without any priors, the performance is 63.66. Adding only the spatial prior raises the score to 73.53, and integrating both spatial and visual priors further boosts performance to 77.91 . These results show that each prior contributes positively, and together they provide a complementary mechanism that substantially enhances data-efficient ROD, reinforcing the overall effec-tiveness of the HeROD framework. 
+
+7.4. Loss Weight Selection 
+
+Our final loss (Eq. (9)) combines three components: clas-sification loss, bounding box loss, and heuristic confidence loss. Following standard DETR practice, we use a 1:5 ra-tio between classification and bounding box losses. Since the heuristic confidence term aligns more closely with clas-sification than with box regression, we assign it the same weight as the classification loss. We validate this choice in Tab. 8, which shows that varying the relative weights has minimal impact on final performance. This suggests that HeROD’s improvements are robust to the exact weighting scheme. 
+
+7.5. Results on Cleaned Datasets 
+
+Recent work [3] identified annotation noise in RefCOCO and released a cleaned version of the dataset. While the original RefCOCO remains the most widely used ROD benchmark, we additionally evaluate HeROD on the cleaned split to test robustness. As shown in Tab. 9, HeROD achieves consistent improvements (e.g., +14.26 in the low-data regime), demonstrating that our approach is effective across both the original and cleaned datasets. This suggests that HeROD’s gains are not sensitive to annotation noise and generalize well under varying data conditions. 1Table 5. Top-1 accuracy comparison for the data-rich setting. * represents the reproduced results using only the ROD datasets with the official code. 
+
+Method Fine-tuning RefCOCO RefCOCO+ RefCOCOg val testA testB val testA testB val test MAttNet [50] w/ 76.65 81.14 69.99 65.33 71.62 56.02 66.58 67.27 VGTR [9] w/ 79.20 82.32 73.78 63.91 70.09 56.51 65.73 67.23 TransVG [7] w/ 81.02 82.72 78.35 64.82 70.70 56.94 68.67 67.73 VILLA-L [10] w/ 82.39 87.48 74.84 76.17 81.54 66.84 76.18 76.71 RefTR [22] w/ 85.65 88.73 81.16 77.55 82.26 68.99 79.25 80.01 MDETR [14] w/ 86.75 89.58 81.41 79.52 84.09 70.62 81.64 80.89 DQ-DETR [25] w/ 88.63 91.04 83.51 81.66 86.15 73.21 82.76 83.44 UNINEXT* [47] w/ 78.61 80.86 73.72 63.87 68.98 55.33 64.18 64.56 HeROD-U (ours) w/ 81.93 84.87 75.70 68.78 74.73 58.01 69.06 69.19 Grounding DINO* [26] w/o 50.61 57.43 44.75 51.46 57.06 46.06 60.38 59.51 Grounding DINO* [26] w/ 88.86 91.46 85.73 80.67 86.99 72.76 84.66 84.56 HeROD-G (ours) w/ 89.57 91.46 86.06 81.79 87.67 74.11 85.40 84.78 
+
+Table 6. Impact of CLIPSeg embedding on the RefCOCO dataset. 
+
+Fusion of CLIPSeg Embedding Performance fuse w/o HeROD pipeline 63.99 fuse w HeROD pipeline 77.91 
+
+Table 7. Overall impact of different heuristic-inspired reasoning priors. 
+
+Hs Hv Performance 
+
+✓ ✓ 77.91 
+
+✓ x 73.53 x x 63.66 
+
+Table 8. Ablation studies on loss weights selection. 
+
+Lconf : Lcls Performance 0.5 77.18 1.0 77.91 
+
+2.0 77.53 
+
+Table 9. Results on the cleaned RefCOCO datasets. 
+
+method 0.1% data 2% data Grounding DINO 60.57 68.64 HeROD 74.83 82.42 
+
+## 8. Visualizations 
+
+8.1. Visualization of Spatial Prior Maps 
+
+As described in Sec. 4, we visualize representative spatial prior maps in Fig. 3. For instance, a “left” map assigns higher scores to regions near the left edge of the image, while a “bottom” map highlights areas closer to the lower boundary. For compound descriptors such as “bottom left,” we combine the corresponding maps (e.g., averaging the 
+
+Figure 3. Visualization of four Spatial Heuristic-inspired Scoring Maps: left-related, top-related, right-related, and bottom-related (listed from the first column to the second column, from the first row to the second row). Brighter colors are used to indicate higher values, while darker colors represent lower values. 
+
+scores from “bottom” and “left”). These visualizations il-lustrate how simple positional priors provide interpretable spatial biases that can be directly injected into the detector. 
+
+8.2. Performance across Data Volumes 
+
+To illustrate the effect of HeROD under varying supervi-sion, we plot performance curves of HeROD and base-line detectors (UNINEXT [47] and Grounding DINO [26]) across different training data volumes (Fig. 4, Fig. 5). The results show that HeROD yields significant improvements in low-data settings, highlighting its ability to enhance la-bel efficiency and accelerate adaptation to the ROD task. Importantly, HeROD also generalizes well to the fully su-2HeROD 
+
+> Baseline
+
+Figure 4. Visualization of performance comparison across varying data volumes between HeROD-U and the baseline UNINEXT. HeROD 
+
+> Baseline
+
+Figure 5. Visualization of performance comparison across vary-ing data volumes between HeROD-G and the baseline Grounding DINO. 
+
+pervised regime, maintaining or improving accuracy even when sufficient annotations are available. This confirms that the injected reasoning priors are complementary to learned features across both scarce- and rich-data condi-tions. 
+
+8.3. Illustration of Pre-trained Detector Outputs 
+
+As discussed in Sec. 1, we observe that the pre-trained Grounding DINO [26] often fails to handle spatial descrip-tions in zero-shot evaluation. For example, when the refer-ring phrase specifies “on the left,” the model frequently ig-nores the spatial cue and predicts an incorrect region. Rep-resentative outputs are shown in Fig. 6. These errors high-light the model’s insensitivity to spatial context and mo-tivate our emphasis on injecting explicit spatial reasoning right dog  
+
+> bottom banana
+> top plate
+> very top left orange
+> person on left edge
+> cake upper right
+> pizza on right
+> giraffe on right
+> bed on the left
+
+Figure 6. Predictions illustration of the pre-trained Grounding DINO. The ground truth bounding boxes are indicated by dashed 
+
+red lines. It suggests that the vanilla grounding detection may overlook the contextual information in the text descriptions with-out heavy finetuning. 
+
+priors. 
+
+8.4. Qualitative Examples and Discussion 
+
+We show qualitative examples in Fig. 7 with different cases. In all cases, the baseline detectors fail, while our HeROD correctly localizes the target. For potential misleading priors, in HeROD, priors pro-vide soft guidance rather than hard constraints. Though absolute-direction priors can be imperfect for purely rel-ative relations, their influence is adaptively modulated through stage-wise integration and learned fusion, allow-ing detector and visual evidence to down-weight misleading cues. As shown in Fig. 7 (e.g., “person right of umbrella”), the framework remains robust under some challenging ex-pressions. For complex relationships, it is true that our current spa-tial vocabulary is limited. This is a deliberate design choice: our goal is not to model all spatial relations, but to show that making even simple, explicit spatial priors actionable can substantially improve data efficiency under scarcity. Im-portantly, HeROD does not rely on spatial cues alone. Vi-sual priors and stage-wise integration allow the framework to handle more compositional expressions in practice (e.g., “the white chair right above the dog” in Fig. 7). The frame-work is general: more expressive relational priors (e.g., rel-ative, proximity cues) can be encoded as heatmaps and in-jected in the same pipeline. We view this work as establish-ing the foundation, with richer priors as a natural extension. 31.person right of umbrella 2.pink doughnut 3.the white chair right above the dog 4.slice of sandwich bottom right 
+
+# 1 2 3 4Figure 7. Qualitative examples. The top row shows correct prediction results by HeROD, the bottom row shows incorrect prediction results by the baseline. The responding referring expressions are illustrated below the figure. 
+
+## 9. Zero-Shot Setting 
+
+we also evaluate a zero-shot variant by disabling training while retaining prior injection. On RefCOCO, HeROD improves Grounding DINO from 50.61/57.43/44.75 to 59.24/64.96/53.35 (val/testA/testB), showing that it can also enhance zero-shot grounding. 
+
+## 10. Latency Discussion 
+
+Baseline (without CLIPSeg) 0.362 s/iter vs. HeROD 0.435 s/iter. GPU memory rise from 4742 to 5810 MB for batch size 8. Training-time overhead is similarly small since CLIPSeg is frozen, runtime remains dominated by detector. 
+
+## 11. Evaluation on Referring Image Segmenta-tion 
+
+Although our primary focus is on referring object detec-tion (ROD), we also evaluate the potential of HeROD for downstream referring image segmentation (RIS). We use the high-quality bounding boxes predicted by HeROD and apply HQ-SAM [17], a strong variant of SAM [19], to gen-erate segmentation masks without fine-tuning. This pipeline differs from conventional zero-shot RIS approaches ( e.g. , Global-Local CLIP [51], TAS [39], IteR-PrimE [42]), which directly predict masks from text without intermediate box proposals. Instead, our method first local-izes the referred object via text and then applies segmen-tation within the localized region. Despite this difference, HeROD achieves strong RIS performance (Tab. 10), show-ing that accurate localization serves as an effective prompt for high-quality segmentation even without mask supervi-sion. While not directly comparable to zero-shot RIS methods, this experiment demonstrates the broader utility of data-efficient ROD. By providing robust localization under lim-ited data, HeROD offers a practical stepping stone toward unified vision–language segmentation frameworks that in-tegrate heuristic-driven localization with downstream mask generation. 
+
+## 12. Further Discussion of De-ROD and HeROD 
+
+De-ROD as a benchmark. Unlike convergence-acceleration methods such as Adam [18] that improve op-timization techniques, De-ROD defines a new evaluation protocol focused on data efficiency in ROD. A success-ful approach should achieve strong performance in severely limited-data regimes while maintaining or slightly improv-ing results under full supervision. By emphasizing intrinsic label efficiency, De-ROD provides a realistic and stringent test bed for future ROD research, especially in scenarios where large-scale annotations are infeasible. This bench-mark highlights both the urgency and the value of designing ROD methods that require fewer labels yet deliver compet-itive accuracy. 
+
+Scope of spatial and visual priors. Our current spa-tial priors ( Hs) are limited to cardinal and compositional directions, and thus cannot capture more complex contex-tual relations. This limitation is partially mitigated by the visual prior ( Hv ), which leverages CLIPSeg to align phrase semantics with image regions. Importantly, our approach goes well beyond simply adding CLIPSeg scores or ensem-bling with a grounding detector. CLIPSeg maps alone are coarse and do not influence detector learning; as shown in Sec. 7.2, na¨ ıve fusion yields only marginal gains. In HeROD, CLIPSeg signals are reinterpreted as visual rea-soning priors and integrated systematically into proposal ranking, prediction fusion, and the training objective, which enables them to directly shape learning. While CLIPSeg is used here for convenience, other pretrained models that pro-vide local alignment signals could be employed in the same role. 
+
+Scope and limitation. Our study targets data-scarce referring object detection on standard benchmarks, under 4Table 10. Referring image segmentation results. * denotes that the paper’s reported results were kept to one decimal place, and we directly replicated them here. 
+
+Method RefCOCO RefCOCO+ RefCOCOg val testA testB val testA testB val test Global-Local CLIP [51] 26.70 24.99 26.48 28.22 26.54 27.86 33.02 33.12 TAS [39] 39.91 42.85 35.85 43.99 50.58 36.44 47.68 47.41 IteRPrimE* [42] 40.20 46.50 33.90 44.20 51.60 35.30 46.00 45.80 HeROD-G (ours) 78.21 80.16 74.30 71.52 76.86 63.86 72.52 72.39 
+
+the common assumption in modern vision–language re-search that pretrained foundation models are available. As such, HeROD is most applicable to real-world settings like robotics, where language-guided localization is needed but dense labeling is costly. A limitation is that our semantic prior relies on the availability of suitable pretrained mod-els; in niche domains (e.g., medical imaging), effective deployment may require domain-specific foundation mod-els/priors and datasets to produce reliable heatmaps. The framework itself is general, and can be adapted when ap-propriate domain foundations are established. 
+
+Novelty and extensibility. The novelty of HeROD lies in the systematic integration of spatial and visual reasoning priors into DETR-based detectors (Sec. 4.1). Unlike prior work that relies solely on implicit feature learning, HeROD explicitly injects interpretable priors into multiple stages of the pipeline, reducing dependence on large labeled datasets and improving cross-modal alignment. Although this work focuses on spatial and visual priors, the framework is ex-tensible: additional priors, such as structural patterns, do-main expertise, or medical knowledge, could be incorpo-rated to further enhance data-efficient referring object de-tection. For instance, depth-based terms may be feasible within HeROD. Depth cues from a depth estimator can be converted into text-conditioned depth priors and injected as reasoning signals in the same pipeline. 5
