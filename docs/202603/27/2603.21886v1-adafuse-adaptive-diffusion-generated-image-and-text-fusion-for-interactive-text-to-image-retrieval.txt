@@ -1,0 +1,235 @@
+Title: ADaFuSE: Adaptive Diffusion-generated Image and Text Fusion for Interactive Text-to-Image Retrieval
+
+URL Source: https://arxiv.org/pdf/2603.21886v1
+
+Published Time: Tue, 24 Mar 2026 02:45:52 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# ADaFuSE: Adaptive Diffusion-generated Image and Text Fusion for Interactive Text-to-Image Retrieval 
+
+## Zhuocheng Zhang 
+
+Hunan University Changsha, Hunan, China zhuocheng@hnu.edu.cn 
+
+## Xingwu Zhang 
+
+Hunan University Changsha, Hunan, China xingwuzhang@hnu.edu.cn 
+
+## Kangheng Liang 
+
+University of Glasgow Glasgow, United Kingdom 2743944l@student.gla.ac.uk 
+
+## Guanxuan Li 
+
+Hunan University Changsha, Hunan, China 1005890623lgx@gmail.com 
+
+## Richard Mccreadie 
+
+University of Glasgow Glasgow, United Kingdom Richard.Mccreadie@glasgow.ac.uk 
+
+## Zijun Long ∗
+
+Hunan University Changsha, Hunan, China longzijun@hnu.edu.cn 
+
+## Abstract 
+
+Recent advances in interactive text-to-image retrieval (I-TIR) use diffusion models to bridge the modality gap between the textual information need and the images to be searched, resulting in in-creased effectiveness. However, existing frameworks fuse multi-modal views of user feedback by simple embedding addition. In this work, we show that this static and undifferentiated fusion indiscriminately incorporates generative noise produced by the dif-fusion model, leading to performance degradation for up to 55.62% samples. We further propose ADaFuSE (Adaptive Diffusion-Text Fusion with Semantic-aware Experts), a lightweight fusion model designed to align and calibrate multi-modal views for diffusion-augmented I-TIR, which can be plugged into existing frameworks without modifying the backbone encoder. Specifically, we introduce a dual-branch fusion mechanism that employs an adaptive gating branch to dynamically balance modality reliability, alongside a semantic-aware mixture-of-experts branch to capture fine-grained cross-modal nuances. Via thorough evaluation over four standard I - TIR benchmarks, ADaFuSE achieves state-of-the-art performance, surpassing DAR by up to 3.49% in Hits@10 with only a 5.29% pa-rameter increase, while exhibiting stronger robustness to noisy and longer interactive queries. These results show that generative augmentation coupled with principled fusion provides a simple, generalizable alternative to fine-tuning for interactive retrieval. 
+
+## Keywords 
+
+Diffusion-augmented Interactive Text-to-Image Retrieval, Multi-modal Query Fusion 
+
+## 1 Introduction 
+
+Interactive text-to-image retrieval (I-TIR) allows users to find target images in a corpus by iteratively incorporating user feedback ex-pressed as natural language dialogue [12, 16, 17]. Recently, diffusion-augmented I-TIR has emerged as a compelling paradigm by em-ploying diffusion models [14, 29] to generate synthetic images  
+
+> ∗Corresponding author.
+> SIGIR ’26, Melbourne | Naarm, Australia
+> ©2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-x-xxxx-xxxx-x/YYYY/MM https://doi.org/XXXXXXX.XXXXXXX
+
+conditioned on the dialogue context as visual proxies, serving to enrich text queries [23] or act as standalone image queries [33]. Existing frameworks, such as DAR [23], integrate the dialogue text and corresponding generated images via a static additive fusion strategy, combining their embeddings with a fixed weight. However, we argue that this static additive fusion suffers from two key limitations. First, methods like DAR that rely on fixed weighting ignore how the usefulness of each modality varies from instance-to-instance. In practice, the reliance on visual and textual information should be dynamic, depending on how well the gen-erated image captures the current intent [3, 35, 1]. Second, static additive fusion treats all generated images as equally valuable, ig-noring their actual quality. Since diffusion models are inherently stochastic, the consistency between generated images and user intent fluctuates across samples. Static addition indiscriminately fuses these generated images, inevitably introducing noise. To address the above limitations, we propose ADaFuSE (Adap-tive Diffusion-Text Fusion with Semantic-aware Experts), a light-weight fusion model that is designed to dynamically calibrate multi-modal representations for diffusion-augmented I-TIR, which can be plugged into existing I-TIR pipelines without modifying the backbone encoder. Structurally, the model comprises two coor-dinated branches: an adaptive gating [27] branch that leverages cross-modal interaction to dynamically modulate the fusion weights of text features and corresponding generated image features; and a semantic-aware mixture-of-experts branch that utilizes diverse semantic-aware experts to construct compensatory features, captur-ing fine-grained cross-modal nuances. By integrating the modulated features from the gating branch with the compensatory features from the semantic-aware branch, ADaFuSE forms a more robust and intent-aligned query representation than static additive fusion. Our main contributions are: (i) We critically analyze existing diffusion-augmented I-TIR frameworks, exposing the limitations of undifferentiated static additive fusion. (ii) We propose ADaFuSE, a lightweight fusion model designed to achieve a robust fused rep-resentation between input text and diffusion-generated images. (iii) We demonstrate state -of -the -art performance on four standard I- TIR benchmarks, improving over strongest diffusion - augmented baseline (DAR) [23] by up to 3.49% in Hits@10 and showing robust-ness to increasing query complexity and interaction length.  
+
+> arXiv:2603.21886v1 [cs.IR] 23 Mar 2026 SIGIR ’26, July 20–24, 2026, Melbourne | Naarm, Australia Trovato et al.
+
+## 2 Related Work 
+
+Interactive Text-to-Image Retrieval: Unlike traditional retrieval systems that rely solely on a single (short) query [15, 28], interac-tive text-to-image retrieval (I-TIR) iteratively refines a search query based on multi-round user feedback [17, 38]. Driven by advance-ments in large language models [6, 11, 21] and vision language models [24, 28, 18], this interactive approach has been used to in-crease search effectiveness for a wide range of use-cases, ranging from general image search [16, 33, 37] to specialized tasks like per-son retrieval [4, 25]. Diffusion-augmented I-TIR approaches are a recent innovation that incorporates diffusion-generated images to bridge the semantic gap between the textual query/dialogue and the images being searched. Specifically, DAR [23] synthesizes these images conditioned on the dialogue context and integrates them with textual queries via a static additive fusion strategy, enabling state-of-the-art performance, even in zero-shot settings. 
+
+Fusion of Multi-modal Query Views: To our knowledge, no prior work examines how to better fuse multi-modal query views for diffusion-augmented I-TIR. The closest related field is com-posed image retrieval (CIR) [31, 32, 22, 2], where a multi-modal query, typically a reference image paired with a modification text, is used to retrieve the target image [30, 34]. This task has been extensively explored in domains ranging from fashion e-commerce to open-domain scenes, driven by large-scale datasets such as FashionIQ [32], CIRR [22] and CIRCO [5]. However, diffusion-augmented I-TIR differs from CIR in the nature of its inputs. In standard CIR, the text typically acts as a modification instruction ap-plied to a reliable reference image. Conversely, diffusion-augmented retrieval employs a synthetic image generated from (potentially long) dialogue context [23, 33]. In this setting, theoretically both modalities should convey the same semantic intent, but in practice the generated image will introduce instance-dependent noise [36]. This motivates the development of dedicated fusion mechanisms tailored to diffusion-augmented I-TIR. 
+
+Figure 1: Analysis of the diffusion-augmented degradation rate (left) and average rank drop (right) on VisDial[9] valida-tion set. Lower is better. 
+
+## 3 Proposed Method: ADaFuSE 3.1 Limitations of Additive Fusion 
+
+As discussed in [36], generated images produced by diffusion-augmented interactive text-to-image retrieval (I-TIR) approaches often semantically deviate from the user’s retrieval intent, introduc-ing noise that can conflict with the original dialogue context. The state-of-the-art method, DAR [23], uses a static weighted additive fusion strategy, combining these diffusion-generated images with the query representation directly. While DAR has been demon-strated to be effective regardless of this limitation, we argue that the introduced noise is degrading performance for some queries. To quantify this risk, we analyze the proportion of queries where incorporating a diffusion-generated image hurts rather than im-proves the retrieval performance (referred to as the degradation rate), as well as average rank drop of the relevant image. As illus-trated in Figure 1, the red solid line reveals that DAR results in a degradation rate exceeding 50% starting from round 2, accompanied by a large average rank drop for degraded queries of approximately 7500, as indicated by the red dashed line. This demonstrates that diffusion noise is a major issue, and that a better way to fuse the text and diffusion-generated image evidence is needed. 
+
+## 3.2 Adaptive Fusion of Diffusion-generated 
+
+Images and Text We hypothesize that an effective mean to limit the leaking of diffusion-generated noise into the ranking process is to be more selective when fusing the text and diffusion-produced evidence. To achieve this, we propose ADaFuSE (Adaptive Diffusion-Text Fusion with Semantic-aware Experts), as illustrated in Figure 2, a lightweight model that acts as a smart bridge between the text and image modalities, dynamically calibrating how much signal from each modality to use per-query. 
+
+Query Encoding and Projection: Consider the 𝑖 -th sample in the dataset at dialogue round 𝑛 . We denote the textual query as 𝑇 𝑛,𝑖 , the corresponding diffusion-generated image as 𝐼 𝑛,𝑖 , and the ground-truth target image as 𝐼 ∗ 
+
+> 𝑖
+
+. Let Φ𝑇 (·) and Φ𝐼 (·) denote the text and image encoder, respectively. The initial embeddings are obtained by mapping inputs into a shared 𝑑 -dimensional embedding space: 
+
+𝑧 𝑇 𝑛,𝑖 = Φ𝑇 (𝑇 𝑛,𝑖 ), 𝑧 𝐷 𝑛,𝑖 = Φ𝐼 (𝐼 𝑛,𝑖 ), 𝑧 ∗ 
+
+> 𝑖
+
+= Φ𝐼 (𝐼 ∗ 
+
+> 𝑖
+
+) (1) where 𝑧 𝑇 𝑛,𝑖 , 𝑧 𝐷 𝑛,𝑖 , 𝑧 ∗ 
+
+> 𝑖
+
+∈ R𝑑 . Although pre-trained encoders effectively align modalities globally, their pre-training objectives prioritize invariance, which can suppress fine-grained visual details contain-ing valuable semantic information for supplementing the text [7, 8]. Direct fusion within this compressed space restricts the effec-tive utilization of these visual cues. To recover this lost capacity, ADaFuSE first employs two projection blocks (see Figure 2) to non-linearly project the raw text and image embeddings into a higher-dimensional, task-specific latent space: 
+
+h𝑇 𝑛,𝑖 = 𝛿  P𝑇 (𝑧 𝑇 𝑛,𝑖 ), h𝐷 𝑛,𝑖 = 𝛿  P𝐷 (𝑧 𝐷 𝑛,𝑖 ) (2) where P{𝑇 ,𝐷 } (·) : R𝑑 → R𝑑 ′
+
+are instantiated as independent pro-jection heads to capture modality-specific characteristics and 𝛿 (·) 
+
+is the GELU activation function. This non-linear dimensional ex-pansion serves to restore the discriminative capacity of the features, providing a more expressive embedding space for the subsequent adaptive gating and expert routing. ADaFuSE: Adaptive Diffusion-generated Image and Text Fusion for Interactive Text-to-Image Retrieval SIGIR ’26, July 20–24, 2026, Melbourne | Naarm, Australia Joint Context h!                    
+
+> …
+> Target Image
+> Image
+> Encoder
+> Text Feats 𝓏 ",$
+> %
+> Text
+> Encoder
+> Image Feats 𝓏 ",$
+> &
+> Diffusion Image
+> Multi -round Dialogue
+> Diffusion
+> Model
+> Image
+> Encoder
+> Semantic -aware Mixture -
+> of -Experts Branch
+> Adaptive Gating Branch
+> Adaptive Gating Branch
+> Symmetric
+> InfoNCE Loss
+> Routing
+> Network
+> What is he wearing?
+> A man hitting a tennis ball
+> with a racket.
+> He is wearing a hat, T -shirt,
+> Shorts, socks and shoes.
+> Projection
+> Block
+> Projection
+> Block
+> 𝑝 !
+> 𝑝 "
+> 𝑝 #
+> Shared
+> Weight 𝑒𝑥𝑝𝑒𝑟𝑡 𝐸 !
+> 𝑒𝑥𝑝𝑒𝑟𝑡 𝐸 "
+> 𝑒𝑥𝑝𝑒𝑟𝑡 𝐸 #
+> Bias GELU Linear Bias Sigmoid Linear
+> Bias GELU Linear Bias Sigmoid Linear 𝜆 ",$
+> 1−𝜆 ",$
+> Dynamic
+> Weight
+> Dynamic
+> Weight
+> Target Image
+> Feats 𝓏 $
+> ∗
+> Fusion Feats 𝓏 ",$
+> ()*+,
+
+Figure 2: The Architecture overview of ADaFuSE. Joint Context Initialization: To provide an initial joint repre-sentation of the textual query and the generated visual cues, we concatenate the projected features, denoted as h𝑢 :
+
+h𝑢 = [h𝑇 𝑛,𝑖 ; h𝐷 𝑛,𝑖 ] ∈ R2𝑑 ′
+
+(3) This unified representation h𝑢 preserves the distinct characteristics of both modalities and serves as the fundamental input for the subsequent two branches in ADaFuSE. 
+
+Adaptive Gating Branch: In diffusion-augmented I-TIR, the gen-erated image 𝐼 𝑛,𝑖 may contain details that are not fully consistent with the text [19, 36], and we demonstrated in Section 3.1 that this can strongly degrade performance for some instances. On the other hand, these images do provide discriminative cues for many in-stances (e.g., fine-grained attributes or structural cues) [23]. Hence, we need a mechanism to distinguish to what extent each generated image is providing signal rather than noise. To address this, ADa-FuSE employs an adaptive gating branch to estimate the reliability of the diffusion-generated image from the joint context h𝑢 and outputs a dynamic scalar weight 𝜆 𝑛,𝑖 ∈ ( 0, 1):
+
+𝜆 𝑛,𝑖 = 𝜎  W2 · 𝛿 (W1h𝑢 + b1) + b2
+
+ (4) where W1 ∈ R𝑑 𝑚𝑖𝑑 ×2𝑑 ′
+
+and W2 ∈ R1×𝑑 𝑚𝑖𝑑 are learnable weights, 
+
+b1, b2 are biases, and 𝜎 (·) is the Sigmoid function. This gate 𝜆 𝑛,𝑖 
+
+modulates the fusion of raw semantic embeddings: 
+
+z𝑏𝑎𝑠𝑒 𝑛,𝑖 = 𝜆 𝑛,𝑖 · 𝑧 𝑇 𝑛,𝑖 + ( 1 − 𝜆 𝑛,𝑖 ) · 𝑧 𝐷 𝑛,𝑖 (5) Intuitively, as the divergence between a textual query and associ-ated diffusion generated image increases, retrieval performance will degrade, since the image will pull the final joint embedding toward visually salient yet semantically incorrect cues, overwhelming the anchoring effect of the textual signal. ADaFuSE counteracts this by predicting, from the joint context h𝑢 , how much the system should trust the diffusion-derived cues for each dialogue round and query. As a result, ADaFuSE can selectively exploit the generated visual signal when 𝐼 𝑛,𝑖 is predicted to be reliable, while falling back to the text representation when the generated image is noisy or contra-dictory; thereby avoiding the brittleness of fixed-weight fusion and yielding more robust alignment with user intent. 
+
+Semantic-aware Mixture-of-Experts Branch: While the adap-tive gating provides a low-cost means to limit the impact of se-mantic mismatches between the text and generated image, it is a coarse-grained re-weighting of the two modalities. Not all semantic divergencies will be problematic; the diffusion model can proba-bilistically produce image elements that initially seem irrelevant, but that are still useful during retrieval. ADaFuSE learns to correct for this using a semantic-aware mixture-of-experts (MoE) [10, 13] branch. We instantiate a set of 𝐾 semantic-aware experts {𝐸 𝑘 }𝐾 𝑘 =1.Each expert 𝐸 𝑘 (·) : R2𝑑 ′
+
+→ R𝑑 ℎ𝑖𝑑𝑑𝑒𝑛 is implemented as a light-weight feed-forward network with independent learnable parame-ters. A routing network is applied to estimate the relevance of each expert conditioned on the current joint context h𝑢 , producing a routing probability 𝑝 𝑘 for the 𝑘 -th expert : 
+
+𝑝 𝑘 = exp (R 𝑘 (h𝑢 )) 
+
+Í𝐾 𝑗 =1 exp (R 𝑗 (h𝑢 )) (6) where R𝑘 (·) denotes the 𝑘 -th logit output of the routing network, designed as a bottleneck two-layer MLP. Subsequently, the out-puts of the experts are aggregated via weighted addition to form a compensatory feature vector h𝑟𝑒𝑠 :
+
+h𝑟𝑒𝑠 =
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑝 𝑘 𝐸 𝑘 (h𝑢 ) (7) Finally, we project the MoE output back to the original embedding space dimension 𝑑 using a projection matrix W𝑜𝑢𝑡 ∈ R𝑑 ×𝑑 ℎ𝑖𝑑𝑑𝑒𝑛 .This projection is added to the gating-based fusion output as a residual term to obtain the final ADaFuSE query representation, followed by ℓ2 normalization: 
+
+z𝑓 𝑖𝑛𝑎𝑙 𝑛,𝑖 = Normalize (z𝑏𝑎𝑠𝑒 𝑛,𝑖 + W𝑜𝑢𝑡 h𝑟𝑒𝑠 ) (8) Unlike the adaptive gating branch, which can only interpolate between two existing modality embeddings, the semantic-aware MoE branch provides additional capacity to model higher-order cross-modal interactions that are not expressible through linear re-weighting. In diffusion-augmented I-TIR, the useful signal often lies in subtle compositional cues (e.g., “shorter sleeves but same silhouette”), which require non-linear feature synthesis rather than selecting one modality over the other. By routing each instance to a small set of specialized experts, the MoE learns a conditional set of refinements tailored to the current dialogue context, while the resid-ual connection preserves the base query to prevent overcorrection. Consequently, the final representation is selectively enriched with context-dependent, fine-grained semantics from h𝑟𝑒𝑠 , improving alignment with user intent. SIGIR ’26, July 20–24, 2026, Melbourne | Naarm, Australia Trovato et al.    
+
+> (a) VisDial (b) ChatGPT_BLIP2 (c) Human_BLIP2 (d) Flan-Alpaca-XXL_BLIP2
+
+Figure 3: The overall performance (measured by Hits@10, the higher is better) across four benchmarks. 
+
+## 4 Experiments and Analysis 4.1 Experimental Setup 
+
+We conduct our training on the DA-VisDial dataset [36]. Consistent with prior SOTA approaches [17, 23], we utilize the pre-trained BLIP weights [17] to initialize our encoder and optimize ADaFuSE in an end-to-end manner via the symmetric InfoNCE loss [28, 26]. We evaluate our method on the VisDial [9] validation set and three additional I-TIR benchmarks introduced by ChatIR: ChatGPT_BLIP2 ,
+
+Human_BLIP2 , Flan-Alpaca-XXL_BLIP2 . We adopt the accumulated recall at rank 10 (Hits@10) as our primary evaluation metric. We compare our proposed ADaFuSE model against two repre-sentative baselines built on the same ChatIR backbone: ChatIR and DAR. (i) ChatIR [17]: a strong I-TIR baseline that relies solely on the dialogue text as the query. (ii) DAR : a state-of-the-art diffusion-augmented variant that incorporates generated images, fusing the dialogue text and diffusion outputs via a static additive operation to refine the query representation. For a fair comparison, all methods use the same pre-trained BLIP encoder as the base visual–textual backbone. The code used in this paper is publicly available at: 
+
+https:// anonymous.4open.science/ r/ ADaFuSE-E149/README.md 
+
+## 4.2 Robustness across Rounds and Distributions 
+
+In this section, we investigate how ADaFuSE performs across dia-logue rounds and data distributions, comparing it with state-of-the-art baselines on four benchmarks. As shown in Figure 3a, on the in-distribution VisDial validation set, ADaFuSE consistently out-performs DAR, with Hits@10 gains growing from 1.09% at round 0 to 3.49% at round 10. This trend persists across all three out-of-distribution datasets, with ADaFuSE consistently outperforming the baselines at every interaction round (see Figure 3b–d). We attribute the larger late-round gains to a pre-training mismatch; encoders trained on MSCOCO [20]-style short captions handle early, brief dialogue well, but struggle as feedback becomes longer and may contain conflicting cues. ADaFuSE mitigates this by filtering out un-reliable signals, leading to stronger improvements in later rounds. Notably, Figure 3d illustrates that the ChatIR baseline, which relies solely on textual queries, saturates early due to the dataset’s prevalence of uninformative dialogue. While DAR mitigates this challenge by introducing diffusion-generated images, ADaFuSE achieves further improvements over DAR at every interaction round, demonstrating that ADaFuSE is not only effective at fusion but is also capable of adaptively leveraging visual cues to compen-sate for low-quality textual feedback. Moreover, since ADaFuSE 
+
+Figure 4: Modality-weighting comparison between DAR and ADaFuSE on the DA-VisDial dataset [36]. 
+
+and DAR share the same backbone encoder, DAR effectively serves as a non-adaptive fusion ablation, indicating that the observed per-formance gains stem from our adaptive fusion module rather than other components. 
+
+## 4.3 Reduced Performance Degradation 
+
+Following our analysis of the performance degradation induced by DAR’s static fusion, we use the two metrics defined in Section 3.1 to further investigate the ability of ADaFuSE to prevent performance degradation caused by noisy generated images. Returning to Fig-ure 1, in sharp contrast to DAR’s performance, ADaFuSE (blue solid line) consistently maintains a lower degradation rate, which further reduces as the dialogue context becomes larger. Moreover, we can observe from Figure 1 (blue dashed line) that ADaFuSE markedly reduces the negative impact of noisy images, with the average rank drop for instances degraded by including the image averaging around 20 ranks, down from around 7,500 for DAR. This confirms that ADaFuSE effectively identifies and suppresses the conflicting noise introduced by diffusion models, ensuring robust retrieval performance even when diffusion-generated images are unreliable. 
+
+## 4.4 Why Adaptive Gating Helps? 
+
+To illustrate the impact of the proposed adaptive gating mecha-nism, we visualize the assigned image weight ( 1 − 𝜆 𝑛,𝑖 ) as defined in Eq 5 against the cosine similarity between the textual query and corresponding generated image in Figure 4. In the plot, gray points represent 100k individual text-image pairs sampled from the DA-VisDial dataset [36], the blue line depicts the fitted regression trend for ADaFuSE and the red line represents the average weight across ten rounds of the DAR. We observe that as the semantic alignment ADaFuSE: Adaptive Diffusion-generated Image and Text Fusion for Interactive Text-to-Image Retrieval SIGIR ’26, July 20–24, 2026, Melbourne | Naarm, Australia 
+
+(cosine similarity) between the text and generated image feature increases, ADaFuSE adaptively amplifies the contribution of the generated image. We also see that on average, ADaFuSE is more conservative in its use of the generated image evidence–keeping the gating weight of the generated image between 15-25%, in con-trast to 45% for DAR. Although note that aspects of the generated image can then be emphasized in ADaFuSE via the subsequent semantic-aware mixture-of-experts component. 
+
+## 5 Conclusion 
+
+In this work, we propose ADaFuSE, a lightweight but robust fusion model for diffusion-augmented I-TIR, designed to mitigate the noise sensitivity of static additive fusion. By combining an adaptive gating mechanism with a semantic-aware mixture-of-experts component, ADaFuSE dynamically controls how much emphasis to place on the diffusion-generated images. This reduces the impact of gen-erated noise, while preserving fine-grained semantic cues during query embedding. Extensive experiments across four benchmarks demonstrate that ADaFuSE achieves state-of-the-art performance. Moreover, our analysis highlights how ADaFuSE improves robust-ness across queries, as it minimizes performance degradation even when dealing with noisy generative feedback, offering a promising path toward more reliable interactive retrieval systems. 
+
+## References 
+
+[1] Saghir Alfasly, Jian Lu, Chen Xu, and Yuru Zou. 2022. Learnable irrelevant modality dropout for multimodal action recognition on modality-specific an-notated videos. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 20208–20217. [2] Muhammad Umer Anwaar, Egor Labintcev, and Martin Kleinsteuber. 2021. Compositional learning of image-text query for image retrieval. In Proceedings of the IEEE/CVF Winter conference on Applications of Computer Vision , 1140– 1149. [3] John Arevalo, Thamar Solorio, Manuel Montes-y-Gómez, and Fabio A González. 2017. Gated multimodal units for information fusion. In 5th International Con-ference on Learning Representations, ICLR 2017, Toulon, France, April 24-26, 2017, Workshop Track Proceedings .[4] Yang Bai, Yucheng Ji, Min Cao, Jinqiao Wang, and Mang Ye. 2025. Chat-based person retrieval via dialogue-refined cross-modal alignment. In Proceedings of the Computer Vision and Pattern Recognition Conference , 3952–3962. [5] Alberto Baldrati, Lorenzo Agnolucci, Marco Bertini, and Alberto Del Bimbo. 2023. Zero-shot composed image retrieval with textual inversion. In Proceedings of the IEEE/CVF International Conference on Computer Vision , 15338–15347. [6] Tom Brown et al. 2020. Language models are few-shot learners. In Advances in neural information processing systems . Vol. 33, 1877–1901. [7] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. 2020. A simple framework for contrastive learning of visual representations. In 
+
+International conference on machine learning . PmLR, 1597–1607. [8] Xinlei Chen and Kaiming He. 2021. Exploring simple siamese representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 15750–15758. [9] Abhishek Das, Satwik Kottur, Khushi Gupta, Avi Singh, Deshraj Yadav, José MF Moura, Devi Parikh, and Dhruv Batra. 2017. Visual dialog. In Proceedings of the IEEE conference on computer vision and pattern recognition , 326–335. [10] William Fedus, Barret Zoph, and Noam Shazeer. 2022. Switch transformers: scaling to trillion parameter models with simple and efficient sparsity. Journal of Machine Learning Research , 23, 120, 1–39. [11] Aaron Grattafiori et al. 2024. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 .[12] Xiaoxiao Guo, Hui Wu, Yu Cheng, Steven Rennie, Gerald Tesauro, and Roge-rio Feris. 2018. Dialog-based interactive image retrieval. Advances in neural information processing systems , 31. [13] Xing Han, Huy Nguyen, Carl Harris, Nhat Ho, and Suchi Saria. 2024. Fusemoe: mixture-of-experts transformers for fleximodal fusion. In Advances in Neural Information Processing Systems . Vol. 37, 67850–67900. [14] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising diffusion proba-bilistic models. In Advances in neural information processing systems . Vol. 33, 6840–6851. [15] Kuang-Huei Lee, Xi Chen, Gang Hua, Houdong Hu, and Xiaodong He. 2018. Stacked cross attention for image-text matching. In Proceedings of the European conference on computer vision (ECCV) , 201–216. [16] Saehyung Lee, Sangwon Yu, Junsung Park, Jihun Yi, and Sungroh Yoon. 2024. Interactive text-to-image retrieval with large language models: a plug-and-play approach. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (ACL) , 791–809. [17] Matan Levy, Rami Ben-Ari, Nir Darshan, and Dani Lischinski. 2023. Chatting makes perfect: chat-based image retrieval. In Advances in Neural Information Processing Systems (NeurIPS) .[18] Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. 2022. Blip: bootstrapping language-image pre-training for unified vision-language understanding and generation. In International conference on machine learning . PMLR, 12888– 12900. [19] Youngsun Lim, Hojun Choi, and Hyunjung Shim. 2025. Evaluating image hallu-cination in text-to-image generation with question-answering. In Proceedings of the AAAI Conference on Artificial Intelligence number 25. Vol. 39, 26290–26298. [20] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C Lawrence Zitnick. 2014. Microsoft coco: common objects in context. In European conference on computer vision . Springer, 740– 755. [21] Aixin Liu et al. 2024. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 .[22] Zheyuan Liu, Cristian Rodriguez-Opazo, Damien Teney, and Stephen Gould. 2021. Image retrieval on real-life images with pre-trained vision-and-language models. In Proceedings of the IEEE/CVF international conference on computer vision , 2125–2134. [23] Zijun Long, Kangheng Liang, Gerardo Aragon Camarasa, Richard Mccreadie, and Paul Henderson. 2025. Diffusion augmented retrieval: a training-free ap-proach to interactive text-to-image retrieval. In Proceedings of the 48th Inter-national ACM SIGIR Conference on Research and Development in Information Retrieval , 823–832. [24] Jiasen Lu, Dhruv Batra, Devi Parikh, and Stefan Lee. 2019. Vilbert: pretraining task-agnostic visiolinguistic representations for vision-and-language tasks. In 
+
+Advances in neural information processing systems . Vol. 32. [25] Yiding Lu, Mouxing Yang, Dezhong Peng, Peng Hu, Yijie Lin, and Xi Peng. 2025. Llava-reid: selective multi-image questioner for interactive person re-identification. arXiv preprint arXiv:2504.10174 .[26] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. 2018. Representation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 .[27] Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. 2018. Film: visual reasoning with a general conditioning layer. In 
+
+Proceedings of the AAAI conference on artificial intelligence number 1. Vol. 32. [28] Alec Radford et al. 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning . PmLR, 8748–8763. [29] Chitwan Saharia et al. 2022. Photorealistic text-to-image diffusion models with deep language understanding. In Advances in neural information processing systems . Vol. 35, 36479–36494. [30] Xuemeng Song, Haoqiang Lin, Haokun Wen, Bohan Hou, Mingzhu Xu, and Liqiang Nie. 2025. A comprehensive survey on composed image retrieval. ACM Transactions on Information Systems , 44, 1, 1–54. [31] Nam Vo, Lu Jiang, Chen Sun, Kevin Murphy, Li-Jia Li, Li Fei-Fei, and James Hays. 2019. Composing text and image for image retrieval-an empirical odyssey. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-tion , 6439–6448. [32] Hui Wu, Yupeng Gao, Xiaoxiao Guo, Ziad Al-Halah, Steven Rennie, Kristen Grauman, and Rogerio Feris. 2021. Fashion iq: a new dataset towards retrieving images by natural language feedback. In Proceedings of the IEEE/CVF Conference on computer vision and pattern recognition , 11307–11317. [33] Diji Yang, Minghao Liu, Chung-Hsiang Lo, Yi Zhang, and James Davis. 2025. Genir: generative visual feedback for mental image retrieval. arXiv preprint arXiv:2506.06220 .[34] Kun Zhang et al. 2025. Composed multi-modal retrieval: a survey of approaches and applications. arXiv preprint arXiv:2503.01334 .[35] Qingyang Zhang, Haitao Wu, Changqing Zhang, Qinghua Hu, Huazhu Fu, Joey Tianyi Zhou, and Xi Peng. 2023. Provable dynamic fusion for low-quality multimodal data. In International conference on machine learning . PMLR, 41753– 41769. [36] Zhuocheng Zhang, Kangheng Liang, Guanxuan Li, Paul Henderson, Richard Mccreadie, and Zijun Long. 2026. Eliminating hallucination in diffusion-augmented interactive text-to-image retrieval. arXiv preprint arXiv:2601.20391 .[37] Zijia Zhao, Longteng Guo, Tongtian Yue, Erdong Hu, Shuai Shao, Zehuan Yuan, Hua Huang, and Jing Liu. 2025. Chatsearch: a dataset and a generative retrieval model for general conversational image retrieval. Pattern Recognition , 111696. [38] Hongyi Zhu, Jia-Hong Huang, Stevan Rudinac, and Evangelos Kanoulas. 2024. Enhancing interactive image retrieval with query rewriting using large lan-guage models and vision language models. In Proceedings of the 2024 Interna-tional Conference on Multimedia Retrieval , 978–987.

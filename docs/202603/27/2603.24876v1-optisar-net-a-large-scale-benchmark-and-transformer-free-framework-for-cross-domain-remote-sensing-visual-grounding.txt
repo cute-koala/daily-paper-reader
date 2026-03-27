@@ -1,0 +1,401 @@
+Title: OptiSAR-Net++: A Large-Scale Benchmark and Transformer-Free Framework for Cross-Domain Remote Sensing Visual Grounding
+
+URL Source: https://arxiv.org/pdf/2603.24876v1
+
+Published Time: Fri, 27 Mar 2026 00:23:26 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# OptiSAR-Net++: A Large-Scale Benchmark and Transformer-Free Framework for Cross-Domain Remote Sensing Visual Grounding 
+
+Xiaoyu Tang, Member, IEEE, Jun Dong, Student Member, IEEE, Jintao Cheng, Rui Fan, Senior Member, IEEE 
+
+Abstract —Remote sensing visual grounding (RSVG) aims to localize specific targets in remote sensing images using natural language expressions. However, existing methods are restricted to single-sensor domains, i.e., either optical or synthetic aperture radar (SAR), limiting their real-world applicability. In this paper, we introduce the Cross-Domain RSVG (CD-RSVG) task and construct OptSAR-RSVG, the first large-scale benchmark dataset for this setting. To tackle the challenges of cross-domain feature modeling, computational inefficiency, and fine-grained semantic discrimination, we propose OptiSAR-Net++. Our framework features a patch-level Low-Rank Adaptation Mixture of Experts (PL-MoE) for efficient cross-domain feature decoupling. To mitigate the substantial computational overhead of Transformer decoding frameworks, we adopt a CLIP-based contrastive paradigm and further incorporate dynamic adversarial negative sampling, thereby transforming generative regression into an efficient cross-modal matching process. Additionally, a text-guided dual-gate fusion module (TGDF-SSA) and a region-aware auxiliary head are introduced to enhance semantic-visual alignment and spatial modeling. Extensive experiments demonstrate that OptiSAR-Net++ achieves SOTA performance on both OptSAR-RSVG and DIOR-RSVG benchmarks, offering significant advantages in localization accuracy and efficiency. Our code and dataset will be made publicly available. 
+
+Index Terms —Visual grounding for remote sensing, cross-domain image learning, contrastive language-image pre-training. 
+
+I. I NTRODUCTION 
+
+# THE rapid advancement of remote sensing technology provides massive, high-precision earth observation 
+
+This work was partially supported by the National Natural Science Foundation of China under Grants 62473288 and 62233013, Guangdong Basic and Applied Basic Research Foundation (2024A1515012126), the Science and Technology Commission of Shanghai Municipal under Grant 22511104500, the Fundamental Research Funds for the Central Universities, and Xiaomi Young Talents Program. (Xiaoyu Tang and Rui Fan are co-corresponding authors). Xiaoyu Tang is with the School of Electronics and Information Engineering, and Xingzhi College, South China Normal University, Foshan 528225, China. (e-mail: tangxy@scnu.edu.cn )Jun Dong is with the School of Data Science and Engineering, and Xingzhi College, South China Normal University, Shanwei, 516600, China (e-mail: 
+
+20228132044@m.scnu.edu.cn ). Jintao Cheng is with the Department of Electronic and Computer Engineering, Hong Kong University of Science and Technology, Hong Kong SAR, China. (e-mail: jchengau@connect.ust.hk )Rui Fan is with the College of Electronics & Information Engineering, Shanghai Research Institute for Intelligent Autonomous Systems, the State Key Laboratory of Intelligent Autonomous Systems, and Frontiers Science Center for Intelligent Autonomous Systems, Tongji University, Shanghai 201804, China. (e-mail: rui.fan@ieee.org )
+
+data for urban planning [1], environmental monitoring [2], and national defense [3]. This creates a critical need for intelligent visual interpretation using natural language. Despite progress in tasks like image captioning and cross-modal retrieval [4], remote sensing visual grounding (RSVG) remains a challenging frontier. Unlike standard object detection, RSVG requires models to accurately localize specific targets within complex scenes by comprehending open-ended natural language queries [5]. This capability is vital for time-sensitive human-machine interactions, such as emergency response, demanding both precision and generalizability. Existing RSVG research primarily focuses on single-source scenarios, treating sensor modalities as isolated domains. Mainstream datasets like DIOR-RSVG [6] and OPT-RSVG [7] rely solely on the rich textures of optical images, while efforts like TACMT [8] explore SAR-based grounding. This fragmented paradigm overlooks the shared knowledge and complementary information across sensor domains, fundamentally limiting the robustness of systems deployed in diverse environments. Practically, optical sensors offer rich semantics but are sensitive to weather and illumination, whereas SAR sensors provide all-weather, all-day imaging. While their complementary advantages are validated in object detection [9]–[11] (Fig. 1(a)), these methods rely on strictly co-registered image pairs, precluding direct extension to language grounding. To bridge this gap, we propose the Cross-Domain RSVG (CD-RSVG) task. It aims to establish a unified framework that leverages multi-source optical and SAR data to acquire universal cross-domain knowledge, enabling generalizable query grounding within a single training batch. However, CD-RSVG introduces formidable challenges beyond traditional single-source RSVG:  
+
+> •
+
+Complexity of cross-domain feature modeling. 
+
+Optical and SAR images have fundamentally different imaging mechanisms: optical images feature clear edges and textures, while SAR images suffer from speckle noise and geometric distortions. Consequently, fully shared dense models face representation bottlenecks, struggling to accommodate both domains without negative transfer [12]. This necessitates a parameter-efficient decoupling strategy to preserve domain-specific features while retaining cross-domain generalizability.  
+
+> •
+
+Computational efficiency bottleneck. Existing RSVG 
+
+0000–0000/00$00.00 © 2021 IEEE           
+
+> arXiv:2603.24876v1 [cs.CV] 25 Mar 2026 IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+> Fig. 1. Comparison of existing methods and our proposed CD-RSVG paradigm. (a) Existing cross-domain methods rely on co-registered optical-SAR pairs for detection only, lacking language grounding. (b) Mainstream RSVG methods rely on heavy Transformers and single-source data, lacking cross-domain generalization. (c) Our OptiSAR-Net++ handles multi-source inputs using a shared MoE backbone. It fuses visual-linguistic features and achieves efficient grounding via a CLIP matching paradigm. During training, a region-aware auxiliary head and adversarial negative sampling further enhance spatial modeling and fine-grained semantic discrimination.
+
+methods (Fig. 1(b)) predominantly rely on heavy Transformer architectures for multi-modal fusion, incurring substantial training costs and prohibitive inference latency. This poses critical deployment challenges for resource-constrained edge platforms, such as satellites and UAVs. There is an urgent need for efficient architectures that balance grounding accuracy with computational economy.  
+
+> •
+
+Inherent RSVG challenges in cross-domain settings. 
+
+Remote sensing targets exhibit extreme scale variations, posing fundamental challenges to fixed-receptive-field extractors. Furthermore, existing vision-language fusion mechanisms [13] typically embed directional information implicitly via cross-attention, lacking explicit alignment between directional semantics and visual features. This causes localization ambiguity in high-density scenes [14]. Combined with the cross-domain setting, jointly modeling semantic commonalities and characteristic differences across modalities remains an unaddressed challenge. To address these challenges, we construct OptSAR-RSVG ,the first large-scale benchmark dataset for the CD-RSVG task, by consolidating and standardizing existing single-source datasets [7], [8], [15]. To mitigate class imbalance and limited semantic diversity, we apply geometric augmentation to under-represented categories and leverage GPT [16] to generate richer text descriptions. After rigorous manual verification, the final dataset comprises 46,825 images and 90,148 image-text-box triplet annotations. Specifically, the SAR subset contains 20,178 instances across 2 categories (12,466 images), while the optical subset contains 69,970 instances across 14 categories (34,359 images). Furthermore, we extend the cross-domain object detection framework OptiSAR-Net [10] to propose OptiSAR-Net++ , the first framework tailored for the CD-RSVG task (Fig. 1(c)). Specifically, we introduce a Patch-Level Low-Rank Adaptation Mixture of Experts (PL-MoE). This parameter-efficient decoupling strategy combines sparse routing with an adaptive cosine Top-K gating mechanism, achieving robust routing and load balancing to accommodate the divergent visual patterns of optical and SAR domains. Second, we adopt a CLIP-based [17] contrastive learning paradigm for efficient visual grounding. Unlike standard open-vocabulary detection (OVD), we explicitly inject adversarial negative samples during training. This fine-grained, semantic-awareness mechanism compels the model to discriminate confusable directional and cross-domain information within a shared feature space. During inference, we leverage CLIP’s cross-modal matching for discriminative region selection, transforming RSVG from a generative prediction task into a computationally efficient retrieval-based matching paradigm. Finally, we propose Text-Guided Dual-Gate Fusion with Spatial Shuffle Attention (TGDF-SSA) to efficiently inject linguistic semantics into the visual feature pyramid without computationally intensive attention operations. Additionally, a region-aware auxiliary head is introduced during training to supervise the target spatial distribution modeling explicitly. The main contributions of this work are summarized as follows:  
+
+> •
+
+We construct OptSAR-RSVG , the first large-scale benchmark for CD-RSVG. By expanding existing datasets via geometric augmentation and GPT-based rewriting, it effectively mitigates class imbalance and semantic scarcity. The dataset comprises 46,825 optical/SAR images and 90,148 image-text-box annotations across 16 categories.  
+
+> •
+
+We propose OptiSAR-Net++ , a lightweight, Transformer-free CD-RSVG framework. Its core components include: (i) PL-MoE for efficient cross-domain feature decoupling; (ii) a CLIP-based contrastive paradigm with adversarial sampling for fast cross-modal matching; and (iii) TGDF-SSA coupled with a region-aware auxiliary head to enhance linguistic-visual fusion and spatial learning.  
+
+> •
+
+Extensive experiments demonstrate that OptiSAR-Net++ achieves SOTA performance on OptSAR-RSVG, outperforming previous models by 7.61% and 0.32% in optical and SAR inference, respectively. Furthermore, it exhibits superior data efficiency, directional awareness, and highly competitive generalization on the DIOR-RSVG benchmark. The remainder of this paper is organized as follows. Sect. II reviews related work. Sect. III details the proposed OptiSAR-Net++ framework, and Sect. IV introduces the OptSAR-RSVG dataset. Sect. V validates the effectiveness of our method through comprehensive experiments encompassing comparative evaluations, ablation studies, and visualization IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+analysis. Finally, Sect. VI concludes the paper with limitations and future directions. II. R ELATED WORK 
+
+A. Remote Sensing Visual Grounding 
+
+RSVG requires fine-grained cross-modal understanding to handle the scale heterogeneity, semantic complexity, and background clutter inherent in remote sensing scenarios. Existing frameworks are predominantly Transformer-based or LLM-based [5]. Transformer-based methods dominate current RSVG research. Early works established benchmarks and basic fusion mechanisms [6], [18]. Subsequent research addressed specific remote sensing challenges by incorporating spatial directional enhancement [19], mitigating attention drift [20], enabling efficient sparse decoding [14], and adapting to SAR imagery [8]. Recent advancements also include diffusion models for iterative refinement [21] and the application of LLMs for enhanced semantic reasoning [22], [23]. However, the quadratic complexity of Transformer architectures incurs substantial computational costs, severely hindering deployment on resource-constrained edge platforms. Meanwhile, CLIP-based contrastive learning has excelled in open-vocabulary detection (OVD) [24], [25], but struggles with the complex spatial relationships required in VG. While RemoteCLIP [4] adapts CLIP for remote sensing, it focuses on image-level tasks rather than region-level localization. General VG models like GLIP [26] and Grounding DINO [27] perform poorly on the extreme scales and bird’s-eye-view geometry of remote sensing. Recently, Efficient Grounding DINO [28] introduced open-set contrastive learning to RSVG; however, its massive parameter count (169.3M) remains prohibitive for edge devices, and it ignores cross-domain challenges. To address these gaps, this paper pioneers a fine-grained, semantic-aware contrastive learning mechanism for CD-RSVG. By utilizing adversarial negative sampling, our approach precisely discriminates confusing directional and cross-domain information within a shared feature space. 
+
+B. Cross-Domain Image Learning 
+
+Cross-domain learning integrates multi-source data to overcome the perceptual limitations of single modalities. In remote sensing, the collaborative analysis of optical and SAR imagery has proven effective for semantic segmentation [29], object detection [30], change detection [31], and image matching [32]. Existing research primarily evolves along two lines: cross-domain feature fusion and feature adaptation. In cross-domain fusion, methods focus on extracting complementary semantics from strictly registered or weakly aligned heterogeneous data [30], [33], [34]. Conversely, cross-domain adaptation targets the representation gap between unregistered source and target domains. This is typically achieved through unsupervised domain adaptation [31], [35] or by leveraging frozen vision-language models (e.g., CLIP) as stable semantic bridges for feature alignment [36]. Notably, most existing methods rely on spatially aligned data or target specific domain shifts, with limited exploration of semantically related but spatially unaligned joint training. Recently, frameworks like OptiSAR-Net [10] and SM3Det [12] have explored unaligned cross-domain knowledge sharing for object detection. However, cross-domain learning remains completely unexplored in RSVG. This paper pioneers the CD-RSVG task, opening a new research direction for the unified and efficient intelligent interpretation of multi-source remote sensing data. III. M ETHODOLOGY 
+
+A. Preliminary 
+
+In our prior work, OptiSAR-Net [10], we introduced a cross-domain ship detection model for multi-source optical and SAR imagery. By incorporating attention mechanisms such as dual adaptive attention (DAA), bilevel routing deformable attention (BRDA), and spatial shuffling attention (SSA), it effectively focuses on target-related visual cues rather than variable backgrounds, enabling cross-domain generalization. However, OptiSAR-Net faces two main limitations. First, it is restricted to single-class ship detection and lacks natural-language understanding, limiting flexible human-computer interaction. Second, its dense, fully shared parameter architecture constrains its capacity for complex cross-domain feature modeling. To address these issues, we propose OptiSAR-Net++ , the first efficient Transformer-free framework tailored for CD-RSVG (Fig. 2). Its advancements are threefold: (1) Task Upgrade. We extend the scope from predefined single-class detection to natural-language-guided visual grounding (VG) of general remote-sensing objects, enabling richer semantic understanding and precise localization. (2) Improved Cross-Domain Learning. We introduce a Patch-Level Low-Rank Adaptation Mixture of Experts (PL-MoE) module. Using a cosine-gating mechanism for sparse routing, it adaptively allocates expert networks to image patches from different domains, enabling efficient cross-domain feature modeling (Sect. III-B). (3) Architectural Optimization. Built upon CSPNet [37] and PAN [38], we introduce a CLIP-based contrastive learning paradigm [17] for VG. By leveraging adversarial negatives, a fine-grained, semantic-awareness mechanism explicitly disentangles object-localization cues from cross-domain semantics in the feature space. This converts heavy Transformer-based generative inference into efficient retrieval matching (Sect. III-C). Furthermore, our proposed TGDF-SSA module precisely injects text semantics into the visual feature pyramid. At the same time, a region-aware auxiliary head explicitly models target spatial distributions to achieve deep cross-modal fusion (Sect. III-D). 
+
+B. Cross-Domain Image Modeling 
+
+The subtle common cues in geometric appearance and spatial structure (e.g., contours and local edge orientations) of cross-domain objects provide a fundamental basis for cross-domain modeling. However, due to the significant differences in imaging mechanisms between optical and SAR remote sensing, fully parameter-shared modeling aimed at extracting common knowledge often leads to feature interference in the IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+> Fig. 2. Overall architecture of OptiSAR-Net++. The framework processes multi-source images and language queries for CD-RSVG via three main components: (1) A shared CNN backbone with PL-MoE, which adaptively routes image patches to domain-specific experts for cross-domain feature modeling. (2) A vision-language fusion neck (TGDF-SSA) that injects semantic information into multi-scale visual features. Text colors denote target categories (orange/blue) and attributes (green). (3) Detection heads comprising a regression head for candidate generation, a CLIP-based contrastive head for efficient retrieval matching, and an auxiliary region-aware classification head for spatial distribution modeling. During training, adversarial negatives (red text) are dynamically sampled to enhance fine-grained cross-domain grounding. Best viewed in color.
+
+latent space. On the one hand, shared representations are forced to accommodate multiple-source distributions, resulting in blurred decision boundaries. On the other hand, SAR-specific cues tend to conflict with optical texture semantics, thereby weakening the model’s representational capacity and cross-domain generalization performance. Inspired by the modern MoE paradigm [12], [39], we propose PL-MoE to enhance cross-domain modeling capabilities while maintaining computational efficiency. As illustrated in Fig. 2, PL-MoE incorporates two core architectural innovations: a patch-level sparse routing strategy and a parameter-efficient shared low-rank adaptation (LoRA) [40] expert framework. By collaboratively modeling local visual patterns shared across modalities and allocating modality-specific cues to distinct experts for decoupled learning, our approach effectively alleviates negative transfer and mitigates representation conflicts. 
+
+Patch-level Sparse Routing. In contrast to routing the entire feature map to a single expert or employing pixel-level dense routing, we implement dynamic patch-level routing decisions on the feature map generated by the visual encoder to achieve an optimal balance between expressiveness and efficiency. Specifically, given an input feature map X ∈ RB×C×H×W , we partition it into N = Hph × Wpw non-overlapping local patches 
+
+Pij , where ph and pw denote adaptive patch dimensions. This patch-level routing mechanism enables experts to align with and process similar spatial patterns across domains, focusing on local structural patterns that are stable across modalities, thereby facilitating the extraction and reuse of shared knowledge. 
+
+Shared LoRA Experts. For each expert module, we adopt a hybrid architecture integrating a shared backbone with LoRA. All experts share a unified convolutional transformation Cshared to preserve general representational capacity. Concurrently, each expert is augmented with adedicated set of lightweight low-rank adapter matrices 
+
+{(A e, Be)}Ne
+
+> e=1
+
+, designed to capture expert-specific biases and facilitate fine-grained feature modulation, where Ne denotes the total number of experts. The output of the e-th expert is formulated as follows: 
+
+Ee(P) = Cshared (P) + α · P A e Be, (1) where Ae ∈ RC×r and Be ∈ Rr×C are the down- and up-projection matrices, respectively, r ≪ C is the low-rank dimension, and α is a learnable scaling factor. To prevent expert collapse, we adopt a cosine similarity-based Top-K
+
+gating mechanism and introduce a load balancing loss Laux 
+
+to improve routing stability. Furthermore, we incorporate the DAA module from OptiSAR-Net [10] prior to MoE routing, which combines convolutional channel attention and spatial attention to enhance responses in critical regions, thereby improving cross-domain generalization. The complete output is formulated as: 
+
+PLoRA -MoE( ¯P) = 
+
+> Ne
+
+X
+
+> e=1
+
+ge(¯P) (PA eBe). (2) 
+
+Y = {(DAA + PLoRA -MoE + I)(k)}nk=1 (3) IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+here, the visual features produced by the visual encoder are sequentially passed through n cascaded modules, where the multi-scale contextual dependencies captured by DAA are fed into PLoRA -MoE for expert routing. After progressive feature refinement and the residual connection I, the final output Y is generated. In PLoRA -MoE , the sparse Top-K gating function 
+
+ge(¯P) dynamically assigns routing weights based on the patch-level global feature ¯P, enabling adaptive modeling of cross-domain features. 
+
+C. CLIP-based Visual Grounding 
+
+Most existing RSVG methods formulate localization as an autoregressive sequence generation problem [5]. However, their reliance on quadratic-complexity attention mechanisms incurs substantial computational overhead and low training efficiency. In contrast, CLIP-based contrastive learning [17] has proven highly efficient for open-vocabulary detection (OVD) [25], [27]. Yet, its application to VG remains underexplored, primarily because standard CLIP-based OVD lacks mechanisms to explicitly capture fine-grained attributes and spatial orientation cues, hindering precise text–region alignment. To address this, we cast RSVG as a discriminative retrieval problem within a dense prediction framework. Specifically, dense visual features are projected into a semantic space and matched against text embeddings to compute region–text scores. Concretely, given multi-scale pyramid features {F l},we first generate visual embeddings via a classification head: 
+
+El = gvis (F l) ∈ RB×D×Hl×Wl , (4) where D denotes the embedding dimension. On the text side, we use the CLIP text encoder to pre-encode and cache all complete candidate descriptions in the training set, 
+
+T = {tk}Kk=1 with tk ∈ RD . We then compute text–region similarity maps using a lightweight Batch-Normalization-based contrastive head, and calibrate the logits with alearnable scale γ and bias term b. The resulting scores Sl ∈
+
+RB×K×Hl×Wl are directly used as the semantic classification logits. During inference, the multi-text contrastive formulation naturally degenerates into a single-query retrieval setting with one text embedding t ∈ RD , and we select the candidate region with the highest matching score as the final grounding prediction. 
+
+Learning Strategy. Unlike OVD training [24], [25] that typically assumes a fixed category set and applies forced contrastive sampling, RSVG queries depend critically on relational descriptions and spatial orientation. We therefore propose a fine-grained, semantic-aware adversarial negative sampling strategy. For each training instance, we generate adversarial textual variants according to predefined rules, in addition to constructing positive samples. Specifically, we create hard negatives by swapping orientation words (e.g., 
+
+upper left ↔ upper right ) or cross-domain modality words (e.g., SAR ↔ optical ). Although these negatives are lexically close to the positives, they differ fundamentally in spatial reference or domain semantics, thereby forcing the model to explicitly reason about target orientation and modality cues and improving its discriminative capability for complex VG relations. 
+
+Training Objective. The overall objective consists of a regression loss Lreg , a CLIP-based classification loss Lcls , an auxiliary spatial loss Lregion , and the load-balancing regularizer 
+
+Llb introduced by PL-MoE. We adopt binary cross-entropy for 
+
+Lcls , while the regression term combines an IoU-based loss 
+
+Lbox with the distribution focal loss (DFL) Ldfl .
+
+D. Explicit Visual-Linguistic Feature Fusion 
+
+While implicit visual-linguistic interaction via multi-layer cross-attention has become an effective cross-modal fusion approach in academia, this fusion process struggles to explicitly decouple the inherent spatially structured representations in remote sensing images. Such implicit coupling tends to introduce localization ambiguity in scenarios with high-density object distributions or strong background interference. 
+
+TGDF-SSA. Inspired by [25], [41], we propose TGDF-SSA, which precisely injects linguistic conditions into multi-scale local visual features in a controllable and interpretable manner. Specifically, visual features are first projected into a multi-head embedding space ϕ(V ) ∈ RB×nh×dh×H×W , where dh =
+
+ec/n h. Meanwhile, text embeddings are linearly enhanced to obtain guidance vectors for each head ψ(T ) ∈ RB×N ×nh×dh .Subsequently, visual-text similarity is computed for each spatial location, and the maximum value along the candidate text dimension is taken to obtain the optimal semantic matching response:        
+
+> Ab,m,h,w =max
+> n∈[1 ,N ]⟨ϕ(V)b,m, :,h,w , ψ (T)b,n,m, :⟩.(5)
+
+To enhance cross-modal learning stability, we introduce learnable temperature parameter τ and per-head bias bm to obtain calibrated attention logits:           
+
+> ˜Ab,m,h,w =Ab,m,h,w
+> τ+bm,Aσ=σ( ˜A)·s, (6)
+
+where s is an optional learnable scaling factor and σ(·) is the Sigmoid activation function. Finally, adaptive learning through attention gating and feature gating enhances the model’s cross-modal modeling capability, yielding semantically enhanced visual features ˜V :             
+
+> ˜V=V+β·V⊙[α·(Aσ−1)] .(7)
+
+TGDF-SSA also inherits the design philosophy of SSA [10]. By perturbing and reorganizing features in advance along the channel dimension, it breaks the coupling in imaging-statistics-related features, encouraging the network to focus on more stable structural and shape cues and thereby improving cross-domain generalization in remote sensing. 
+
+Region-Aware Auxiliary Head. To further facilitate TGDF-SSA’s learning of orientation and regional semantics, we introduce a region-aware auxiliary branch that is only activated during training. This branch classifies each location on the high-level feature map into predefined spatial grids, providing structured spatial supervision signals for the main branch. Given a feature layer Z ∈ RB×C′×Hl×Wl , the prediction head outputs P = hgrid (Z) ∈ RB×G×Hl×Wl . For feature map IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6 
+
+> Fig. 3. Statistical analysis of the OptSAR-RSVG dataset. (a)-(c) Normalized bounding box height, width, and area distributions for optical (blue) and SAR (green) samples. Optical targets show broader scale variations, whereas SAR targets concentrate on medium-to-small scales. (d) Cross-domain sample quantity, reflecting practical data acquisition ratios. (e) Caption word count distribution (average: 11.13 words). (f) Average pixel area per category, highlighting inter-category scale diversity. (g) Sample distribution across 16 categories. Best viewed in color.
+
+location (i, j ), its grid label is determined by the landing point of its corresponding original image center coordinates in the normalized plane: 
+
+yi,j = row( i) · c + col( j), yi,j ∈ { 0, . . . , G − 1}, (8) 
+
+where row( ·) and col( ·) are determined by the number of grid rows and columns and the feature point mapping relationship. The final spatial auxiliary loss is computed using pixel-wise cross-entropy: 
+
+Lregion = 1
+
+BHW 
+
+> B
+
+X
+
+> b=1
+> H
+
+X
+
+> i=1
+> W
+
+X
+
+> j=1
+
+CE  Pb, :,i,j , y i,j 
+
+. (9) 
+
+The region auxiliary head focuses on modeling spatial location priors (Where) during training, while TGDF-SSA concentrates on semantic content matching (What), ensuring reliable visual-linguistic fusion under complex relational descriptions and orientation constraints. IV. D ATASET CONSTRUCTION 
+
+In this section, we introduce the OptSAR-RSVG dataset. Sect. IV-A describes the dataset construction pipeline, while Sect. IV-B provides statistical analysis and visualization. 
+
+A. OptSAR-RSVG: A Cross-Domain Remote Sensing Visual Grounding Benchmark 
+
+The CD-RSVG task requires remote sensing image data from both the optical and SAR domains, along with high-quality textual descriptions and bounding box annotations.  
+
+> Fig. 4. Word cloud visualizations of textual descriptions in OptSAR-RSVG. (a) Target attributes, highlighting size and color descriptors. (b) Overall vocabulary, dominated by terms like ”image”, ”ship”, and modality identifiers. (c) Category names. (d) Spatial directional vocabulary, providing crucial semantic cues for localization.
+
+However, existing RSVG datasets are constructed for single-source optical or SAR images, rendering them unsuitable for cross-domain research. To address this gap, we integrate four single-source RSVG datasets: RSVGD [15], OPT-RSVG [7] (which provides more abundant and complex annotations than DIOR-RSVG [6]), along with the only two publicly available SAR-based datasets, SARVG [15] and TACMT [8]. Through a systematic data processing pipeline, we construct OptSAR-IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7 
+
+> Fig. 5. Representative samples from the OptSAR-RSVG dataset, covering diverse optical (top row) and SAR (bottom row) scenarios. Each image is paired with a bounding box and a textual description containing target attributes, categories, and spatial cues. Optical samples exhibit rich semantic details, while SAR samples demonstrate target localization under challenging low-contrast conditions.
+
+RSVG, the first large-scale benchmark dataset for CD-RSVG tasks. The construction process comprises the following steps: 
+
+Step 1 (Data Collection & Cleaning): We collect images from four datasets: RSVGD [15] (optical ships), OPT-RSVG [7] (14 optical targets), SARVG [15] (SAR ships), and TACMT [8] (SAR transmission towers). To ensure data quality, we first remove samples with invalid bounding boxes (e.g., out-of-bounds or xmin ≥ xmax / ymin ≥ ymax ). Furthermore, we train an object detector on the merged data to identify annotation mismatches; images with a low predicted-to-ground-truth IoU are flagged for manual verification and potential removal. Finally, we unify the remaining 76 fine-grained ship categories in RSVGD into a single “ship” category (updating texts accordingly) and append modality prefixes (“Optical” or “SAR”) to all categories. 
+
+Step 2 (Data Augmentation & Merging): To mitigate class imbalance, we apply geometric augmentations (horizontal/vertical flips, 180-degree rotation) to minority classes, synchronously updating bounding boxes. We employ GPT-4o [16] to rewrite textual descriptions, updating absolute directional terms based on new coordinates while preserving relative positional semantics. An automated verification mechanism cross-checks the generated directional words against the transformed bounding box centers, prompting regeneration for conflicting samples. This process yields 9,046 new images with 19,136 annotations. The augmented data is then merged with the cleaned source datasets, resolving any filename conflicts via source-specific prefixes. 
+
+Step 3 (Manual Verification & Splitting): To eliminate potential semantic biases and ensure high-quality annotations, we conduct a final manual verification to check box-target matching and textual correctness. The finalized dataset is randomly split into training, validation, and test sets at an 8:1:1 ratio, maintaining consistent category and modality distributions. Specifically, the train/val/test sets contain 37,460/4,682/4,683 images and 72,118/9,015/9,015 annotations, respectively. Annotations are provided in both XML and COCO JSON formats. 
+
+B. Statistical Analysis 
+
+We constructed the large-scale OptSAR-RSVG dataset, comprising 46,825 remote sensing images and 90,148 image/text description/bounding box triplet annotations spanning 16 target categories. The optical modality data includes 34,359 valid annotation files and 69,970 instances covering 14 categories; the SAR modality data includes 12,466 valid annotation files and 20,178 instances covering 2 categories. 
+
+Cross-Domain Samples. Fig. 3(a)-(c) illustrate the width, height, and area distributions of the dataset. Optical targets exhibit a wide range of scales, whereas SAR targets (mainly ships and towers) are predominantly small to medium in size. As shown in Fig. 3(d), optical and SAR samples account for 77.6% (69,970 instances) and 22.4% (20,178 instances) of the dataset, respectively. This ratio reflects the real-world scarcity of SAR annotations while providing sufficient data to drive cross-domain learning research. 
+
+Category Distribution. Fig. 3(g) presents the category proportions. Optical ships are abundant due to the merging of RSVGD [15] and OPT-RSVG [7], while other optical categories are balanced via augmentation. In the SAR domain, ships dominate over transmission towers. Furthermore, significant inter-class scale variations (Fig. 3(f)) demand robust multi-scale detection capabilities from visual grounding models. Category word clouds are visualized in Fig. 4(c). 
+
+Textual Descriptions. Fig. 3(e) details the description length distribution. OptSAR-RSVG averages 11.13 words per description, surpassing existing datasets (e.g., DGF-RSVG [42] at 10.7, OPT-RSVG [7] at 10.10, RSVGD [15] at 9.77, and DIOR-RSVG [6] at 7.47), indicating richer semantic expression. Word clouds for attributes, overall vocabulary, and directional words (Fig. 4(a, b, d)) highlight the dataset’s linguistic diversity. Notably, the high frequency of directional terms emphasizes the importance of spatial cues for distinguishing similar remote sensing targets. Fig. 5 presents sample data from the OptSAR-RSVG dataset, including typical images from both optical and SAR modalities. Each sample is annotated with target bounding boxes and corresponding textual descriptions. The samples demonstrate that the dataset covers diverse remote sensing scenarios, including urban areas, harbor waters, mountainous regions, and more. V. E XPERIMENTS 
+
+In this section, we conduct extensive experiments to validate the effectiveness and generalizability of the proposed cross-domain remote sensing visual grounding framework. First, we introduce the experimental setup (Sect. V-A), covering datasets, evaluation metrics, and implementation details. Subsequently, we perform comprehensive comparative IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8
+
+evaluations on our constructed OptSAR-RSVG dataset and the public single-source optical benchmark DIOR-RSVG (Sect. V-B). Furthermore, we analyze the contributions of key components through ablation studies (Sect. V-C). Finally, we present qualitative visualization results and demonstrate the unique zero-shot image annotation capability enabled by CLIP alignment (Sect. V-D). 
+
+A. Experimental Setup 1) Datasets: We evaluate the proposed method on two datasets. The first is OptSAR-RSVG, a large-scale CD-RSVG dataset we compiled that covers 16 common remote sensing object categories. Specifically, the optical subset comprises 34,359 valid annotation files with 69,970 instances across 14 categories, while the SAR subset comprises 12,466 annotation files with 20,178 instances across 2 categories. The dataset is randomly partitioned into training, validation, and test sets at 8:1:1, ensuring consistent category distributions and modal proportions across all subsets. To verify the generalizability of our model on standard benchmarks, we also conduct evaluations on DIOR-RSVG [6], a published single-source optical dataset covering 20 object categories, with the training, validation, and test sets containing 26,991 (70%), 3,829 (10%), and 7,500 (20%) image-text pairs, respectively. 
+
+2) Evaluation Metrics: Following the evaluation protocol of MGVLF [6], we report Pr@0.5, Pr@0.6, Pr@0.7, Pr@0.8, Pr@0.9, meanIoU, and cumIoU. Let IoU( ˆb, b ) denote the Intersection over Union between the predicted box ˆb and the ground truth box b. The metric Pr@ t represents the percentage of test samples where the IoU is greater than or equal to the threshold t:       
+
+> Pr@ t=1
+> N
+> NX
+> i=1
+> I IoU( ˆbi, b i)≥t×100% ,(10)
+
+where I(·) is the indicator function. meanIoU is the average IoU over all test samples:     
+
+> meanIoU = 1
+> N
+> NX
+> i=1
+> IoU( ˆbi, b i)×100% .(11)
+
+cumIoU calculates the IoU by aggregating the intersection and union areas over the entire test set:          
+
+> cumIoU =
+> PNi=1 Area( ˆbi∩bi)
+> PNi=1 Area( ˆbi∪bi)×100% .(12)
+
+3) Implementation Details: For the training of OptiSAR-Net++, we utilize the AdamW optimizer with an initial learning rate ηinit = 2 × 10 −3, weight decay of 0.025 , and momentum of 0.9. A cosine learning rate decay strategy is adopted with a final factor of 0.01 . The warmup bias learning rate is set to 0.0. The loss weights are configured as follows: region loss λregion = 1 .0, bounding box regression loss λbox = 7 .5, CLIP classification loss λcls = 0 .5, DFL loss 
+
+λdfl = 1 .5, and the MoE load balancing loss weight is set to 
+
+λlb = 1 .5. The maximum number of text instances sampled per batch is set to 20. The sampling ratio of adversarial negative samples to positive samples is 0.5. The number of random negative samples is uniformly sampled from the interval  
+
+> Fig. 6. CD-RSVG result comparison in optical and SAR scenes. Green bounding boxes denote the ground-truth annotations, and red bounding boxes indicate model predictions. The text prompts cover diverse semantic cues, including target category, attributes, and spatial location. OptiSAR-Net++ exhibits clear advantages in both localization accuracy and bounding-box regression quality.
+
+[0 , 10] , and global negative samples are used for padding to align tensor shapes. For reproducing open-source methods, we strictly follow their official configurations, including loading pretrained visual backbones (e.g., ResNet-50, DETR) and text encoders (e.g., BERT). In contrast, our method only loads the pretrained MobileCLIP2-B [44] text encoder for embedding generation. This branch contains 63.4M parameters and remains frozen throughout training without fine-tuning. It is worth noting that, among the 95.6M total parameters of OptiSAR-Net++, only 32.2M parameters are trained from scratch and participate in training. All experiments are conducted on 8 NVIDIA RTX 4090 GPUs using adistributed training strategy. OptiSAR-Net++ is trained for 300 epochs, while the other models are trained until the loss stops converging for 10 consecutive epochs. The global batch size is set to 64 for all models. The input image resolution is resized to 640 × 640 for both training and testing on OptSAR-RSVG and DIOR-RSVG [6]. 
+
+B. Comparative Experiments 
+
+This subsection validates the performance advantages of the proposed method through comprehensive comparisons. We first conduct a benchmark comparison with representative SOTA visual grounding methods on OptSAR-RSVG. Subsequently, we perform targeted evaluations from three perspectives: data efficiency, spatial localization capability, and generalizability on the public benchmark DIOR-RSVG. 
+
+SOTA Comparisons on OptSAR-RSVG. Table I and Fig. 6 compare OptiSAR-Net++ with state-of-the-art methods. With only 95.6M parameters (including a frozen 63.4M MobileCLIP2 text branch [44]), our model achieves the best overall test performance: 82.76% meanIoU and 90.70% cumIoU. It surpasses previous bests (LQVG: 78.04% IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+TABLE I PERFORMANCE COMPARISON ON OPT SAR-RSVG BENCHMARK . W E EVALUATE OUR METHOD AGAINST SOTA APPROACHES ACROSS OPTICAL AND 
+
+SAR DOMAINS . O UR OPT SAR-N ET ++ ACHIEVES SUPERIOR PERFORMANCE WITH SIGNIFICANTLY FEWER PARAMETERS . T HE BEST TWO RESULTS ARE HIGHLIGHTED IN RED AND BLUE .
+
+Method Params (M) Optical Testset SAR Testset All Testset Pr@0.5 Pr@0.7 Pr@0.9 meanIoU cumIoU Pr@0.5 Pr@0.7 Pr@0.9 meanIoU cumIoU meanIoU cumIoU 
+
+Transformer-Based: 
+
+TransVG [18] 149.7 43.06 30.10 3.23 36.87 39.86 65.99 41.47 1.64 51.72 20.04 40.69 40.90 LQVG [43] 156.8 89.64 80.06 33.48 77.29 82.75 94.13 87.39 32.14 80.76 81.04 78.04 82.15 TACMT [8] 150.9 85.51 79.53 42.20 75.74 79.98 92.87 89.74 38.29 81.59 82.46 77.24 81.40 CSDNet [14] 154.6 86.64 77.86 34.67 75.48 83.20 93.55 90.13 29.67 81.00 74.71 77.01 82.96 
+
+Contrastive Learning-based: 
+
+G-DINO [27] 172.3 81.73 75.82 30.98 71.26 75.83 89.61 85.14 29.69 78.24 80.92 74.84 78.74 GLIP [26] 231.8 67.83 60.79 24.74 58.99 76.27 88.25 83.72 24.13 75.31 81.55 63.17 76.91 OptSAR-Net++ (Ours) 95.6 90.37 86.83 68.89 83.17 88.83 94.68 90.21 37.22 81.85 83.15 82.76 90.70 
+
+meanIoU; CSDNet: 82.96% cumIoU) by 4.72% and 7.74%, respectively, while reducing the number of parameters by 36.1%–58.8% due to its efficient contrastive paradigm. On the optical test set, OptiSAR-Net++ achieves 68.89% Pr@0.9, outperforming TACMT (42.20%) by 26.69%, highlighting the precision of our mechanism’s bounding-box regression. On the SAR test set, TACMT (38.29%) slightly exceeds our method (37.22%) on Pr@0.9. However, prior Transformer models struggle to balance cross-domain performance due to distribution shifts and imbalanced training data. Furthermore, despite larger capacities, contrastive baselines (Grounding DINO [27], GLIP [26]) perform substantially worse, likely due to their reliance on natural-image pretraining without domain adaptation. Conversely, our domain-adaptive, hard-negative-enhanced CLIP paradigm effectively solves the CD-RSVG task. 
+
+Data Efficiency. Table II and Fig. 7 evaluate meanIoU using 30%, 60%, and 100% of the training data. OptiSAR-Net++ consistently outperforms competitors across all ratios. Notably, using only 60% data, it achieves 79.83% optical meanIoU, surpassing all full-data baselines (e.g., LQVG: 77.29%). Remarkably, with just 30% data, it attains 73.41% (optical) and 77.93% (SAR), rivaling or exceeding the full-data performance of much larger models like Grounding DINO (1.8 × params; 71.26%/78.24%) and GLIP (2.4 × params; 58.99%/75.31%). This strong data efficiency stems from two factors: (1) the CLIP-style paradigm provides rich linguistic priors, reducing the data needed for cross-modal alignment; and (2) adversarial hard-negative sampling amplifies discriminative signals, forcing the model to extract fine-grained supervisory cues from limited samples. 
+
+Spatial Localization Capability. A core challenge in RSVG is to accurately interpret orientation and spatial relations described in natural-language queries (e.g., “vehicles on the north side of the playground”). To evaluate the spatial grounding capability of different methods, we randomly replace a portion of the textual descriptions with category names at ratios of 0%, 10%, and 30%; the results are reported in Table III. On the optical test set, as the masking ratio increases from 0% to 30%, our meanIoU drops from 83.17% to 
+
+Fig. 7. Comparison of data efficiency on OptSAR-RSVG under different training data ratios (top) and comparison of spatial grounding performance under different description masking ratios (bottom). TABLE II PERFORMANCE COMPARISON WITH DIFFERENT TRAINING DATA (%)                                                  
+
+> Method Params (M) Optical Testset SAR Testset 30 60 All 30 60 All
+> Transformer-Based:
+> LQVG [43] 156.8 70.58 73.11 77.29 76.83 77.95 80.76 TACMT [8] 150.9 59.39 66.38 75.74 72.08 77.15 81.59 CSDNet [14] 154.6 70.86 75.05 75.48 74.42 77.10 81.00
+> Contrastive Learning-Based:
+> G-DINO [27] 172.3 61.82 67.49 71.26 71.80 75.28 78.24 GLIP [26] 231.8 49.88 56.02 58.99 68.71 73.44 75.31 OptSAR-Net++ (Ours) 95.6 73.41 79.83 83.17 77.93 78.36 81.85
+
+77.63%, a decrease of 5.54 percentage points (a relative drop of 6.66%). On the SAR test set, the degradation is notably smaller, decreasing from 81.85% to 79.37%, i.e., only 2.48 percentage points (a relative drop of 3.03%). In comparison, GLIP and TACMT exhibit the most severe performance degradation on the optical test set, indicating that their spatial reasoning is more fragile and that they are more susceptible to IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+TABLE III PERFORMANCE COMPARISON WITH DIFFERENT MASKING CAPTION 
+
+RATIO (%)                                                  
+
+> Method Params (M) Optical Testset SAR Testset 010 30 010 30
+> Transformer-Based:
+> LQVG [43] 156.8 77.29 73.30 73.23 80.76 79.95 78.90 TACMT [8] 150.9 75.74 73.35 69.20 81.59 79.67 77.22 CSDNet [14] 154.6 75.48 73.64 73.21 81.00 75.78 75.75
+> Contrastive Learning-Based:
+> G-DINO [27] 172.3 71.26 68.49 65.02 78.24 75.38 74.62 GLIP [17] 231.8 58.99 56.23 51.00 75.31 73.92 71.43 OptSAR-Net++ (Ours) 95.6 83.17 81.70 77.63 81.85 81.06 79.37
+
+TABLE IV PERFORMANCE COMPARISON ON DIOR-RSVG BENCHMARK .Method Params (M) Pr@0.5 Pr@0.7 Pr@0.9 mean IoU cum IoU 
+
+One-Stage Dense Prediction: 
+
+ZSGNet [45] - 51.67 42.30 10.15 44.12 51.65 FAOA [46] - 70.86 62.04 36.44 62.86 67.28 ReSC [47] 179.9 72.71 63.01 33.37 64.24 68.10 LBYL-Net [48] 163.8 73.78 65.36 19.52 65.23 76.37 
+
+Transformer-Based: 
+
+QRNet [49] 150.5 74.38 63.47 20.83 62.73 71.69 TransVG [18] 149.7 72.41 60.05 16.30 60.95 70.17 MGVLF [6] 152.5 76.78 66.74 35.07 68.04 78.41 LQVG [43] 156.8 83.41 75.91 33.74 74.02 82.22 LPVA [20] 156.2 82.27 72.25 39.55 72.23 85.11 TACMT [8] 150.9 79.92 71.43 38.75 71.64 80.64 MSANet [50] - 74.23 61.32 24.26 64.88 77.13 CSDNet [14] 154.6 81.91 71.05 32.04 70.88 79.58 QAMFN [51] 128.4 81.67 68.56 34.51 71.78 84.55 GLAED [52] 157.2 84.44 73.51 43.36 73.69 82.29 
+
+Contrastive Learning: 
+
+Eff. G-DINO [28] 169.3 83.05 75.00 42.27 73.41 81.06 G-DINO [27] 172.3 80.07 72.77 40.37 71.21 80.49 GLIP [26] 231.8 76.14 70.93 35.87 69.86 79.05 OptSAR-Net++ (Ours) 95.6 84.07 75.69 45.28 73.79 85.46 
+
+missing explicit orientation cues in the text queries. In contrast, the moderate degradation of OptiSAR-Net++ suggests that it leverages spatial and category cues in a balanced manner rather than over-relying on either. 
+
+Generalization on DIOR-RSVG. To assess the generalization of our framework beyond the cross-domain setting, we further evaluate it on the widely used single-source optical benchmark DIOR-RSVG [6]. As shown in Table IV. OptiSAR-Net++ achieves the best results on the two most challenging metrics: Pr@0.9 (45.28%) and cumIoU (85.46%), surpassing the runner-up GLAED [52] (43.36%) by 1.92 percentage points and LPVA [20] (85.11%) by 0.35 percentage points, respectively. On Pr@0.5 (84.07%), Pr@0.7 (75.69%), and meanIoU (73.79%), our method ranks second, trailing GLAED (84.44%), LQVG [43] (75.91%), and LQVG (74.02%) by narrow margins of 0.37, 0.22, and 0.23 percentage points, respectively. These results indicate that, although OptiSAR-Net++ is designed for the cross-domain CD-RSVG task, it can effectively generalize to the single-source scenario without any architectural modifications, 
+
+Fig. 8. Visualization of last-layer feature activation heatmaps across ablation stages for optical (top two rows) and SAR (bottom two rows) samples. (a) Input image. (b) Baseline model, showing dispersed activations across the scene. (c) Model with fine-grained adversarial sampling, exhibiting improved attention concentration. (d) Full OptiSAR-Net++ (integrating PL-MoE, TGDF-SSA, and the auxiliary head), yielding highly focused activations that precisely align with target boundaries. Green boxes denote localization results. TABLE V ABLATION STUDY OF KEY COMPONENTS 
+
+Fine. Sample PL-MoE Sem. Injection Params (M) mean IoU cum IoU 91.0 76.42 82.15 
+
+✓ 91.0 81.59 +5 .17 88.03 +7 .88 
+
+✓ ✓ 91.3 82.34 +0 .75 88.96 +0 .93 
+
+✓ ✓ ✓ 95.6 82.76 +0 .42 90.70 +1 .74 
+
+validating the generality of our framework. 
+
+C. Ablation Studies 
+
+In this subsection, we conduct ablation studies to analyze the contributions of key components to the overall performance, including ablations on core modules and MoE configurations. 
+
+Ablation on Key Components. Table V details the progressive integration of each component into our baseline (a standard backbone+neck detector using CLIP-style random sampling; activations in Fig. 8(b)). Adversarial negative sampling (perturbing orientation and domain cues) enables fine-grained feature distinction, shifting activations from dispersed to semantically focused (Fig. 8(c)). Adding PL-MoE further improves meanIoU by 0.75% and cumIoU by 0.93% with only 0.3M extra parameters. This sparse architecture efficiently strengthens cross-domain representations by IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11                                       
+
+> Fig. 9. Visualization of expert routing patterns under different MoE granularity settings. From top to bottom, the models use 2, 4, and 8 experts for cross-domain learning, respectively. TABLE VI ABLATION STUDY OF MOE C ONFIGURATION
+> MoE (n, k, p) 2, 2, 2 4, 2, 2 8, 1, 2 8, 3, 2 8, 2, 1 (G. Lv.) 8, 2, ∞
+> (I. Lv.) 8, 2, 4 (P. Lv.) 8, 2, 2 (P. Lv.) Params (M) 94.9 95.6 95.6 95.6 95.6 95.6 95.6 95.6 meanIoU 81.04 81.48 81.97 82.64 82.73 81.37 82.71 82.76
+> cumIoU 87.76 89.82 88.56 89.35 89.84 87.96 90.48 90.70
+
+adaptively routing patches to domain-matched experts. Finally, the semantic injection module (TGDF-SSA and auxiliary head) yields further gains of 0.42% meanIoU and 1.74% cumIoU. The full model produces highly concentrated activations (Fig. 8(d)), demonstrating the strong synergy among all proposed components. 
+
+Ablation on MoE Configurations. Table VI and Fig. 9 explore MoE configurations: expert count ( n), Top-k selection (k), and routing granularity defined by patch size ( p). With 
+
+k = 2 and p = 2 , increasing n from 2 to 8 consistently improves meanIoU (81.04% → 81.48% → 82.76%), as expert diversity facilitates finer optical/SAR specialization. We set n = 8 
+
+to balance performance and efficiency. For Top-k selection, 
+
+k = 2 is optimal: k = 1 limits the integration of shared representations, while k > 2 dilutes expert specialization. Regarding routing granularity, image-level routing ( p = ∞)performs worst (81.37% meanIoU, 87.96% cumIoU). Token-level routing ( p = 1 ) achieves competitive meanIoU (82.73%) but lower cumIoU (89.84%) than patch-level routing ( p =2: 82.76%/90.70%). This suggests that overly fine-grained routing disrupts spatial coherence. Thus, p = 2 strikes the best balance, grouping neighboring tokens to preserve both spatial consistency and routing flexibility.           
+
+> Fig. 10. Additional visual grounding predictions of OptiSAR-Net++ on the OptSAR-RSVG test set, covering a variety of representative scenes in optical (first row) and SAR (second row) imagery, as well as several failure cases (third row). For each example, the text query is shown next to the image; green bounding boxes denote the ground-truth annotations, and red bounding boxes indicate the predicted results.
+> Fig. 11. Zero-shot image annotation comparison between OptiSAR-Net++ and GLIP. Both methods annotate unseen scenes by matching detections against training text embeddings (confidence >0.85 ). Red text indicates misclassifications. OptiSAR-Net++ outperforms GLIP in category accuracy, attribute discrimination, and spatial-relation richness, demonstrating its potential for automated remote-sensing annotation.
+
+D. Further Qualitative Analysis 
+
+We visualize the localization predictions of our method in more complex scenarios, such as dense object clusters, strong background interference, and cases with ambiguous descriptions. Additionally, we demonstrate the zero-shot image annotation capability enabled by the CLIP-aligned latent space, highlighting the semantic generalization potential of our framework for future data annotation tasks. 
+
+More Visual Grounding Visualizations. Fig. 10 presents additional predictions in challenging scenes, including dense clusters, severe background clutter, multi-scale objects, and complex spatial queries. Across both optical and SAR domains, OptiSAR-Net++ consistently produces tight, accurate bounding boxes. Particularly in dense scenes, it successfully disambiguates targets among similar IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+candidates using orientation and relational cues, validating the effectiveness of our fine-grained semantic perception mechanism. We also provide several failure cases. 
+
+Zero-shot Image Annotation Results. The CLIP-style contrastive paradigm inherently aligns visual and textual spaces, enabling zero-shot transfer. To validate this, we compare OptiSAR-Net++ and GLIP [26] on zero-shot image annotation (Fig. 11). We match detected boxes against a unified training-text embedding pool, retaining predictions with confidence > 0.85 .OptiSAR-Net++ clearly outperforms GLIP in accuracy and completeness. GLIP frequently misclassifies categories (e.g., mistaking a baseball field for an “oil storage tank”) and generates generic, repetitive descriptions (e.g., labeling all SAR ships as “large”). Conversely, OptiSAR-Net++ differentiates scale variations (“large”, “medium”, “small”) and captures richer orientation cues (“upper left”, “lower right”). These results demonstrate our framework’s strong semantic generalization to novel scenes and categories, offering a promising solution for rapid data annotation and low-resource scene interpretation. VI. C ONCLUSION AND FUTURE WORK 
+
+In this paper, we systematically explore cross-domain remote-sensing visual grounding (CD-RSVG). We introduce OptSAR-RSVG, the first large-scale benchmark for this task, and propose OptiSAR-Net++, an efficient Transformer-free framework. By leveraging CLIP-based contrastive learning and adversarial negative mining, OptiSAR-Net++ reframes CD-RSVG from generative regression to efficient retrieval. Furthermore, it integrates PLoRA-MoE for parameter-efficient cross-domain feature decoupling, and TGDF-SSA for precise cross-modal semantic injection and spatial modeling. Extensive experiments demonstrate that OptiSAR-Net++ achieves state-of-the-art performance on the OptSAR-RSVG and DIOR-RSVG benchmarks, showing notable advantages in fine-grained spatial modeling and data efficiency. However, this work has two main limitations. First, our cross-domain setting is confined to optical and SAR modalities; its generalizability to other data sources (e.g., infrared or multispectral imagery) remains unexplored. Second, compared to Transformer-based models with stronger long-range dependency modeling, our CLIP-based contrastive paradigm may face scalability bottlenecks on larger datasets. Future work will explore incorporating temporal information from image sequences for dynamic scene understanding (e.g., change detection). Ultimately, we hope the OptSAR-RSVG dataset and OptiSAR-Net++ framework will serve as pivotal foundations for advancing cross-domain remote sensing comprehension and human-machine interaction. REFERENCES [1] T. Liu, M. Zhang, M. Gong, Q. Zhang, F. Jiang, H. Zheng, and D. Lu, “Commonality feature representation learning for unsupervised multimodal change detection,” IEEE Trans. Image Process. , 2025. [2] Y. Xiao, Q. Yuan, K. Jiang, J. He, C.-W. Lin, and L. Zhang, “Ttst: A top-k token selective transformer for remote sensing image super-resolution,” IEEE Trans. Image Process. , vol. 33, pp. 738–752, 2024. [3] W. Li, W. Yang, Y. Hou, L. Liu, Y. Liu, and X. Li, “Saratr-x: Towards building a foundation model for sar target recognition,” IEEE Trans. Image Process. , 2025. [4] F. Liu, D. Chen, Z. Guan, X. Zhou, J. Zhu, Q. Ye, L. Fu, and J. Zhou, “Remoteclip: A vision language foundation model for remote sensing,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–16, 2024. [5] Z. Wang, L. Liu, G. Wan, W. Zhang, B. Zhong, H. Chang, X. Li, X. Liu, and G. Sun, “A review of visual grounding on remote sensing images,” 
+
+Electronics , vol. 14, no. 14, p. 2815, 2025. [6] Y. Zhan, Z. Xiong, and Y. Yuan, “Rsvg: Exploring data and models for visual grounding on remote sensing data,” IEEE Trans. Geosci. Remote Sens. , vol. 61, pp. 1–13, 2023. [7] K. Li, D. Wang, H. Xu, H. Zhong, and C. Wang, “Language-guided progressive attention for visual grounding in remote sensing images,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–13, 2024. [8] T. Li, C. Wang, S. Tian, B. Zhang, F. Wu, Y. Tang, and H. Zhang, “Tacmt: Text-aware cross-modal transformer for visual grounding on high-resolution sar images,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 222, pp. 152–166, 2025. [9] C. Chen, J. Qi, X. Liu, K. Bin, R. Fu, X. Hu, and P. Zhong, “Weakly misalignment-free adaptive feature alignment for uavs-based multimodal object detection,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) , 2024, pp. 26 836–26 845. [10] J. Dong, J. Feng, and X. Tang, “Optisar-net: A cross-domain ship detection method for multi-source remote sensing data,” IEEE Trans. Geosci. Remote Sens. , 2024. [11] L. Bao, X. Zhou, B. Zheng, R. Cong, H. Yin, J. Zhang, and C. Yan, “Ifenet: Interaction, fusion, and enhancement network for vdt salient object detection,” IEEE Trans. Image Process. , 2025. [12] Y. Li, X. Li, Y. Li, Y. Zhang, Y. Dai, Q. Hou, M.-M. Cheng, and J. Yang, “Sm3det: A unified model for multi-modal remote sensing object detection,” arXiv preprint arXiv:2412.20665 , 2024. [13] H. Guo, B. Sun, S. Li, C. Lei, X. Li, and M. Tan, “Directional semantic enhanced visual grounding for remote sensing images,” IEEE Trans. Geosci. Remote Sens. , 2025. [14] Y. Zhao, Y. Chen, R. Yao, S. Xiong, and X. Lu, “Context-driven and sparse decoding for remote sensing visual grounding,” Information Fusion , p. 103296, 2025. [15] Y. Chen, L. Zhan, Y. Zhao, S. Xiong, and X. Lu, “Vgrss: Datasets and models for visual grounding in remote sensing ship images,” IEEE Trans. Geosci. Remote Sens. , 2025. [16] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman, D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat et al. , “Gpt-4 technical report,” arXiv preprint arXiv:2303.08774 , 2023. [17] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in Proc. Int. Conf. Mach. Learn. PmLR, 2021, pp. 8748–8763. [18] J. Deng, Z. Yang, T. Chen, W. Zhou, and H. Li, “Transvg: End-to-end visual grounding with transformers,” in Proc. IEEE Int. Conf. Comput. Vis.(ICCV) , 2021, pp. 1769–1779. [19] H. Guo, B. Sun, S. Li, C. Lei, X. Li, and M. Tan, “Directional semantic enhanced visual grounding for remote sensing images,” IEEE Trans. Geosci. Remote Sens. , 2025. [20] K. Li, D. Wang, H. Xu, H. Zhong, and C. Wang, “Language-guided progressive attention for visual grounding in remote sensing images,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–13, 2024. [21] X. Tang, R. Shen, J. Ma, X. Zhang, F. Liu, and L. Jiao, “Language-guided progressive query refinement with diffusion model for visual grounding on remote sensing images,” IEEE Trans. Geosci. Remote Sens. , 2025. [22] Y. Zhan, Z. Xiong, and Y. Yuan, “Skyeyegpt: Unifying remote sensing vision-language tasks via instruction tuning with large language model,” 
+
+ISPRS Journal of Photogrammetry and Remote Sensing , vol. 221, pp. 64–77, 2025. [23] W. Zhang, M. Cai, T. Zhang, Y. Zhuang, and X. Mao, “Earthgpt: A universal multimodal large language model for multisensor image comprehension in remote sensing domain,” IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–20, 2024. [24] A. Wang, L. Liu, H. Chen, Z. Lin, J. Han, and G. Ding, “Yoloe: Real-time seeing anything,” arXiv preprint arXiv:2503.07465 , 2025. [25] T. Cheng, L. Song, Y. Ge, W. Liu, X. Wang, and Y. Shan, “Yolo-world: Real-time open-vocabulary object detection,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) , 2024, pp. 16 901–16 911. [26] L. H. Li, P. Zhang, H. Zhang, J. Yang, C. Li, Y. Zhong, L. Wang, L. Yuan, L. Zhang, J.-N. Hwang et al. , “Grounded language-image pre-IEEE JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+training,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) ,2022, pp. 10 965–10 975. [27] S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang, H. Su et al. , “Grounding dino: Marrying dino with grounded pre-training for open-set object detection,” in Proc. Eur. Conf. Comput. Vis.(ECCV) . Springer, 2024, pp. 38–55. [28] Z. Hu, K. Gao, X. Zhang, Z. Yang, M. Cai, Z. Zhu, and W. Li, “Efficient grounding dino: Efficient cross-modality fusion and efficient label assignment for visual grounding in remote sensing,” IEEE Trans. Geosci. Remote Sens. , 2025. [29] W. Han, W. Jiang, J. Geng, and W. Miao, “Difference-complementary learning and label reassignment for multimodal semi-supervised semantic segmentation of remote sensing images,” IEEE Trans. Image Process. , 2025. [30] C. Wang, W. Lu, X. Li, J. Yang, and L. Luo, “M4-sar: A multi-resolution, multi-polarization, multi-scene, multi-source dataset and benchmark for optical-sar fusion object detection,” arXiv preprint arXiv:2505.10931 ,2025. [31] J. Wang, L. Yan, J. Yang, H. Xie, Q. Yuan, P. Wei, Z. Gao, C. Zhang, and P. M. Atkinson, “Macon: a generic self-supervised framework for unsupervised multimodal change detection,” IEEE Trans. Image Process. , 2025. [32] Y. Liu, Z. Sun, B. Yu, Y. Zhao, B. Du, Y. Xu, and J. Cheng, “Mifnet: Learning modality-invariant features for generalizable multimodal image matching,” IEEE Trans. Image Process. , 2025. [33] L. Bao, X. Zhou, B. Zheng, R. Cong, H. Yin, J. Zhang, and C. Yan, “Ifenet: Interaction, fusion, and enhancement network for vdt salient object detection,” IEEE Trans. Image Process. , 2025. [34] Y. Liu, W. Guo, C. Yao, and L. Zhang, “Dual-perspective alignment learning for multimodal remote sensing object detection,” IEEE Trans. Geosci. Remote Sens. , 2025. [35] D. Hong, B. Zhang, H. Li, Y. Li, J. Yao, C. Li, M. Werner, J. Chanussot, A. Zipf, and X. X. Zhu, “Cross-city matters: A multimodal remote sensing benchmark dataset for cross-city semantic segmentation using high-resolution domain adaptation networks,” Remote Sensing of Environment , vol. 299, p. 113856, 2023. [36] J. Lu and H. Chen, “Vlsda: Vision–language model-supervised domain adaptation for cross-domain object detection in remote sensing,” IEEE Trans. Geosci. Remote Sens. , vol. 63, pp. 1–15, 2025. [37] C.-Y. Wang, H.-Y. M. Liao, Y.-H. Wu, P.-Y. Chen, J.-W. Hsieh, and I.-H. Yeh, “Cspnet: A new backbone that can enhance learning capability of cnn,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) workshops , 2020, pp. 390–391. [38] S. Liu, L. Qi, H. Qin, J. Shi, and J. Jia, “Path aggregation network for instance segmentation,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) , 2018, pp. 8759–8768. [39] S. Mu and S. Lin, “A comprehensive survey of mixture-of-experts: Algorithms, theory, and applications,” arXiv preprint arXiv:2503.07137 ,2025. [40] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, W. Chen et al. , “Lora: Low-rank adaptation of large language models.” 
+
+ICLR , vol. 1, no. 2, p. 3, 2022. [41] Z. Qiu, Z. Wang, B. Zheng, Z. Huang, K. Wen, S. Yang, R. Men, L. Yu, F. Huang, S. Huang et al. , “Gated attention for large language models: Non-linearity, sparsity, and attention-sink-free,” arXiv preprint arXiv:2505.06708 , 2025. [42] J. Xie, B. Zhang, Z. Chen, X. Yang, Y. Bai, Z. Wu, and Y. Xu, “Global vision-language feature interaction enhanced by object-context association for remote sensing visual grounding,” IEEE Trans. Geosci. Remote Sens. , 2025. [43] M. Lan, F. Rong, H. Jiao, Z. Gao, and L. Zhang, “Language query-based transformer with multiscale cross-modal alignment for visual grounding on remote sensing images,” IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–13, 2024. [44] F. Faghri, P. K. A. Vasu, C. Koc, V. Shankar, A. T. Toshev, O. Tuzel, and H. Pouransari, “MobileCLIP2: Improving multi-modal reinforced training,” Transactions on Machine Learning Research , 2025, featured Certification. [Online]. Available: https: //openreview.net/forum?id=WeF9zolng8 [45] A. Sadhu, K. Chen, and R. Nevatia, “Zero-shot grounding of objects from natural language queries,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2019, pp. 4694–4703. [46] Z. Yang, B. Gong, L. Wang, W. Huang, D. Yu, and J. Luo, “A fast and accurate one-stage approach to visual grounding,” in Proceedings of the IEEE/CVF international conference on computer vision , 2019, pp. 4683–4693. [47] Z. Yang, T. Chen, L. Wang, and J. Luo, “Improving one-stage visual grounding by recursive sub-query construction,” in Proc. Eur. Conf. Comput. Vis.(ECCV) . Springer, 2020, pp. 387–404. [48] B. Huang, D. Lian, W. Luo, and S. Gao, “Look before you leap: Learning landmark features for one-stage visual grounding,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.(CVPR) , 2021, pp. 16 888–16 897. [49] J. Ye, J. Tian, M. Yan, X. Yang, X. Wang, J. Zhang, L. He, and X. Lin, “Shifting more attention to visual backbone: Query-modulated refinement networks for end-to-end visual grounding,” in proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2022, pp. 15 502–15 512. [50] F. Wang, C. Wu, J. Wu, L. Wang, and C. Li, “Multistage synergistic aggregation network for remote sensing visual grounding,” IEEE Geoscience and Remote Sensing Letters , vol. 21, pp. 1–5, 2024. [51] C. Li, W. Zhang, H. Bi, J. Li, S. Li, H. Yu, X. Sun, and H. Wang, “Injecting linguistic into visual backbone: Query-aware multimodal fusion network for remote sensing visual grounding,” IEEE Transactions on Geoscience and Remote Sensing , 2024. [52] J. Xie, B. Zhang, Z. Chen, X. Yang, Y. Bai, Z. Wu, and Y. Xu, “Global vision-language feature interaction enhanced by object-context association for remote sensing visual grounding,” IEEE Transactions on Geoscience and Remote Sensing , 2025. 
+
+Xiaoyu Tang (Member, IEEE) received the B.S. degree from South China Normal University, Shanwei, China, in 2003, and the M.S. degree from Sun Yat-sen University, Guangzhou, China, in 2011. He is currently pursuing the Ph.D. degree with South China Normal University. He is working with Xingzhi College, South China Normal University, where he is engaged in information system development. His research interests include machine vision, intelligent control, and the Internet of Things. Mr. Tang is a member of the IEEE ICICSP Technical Committee. 
+
+Jun Dong (Student Member, IEEE) is currently pursuing the bachelor’s degree in Internet of Things (IoT) engineering with the School of Data Science and Engineering, South China Normal University, Shanwei, China. 
+
+Jintao Cheng received his bachelor’s degree from the School of Physics and Telecommunications Engineering, South China Normal University, in 2021. He is currently pursuing an MPhil degree at The Hong Kong University of Science and Technology. 
+
+Rui Fan (Senior Member, IEEE) received the B.Eng. degree in Automation from the Harbin Institute of Technology in 2015 and the Ph.D. degree in Electrical and Electronic Engineering from the University of Bristol in 2018. He worked as a Research Associate at the Hong Kong University of Science and Technology from 2018 to 2020 and a Postdoctoral Scholar-Employee at the University of California San Diego between 2020 and 2021. He began his faculty career as a Full Research Professor in the College of Electronics & Information Engineering at Tongji University in 2021. He was promoted to Full Professor in 2022 and attained tenure in 2024, both in the same college and at the Shanghai Research Institute for Intelligent Autonomous Systems. His research interests include computer vision, deep learning, and robotics, with a specific focus on humanoid visual perception under the two-streams hypothesis. Prof. Fan served as an associate editor for ICRA’23/25 and IROS’23/24, an area chair for ICIP’24, and a senior program committee member for AAAI’23/24/25/26. He organized several impactful workshops and special sessions in conjunction with WACV’21, ICIP’21/22/23, ICCV’21/25, and ECCV’22. He was honored by being included in the Stanford University List of Top 2% Scientists Worldwide between 2022 and 2025, recognized on the Forbes China List of 100 Outstanding Overseas Returnees in 2023, acknowledged as one of Xiaomi Young Talents in 2023, and awarded the Shanghai Science & Technology 35 Under 35 honor in 2024 as its youngest recipient.

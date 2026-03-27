@@ -1,0 +1,482 @@
+Title: MultiCam: On-the-fly Multi-Camera Pose Estimation Using Spatiotemporal Overlaps of Known Objects
+
+URL Source: https://arxiv.org/pdf/2603.22839v1
+
+Published Time: Wed, 25 Mar 2026 00:42:32 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# MultiCam: On-the-fly Multi-Camera Pose Estimation Using Spatiotemporal Overlaps of Known Objects 
+
+Shiyu Li , Hannah Schieber , Kristoffer Waldow ,Benjamin Busam , Julian Kreimeier , and Daniel Roth, Member, IEEE Non aligned camera coordinate systems            
+
+> (HMD SLAM)
+> Semi -aligned camera coordinate systems
+> (HMD SLAM + 𝐶 !)
+> Semi -aligned camera coordinate systems
+> (HMD SLAM + 𝐶 !+𝐶 ")
+> Fully -aligned camera coordinate systems
+> (HMD SLAM + 𝐶 !+𝐶 ")
+> Individual/common
+> camera FoV
+> Known
+> objects
+> t0 t1 t2 t3
+> time
+> Individual/common
+> coordinate system
+
+Fig. 1: Our proposed method MultiCam enhances the limited field of view ( FoV ) of Augmented Reality ( AR ) head-mounted display ( HMD )by integrating more comprehensive spatial information from multiple external cameras with non-aligned camera coordinate systems (left figure). We can dynamically calculate multiple camera poses using spatiotemporal object overlaps. If there are object overlaps between the HMD and one external camera (second figure), we update the new calculated camera poses in the aligned coordinate system. In the end, the multi-camera system is fully aligned (right figure). 
+
+Abstract —Multi-camera dynamic Augmented Reality (AR) applications require a camera pose estimation to leverage individual information from each camera in one common system. This can be achieved by combining contextual information, such as markers or objects, across multiple views. While commonly cameras are calibrated in an initial step or updated through the constant use of markers, another option is to leverage information already present in the scene, like known objects. Another downside of marker-based tracking is that markers have to be tracked inside the field-of-view (FoV) of the cameras. To overcome these limitations, we propose a constant dynamic camera pose estimation leveraging spatiotemporal FoV overlaps of known objects on the fly. To achieve that, we enhance the state-of-the-art object pose estimator to update our spatiotemporal scene graph, enabling a relation even among non-overlapping FoV cameras. To evaluate our approach, we introduce a multi-camera, multi-object pose estimation dataset with temporal FoV overlap, including static and dynamic cameras. Furthermore, in FoV overlapping scenarios, we outperform the state-of-the-art on the widely used YCB-V and T-LESS dataset in camera pose accuracy. Our performance on both previous and our proposed datasets validates the effectiveness of our marker-less approach for AR applications. The code and dataset are available on https://github.com/roth-hex-lab/IEEE-VR-2026-MultiCam .
+
+Index Terms —Camera pose estimation, bundle adjustment, augmented reality, multi-view 6D object pose. 
+
+1 INTRODUCTION 
+
+©2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works. DOI: 
+
+Augmented Reality ( AR ) head-mounted displays ( HMD s) are typi-cally equipped with built-in cameras for environment sensing and object tracking. However, their dynamic field of view ( FoV ) is inherently con-strained to a narrow, egocentric perspective. In complex industrial and medical scenarios, such a limited sensing capability can lead to the omission of critical contextual information from the surrounding 
+
+• Shiyu Li, Hannah Schieber, Julian Kreimeier, and Daniel Roth are with Technische Universtität München, Human-Centered-Computing and Extended Reality Lab, Klinikum rechts der Isar, Orthopedics and Sports Orthopedics, Munich Institute of Robotics and Machine Intelligence (MIRMI), Germany. (e-mail: {shiyu.li | hannah.schieber | julian.kreimeier | daniel.roth}@tum.de). • Kristoffer Waldow is with TH Köln, Computer Graphics Group and with Technische Universität München, Human-Centered-Computing and Extended Reality Lab, Germany. (e-mail: kristoffer.waldow@th-koeln.de). • Benjamin Busam is with Technische Universtität München, Photogrammetry and Remote Sensing Lab, Munich, Germany (e-mail: b.busam@tum.de). Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx xxx. 201x; date of current version xx xxx. 201x. For information on obtaining reprints of this article, please send e-mail to: reprints@ieee.org. Digital Object Identifier: xx.xxxx/TVCG.201x.xxxxxxx 
+
+environment [1, 46]. To address this issue, static external cameras can be employed to extend the overall FoV of the application [23]. But integrating additional cameras requires a pose estimation step to align their individual coordinate systems with that of the HMD , enabling consistent joint sensing. Dynamic cameras can update their pose by IMU data processing [51], outside-in tracking [2], and Simultaneous Localization and Mapping ( SLAM ) approaches [48]. However, when IMU or SLAM approaches are used alone for HMD , they remain prone to accumulating errors over runtime, which requires their updated pose estimation or recalibration in relation to the static cameras [1, 46], i.e., estimating and updating the camera pose. Fusing static and dynamic cameras requires estimating the pose of each camera by shared information in at least two static FoV s. This is usually implemented by optical markers [9] or calibration patterns [61]. However, having such markers is oftentimes not feasible in the application context where an updated pose is constantly needed due to dynamic scene parts. Furthermore, the implementation can be difficult in challenging environments such as sterile operating rooms. Firstly, the markers have to be sterilized, adding overhead in the medical workflow; secondly, awareness to always keep the markers in the FoV has to be raised. Another solution to address this problem could be the use of known objects as substitutes for markers, such as surgical instruments already 
+
+> arXiv:2603.22839v1 [cs.CV] 24 Mar 2026
+
+present in the operating room. Similar conditions apply to industrial use cases, such as having known components during assembly. To leverage known objects as markers, each of their poses needs to be estimated. Several approaches (e.g. [24, 25, 27, 33, 43, 60]) exist to estimate object poses, and multiple datasets have been proposed [6, 21, 57, 60]. But existing datasets [6, 7, 13 –15, 29, 49, 50, 56, 60] do not cover multi-view setups with spatiotemporal overlaps between the cameras’ FoV . However, combining this spatiotemporal overlap with object pose estimation can be an advantageous solution for dynamic camera pose estimation in dynamic scenes. To do so, an accurate and real-time capable object pose estimator needs to be applied in the scene. Thus, our approach requires the training of a 6D pose estimator. As a real-world dataset for every AR application is unrealistic and not scalable, synthetic data can be leveraged to meet training data demands [4, 41]. Additionally, synthetic data increases the scalability of our approach, as new objects can be easily added by expanding the training corpus [4, 41]. 
+
+1.1 Contribution 
+
+Current approaches and datasets do not address this spatiotemporal challenge in dynamic AR camera setups. To address this gap, we a) overcome the need for dedicated optical markers and b) update static and dynamic cameras’ pose data in a continuous, real-time manner with our approach (MultiCam). We leverage prior knowledge about existing objects in the temporarily shared fields of view and employ pose estimations of these objects. If we know objects in the scene, we can use the system on the fly without calibration. To summarize, we contribute: • A markerless multi-view camera pose estimation toolkit for RGB/RGB-D sensors using a real-time 6D object pose estimator • A spatiotemporal scene graph fusing object pose information in temporarily-shared camera views and a novel object-level bundle adjustment for global optimization • A real-world multi-view multi-object benchmark dataset recorded with one AR HMD and two static cameras. Figure 1 visualizes the application scenario of such a multi-camera setup. An HMD user with a dynamic camera enters the scene. Our approach can handle static and dynamic multi-camera setups and update all cameras’ pose data, based on temporarily shared FoV sensing. This allows AR systems to extend the sensing FoV to multiple cameras and provides continuous context sensing information of objects, even when they are outside the current FoV of the HMD. 
+
+2 RELATED WORK 
+
+2.1 Camera Pose Estimation 
+
+2.1.1 Traditional Methods 
+
+For the calibration of a single camera, Zhang [61] proposed a flexible calibration approach requiring the camera to observe a planar pattern shown at a few (at least two) different orientations. This approach builds the foundation for 3D computer vision. Fiala [9] proposed ARTag, a fiducial marker system using digital techniques. Experimental results validate this system with a low error detection rate and high accuracy for AR , robot navigation, and general applications between a camera and an object. Most multi-camera calibration methods are marker-based [1, 12, 19, 38]. Rameau et al. [38] introduced a toolbox for synchronized systems using multiple marker patterns, evaluating pose errors on synthetic data. However, their reliance on static markers limits use in AR settings with space restrictions. Regarding AR HMD , Ai et al. [1] proposed a robust virtual-to-real calibration that aligns the virtual and real spaces using retro-reflective markers. Song et al. [46] presented a marker-less calibration method integrating external cameras with AR HMD using point cloud registration, but the calibration of external cameras still relies on a fiducial marker. 
+
+2.1.2 Learning-Based Methods 
+
+Camera pose estimation determines a camera’s position and orientation relative to a reference frame using semantic cues in a marker-less setup. It is crucial for tasks such as 6D pose estimation [21, 24], novel view synthesis [28, 42], and general scene understanding. Unlike camera calibration, which uses predefined patterns, pose estimation focuses solely on extrinsic parameters and can leverage object and background cues. Scene coordinate regression methods [3, 22, 45] estimate camera poses via deep learning in an end-to-end manner, eliminating the need for manual engineering or graph optimization. These methods can ro-bustly re-localize the camera even when traditional point-based registra-tion (e.g., SIFT) fails [22]. Roessle et al. [39] introduced an end-to-end pipeline based on feature matching and pose optimization, but their method suffers from scale ambiguity and does not consider dynamic camera scenarios. 
+
+2.2 6D Object Pose Estimation 
+
+6D pose estimation predicts an object’s pose relative to the camera coor-dinate system. Single-view methods build the foundation for multi-view approaches; while single-network approaches offer faster inference, they often sacrifice accuracy [16,30]. For AR application, YOLO-based methods [27, 43] are suitable due to a good balance between speed and accuracy, but are limited to known objects. Approaches like [25, 33], which use 2D detectors such as CNOS [32], are more generalizable for novel objects, but suffer from large runtime, which is far from real-time capability. Multi-view techniques address depth ambiguities and occlusions [7, 8, 24]. CosyPose [24] estimates both camera and object poses using RGB images and object-level RANSAC, but operates at 3 FPS, limiting AR applicability. MV6D [7] and its extension SyMFM6D [8] improve multi-view accuracy by assuming known camera poses and addressing object symmetry, achieving better results in cluttered scenes. However, both run below 10 FPS and require known camera poses, restricting their real-time use in AR. 
+
+2.3 Scene Graph Representation 
+
+Scene graphs are beneficial for scene understanding tasks requiring perception, interaction, and manipulation [10, 40, 59]. Semantic Scene Graphs ( SSG s) [58] incorporate spatial relationships beyond object recognition. These methods primarily focus on estimating relationships across hierarchical levels, such as object [34, 54], and human-level seman-tics [40]. Wald et al. [53] addressed object re-localization in dynamic environments, updating object poses accordingly. However, most exist-ing approaches rely on monocular inputs [54, 59] and lack integration of multi-camera data into the scene graph. Spatio-temporal scene graphs [20,36] have been proposed to capture dynamic interactions, particularly human-object relationships, support-ing tasks like action recognition and video understanding. However, they typically rely on 2D object detection, omitting 3D cues such as object and human poses. In contrast, this work focuses on 6D pose esti-mation, leveraging scene graphs to connect objects and cameras within a unified 3D representation, facilitating more robust AR applications. 
+
+2.4 6D Object Pose Datasets 
+
+While single-camera 6D pose datasets [14, 15, 60] pose challenges such as occlusion, previous multi-view methods [24] evaluate multiple views on these datasets, using multiple frames from a single camera. To improve annotation accuracy, Li et al. [26] introduced the BCOT dataset with two static cameras observing dynamic objects, using multi-view geometry for pose optimization. Hein et al. [13] presented a dataset for surgical tool localization using five static RGB-D cameras and two AR HMD s; however, its shared FoV setup and limited object diversity make it unsuitable for non-overlapping, mobile multi-camera AR scenarios. As summarized in Table 1, we include reflective or metallic objects, which introduce challenging texture-less regions. We demonstrate it on a variety of challenging objects in medical use cases from the Table 1: Dataset Overview. Comparison of existing instance-level 6D pose datasets with our proposed dataset in terms of camera setup, field-of-view (FOV) overlap, and object complexity.                                                     
+
+> Dataset Modality Scene Type Object Camera Number
+> RGB Depth Real Synthetic Cluttered Symmetry Transparent/ Multi-view Static Dynamic XR Non-overlapping Categories Instances Scenes Reflective Device FOV
+> FAT [49] –21 >1k Linemod [14] –15 15 YCB [60] –21 92 MV-YCB [7] –21 8333 T-LESS [15] –30 20 ITODD [6] –28 800 HOPE [50] –28 50 TOD [29] 320 10 Wet lab [13] –217(syn)/4(real) Femoral Nailing (ours) –9400(syn)/2(real)
+
+state-of-the-art household objects. Moreover, few datasets include both static and dynamic cameras, particularly Extended reality ( XR ) devices, under multi-view configurations. Our dataset addresses this gap by integrating static and dynamic viewpoints, incorporating materials that challenge conventional methods, and supporting both overlapping and non-overlapping FoV setups. Additionally, it targets the on-the-fly multi-camera pose estimation problem, aligning XR device trajecto-ries with external references under realistic AR conditions without calibration. 
+
+2.5 Research Gap 
+
+Existing multi-view 6D object pose estimation methods (e.g., [7, 24]) rely on static graphs and lack spatiotemporal reasoning for dynamic scene understanding, limiting their suitability for real-time XR applica-tions. Object-level bundle adjustment, jointly optimizing camera and object poses, has mainly been explored in single-view settings, often targeting re-projection error optimization, which are prone to detection errors and omit depth information. These methods generally neglect object feature properties and do not meet real-time constraints. To address these limitations, we propose a spatiotemporal scene graph framework that processes RGB or RGB-D inputs and flexibly integrates external cameras and an AR HMD for real-time operation. Most existing datasets are single-view with limited pose diversity or multi-view datasets [13, 26] with limited camera setups. We contribute a new benchmark with both static and dynamic ( AR HMD ) camera setups to support robust multi-view pose evaluation. 
+
+3 METHOD 
+
+To estimate dynamic camera poses from both AR HMD s and static cameras, our method combines scene graphs with multi-view 6D pose estimation. The pipeline begins with object pose candidates from YOLOPose. These are then integrated into our proposed spatiotemporal scene graph. Finally, we jointly optimize both camera and object poses using a pose-graph optimization framework. 
+
+3.1 Symmetry-aware Keypoints Selection and 6D Object Pose Estimation 
+
+We estimate 6D object poses by establishing 2D-3D correspondences using state-of-the-art keypoint-based methods [16, 35, 55] from RGB inputs. Eight keypoints are sampled from the object’s 3D model via farthest point sampling (FPS) [35], as 3D models, such as CAD models or scanned models, can be used for FPS. To enable real-time inference, we build a high-performance pose esti-mator on the YOLOX architecture [11]. The network outputs bounding boxes and keypoints, which are processed by RANSAC PnP to recover the 6D pose. Our object detection head builds on RTM-O [30], a key-point detector that leverages dynamic coordinate classifier ( DCC ) to enhance accuracy in one-stage detection. RTM-O dynamically assigns keypoint ranges based on predicted bounding boxes. Implementation details and hyperparameters are outlined in subsection 4.2. Symmetric objects often have repeated geometries that cause pose ambiguities. To address this, we define a set of valid symmetric trans-formations S = {TOS1 , TOS2 , . . . , TOSM }. Following [31], we resolve symmetry by selecting keypoints corresponding to the pose closest to a predefined canonical view. 
+
+3.2 Spatiotemporal Scene Graph 
+
+We model dynamic scenes with cameras and objects by constructing a spatiotemporal scene graph comprising camera and object nodes. Given image sequence I from multiple camera views, the scene graph predictor SG generates all the cameras, objects, and connects each object with their relations to the camera in each frame, i.e., SG : I −→ G.Each camera node is defined by a camera id and a camera pose, while the object node is defined by an instance id, a category id, and an object pose TCaOa,α , which represents the object pose of α observed by camera a. On each frame, the scene graph SG = ( O,C, R) consists of a set of objects O = {O1, O2, . . . } that an object is visible by one or more cameras C = {C1,C2, . . . }, denoted by relationships of R =
+
+{{ r11 , r12 , . . . }, {r21 , r22 , . . . }, . . . }, as shown in Figure 2. Here rpq 
+
+denotes the relationship between camera Cq and the visible object Op.
+
+rpq equals to 1 if Op is visible by Cq, and 0 otherwise. Let’s assume there are |C| number of cameras and |O| instances of objects in the scene. Similar to the pose graph, we assume there is a hierarchical structure between camera and object nodes. A visibility edge in the scene graph is defined as the connection between camera and object nodes. If objects are spatiotemporally visible in the camera view, then there is a connection rpq updated between the camera and object nodes. 
+
+Objects matching and initial camera pose estimation. We use 6D object pose candidates from RGB images to calculate camera poses. To initialize the camera nodes with poses, we optimize the RANSAC algorithm proposed by [24] using the unique camera pairs, which helps to reduce the overall runtime. In the case that camera a observes object 
+
+α and β and camera b observes object γ and δ , where α ∼ γ and β ∼ δ
+
+(∼ means the same category ids), we assume α and γ as well as β
+
+and δ are the same objects. Due to the pose ambiguity of symmetric objects, we use object pairs (Oa,α , Ob,β ) and (Oa,γ , Ob,δ ) to select the best initial camera pose using the equation from [24]  
+
+> Ca
+
+TCb = Ca TOa,α S⋆Cb T −1 
+
+> Ob,β
+
+(1) where Ca TCb is the pose of the camera b with respect to camera a, Ca TOa,α
+
+is the object α pose regard to camera a, Cb TOb,β is the object β pose regard to camera b, S⋆ is the symmetry matrix among the symmetric transformations S, as discussed in the previous section, that minimizes their symmetric distance. The camera pose between Ca and Cb can be estimated with enough inliers (at least three objects) when the matching error (symmetric distance) is smaller than a given threshold (5cm, roughly the object size). If the error is larger than the threshold, the objects will be classified as outliers. As both the camera and objects are movable, we need to define one camera with a known pose with respect to the world coordinate frame. In AR case, the front camera of the AR HMD has a known pose, since an AR HMD is equipped with sensors to track the camera Individual/common                     
+
+> camera FoV
+> HMD with
+> SLAM
+> Static
+> Camera
+> Known
+> Objects
+> Object pose
+> match across
+> multi -view
+> No match
+> Object pose
+> match across
+> multi -view
+> Update visibility
+> edges
+> Object pose
+> match across
+> multi -view
+> Process over time Objects matching Scene graph update
+> r11 r12 r13
+> 𝐶 !
+> r01 r02 r03
+> r11 r12 r13
+> r04 r05 r06
+> rn4 rn5 rn6
+> Individual/common
+> coordinate system Object
+> node
+> Visibility
+> edge
+> r11 r12 r13 rn4 rn5 rn6 rn4 rn5 rn6
+> Object 1,2,3
+> match
+> Object 4,5,6
+> match
+> Update visibility
+> edges
+
+t   
+
+> 𝐶 "𝐶 #
+> 𝐶 !
+> 𝐶 "𝐶 #
+> 𝐶 !
+> 𝐶 "𝐶 #
+
+Fig. 2: Architecture of our proposed graph-based pose estimation. We generate object candidates from a set of captured RGB images using our 6D pose estimation module. Based on object candidates from different camera views, we select the matching candidates and calculate camera poses. Finally, we implement object and camera optimization using our novel spatiotemporal scene graph. We build our spatiotemporal scene graph using object information from different spaces and times. The icons represent camera nodes, i.e., HMD , camera C1, and camera Cn. The circles represent objects. If there are overlaps between two cameras, we calculate camera poses based on the HMD SLAM coordinate system. 
+
+poses [37]. The pose estimation of the external camera can be for-mulated as follows:  
+
+> W
+
+TC(t) = W THMD (t)HMD TC(t) (2) where W TC(t) is the pose of external camera C to be estimated in time t, W THMD (t) is the pose of HMD regard to word coordinate system estimated by the inside-out tracking algorithm integrated in the HMD ,
+
+> HMD
+
+TC(t) is the pose of external camera C regard to AR HMD , which can be calculated from object poses using Equation 1. 
+
+Global Scene Aggregation. To overcome the situation that all cameras need to share the same FoV , we fuse the information from all camera views and propose a global scene aggregation based on our dynamic scene graph. Different from CosyPose [24] that only selects the overlapping objects and removes the objects that are only visible to one camera, we keep all object candidates that are visible by all cameras. We combine the information and complete the scene information by aggregating the poses from different views. If one object have more than one pose observed from multiple cameras, we use the pose from one camera view. We set the edge rpq to 0 if one object Op is regarded as an outlier by camera Cq from the previous step. 
+
+AR HMD -based spatiotemporal scene graph The camera pose estimation quality depends on the HMD and external camera view. Therefore, it is crucial to select the camera view with high accuracy and drop any unreliable frames by the matching error. If the matching error is smaller than a threshold in the previous camera pose estimation step, we will update the camera poses. Figure 2 shows one example of our spatiotemporal scene graph. In this example, we have one AR HMD (denoted as camera C0) and two static cameras (denoted as camera C1
+
+and Cn). In the beginning, only the AR HMD pose is known, and the poses of the other two static cameras are unknown. In the first frames, there are no matching objects between these cameras. In the second keyframe, there is a match between HMD C0 and camera C1. Therefore, we built an alignment between these two cameras. In the last keyframe, there are matching candidates for the other three objects between HMD 
+
+C0 and camera Cn. All the cameras and objects are connected in our proposed spatiotemporal scene graph that fuses different camera views. The same process can be repeated if the number of cameras exceeds two. 
+
+3.3 Object-level Bundle Adjustment 
+
+We propose an optimization method based on object pose refinement using the spatiotemporal scene graph based on RGB or RGB-D images. We build our object-level bundle adjustment approach based on a prob-abilistic model ICG proposed by Stoiber et. al [47]. The probabilistic is defined using the log likelihood of the energy function. There are two modalities used to define the probabilistic model, i.e., region modality based on RGB image and depth modality based on depth image. The probabilistic model can be written as 
+
+p(θθθ | XXX,PPP) = F  WXXX(θθθ cam ) − WPPP(θθθ ob j ) (3) where F is the function defined by region and depth modalities, 
+
+XXX are the 3D surface points observed by camera and PPP are the 3D points from object models, θθθ cam is the camera pose variation vector and θθθ ob j is the object pose variation vector. More details about pose variation can be found in [47]. W represents the world coordinate system. Therefore we have Screw Gear Spacer Roller Insertion handle Aiming arm Nail Bar Stick Fig. 3: Objects included in our Femoral Nailing dataset. 
+
+d p (θθθ | XXX,PPP) = ∂ dF
+
+∂ WXXX
+
+∂ WXXX
+
+∂θ θθ cam θθθ cam =000
+
+dθθθ cam 
+
+= − ∂ dF
+
+∂ WPPP
+
+∂ WPPP
+
+∂θ θθ ob j θθθ ob j =000
+
+dθθθ ob j 
+
+(4) which means that to optimize the camera poses, we need to move the camera during camera pose optimization in the opposite direction of object pose refinement. This conclusion is intuitive considering the following situation. One camera detects one object, and there is a positive offset in depth between the camera and the object. We should either move the object close to the camera or we should move the object back in the direction of the camera. The movements of the camera and the object are opposite. Therefore, we formulated the update for camera pose optimization with Gauss Newton method based on object pose refinement as follows: ˆθcam 
+
+ˆθcam ˆθcam = −HHH−1
+
+> cam
+
+gggcam , (5) where the gradient vector gggcam and the Hessian matrix HHHcam are the first- and second-order derivatives of the energy function E(θθθ ) or the negative logarithmic probability − ln (p(θθθ )) . The update of camera poses equals the sum of items from the objects visible to this camera. 
+
+ggg⊤ 
+
+> cam
+
+= − ∂ Ecam 
+
+∂θ θθ cam θθθ cam =000
+
+= −
+
+> n
+
+# ∑
+
+> i=1
+
+ri j 
+
+∂ Ei
+
+∂θ θθ i
+
+∂θ θθ i
+
+∂θ θθ cam θθθ cam =000
+
+= −
+
+> n
+
+# ∑
+
+> i=1
+
+ri j ggg⊤ 
+
+> i
+
+JJJi,
+
+(6) 
+
+HHHcam = ∂ 2Ecam 
+
+∂θ θθ cam 2 θθθ cam =000
+
+≈
+
+> n
+
+# ∑
+
+> i=1
+
+ri j 
+
+∂θ θθ i
+
+∂θ θθ cam  
+
+> ⊤
+
+∂ 2Ei
+
+∂θ θθ i2
+
+∂θ θθ i
+
+∂θ θθ cam θθθ cam =000
+
+≈
+
+> n
+
+# ∑
+
+> i=1
+
+ri j JJJ⊤ 
+
+> i
+
+HHHi JJJi,
+
+(7) with gggi and HHHi the gradient vector and the Hessian matrix of the object i in the scene graph, ri j is the previous mentioned relationship between camera j and object i in the scene graph and JJJi is the Jacobian matrix of camera. The object-level bundle adjustment process is only implemented in the keyframes where there are overlapping objects between cameras. As the detected object poses may have large errors for some objects, we optimize the object poses and camera poses separately. In the case of multi-camera view and multiple objects, we assume the pose of one camera view is known, and both camera and object poses need to be optimized using the connection between camera and object nodes in a scene graph. For these objects visible by more than one camera and detected as inliers in the initial camera pose estimation process, the predefined energy function will be used to optimize both camera and object poses. For the objects which is only visible by one camera or detected as outliers, we only optimize the object poses. 
+
+3.4 The Femoral Nailing Dataset 
+
+Currently, there is no usable multiple-view 6D pose dataset for AR application. We create a small test dataset with nine parts of a surgical 
+
+Table 2: Single-view object pose evaluation on YCB-V dataset [60] with ADD(-S)-0.1d. P.E. means whether the method is trained with 1 pose estimator for the whole dataset or 1 per object ( N objects in total). (∗) denotes symmetric objects and ( −) denotes unavailable results.                                                                                                                             
+
+> Approach One-stage Two-stage Method PoseCNN SegDriven YOLOPose GDR-Net [60] [17] (Ours )[55] P.E. 1111N
+> 002_master_chef_can 3.6 33.0 70.2 51.7 41.5 003_cracker_box 25.1 44.6 85.4 45.1 83.2 004_sugar_box 40.3 75.6 73.8 83.9 91.5 005_tomato_soup_can 25.5 40.8 73.7 48.3 65.9 006_mustard_bottle 61.9 70.6 92.0 92.2 90.2 007_tuna_fish_can 11.4 18.1 60.2 29.1 44.2 008_pudding_box 14.5 12.2 82.0 39.7 2.8 009_gelatin_box 12.1 59.4 62.7 34.6 61.7 010_potted_meat_can 18.9 33.3 70.5 36.3 64.9 011_banana 30.3 16.6 47.1 60.2 64.1 019_pitcher_base 15.6 90.0 100.0 96.3 99.0 021_bleach_cleanser 21.2 70.9 76.2 73.0 73.8 024_bowl ∗12.1 30.5 24.9 35.0 37.7 025_mug 5.2 40.7 62.8 39.3 61.5 035_power_drill 29.9 63.5 90.5 57.7 78.5 036_wood_block ∗10.7 27.7 78.6 50.8 59.5 037_scissors 2.2 17.1 73.5 6.6 3.9 040_large_marker 3.4 4.8 10.4 13.7 7.4 051_large_clamp ∗28.5 25.6 71.4 40.3 69.8 052_extra_large_clamp ∗19.6 8.8 91.7 35.3 90.0 061_foam_brick ∗54.5 34.7 69.2 61.1 71.9 MEAN 21.3 39.0 69.9 49.1 60.1
+
+tool, as shown in Figure 3. These objects show different levels of pose estimation difficulty by varying object sizes, shapes, and textures. 
+
+3.4.1 Training Set 
+
+Our training set contains 10K synthetic images of reflective medical instruments. The images feature assembled and unassembled objects with 50% of each variant. To improve domain randomization, we generated synthetic data using domain randomization [41]. We apply different textures, scenes, overlays, distracting objects from T-less [15], varying backgrounds and light conditions. 
+
+3.4.2 Test Set 
+
+We created a real-world test dataset using one HoloLens 2 HMD and two Azure Kinects. We recorded the sequences and validated the cam-era poses using the OptiTrack system with 6 infrared cameras. Further-more, we recorded camera poses from the HoloLens’s SLAM system. The images of the sequence are RGB images from the HoloLens’ pri-mary view with a resolution of 1280x720 and RGB-D images from two Azure Kinect DKs with a resolution of 1280x720. Our dataset includes ground truth HoloLens coordinates captured by the OptiTrack system and the coordinates estimated by HoloLens’ SLAM. We assume camera poses of HoloLens are known in the evalu-ation, and poses of other cameras are estimated based on the HoloLens camera. We use a TCP server to get the video stream from the HoloLens primary view. As there is time latency between different cameras, we carefully align the tracking poses to each camera based on object seg-mentations. To compare the accuracy of the state-of-the-art camera pose estima-tion approaches with the mostly used marker-based camera calibration approaches, we also include a 5x4 Charuco calibration board with a 50mm checker and a 40 mm marker (in the same scale of object size) in the scene. To study the effects of distance on the pose accuracy, we recorded the scene in near distance (within 0.5 m) and far distance (0.75m - 1m), similar to [18]. 
+
+4 EVALUATION 
+
+We evaluate the proposed methods on the YCB-Video dataset for gen-eral multi-camera pose estimation and our Femoral Nailing dataset to show the AR suitability. Table 3: Quantitative multi-view 6D object pose results on YCB-V dataset [60]. The best results per category (known vs. unknown camera poses) are printed in bold .                                
+
+> Unknown ADD-S AUC ADD(-S) AUC Cam. Pose 1 view 3 views 5 views 1 view 3 views 5 views MV6D [7] -91.2 91.1 -85.6 84.0 SyMFM6D [8] 96.8 95.4 95.4 94.1 91.7 91.6
+> CosyPose [24] 89.8 92.3 93.4 84.5 87.7 88.8 MultiCam (Ours) 93.3 93.2 93.9 88.8 88.8 89.8
+
+4.1 Metrics 
+
+To evaluate the 6D object pose accuracy, we follow the state-of-the-art and report Average Distance Error ( ADD ) / ADD -S [14] and Average Distance Error under Curve (ADD-AUC) [60]. To evaluate camera poses, we considered two different errors, i.e., pose estimation errors and sensor drift errors. For pose estimation errors, we compare the estimated camera poses and ground truth camera poses [44] in the predefined world coordinate. The state-of-the-art assumes constant overlapping FoV from multiple cameras, while our approach assumes temporal overlaps from static cameras with dynamic cameras, so we only compare the results in the overlapping case. Sensor drift errors are analyzed when AR HMD SLAM is used. In our recorded dataset, we compared HoloLens tracking data and ground truth camera poses with a motion capture system. 
+
+4.2 Implementation Details 
+
+The total loss for the proposed pose estimation network is 
+
+L = λ1Lbbox + λ2L2D + λ3L3D + λ4Lproxy + λ5Lcls + Lvis ,
+
+with hyperparameters λ1, λ2, λ3, λ4 and λ5 set at λ1 = λ2 = 5, λ3 =
+
+λ4 = 10 , and λ5 = 2, where Lbbox is bounding box loss, L2D is the 2D MLE keypoint loss, L3D is the 3D keypoint loss proposed by [18], 
+
+Lproxy is the proxy loss in SimOTA for positive grid selection, Lcls 
+
+is object instance classification loss, represented by varifocal loss and 
+
+Lvis is BCE loss for visibility. These hyperparameters are selected following [30] to keep a balance between these losses. We apply data augmentation, like flipping, affine transformation, which are not applicable for 3D keypoint loss. Therefore, we combine 2D and 3D keypoint loss to train our models in multiple stages. We divide our training into three stages. Following the training steps of [30], the first involves training both the proxy branch and DCC using 2D keypoint annotations, and the second shifts the target of the proxy branch to the decoded pose from DCC. In the last stage, we use no data augmentation and add a 3D keypoint loss. 
+
+4.3 Experimental Setup 
+
+We use a workstation with an Intel(R) Core(TM) i9-10980XE CPU and NVIDIA GeForce RTX 4090 GPU with 24GB VRAM. Our training batch size is set to 8 and the inference batch size is set to the number of camera views. Our object pose estimation algorithm extends YOLOX, is implemented in PyTorch for 6D pose estimation, and uses ONNX runtime to accelerate and optimize inference performance. Inference en-gine, our pose estimation, and the TCP server for HoloLens stream [5] are implemented in C++ 17. The code of camera API (HoloLens and Azure Kinect), pose estimation is publicly available on GitHub to ensure reproducibility and re-usability for further future work. 
+
+4.4 Evaluation on YCB-V and T-LESS Datasets 
+
+Table 2 shows the single-view evaluation results on the YCB-V dataset. Our enhanced one-stage approach outperformed the state-of-the-art methods in accuracy. We achieved an average ADD(S)-0.1d of 69.9 of all the objects. To evaluate our proposed multiple-view approach, we also compared it with CosyPose [24], MV6D [7], and SyMFM6D [8]. Table 3 shows our quantitative evaluation results. Our methods are better than Cosy-Pose and MV6D in all views, with ADD(S) AUC around 88 and ADD-S   
+
+> Table 4: Evaluation of camera pose estimation error before and after object-level bundle adjustment on the YCB-V dataset [60]: We report pose rotation error (in mm) and translational error(in degrees) for the camera poses before and after bundle adjustment. Our proposed bundle adjustment helps improve both object and camera accuracy.
+
+Methods Bundle 3 views 5 views adjustment etrans ↓ erot ↓ etrans ↓ erot ↓
+
+CosyPose [24] 22.30 1.49 27.57 1.90 MultiCam (ours) 35.04 2.39 36.85 2.52 MultiCam (ours) 21.22 1.48 21.63 1.48   
+
+> Table 5: Effect of the 3D loss in YCB-V dataset [60]. The proposed 3D loss outperforms the 2D key point loss. The larger the distance between the object and the camera is, the more obvious the advantage of the 3D loss.
+
+Model DCC 3D loss ADD(-S) AUC ADD-S AUC Baseline 63.9 77.4 Baseline 80.7 88.2 Baseline 83.4 89.4 
+
+Delta +20.5 +12.0   
+
+> Table 6: Evaluation of camera pose estimation error on the T-LESS dataset [15]. We report pose rotation error (in mm) and translational error(in degrees) for the camera poses with state-of-the-art calibration and pose estimation methods.
+
+Methods 4 views 8 views 
+
+etrans ↓ erot ↓ etrans ↓ erot ↓
+
+CosyPose [24] 44.38 4.19 65.93 8.11 ARToolKitPlus marker [52] 64.27 14.01 61.97 13.48 MultiCam (ours) 38.22 3.25 38.96 3.33 
+
+AUC around 93, while SyMFM6D achieves ADD-S AUC around 95 -96 only with known camera poses. We can observe that the object pose accuracy increases with camera view numbers, which shows similar re-sults to CosyPose. Our results with multiple views show slightly better results than our experiments on single view. This is because the YCB-V dataset has few camera poses variety which may not significantly contribute to object pose accuracy. Figure 4 shows the multi-view pose visualization of our approach compared with CosyPose. Our approach shows better object and pose detection accuracy. Table 4 shows evaluation results of camera poses before and after our proposed object-level bundle adjustment. As seen in Table 4, there is an improvement in camera pose accuracy with 3 views. Before the bundle adjustment, the average translation error is 35.04 mm, and the rotation error is 2.39 degrees. After the camera pose optimization, we can observe the lower translation error of 21.22 mm and rotation error of 1.48 degrees. We observed that adding additional views does not further improve the camera pose estimation in terms of translation and rotation errors. We tested each module individually to show its individual effects on the overall performance. As shown in Table 5, the DCC module improves the accuracy for single-stage 6D pose estimation with more than 10% in ADD(-S) AUC and ADD-S AUC. Introducing 3D keypoint loss helps increase ADD(-S) AUC by 2.7 and ADD-S AUC by 1.2. Our proposed new module has improved the performance of single-view 6D object pose estimation, which is the base of the multi-view approach. To study the effects of symmetric and texture-less objects, we also evaluate the camera pose estimation and calibration error on the T-LESS dataset, as shown in Table 6. The ARToolKitPlus marker [52] has an overall larger error than the marker-less pose estimation approach. Our method is better than the state-of-the-art methods with a translation error of around 40mm and a rotation error of 3 degrees. View 1 View 2 View 3 View 4 View 5 
+
+> Ground truth
+> Cosy-Pose
+> Ours
+
+Fig. 4: Multi-view visualization of object poses in YCB-V dataset: Our proposed approach, MultiCam, (bottom) is able to detect and optimize object poses in a more accurate way compared to the state-of-the-art CosyPose (center) [24] in multi-view setups. The ground truth is displayed on top. Differences are notable on the clamp right next to the can, and on the other clamp, a drift in different views becomes apparent. 
+
+Ground Truth YOLOPose + CosyPose CNOS + Megapose + CosyPose Ours 
+
+> HoloLens (near)
+> Azure Kinect (near)
+> HoloLens (far)
+> Azure Kinect (far)
+
+Fig. 5: Multi-view visualization from our Femoral Nailing dataset in near distance (top two rows) and far distance (bottom two rows): We compared YOLOPose + CosyPose [24] (second left), CNOS [32] + Megapose [25] + CosyPose [24] (second right), and our approach (MultiCam) (right) with the ground truth (left). Our approach has smaller visualization errors than the other approaches. MultiCam also integrates more objects using spatiotemporal information, leveraging shared and non-shared FoV information. Calibration markers presented in the scene are used to compare with our proposed marker-less approach. Table 7: Camera pose estimation/Calibration results on our Femoral Nailing dataset: The translation error is in millimeters (mm) ( eave _trans 
+
+denoted as etrans , ↓), the rotation error ( eave _rot denoted as erot , ↓) is in degrees and the average runtime is in ms. The best results among all methods are labeled in bold. 
+
+Methods Object-level Calibration board Conditions YOLOpose + CosyPose [24] CNOS [32] + Megapose [25] + CosyPose [24] MultiCam (ours) Charuco marker 
+
+etrans ↓ erot ↓ runtime etrans ↓ erot ↓ runtime etrans ↓ erot ↓ runtime etrans ↓ erot ↓ runtime Near 64.54 9.81 135.05 47.17 6.84 84831.93 45.54 6.48 43.37 34.98 3.40 21.72 
+
+Far 94.69 8.90 194.70 70.47 6.91 79163.96 52.79 5.53 47.65 81.68 6.76 18.56 
+
+Mean 79.62 9.36 164.9 58.8 6.88 81997.95 49.17 6.01 45.51 58.33 5.08 20.14 
+
+Table 8: Multiview object pose evaluation on Femoral Nailing ADD(-S)-AUC, translation error in mm and rotation error in degrees with near and far conditions. Symmetric objects are denoted by ⋆. Rota-tional errors are only evaluated for unsymmetrical objects.                                                                              
+
+> Methods YOLOpose + CosyPose [24] MultiCam (ours)
+> ADD (S)AUC ↑etrans ↓erot ↓ADD (S)AUC ↑etrans ↓erot ↓
+> Aiming arm 0.00 158.62 20.53 30.90 85.57 19.00 Bar ⋆0.00 244.59 -37.51 109.23 -Gear ⋆33.33 156.18 -47.65 127.31 -Insertion handle 0.00 215.67 13.01 56.29 46.62 9.13 Nail 0.00 261.23 140.67 46.59 75.46 83.61 Roller ⋆0.00 --26.32 289.95 -Screw ⋆0.00 --5.04 206.71 -Spacer 0.00 196.19 15.48 39.82 99.69 69.58 Stick ⋆20.00 197.66 -27.12 195.27 -MEAN 5.93 158.91 47.43 35.25 137.31 45.33 20 40 60 80 100
+> Num of frames
+> 0.00
+> 0.01
+> 0.02
+> 0.03
+> 0.04
+> 0.05
+> 0.06
+> Translation error (m)
+> drift error after correction
+> drift error of HoloLens
+
+Fig. 6: Drift error correction with MultiCam: The figure shows the increas-ing sensor drift (orange) which can be reduced when on-the-fly camera pose estimation is performed (blue). 
+
+4.5 Evaluation on Femoral Nailing dataset 
+
+Table 7 shows the quantitative comparison of camera pose estimation methods and calibration with markers. In the condition of near distance, the accuracy of the marker with 34.98 mm and 3.4 degrees is better than our object-level pose estimation with 45.54 mm and 6.48 degrees. In addition, our object-level methods outperform other methods both in speed and accuracy in this condition. In the condition of far distance, our scene matching method, with an accuracy of 52.79 mm and 5.53 degrees, outperforms both the other object-level approach and the marker-based approach. The calibration board performs worse than the near distance condition, with 81.68 mm and 6.76 degrees. In both conditions, our runtime with around 45 ms is smaller than the other state-of-the-art multi-view pose estimation approaches, but larger than the marker-based approach with around 20 ms. Our approach outperforms the marker-based approach in the condition of far distance and proves its suitability for marker-less AR applications. Table 8 shows the quantitative evaluation of object poses. As shown in Table 8, small objects like a roller and a screw have a large offset of more than 200 mm. Large objects, like the insertion handle with an error of 46.64 mm, perform relatively better than these small objects. In addition, the average object pose error is 137.31 mm and 45.33 degrees, while the camera pose error is only around 50 mm, as shown in Table 7. The error of camera pose is roughly the pose error of the best object pose candidates. As a result, the camera poses have better accuracy than object poses, which means our approach can effectively calculate camera poses robustly with object inliers. The object poses of the roller and the screw are not available for the state-of-the-art approach CosyPose, as it removes these object outliers, while we keep these objects. We show overall better results than previous methods with our proposed spatiotemporal reasoning and pose optimization. Figure 5 shows the visualization comparisons of object poses in different camera views with near and far distances. As shown in the top two rows of the figure with near condition, our approach is able to detect more objects than the other approaches using spatiotemporal information. In addition, our approach has fewer visualization errors than other methods. As shown in the bottom two rows of the figure with the far condition, our methods are able to efficiently fuse object information in different camera views and recover the camera poses robustly. Our dynamic scene graph, which integrates HoloLens, can keep most of the object poses, which works better than the other static pose estimation approaches. However, some small objects have large offsets due to errors in the network. Figure 6 shows the drift error corrections with our proposed on-the-fly pose estimation methods. As shown in the figure, there are increasing drift errors between the HoloLens SLAM and ground truth data. Our proposed method can reduce the drift offset between HMD and external cameras by updating poses. The drift error is zero in the time stamp with updated pose estimation and accumulates over times in other frames. 
+
+5 DISCUSSION 
+
+We propose MultiCam to enable markerless and continuous real-time multi-view camera pose estimation of both static and dynamic cameras using known objects. We use spatiotemporal FoV overlaps of known objects and enhance state-of-the-art pose estimation algorithms to up-date a spatiotemporal scene graph. By including dynamic cameras, our approach makes pose estimation of a non-overlapping multiple-camera set-up possible. 
+
+5.1 Accuracy and Pose Error Analysis 
+
+Assessing the accuracy of object and (in turn) camera pose estimation revealed a two-fold outcome. On the one hand, our object pose estima-tor has been improved compared with previous approaches regarding the single-camera results, as shown in Table 2. On the other hand, our multi-camera method also showed better results with the same single-camera inputs than previous methods, as shown in Table 7 and Table 8. To evaluate the effects of multi-camera methods, we use the same single-camera input with YOLOpose for Cosypose and our pro-posed approach in our new contributed Femoral Nailing dataset. Our approach shows better results than the current state-of-the-art object-level pose estimation approaches in both conditions, with 45.54 mm, 6.48 degrees error in near distance and 52.79 mm, 5.53 degrees error in far distance. Pose errors depend on many factors, such as object/marker size, distance to the camera, rolling-shutter artifacts or motion blur of dy-namic cameras. Especially in our proposed dataset, the errors are large for small objects due to a lack of features, which makes the detection difficult. Both Table 2 and Table 8 show that the pose error varies for different objects. Our proposed methods can calculate camera pose best using reliable overlapping object poses based on multiple candidates. By choosing a set of most robust and precise object candidates, the esti-mated camera poses can be even more accurate than the object poses. Our methods also show better results in the cluttered scenes of the T-LESS dataset, where markers can be occluded. The occlusion-aware object pose estimation models can overcome these challenges, while marker-based calibration is error-prone in these scenarios. Regarding to errors from dynamic cameras, rolling-shutter artifacts or motion blur may happen in frames with high-speed camera motions. We reduce these influences by selecting key frames with suitable threshold. Our evaluation on real data shows results similar to marker-based calibration methods. Our proposed marker-less approach even out-performs the ARToolKitPlus marker in the T-LESS dataset, as shown in Table 6, and Charuco markers in the far condition of our Femoral Nailing dataset, as shown in Table 7. We assume that the calibration quality depends highly on the distance to the calibration board. Our approach filters object outliers and relies on multiple objects instead of a single, smaller calibration marker. Thus, our approach can better recover object and camera poses in the far condition. 
+
+5.2 Runtime and Latency 
+
+The MultiCam pipeline runs at approx. 50ms (20 FPS) for three views using temporal overlapping keyframes in our dataset. Our real-time performance is achieved, by exploiting spatiotemporal continuity in multi-view video sequences. The pose estimation time is around 40 ms and candidate matching time is around 10 ms for each frame. The object-level bundle adjustment is only applied for the overlapping frame with threshold and the runtime is around 50ms for these overlapping keyframes, but less than 1 ms in average for all frames. We assume that this is applicable as a baseline for most AR applications’ multi-view sensing. However, future work can finetune parameters to individually balance speed and accuracy, specifically for each use case and available computational power. To account for different camera latencies and moving objects, we only consider objects in a consistent spatial layout from each camera for pose estimation. Thus, we exclude moving objects which can not be used for pose estimation. Our methods do not require strict synchro-nized multiple cameras, which also explain the idea of spatiotemporal pose estimation, which is performed in different time and space. The essence of the task is to align multiple cameras in the same coordinate system and these cameras may not be in the same time stamp. Given continuous SLAM sensing on the dynamic camera, the individual cam-era latency does not impede the pose estimation process. It will only change the time when the pose estimation happens. 
+
+5.3 Limitations 
+
+The current system runs in real time, but is limited to known objects (state-of-the-art instance-level pose estimator). Generalizable pose estimators like Megapose [25] and object detectors like CNOS [32] can overcome this limitation, but still suffer from high computational time. Up-scaling this and getting towards unknown objects can not match the real-time requirement. To make the overall pipeline work for novel objects, an appropriate real-time object pose estimator will be required. 
+
+6 CONCLUSIONS 
+
+We enable multi-view camera pose estimation for AR applications using static and dynamic cameras. MultiCam is a object and camera pose estimation toolkit. Our approach, MultiCam, does not require dedicated optical markers, but uses known object in a temporarily overlapping FoV s, and continuously updates camera poses in real-time. We propose a dynamic scene graph for joint estimation of cameras’ and objects’ poses using object-level bundle adjustment. Since there is no suitable dataset for this scenario, we also present a novel dataset using two static and one dynamic camera. We achieve a runtime of 45.51 ms in our Femoral Nailing dataset with three camera views using keyframes with overlapping FoV and even outperform a marker-based approach in the far condition. Moreover, we outperform current state-of-the-art pose estimators in the YCB-V, T-LESS, and our Femoral Nailing datasets while balancing speed and accuracy. Our work is a promising step towards a markerless multi-camera and multi-object pose estimation for AR applications to replace the current widely used marker-based approaches. Future work can build on our baseline and enhance the precision and runtime (e.g., by combining object pose estimation and tracking). 
+
+ACKNOWLEDGMENTS 
+
+This work was funded by the German Federal Ministry of Research, Technology and Space (BMFTR) in the grant program "AI-based as-sistance systems for in-process health applications", grant number 16SV8973. Shiyu Li acknowledges the financial support from the China Scholarship Council. 
+
+REFERENCES                          
+
+> [1] L. Ai, Y. Liu, M. Armand, and A. Martin-Gomez. Calibration of aug-mented reality headset with external tracking system using ax= yb. In
+> 2024 IEEE International Symposium on Mixed and Augmented Reality (ISMAR) , pp. 210–218. IEEE, 2024. 1, 2 [2] S. Barai and M. Momin. Outside-in electromagnetic tracking method for augmented and virtual reality 6-degree of freedom head-mounted displays. In 2020 4th International Conference on Intelligent Computing and Control Systems (ICICCS) , pp. 467–476. IEEE, 2020. 1 [3] H. Deng, M. Bui, N. Navab, L. Guibas, S. Ilic, and T. Birdal. Deep bing-ham networks: Dealing with uncertainty and ambiguity in pose estimation.
+> International Journal of Computer Vision , 130(7):1627–1654, 2022. 2 [4] M. Denninger, M. Sundermeyer, D. Winkelbauer, D. Olefir, T. Hodan, Y. Zidan, M. Elbadrawy, M. Knauer, H. Katam, and A. Lodhi. BlenderProc: Reducing the reality gap with photorealistic rendering. 2020. 2 [5] J. C. Dibene and E. Dunn. Hololens 2 sensor streaming. arXiv preprint arXiv:2211.02648 , 2022. 6 [6] B. Drost, M. Ulrich, P. Bergmann, P. Hartinger, and C. Steger. Introducing mvtec itodd-a dataset for 3d object recognition in industry. In Proceedings of the IEEE international conference on computer vision workshops , pp. 2200–2208, 2017. 2, 3 [7] F. Duffhauss, T. Demmler, and G. Neumann. Mv6d: Multi-view 6d pose estimation on rgb-d frames using a deep point-wise voting network. In 2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 3568–3575. IEEE, 2022. 2, 3, 6 [8] F. Duffhauss, S. Koch, H. Ziesche, N. A. Vien, and G. Neumann. Symfm6d: Symmetry-aware multi-directional fusion for multi-view 6d object pose estimation. IEEE Robotics and Automation Letters , 2023. 2, 6 [9] M. Fiala. Artag, a fiducial marker system using digital techniques. In
+> 2005 IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR’05) , vol. 2, pp. 590–596. IEEE, 2005. 1, 2 [10] P. Gay, J. Stuart, and A. Del Bue. Visual graphs from motion (vgfm): Scene understanding with object geometry reasoning. In Computer Vision– ACCV 2018: 14th Asian Conference on Computer Vision, Perth, Australia, December 2–6, 2018, Revised Selected Papers, Part III 14 , pp. 330–346. Springer, 2019. 2 [11] Z. Ge, S. Liu, F. Wang, Z. Li, and J. Sun. Yolox: Exceeding yolo series in 2021. arXiv preprint arXiv:2107.08430 , 2021. 3 [12] N. Guo, T. Wang, B. Yang, L. Hu, H. Liu, and Y. Wang. An online cali-bration method for microsoft hololens. IEEE Access , 7:101795–101803, 2019. 2 [13] J. Hein, N. Cavalcanti, D. Suter, L. Zingg, F. Carrillo, L. Calvet, M. Far-shad, M. Pollefeys, N. Navab, and P. Fürnstahl. Next-generation surgical navigation: Marker-less multi-view 6dof pose estimation of surgical in-struments. arXiv preprint arXiv:2305.03535 , 2023. 2, 3 [14] S. Hinterstoisser, V. Lepetit, S. Ilic, S. Holzer, G. Bradski, K. Kono-lige, and N. Navab. Model based training, detection and pose estimation
+
+of texture-less 3d objects in heavily cluttered scenes. In Computer Vi-sion–ACCV 2012: 11th Asian Conference on Computer Vision, Daejeon, Korea, November 5-9, 2012, Revised Selected Papers, Part I 11 , pp. 548– 562. Springer, 2013. 2, 3, 6 [15] T. Hodan, P. Haluza, S. Obdrzalek, J. Matas, M. Lourakis, and X. Zabulis. T-LESS: An RGB-d dataset for 6d pose estimation of texture-less objects. 2017. 2, 3, 5, 6 [16] Y. Hu, P. Fua, W. Wang, and M. Salzmann. Single-stage 6d object pose estimation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 2930–2939, 2020. 2, 3 [17] Y. Hu, J. Hugonot, P. Fua, and M. Salzmann. Segmentation-driven 6d object pose estimation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 3385–3394, 2019. 5 [18] Y. Hu, S. Speierer, W. Jakob, P. Fua, and M. Salzmann. Wide-depth-range 6d object pose estimation in space. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 15870– 15879, 2021. 5, 6 [19] L. Huang, F. Da, and S. Gai. Research on multi-camera calibration and point cloud correction method based on three-dimensional calibration object. Optics and Lasers in Engineering , 115:32–41, 2019. 2 [20] J. Ji, R. Krishna, L. Fei-Fei, and J. C. Niebles. Action genome: Actions as compositions of spatio-temporal scene graphs. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 10236–10247, 2020. 2 [21] H. Jung, S.-C. Wu, P. Ruhkamp, G. Zhai, H. Schieber, G. Rizzoli, P. Wang, H. Zhao, L. Garattoni, S. Meier, D. Roth, N. Navab, and B. Busam. HouseCat6d – a large-scale multi-modal category level 6d object pose dataset with household objects in realistic scenarios, 2023. 2 [22] A. Kendall, M. Grimes, and R. Cipolla. Posenet: A convolutional network for real-time 6-dof camera relocalization. In Proceedings of the IEEE international conference on computer vision , pp. 2938–2946, 2015. 2 [23] C. Kleinbeck, H. Schieber, S. Andress, C. Krautz, and D. Roth. ARTFM: Augmented reality visualization of tool functionality manuals in operat-ing rooms. In 2022 IEEE Conference on Virtual Reality and 3D User Interfaces Abstracts and Workshops (VRW) , pp. 736–737. IEEE, 2022. 1 [24] Y. Labbé, J. Carpentier, M. Aubry, and J. Sivic. Cosypose: Consistent multi-view multi-object 6d pose estimation. In Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XVII 16 , pp. 574–591. Springer, 2020. 2, 3, 4, 6, 7, 8 [25] Y. Labbé, L. Manuelli, A. Mousavian, S. Tyree, S. Birchfield, J. Trem-blay, J. Carpentier, M. Aubry, D. Fox, and J. Sivic. Megapose: 6d pose estimation of novel objects via render & compare. arXiv preprint arXiv:2212.06870 , 2022. 2, 7, 8, 9 [26] J. Li, B. Wang, S. Zhu, X. Cao, F. Zhong, W. Chen, T. Li, J. Gu, and X. Qin. Bcot: A markerless high-precision 3d object tracking benchmark. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 6697–6706, 2022. 2, 3 [27] S. Li, H. Schieber, N. Corell, B. Egger, J. Kreimeier, and D. Roth. GBOT: graph-based 3d object tracking for augmented reality-assisted assembly guidance. In 2024 IEEE Conference Virtual Reality and 3D User Interfaces (VR) , pp. 513–523. IEEE, 2024. 2 [28] C.-H. Lin, W.-C. Ma, A. Torralba, and S. Lucey. Barf: Bundle-adjusting neural radiance fields. In Proceedings of the IEEE/CVF international conference on computer vision , pp. 5741–5751, 2021. 2 [29] X. Liu, R. Jonschkowski, A. Angelova, and K. Konolige. Keypose: Multi-view 3d labeling and keypoint estimation for transparent objects. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 11602–11610, 2020. 2, 3 [30] P. Lu, T. Jiang, Y. Li, X. Li, K. Chen, and W. Yang. RTMO: Towards high-performance one-stage real-time multi-person pose estimation. 2023. 2, 3, 6 [31] N. Merrill, Y. Guo, X. Zuo, X. Huang, S. Leutenegger, X. Peng, L. Ren, and G. Huang. Symmetry and uncertainty-aware object slam for 6dof object pose estimation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 14901–14910, 2022. 3 [32] V. N. Nguyen, T. Groueix, G. Ponimatkin, V. Lepetit, and T. Hodan. Cnos: A strong baseline for cad-based novel object segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 2134– 2140, 2023. 2, 7, 8, 9 [33] V. N. Nguyen, T. Groueix, M. Salzmann, and V. Lepetit. Gigapose: Fast and robust novel object pose estimation via one correspondence. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 9903–9913, 2024. 2 [34] Y. Nie, X. Han, S. Guo, Y. Zheng, J. Chang, and J. J. Zhang. To-tal3dunderstanding: Joint layout, object pose and mesh reconstruction for indoor scenes from a single image. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 55–64, 2020. 2[35] S. Peng, Y. Liu, Q. Huang, X. Zhou, and H. Bao. Pvnet: Pixel-wise voting network for 6dof pose estimation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 4561–4570, 2019. 3 [36] Y. Qiu, Y. Nagasaki, K. Hara, H. Kataoka, R. Suzuki, K. Iwata, and Y. Satoh. Virtualhome action genome: A simulated spatio-temporal scene graph dataset with consistent relationship labels. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pp. 3351–3360, 2023. 2 [37] R. Radkowski and J. Ingebrand. HoloLens for assembly assistance - a focus group report. In S. Lackey and J. Chen, eds., Virtual, Augmented and Mixed Reality , Lecture Notes in Computer Science, pp. 274–282. Springer International Publishing, 2017. doi: 10.1007/978-3-319-57987-0_22 4 [38] F. Rameau, J. Park, O. Bailo, and I. S. Kweon. Mc-calib: A generic and robust calibration toolbox for multi-camera systems. Computer Vision and Image Understanding , 217:103353, 2022. 2 [39] B. Roessle and M. Nießner. End2end multi-view feature matching with differentiable pose optimization. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , pp. 477–487, 2023. 2 [40] A. Rosinol, A. Gupta, M. Abate, J. Shi, and L. Carlone. 3d dynamic scene graphs: Actionable spatial perception with places, objects, and humans. 
+
+arXiv preprint arXiv:2002.06289 , 2020. 2 [41] H. Schieber, K. C. Demir, C. Kleinbeck, S. H. Yang, and D. Roth. Indoor synthetic data generation: A systematic review. p. 103907, 2024. doi: 10. 1016/j.cviu.2023.103907 2, 5 [42] H. Schieber, F. Deuser, B. Egger, N. Oswald, and D. Roth. Nerftrinsic four: An end-to-end trainable nerf jointly optimizing diverse intrinsic and extrinsic camera parameters. Computer Vision and Image Understanding ,249:104206, 2024. 2 [43] H. Schieber, S. Li, N. Corell, P. Beckerle, J. Kreimeier, and D. Roth. ASDF: Assembly state detection utilizing late fusion by integrating 6d pose estimation. 2024. 2 [44] Y. Shavit and R. Ferens. Introduction to camera pose estimation with deep learning. arXiv preprint arXiv:1907.05272 , 2019. 6 [45] Y. Shavit, R. Ferens, and Y. Keller. Learning multi-scene absolute pose re-gression with transformers. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 2733–2742, 2021. 2 [46] T. Song, U. Eck, and N. Navab. If i share with you my perspective, would you share your data with me? In 2022 IEEE Conference on Virtual Reality and 3D User Interfaces Abstracts and Workshops (VRW) , pp. 666–667. IEEE, 2022. 1, 2 [47] M. Stoiber, M. Sundermeyer, and R. Triebel. Iterative corresponding geometry: Fusing region and depth for highly efficient 3d tracking of textureless objects. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022. 4 [48] Q. Sun, Y. Mai, R. Yang, T. Ji, X. Jiang, and X. Chen. Fast and accurate online calibration of optical see-through head-mounted display for ar-based surgical navigation using microsoft hololens. International journal of computer assisted radiology and surgery , 15:1907–1919, 2020. 1 [49] J. Tremblay, T. To, and S. Birchfield. Falling things: A synthetic dataset for 3d object detection and pose estimation. In Proceedings of the IEEE conference on computer vision and pattern recognition workshops , pp. 2038–2041, 2018. 2, 3 [50] S. Tyree, J. Tremblay, T. To, J. Cheng, T. Mosier, J. Smith, and S. Birch-field. 6-dof pose estimation of household objects for robotic manipulation: An accessible dataset and benchmark. In 2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , pp. 13081–13088. IEEE, 2022. 2, 3 [51] D. Ungureanu, F. Bogo, S. Galliani, P. Sama, X. Duan, C. Meekhof, J. Stühmer, T. J. Cashman, B. Tekin, J. L. Schönberger, et al. Hololens 2 research mode as a tool for computer vision research. arXiv preprint arXiv:2008.11239 , 2020. 1 [52] D. Wagner and D. Schmalstieg. Artoolkitplus for pose tracking on mobile devices. 2007. 6 [53] J. Wald, A. Avetisyan, N. Navab, F. Tombari, and M. Nießner. Rio: 3d object instance re-localization in changing indoor environments. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pp. 7658–7667, 2019. 2 [54] J. Wald, H. Dhamo, N. Navab, and F. Tombari. Learning 3d semantic scene graphs from 3d indoor reconstructions. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 3961–3970, 2020. 2 [55] G. Wang, F. Manhardt, F. Tombari, and X. Ji. Gdr-net: Geometry-guided direct regression network for monocular 6d object pose estimation. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16611–16621, 2021. 3, 5 [56] H. Wang, S. Sridhar, J. Huang, J. Valentin, S. Song, and L. J. Guibas. Normalized object coordinate space for category-level 6d object pose and size estimation. In The IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2019. 2 [57] P. Wang, H. Jung, Y. Li, S. Shen, R. P. Srikanth, L. Garattoni, S. Meier, N. Navab, and B. Busam. PhoCaL: A multi-modal dataset for category-level object pose estimation with photometrically challenging objects. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 21222–21231, 2022. 2 [58] S.-C. Wu, K. Tateno, N. Navab, and F. Tombari. Incremental 3d seman-tic scene graph prediction from rgb sequences. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 5064–5074, 2023. 2 [59] S.-C. Wu, J. Wald, K. Tateno, N. Navab, and F. Tombari. Scenegraphfu-sion: Incremental 3d scene graph prediction from rgb-d sequences. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 7515–7525, 2021. 2 [60] Y. Xiang, T. Schmidt, V. Narayanan, and D. Fox. Posecnn: A convolutional neural network for 6d object pose estimation in cluttered scenes. 2017. 2, 3, 5, 6 [61] Z. Zhang. A flexible new technique for camera calibration. IEEE Trans-actions on pattern analysis and machine intelligence , 22(11):1330–1334, 2002. 1, 2
