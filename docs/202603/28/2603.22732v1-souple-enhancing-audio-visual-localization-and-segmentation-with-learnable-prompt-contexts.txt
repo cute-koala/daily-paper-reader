@@ -1,0 +1,373 @@
+Title: SOUPLE: Enhancing Audio-Visual Localization and Segmentation with Learnable Prompt Contexts
+
+URL Source: https://arxiv.org/pdf/2603.22732v1
+
+Published Time: Wed, 25 Mar 2026 00:38:18 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# SOU PL E: Enhancing Audio-Visual Localization and Segmentation with Learnable Prompt Contexts 
+
+# Khanh Binh Nguyen Deakin University, Australia 
+
+binh.nguyen@deakin.edu.au 
+
+# Chae Jung Park *
+
+# National Cancer Center, South Korea 
+
+cjp@ncc.re.kr 
+
+# Abstract 
+
+Large-scale pre-trained image-text models exhibit robust multimodal representations, yet applying the Contrastive Language-Image Pre-training (CLIP) model to audio-visual localization remains challenging. Replacing the classifica-tion token ( [CLS ]) with an audio-embedded token ( [VA])struggles to capture semantic cues, and the prompt “a photo of a [VA]” fails to establish meaningful connections between audio embeddings and context tokens. To address these is-sues, we propose Sound-aware Prompt Learning ( SOU PL E), which replaces fixed prompts with learnable context tokens. These tokens incorporate visual features to generate condi-tional context for a mask decoder, effectively bridging seman-tic correspondence between audio and visual inputs. Experi-ments on VGGSound, SoundNet, and AVSBench demonstrate that SOU PL E improves localization and segmentation per-formance. 
+
+# 1. Introduction 
+
+Localizing sound sources within visual scenes is a key com-ponent of audiovisual perception, which is vital for both biological organisms and artificial systems. The domain of audio-visual sound-source localization has experienced considerable progress in recent years, propelled by the im-perative to create machine perception systems capable of emulating human multi-sensory integration for pinpointing the origins of sound in intricate settings. In recent years, audio-visual sound source localization has been extensively explored to equip machine perception with comparable capa-bilities [ 1 , 4 , 10 , 14 –16 , 20 –22 , 25 , 27 , 29 – 34 ]. A key strat-egy is to utilize the inherent correlation between audio and visual signals without explicit supervision or annotated data. The primary method for accomplishing this aligns audio-visual representations as self-supervision signals within a contrastive learning framework. Sound source localization methods often incorporate addi-
+
+> *Corresponding author.
+
+Figure 1. Comparison of attention masks produced by ACL-SSL and S OU PL E in representative cases. Compared with ACL-SSL, SOU PL E yields more refined localization of the sounding objects. 
+
+tional prior knowledge beyond the fundamental assumption of audio-visual correspondence. This prior knowledge can take various forms, such as visual object detection [ 20 , 21 ] or motion analysis [ 39 ]. However, these priors may introduce biases that can potentially hinder true audio-visual semantic alignment, which is crucial for accurate sound source local-ization [ 1 , 20 , 24 ]. Park et al. [26] proposed a CLIP-based adaptation method that leverages the audio-driven embed-ding to efficiently localize and segment sounding objects. Nevertheless, ACL-SSL [ 26 ] fails in some cases, as depicted in Figure 1. We conjecture that this is because only the classi-fication token ( [CLS ]) is replaced with an audio-embedded token ( [VA]) that does not have semantic information that can be integrated with visual information. Moreover, the prompt “a photo of a [VA]” does not always hold, and the given tokens of the phrase “a photo of a” are not well aligned with [VA].Our research adopted a different approach by leveraging the prompt learning approach to enhance the generalization of CLIP-based methods such as ACL-SSL. Prompt learning was proposed to overcome the limitations of prompt engi-neering [ 12 , 13 , 23 , 42 , 43 ]. In prompt learning, the prompt tokens are trained using few-shot labeled data for down-stream tasks, freezing the vision-language model (VLM) image and text encoders. Context optimization (CoOp) [ 43 ], a milestone in prompt learning, defines prompts as learnable vectors and optimizes them to fit few-shot training samples 
+
+> arXiv:2603.22732v1 [cs.CV] 24 Mar 2026
+
+effectively. In addition, to address the limited generalization of CoOp to downstream tasks, conditional context optimiza-tion (CoCoOp) [ 42 ] was introduced as a successor model. CoCoOp generates prompts conditioned on image features, thereby yielding improved generalization capabilities for unseen categories. Building on these observations, we propose Sou nd-aware 
+
+Prompt Le arning (S OU PL E), a prompt learning framework for audio-visual localization and segmentation. Instead of relying on a fixed handcrafted prompt, S OU PL E introduces learnable context tokens that adapt to the input visual fea-tures and provide instance-conditional context for the audio representation. This design strengthens the semantic corre-spondence between audio and visual modalities, leading to improved localization and segmentation performance. Our contributions are summarized as follows: • We propose a prompt learning framework to address the generalization limitations of CLIP-based audio-visual lo-calization by introducing instance-conditional, learnable context tokens. • We present an end-to-end label-free framework that gen-eralizes to unseen objects and datasets without requiring ground-truth class labels. • Our prompt learning strategy produces context-aware to-kens that are combined with an audio-embedded token to better emphasize sound-associated regions in the visual input. • Extensive experiments on VGG-SS, SoundNet-Flickr, VGG-SS OpenSet, AVS-Bench, and Extended VGG-SS/SoundNet-Flickr demonstrate the effectiveness of the proposed method. 
+
+# 2. Related Work 
+
+Sound Source Localization The leading approach for audio-visual sound source localization is cross-modal at-tention [ 29 , 30 , 36 ], which is typically combined with con-trastive loss. In line with the contrastive learning approach, advancements include the integration of hard negatives from background areas [ 4 ], use of iterative contrastive learning with pseudo-labels from prior epochs [ 15 ], enforcement of transformation invariance and equivariance via data augmen-tation and geometric consistency [16], selection of semanti-cally similar hard positives [ 30 ], adoption of negative-free contrastive learning [ 33 ] akin to SiamSiam [ 6 ], employing momentum encoders to prevent overfitting [ 20 ], introduc-tion of a negative margin to contrastive learning to reduce the impact of noisy correspondences [ 25 ], and implemen-tation of false negative-aware contrastive learning through intra-modal similarities [34]. While GAVS [ 37 ] employs prompt learning to directly condition the segmentation decoder, S OU PL E differs in both where and how prompting is applied. Specifically, S OU PL E
+
+performs soft prompt learning within a CLIP-based, text-less grounding pipeline by replacing the static handcrafted prompt (e.g., ”a photo of a [VA]”) with instance-conditional context tokens generated from visual features via a Meta-net. We therefore view the comparison to GAVS as a cross-paradigm reference, while emphasizing that our main contri-bution is prompt learning within a CLIP-based audio-visual grounding framework. In addition, various sound localization methods that uti-lize extra prior knowledge or post-processing techniques are being explored. Label information has been integrated to train core audio and visual networks, improving alignment between audio and visual cues [ 27 , 31 ]. Object priors in the form of object proposals have also been applied, while post-processing methods using pre-trained visual feature ac-tivation maps can enhance audio-visual localization results [39]. In our research, we employ the multimodal alignment capabilities of CLIP as a prior in a textless, entirely self-supervised approach, foregoing any post-processing steps. 
+
+CLIP in Audio-Visual Learning Recent advancements in CLIP models pre-trained on extensive paired datasets [11 , 28 ], have shown remarkable generalization capabilities, proving effective in a variety of downstream tasks across di-verse research areas. This section discusses studies that inte-grate CLIP [ 28 ] into audiovisual learning, using WAV2CLIP [38 ] and AudioCLIP [ 9 ] to extend the pretrained CLIP model by synchronizing audio features with text and visual features within a unified embedding space, thereby facilitating rep-resentation learning. Synchronization is achieved through paired data or by leveraging the visual modality as an in-termediary. Beyond representation learning, CLIP models are utilized in tasks such as audio-visual event localization [19 ], video parsing [ 8 ], and audio-visual source separation [ 7, 35 ]. Notably, while [ 35 ] used text input for separation, CLIPSep [ 7 ] was trained to focus on audiovisual correlation, omitting text queries. The method proposed in this study similarly focuses on training with an audio-visual alignment goal. Additionally, other studies [ 2, 40 ] modified pretrained CLIP models and text encoders to process audio by replicat-ing contextual text tokens with audio signals, thus enabling the CLIP text encoder to process audio signals. Our research adopted a comparable strategy, utilizing the CLIP model without text input for sound localization tasks. 
+
+Prompt Learning Drawing inspiration from “prompt en-gineering” in natural language processing (NLP), “prompt learning” seeks to derive optimal prompts by leveraging few-shot samples in downstream tasks. The core methodology of prompt learning involves optimizing prompts that are represented as continuous learnable vectors using few-shot samples. Typically, the cross-entropy loss function serves as the training objective. CoOp [ 43 ] was a trailblazing effort in conceptualizing prompts as continuous vectors instead of discrete entities. Building on this, CoCoOp [ 42 ] adapted prompts to image features to improve generalization across unseen categories. MaPLe [ 12 ] extends prompt learning to multimodal settings by injecting learnable vectors into both the text and image encoders, enabling more effective mul-timodal adaptation. PromptSRC [ 13 ] addresses the crucial aspect of knowledge retention during pretraining by intro-ducing a sophisticated prompt-learning model that balances both task-agnostic and task-specific knowledge. 
+
+2.1. Prompt Learning for CLIP 
+
+Prompt learning eliminates the need for the handcrafted design of prompts, e.g., ”a photo of a”, to match down-stream tasks. The earliest work, CoOp [ 43 ], defines a prompt as sequence of M continuously differentiable to-kens, [V1][ V2] . . . [VM ]. In the case of CLIP-ViT, [Vi]
+
+is a 512-dimensional vector. The prompt represent-ing the i-th category can be then defined as ti(x) =
+
+{V1(x), V 2(x), . . . , V M (x), c i}. Let features from the image encoder and text encoder be denoted by x and g(·). Then the class probabilities can be expressed by the following formula: 
+
+p(ˆ y | x) = exp (sim ( x, g (ty )) /τ )
+
+PCi=1 exp (sim ( x, g (ti)) /τ ) (1) Here, sim (·, ·) is a metric that measures similarity in a fea-ture space, with the cosine similarity as a common choice, and τ is the temperature parameter. CoCoOp [ 42 ] conditions prompts with image features to enhance generalization for unseen categories. In practical, image-conditioned prompts, 
+
+ti(x) = {V1(x), V 2(x), . . . , V M (x), c i} are formulated by summing meta-tokens π, derived from ”meta-net” θ, and the 
+
+[Vi]. The class probabilities are expressed by 
+
+p(ˆ y | x) = exp (sim ( x, g (ty (x))) /τ )
+
+PCi=1 exp (sim ( x, g (ti(x))) /τ ) . (2) Both CoOp and CoCoOp update tokens; CoCoOp addition-ally adjusts the meta-net parameters - by using the cross-entropy loss from downstream tasks: 
+
+Lce (y, ˆy) = −
+
+> C
+
+X
+
+> i=1
+
+yilog (ˆ yi) (3) 
+
+2.2. Sound Source Localization Using CLIP 
+
+Park et al. [26] introduce a framework named ACL-SSL that translates audio signals into tokens compatible with CLIP’s text encoder, yielding audio-driven embeddings. The method generates audio-grounded masks for the provided audio us-ing these audio-driven embeddings. On the other hand, the model extracts audio-grounded image features from the high-lighted regions in the visual input. The extracted features are aligned with the audio-driven embeddings using an audio-visual correspondence objective. Finally, the entire model is trained using a contrastive learning framework, which helps in learning the audio-visual correspondence without explicit text input. ACL-SSL leverages the pre-trained CLIP model’s robust representational capabilities and effective multimodal align-ment but uniquely does so without using explicit text input. Instead, it relies solely on audio-visual correspondence. The use of pre-trained image-text models enables the generation of improved localization maps for sounding objects. 
+
+# 3. Method 
+
+Our method builds upon ACL-SSL [ 26 ] and extends it with prompt learning, as illustrated in Figure 2. 
+
+3.1. SOUPLE Framework 
+
+Using CLIPSeg [ 17 ] as the audio-visual grounder, an audio-visual pair is input to the framework. The CLIP Image Encoder EI extracts the image features FI from the visual input XI . Then, a meta-net EM , which consists of a two-layer non-linear bottleneck structure (Linear-ReLU-Linear), with the hidden layer reducing the input dimension by 16 ×,receives these image features and translates them into M
+
+context tokens ( [V1][ V2] . . . [VM ]). On the other hand, the Audio Encoder EA extracts the audio features FA from the audio signal XA and translates them into the compatible audio-embedded token [VA] via the Audio Projection module, which consists of an MLP and an attention pooling layer. This module is referred to as the Audio Tokenizer. The context tokens and the audio-embedded token are then concatenated and input to the Text Encoder ET to extract the audio-text features FAT . Finally, image features and audio-text features are input into the Mask Decoder D, providing the segmentation masks S for given sounding objects, following the mechanism of ACL-SSL [26]. In this way, instead of feeding the fixed tokens of a prompt ”a photo of a [VA]”, we replace them with the learnable con-text tokens [V1][ V2] . . . [VM ][ VA]. This improves generaliza-tion for the given input by introducing instance-conditional context, since the fixed prompt “a photo of a” has no seman-tic connection to [VA].
+
+3.2. Visual-Audio-Text Alignment 
+
+Figure 3 illustrates the computation of contrastive loss at both the image and feature levels by the Visual-Audio-Text (VAT) module. Sounding area masks derived from the au-dio input using S OU PL E are utilized to create two distinct masks: one for the image level ( MI ), which highlights the sounding regions by foregrounding pixels and obscuring the background, and another for the feature level ( MF ), which Figure 2. Pipeline of our S OU PL E framework. S OU PL E takes an audio-visual pair as input, converting the audio signal into a CLIP-compatible token via the Audio Tokenizer and the image into learnable context tokens via the Meta-net. The learnable context tokens are concatenated with the audio-embedded token and used by the text encoder to produce audio-text features for mask decoding. By replacing fixed handcrafted prompts with learnable context tokens, S OU PL E improves generalization to the given audio-visual input. 
+
+accentuates areas within the spatial visual features. The im-age mask is then converted into a visual embedding, denoted as vI = EI (MI ·XI ). In a similar fashion, the visual embed-ding for spatial visual features is formulated as vI = MI ·FI .Subsequently, the VAT similarity between the audio-text features ( FAT ) and the audio-grounded visual embedding 
+
+vI is determined through cosine similarity, expressed as 
+
+SI = ( vI · FAT ). Likewise, the similarity between the audio-text features and the feature-level audio-grounded vi-sual embedding vF is articulated as SF = ( vF · FAT ). Sym-metric InfoNCE is applied to calculate the image-level audio-text-grounded contrastive loss ( LACL I ) and the feature-level audio-text-grounded contrastive loss ( LACL F ). 
+
+LACL I = Inf oN CE  SI 
+
+= − 12B
+
+> B
+
+X
+
+> i
+
+log exp  SIi,i /τ PBj exp  SIi,j /τ 
+
+− 12B
+
+> B
+
+X
+
+> i
+
+log exp  SIi,i /τ PBj exp  SIj,i /τ 
+
+(4) 
+
+LACL F = Inf oN CE  SF 
+
+= − 12B
+
+> B
+
+X
+
+> i
+
+log exp  SFi,i /τ PBj exp  SFi,j /τ 
+
+− 12B
+
+> B
+
+X
+
+> i
+
+log exp  SFi,i /τ PBj exp  SFj,i /τ 
+
+(5) where τ is the temperature parameter and SI is image-level audio-visual similarity matrix within batch B.Finally, following ACL-SSL, the area regularization loss 
+
+Figure 3. Visual-Audio-Text Alignment (VAT) module 
+
+(LREG ) is defined as: 
+
+LREG = X
+
+> i
+
+p+ − ˆM Ii,i 1
+
++ X
+
+> i̸=j
+
+p− − ˆM Ii,j 1
+
+(6) 
+
+3.3. Training Objectives 
+
+The overall training loss term is following ACL-SSL, as defined as follows: 
+
+L = λ1LACL I + λ2LACL F + λ3LREG (7) where λ1, λ2, and λ3 are the hyper-parameters weighting the loss terms. The LACL I loss represents the symmetric InfoNCE form of contrastive loss. It enhances the similarity between the positive-sounding region and its corresponding audio pair while simultaneously ensuring the dissimilarity between negative audio samples and the actual-sounding re-gion. The LACL F loss focuses on the highly correlated area, regardless of positive or negative audio-visual pairs. The 
+
+LREG loss regularizes the size of the mask during training to ensure it only covers the relevant sounding area. Except for the encoders, EI , EA, and ET parameters are frozen; the rest of the framework is optimized using Equation 7 as the overall training objective. 
+
+# 4. Experiments 
+
+Datasets Our method utilizes the VGGSound dataset [ 3 ], which consists of approximately 200,000 videos. Post-training, we assess the sound localization capabilities on the VGG-SS [ 4 ] and SoundNet-Flickr [ 29 , 30 ] datasets. These datasets offer bounding box annotations for sound-emitting objects, with around 5,000 and 250 samples, respectively. Additional evaluations are performed on the AVSBench [ 41 ]and Extended VGG-SS/SoundNet-Flickr [ 20 ] datasets. AVS-Bench provides binary segmentation maps that identify pix-els associated with audio-visual signals and are segmented into Single-source (S4) and Multi-source (MS3) categories based on the number of sound sources. The S4 category con-tains approximately 5,000 samples, while the MS3 has about 400 samples. Finally, the Extended VGG-SS/SoundNet-Flickr datasets, introduced by Mo and Morgado [20] , are employed to investigate the presence of sound sources that are not visible. 
+
+Implementation Details In our approach, we utilize a frozen pre-trained ViT-B/16 CLIP model as the image en-coder, BEATs [ 5] for the audio encoder, and CLIPSeg [ 18 ]as the grounder, following the design of ACL-SSL [ 26 ]. For training, 10-second audio clips sampled at 16kHz were employed, along with the central video frame resized to 
+
+352 × 352 . The model underwent optimization over 20 epochs with a batch size of 16, utilizing the Adam opti-mizer with a learning rate of 10 −3 and a weight decay of 
+
+10 −5. The prompt-learning components add only a small parameter overhead (approximately 2.38M trainable param-eters in total, less than 1% of the overall model capacity of 
+
+∼ 242 M). 
+
+4.1. Quantitative Results 
+
+We compare our proposed method with the existing works, as shown in Table 1. We also compare our proposed method with closely-related baselines such as WAV2CLIP [ 38 ], Au-dioCLIP [9], and ACL-SSL [26]. 
+
+4.1.1. Comparison on Standard Benchmarks 
+
+In this section, a comparative analysis is conducted of our sound source localization method against existing ap-proaches and established baselines. Our evaluations follow a similar framework to previous methods [ 4 , 21 , 30 , 34 ]. The model is trained on the VGGSound-144K dataset, with performance assessments carried out on the VGG-SS and SoundNet-Flickr test sets. It is important to note that all compared models are trained with equivalent data volumes. Our model, distinctively, does not utilize object-guided re-finement (OGL). The results are detailed in Table 1. 
+
+Method VGG-SS SoundNet-Flickr 
+
+cIoU ↑ AUC ↑ cIoU ↑ AUC ↑
+
+Attention 18.50 30.20 66.00 55.80 CoarseToFine 29.10 34.80 - -LCBM 32.20 36.60 - -LVS 34.40 38.20 71.90 58.20 HardPos 34.60 38.00 76.80 59.20 SSPL 33.90 38.00 76.70 60.50 EZ-VSL† 35.96 38.20 78.31 61.74 EZ-VSL‡ 38.85 39.54 83.94 63.60 SSL-TIE 38.63 39.65 79.50 61.20 SLAVC† 37.79 39.40 83.60 -SLAVC‡ 39.80 - 86.00 -MarginNCE† 38.25 39.06 83.94 63.20 MarginNCE‡ 39.78 40.01 85.14 64.55 HearTheFlow 39.40 40.00 84.80 64.00 FNAC† 39.50 39.66 84.73 63.76 FNAC‡ 41.85 40.80 85.14 64.30 Alignment† 39.94 40.02 79.60 63.44 Alignment‡ 42.64 41.48 82.40 64.60 
+
+Baseline: 
+
+WAV2CLIP 37.71 39.93 26.00 29.60 AudioCLIP 44.15 46.23 47.20 45.22 ACL-SSL† 49.46 46.32 80.80 64.62 
+
+SOU PL E† 53.21 48.15 84.80 67.64 
+
+3.75 ↑ 1.83 ↑ 4.00 ↑ 3.02 ↑
+
+SOU PL E†-50ep 54.76 49.40 83.60 65.76      
+
+> Table 1. Quantitative results on the VGG-SS and SoundNet-Flickr test sets. All models were trained on 144K samples from VG-GSound. SLAVC does not report AUC scores. The last row in-dicates improvement over ACL-SSL. †and ‡denote without and with OGL, respectively.
+
+We first compare our method with existing sound source localization approaches on the VGG-SS benchmark, as shown in Table 1. It is also noteworthy that our use of CLIP does not involve explicit text input. Compared with ACL-SSL, which directly uses the conventional prompt ”a photo of a” with the audio-embedded token [VA], our prompt learning further enhances the performance and generaliza-tion. The results confirm that instance-conditional prompts are more domain-generalizable. 
+
+4.1.2. Open-Set Audio-Visual Localization 
+
+Chen et al. [4] introduced an open-set evaluation framework to gauge the generalization capabilities of sound source lo-calization techniques. This framework tests models on both categories included in the training data (Heard) and those not included (Unheard). In this evaluation, 110 categories ran-domly chosen from the VGGSound dataset are designated for training, while a distinct set of 110 categories is reserved for testing, ensuring exposure to novel and unseen categories during the evaluation phase. Experiments are conducted using the identical train/test split as established in prior stud-ies [ 4, 21 , 25 ]. Notably, our methodology diverges from previous ones as it does not employ object-guided refine-ment (OGL). The results, detailed in Table 2, demonstrate that our approach significantly surpasses existing methods in localizing both Heard and Unheard categories. 
+
+Test Class Method cIoU ↑ AUC ↑
+
+Heard 110 LVS 28.90 36.20 EZ-VSL† 31.86 36.19 EZ-VSL‡ 37.25 38.97 SLAVC† 35.84 -SLAVC‡ 38.22 FNAC‡ 39.54 39.83 Alignment† 38.31 39.05 Alignment (w OGL) 41.85 40.93 ACL-SSL† 48.44 45.06 
+
+SOU PL E† 54.76 48.86 
+
+6.32 ↑ 3.80 ↑
+
+SOU PL E†-50ep 54.85 48.98 Unheard 110 LVS 26.30 34.70 EZ-VSL† 32.66 36.72 EZ-VSL‡ 39.57 39.60 SLAVC† 36.50 -SLAVC‡ 38.87 -FNAC‡ 42.91 41.17 Alignment† 39.11 39.80 Alignment (w OGL) 42.94 41.54 ACL-SSL† 41.98 41.55 
+
+SOU PL E† 48.40 46.24 
+
+6.42 ↑ 4.69 ↑
+
+SOU PL E†-50ep 48.40 46.24        
+
+> Table 2. Open-set audio-visual localization results on the train/test splits of [ 4,21 ,25 ]. The last row indicates improvements over ACL-SSL. †and ‡denote without and with OGL, respectively. ”50ep” indicates training for 50 epochs.
+
+4.1.3. AVSBench 
+
+Additional experiments were conducted using the AVSBench S4 and MS3 datasets [ 41 ] to demonstrate our model’s precise sound localization capabilities. These datasets are specifi-cally designed for audio-visual correspondence identification at the pixel level, which is audio-visual segmentation. In these experiments, models were trained on the VGGSound-144K dataset and subsequently tested on the AVSBench datasets in a zero-shot fashion. The results, which are de-tailed in Table 3, reveal two significant insights. Firstly, in single-object scenarios within the S4 dataset, our approach markedly surpasses the previous method by a substantial margin, utilizing solely audio-visual data without text super-vision. This underscores the efficacy of the prompt learning method in improving generalization capabilities for sound source localization and segmentation tasks. Secondly, in multi-object scenarios within the MS3 dataset, our method, SOU PL E, falls behind ACL-SSL. The underperformance is attributed to the absence of GT label supervision, lead-ing S OU PL E to segment all potential objects within the frames, resulting in inaccurate segmentation masks. It is also pertinent to acknowledge that the task of sound source localization is, in theory, an unlabeled challenge. 
+
+Method S4 MS3 (w/o OGL) mIoU ↑ F-Score ↑ mIoU ↑ F-Score ↑
+
+SLAVC 28.10 34.60 24.37 25.56 MarginNCE 33.27 45.33 27.31 31.56 FNAC 27.15 31.40 21.98 22.50 Alignment 29.60 35.90 - -
+
+Baselines: 
+
+WAV2CLIP 28.70 35.35 25.09 23.84 AudioCLIP 36.57 42.15 27.06 26.48 ACL-SSL 59.76 69.03 41.08 46.67 SOU PL E 62.89 71.47 38.96 43.30 
+
+3.13 ↑ 2.44 ↑ 2.12 ↓ 3.37 ↓
+
+SOU PL E-50ep 64.58 74.00 40.19 46.00 
+
+> Table 3. Quantitative results on the AVSBench test sets. The last row indicates the improvement over ACL-SSL.
+
+4.1.4. Extended SoundNet-Flickr/VGG-SS 
+
+Existing benchmarks typically consist of sounding ob-jects/regions in the scene. However, in reality, silent objects or off-screen audio are also common occurrences. Mo and Morgado [20] propose a new evaluation that extends the existing benchmarks to include non-audible frames, non-visible sound sources, and mismatched audio-visual pairs. In this evaluation scenario, it is expected that sound local-ization methods should not highlight an object/region if the audio and visual signals are mismatched. The experiments were conducted using the extended SoundNet-Flickr/VGG-SS datasets in Table 4. Surprisingly, S OU PL E also surpasses previous methods significantly by a large margin. These re-sults indicate that our method provides a robust audio-visual semantic relationship that is suitable for a task such as a non-audible/non-visible sound source. Method Extended VGG-SS Extended Flickr AP ↑ max-F1 ↑ LocAcc ↑ AP ↑ max-F1 ↑ LocAcc ↑
+
+SLAVC† 32.95 40.00 37.79 51.63 59.10 83.60 MarginNCE† 30.58 36.80 38.25 57.99 61.80 83.94 FNAC† 23.48 33.70 39.50 50.40 62.30 84.73 Alignment† 34.73 40.70 39.94 64.43 66.90 79.60 WAV2CLIP 26.67 33.00 37.71 20.99 24.80 29.60 AudioCLIP 23.79 32.80 44.15 34.00 38.80 45.22 ACL-SSL† 40.79 49.10 49.46 76.07 73.20 80.80 
+
+SOU PL E† 44.77 53.00 53.21 80.25 83.11 84.80 
+
+3.98 ↑ 4.10 ↑ 3.66 ↑ 4.18 ↑ 7.91 ↑ 4.00 ↑
+
+SOU PL E†-50ep 45.81 54.22 54.76 79.89 82.96 83.60       
+
+> Table 4. Quantitative results on the Extended VGG-SS and Extended SoundNet-Flickr benchmarks. All models were trained on 144 K
+> samples from VGGSound. Results for prior approaches are from Mo and Morgado [20] . The last row indicates the improvement over ACL-SSL. †and ‡denote without and with OGL, respectively.
+
+# 5. Ablation Study 
+
+5.1. Context Length 
+
+An ablation study on context length was conducted, examin-ing 4, 8, and 16 context tokens. To ensure a fair comparison, random initialization was employed for all context tokens. The results, summarized in Table 5, show that on the VGG-SS test set, S OU PL E performs best with just four context tokens, suggesting that a higher number of context tokens may detrimentally affect performance, proving that increas-ing the parameter size is not the key. Based on these results about the context length, we carry out the rest of the ablation study with only four context tokens on the VGG-SS dataset. 
+
+# ctx cIoU ↑ AUC ↑
+
+ctx=4 53.21 48.15 
+
+ctx=8 52.01 47.32 ctx=16 51.08 46.93 
+
+> Table 5. Ablation study on context length on the VGG-SS dataset.
+
+5.2. Audio-Embedded Token Position in the Prompt 
+
+This section examines the impact of the position of the [VA]
+
+token on performance. The [VA] token is randomly posi-tioned within various context token prompts. As indicated in Table 6, positioning [VA] at the start of the prompt no-tably diminishes performance, whereas situating it at the end enhances performance significantly. We observe that positioning [VA] at the end of the learn-able context (pos=5) yields the highest performance, whereas placing it at the start (pos=1) notably diminishes results. This phenomenon can be explained by the CLIP text transformer’s causal (left-to-right) attention. By situating [VA] after the 
+
+# ctx VA index Token Order cIoU ↑ AUC ↑
+
+ctx=4 pos=1 [VA][ V1][ V2][ V3][ V4] 49.91 46.21 ctx=4 pos=2 [V1][ VA][ V2][ V3][ V4] 50.71 46.42 ctx=4 pos=3 [V1][ V2][ VA][ V3][ V4] 51.08 46.93 ctx=4 pos=4 [V1][ V2][ V3][ VA][ V4] 52.41 47.72 
+
+ctx=4 pos=5 [V1][ V2][ V3][ V4][ VA] 53.21 48.15  
+
+> Table 6. Ablation study on the position of [VA].
+
+learnable context tokens [V1] . . . [VM ], the transformer lay-ers can process the instance-conditional visual cues first, effectively priming the semantic space before reaching the audio-driven query. As a result, [VA] can aggregate richer image-conditioned context, leading to stronger audio-visual alignment. 
+
+5.3. Longer Training 
+
+To understand the impact of training duration, we conducted an ablation study by comparing different numbers of training epochs. The results are recorded in Table 7. Longer training further enhances the performance of S OU PL E, resulting in a cIoU of 54.76 and an AU C of 49.40 for 50 epochs. However, to keep the comparison fair with ACL-SSL, we based our analysis solely on the results of 20 epochs. 
+
+# ctx # epochs cIoU ↑ AUC ↑
+
+ctx=4 20 53.21 48.15 ctx=4 40 53.66 48.49 
+
+ctx=4 50 54.76 49.40 
+
+> Table 7. Ablation study on training duration. Figure 4. Sound localization results on VGG-SS, SoundNet-Flickr, and AVSBench, along with a comparison with ACL-SSL.
+
+5.4. Audio-Visual Feature Fusion 
+
+Since previous methods have shown improvements when fusing the audio with visual features, in this section we also study its effect in S OU PL E, the results are in Table 8. 
+
+Method Fusion? Ensemble? cIoU ↑ AUC ↑
+
+SOU PL E
+
+53.21 48.15 
+
+✓ 49.93 45.98 
+
+✓ 33.63 34.49 
+
+> Table 8. Ablation study on audio-visual feature fusion.
+
+We carried out three distinct experiments: one with the standard S OU PL E, another with S OU PL E incorporating fused audio and visual features, and a third with S OU PL E
+
+employing an ensemble strategy. In the fusion scenario, audio and visual features were combined prior to their intro-duction to the Meta-net, resulting in the final prompt being 
+
+{V1(FI + FA), V 2(FI + FA), . . . , V M (FI + FA)}. Conse-quently, [VA] was omitted since the audio features had al-ready been integrated with the visual features. For the ensem-ble scenario, we altered the position of [VA] sequentially, as delineated in Table 6. Instead of relying on a single position, we computed the mean across five different positions. The outcomes revealed that while the fusion of audio-visual fea-tures can enhance the efficacy of other methods, it does not yield the same success when applied to S OU PL E. Further-more, the performance was significantly diminished when multiple prompts were ensemble with varying [VA] positions. 
+
+5.5. Failure Analysis on the MS3 Dataset 
+
+In multi-object scenarios within the MS3 dataset, S OU PL E
+
+falls behind ACL-SSL. We attribute this performance gap to the absence of class-specific supervision in our textless, label-free setting: when multiple plausible sounding objects co-occur, the model may segment several semantically relevant regions, which can be penalized when the annotations do not fully capture all sounding sources. Nevertheless, the results still indicate that prompt learning improves generalization in single-source settings and remains competitive in more challenging multi-source scenes.  
+
+> Figure 5. Failure cases visualization of S OU PL Eon MS3.
+
+Figure 5 illustrates several representative failure cases from the MS3 dataset. In these examples, S OU PL E some-times highlights multiple candidate regions that are seman-tically consistent with the audio, whereas the ground-truth annotations correspond to only one of the objects. This phe-nomenon is particularly evident in complex scenes contain-ing multiple interacting objects or overlapping sound sources. Despite these challenges, the results indicate that prompt learning improves generalization in single-source scenarios and remains competitive in more challenging multi-source environments. 
+
+5.6. Qualitative Results 
+
+Figure 4 illustrates the comparative analysis between our method and ACL-SSL. The visual examples show that our approach provides more accurate and finely localized regions for sounding objects than ACL-SSL, which often produces vague or misclassified segmentation areas. In MS3, S OU PL E
+
+often highlights multiple semantically plausible sounding objects, some of which may not be fully captured by the available annotations. In summary, S OU PL E demonstrates consistency in handling sound source objects of various sizes, regardless of their location and resolution. These results are consistent with the quantitative data presented in Table 1 and Table 4, further validating the superiority of our method over ACL-SSL and other prior techniques across all tested datasets. 
+
+# 6. Conclusion 
+
+We presented a prompt learning approach for sound source localization and segmentation. Our goal was to improve generalization on unlabeled datasets and previously unseen objects by replacing a fixed handcrafted prompt with an instance-conditional form. To this end, we introduced S OU -PL E, which generates learnable context tokens from visual features and combines them with an audio-embedded to-ken to better preserve the semantic relationship between audio and visual inputs. Experimental results demonstrate that this simple prompt reformulation consistently improves audio-visual localization and segmentation, highlighting the potential of prompt learning for broader audio-visual under-standing tasks. 
+
+# Acknowledgements 
+
+This work was supported by the National Cancer Center Grant(NCC-23113503, NCC-25104802). 
+
+# References 
+
+[1] Relja Arandjelovic and Andrew Zisserman. Objects that sound. In Proceedings of the European conference on com-puter vision (ECCV) , pages 435–451, 2018. [2] Saurabhchand Bhati, Jes ´us Villalba, Laureano Moro-Velazquez, Thomas Thebaud, and Najim Dehak. Segmental speechclip: Utilizing pretrained image-text models for audio-visual learning. In INTERSPEECH , 2023. [3] Honglie Chen, Weidi Xie, Andrea Vedaldi, and Andrew Zis-serman. Vggsound: A large-scale audio-visual dataset. In 
+
+ICASSP 2020-2020 IEEE International Conference on Acous-tics, Speech and Signal Processing (ICASSP) , pages 721–725. IEEE, 2020. [4] Honglie Chen, Weidi Xie, Triantafyllos Afouras, Arsha Na-grani, Andrea Vedaldi, and Andrew Zisserman. Localizing visual sounds the hard way. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 16867–16876, 2021. [5] Sanyuan Chen, Yu Wu, Chengyi Wang, Shujie Liu, Daniel Tompkins, Zhuo Chen, and Furu Wei. Beats: Au-dio pre-training with acoustic tokenizers. arXiv preprint arXiv:2212.09058 , 2022. [6] Xinlei Chen and Kaiming He. Exploring simple siamese representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 15750–15758, 2021. [7] Hao-Wen Dong, Naoya Takahashi, Yuki Mitsufuji, Julian McAuley, and Taylor Berg-Kirkpatrick. Clipsep: Learning text-queried sound separation with noisy unlabeled videos. 
+
+arXiv preprint arXiv:2212.07065 , 2022. [8] Yingying Fan, Yu Wu, Bo Du, and Yutian Lin. Revisit weakly-supervised audio-visual video parsing from the language per-spective. Advances in Neural Information Processing Systems ,36, 2024. [9] Andrey Guzhov, Federico Raue, J ¨orn Hees, and Andreas Dengel. Audioclip: Extending clip to image, text and audio. In ICASSP 2022-2022 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 976–980. IEEE, 2022. [10] Di Hu, Rui Qian, Minyue Jiang, Xiao Tan, Shilei Wen, Errui Ding, Weiyao Lin, and Dejing Dou. Discriminative sounding objects localization via self-supervised audiovisual match-ing. Advances in Neural Information Processing Systems , 33: 10077–10087, 2020. [11] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representa-tion learning with noisy text supervision. In International conference on machine learning , pages 4904–4916. PMLR, 2021. [12] Muhammad Uzair khattak, Hanoona Rasheed, Muhammad Maaz, Salman Khan, and Fahad Shahbaz Khan. Maple: Multi-modal prompt learning. In The IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023. [13] Muhammad Uzair Khattak, Syed Talal Wasim, Muzammal Naseer, Salman Khan, Ming-Hsuan Yang, and Fahad Shahbaz Khan. Self-regulating prompts: Foundational model adap-tation without forgetting. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 15190–15200, 2023. [14] Sizhe Li, Yapeng Tian, and Chenliang Xu. Space-time mem-ory network for sounding object localization in videos. arXiv preprint arXiv:2111.05526 , 2021. [15] Yan-Bo Lin, Hung-Yu Tseng, Hsin-Ying Lee, Yen-Yu Lin, and Ming-Hsuan Yang. Unsupervised sound localization via iterative contrastive learning. Computer Vision and Image Understanding , 227:103602, 2023. [16] Jinxiang Liu, Chen Ju, Weidi Xie, and Ya Zhang. Ex-ploiting transformation invariance and equivariance for self-supervised sound localisation. In Proceedings of the 30th ACM International Conference on Multimedia , pages 3742– 3753, 2022. [17] Timo L ¨uddecke and Alexander Ecker. Image segmentation us-ing text and image prompts. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7086–7096, 2022. [18] Timo L ¨uddecke and Alexander Ecker. Image segmentation us-ing text and image prompts. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 7086–7096, 2022. [19] Tanvir Mahmud and Diana Marculescu. Ave-clip: Audioclip-based multi-window temporal transformer for audio visual event localization. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 5158– 5167, 2023. [20] Shentong Mo and Pedro Morgado. A closer look at weakly-supervised audio-visual source localization. Advances in Neural Information Processing Systems , 35:37524–37536, 2022. [21] Shentong Mo and Pedro Morgado. Localizing visual sounds the easy way. In European Conference on Computer Vision ,pages 218–234. Springer, 2022. [22] Khanh-Binh Nguyen and Chae Jung Park. Save: Segment audio-visual easy way using segment anything model, 2024. [23] Khanh-Binh Nguyen and Chae Jung Park. On calibration of prompt learning using temperature scaling. IEEE Access ,pages 1–1, 2025. [24] Takashi Oya, Shohei Iwase, Ryota Natsume, Takahiro Itazuri, Shugo Yamaguchi, and Shigeo Morishima. Do we need sound for sound source localization? In Proceedings of the Asian Conference on Computer Vision , 2020. [25] Sooyoung Park, Arda Senocak, and Joon Son Chung. Margin-nce: Robust sound localization with a negative margin. In 
+
+ICASSP 2023-2023 IEEE International Conference on Acous-tics, Speech and Signal Processing (ICASSP) , pages 1–5. IEEE, 2023. [26] Sooyoung Park, Arda Senocak, and Joon Son Chung. Can clip help sound source localization? In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pages 5711–5720, 2024. [27] Rui Qian, Di Hu, Heinrich Dinkel, Mengyue Wu, Ning Xu, and Weiyao Lin. Multiple sound sources localization from coarse to fine. In Computer Vision–ECCV 2020: 16th Euro-pean Conference, Glasgow, UK, August 23–28, 2020, Pro-ceedings, Part XX 16 , pages 292–308. Springer, 2020. [28] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervi-sion. In International conference on machine learning , pages 8748–8763. PMLR, 2021. [29] Arda Senocak, Tae-Hyun Oh, Junsik Kim, Ming-Hsuan Yang, and In So Kweon. Learning to localize sound source in visual scenes. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pages 4358–4366, 2018. [30] Arda Senocak, Hyeonggon Ryu, Junsik Kim, and In So Kweon. Learning sound localization better from semanti-cally similar samples. In ICASSP 2022-2022 IEEE Interna-tional Conference on Acoustics, Speech and Signal Process-ing (ICASSP) , pages 4863–4867. IEEE, 2022. [31] Arda Senocak, Hyeonggon Ryu, Junsik Kim, and In So Kweon. Less can be more: Sound source localization with a classification model. In Proceedings of the IEEE/CVF Win-ter Conference on Applications of Computer Vision , pages 3308–3317, 2022. [32] Arda Senocak, Hyeonggon Ryu, Junsik Kim, Tae-Hyun Oh, Hanspeter Pfister, and Joon Son Chung. Sound source local-ization is all about cross-modal alignment. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 7777–7787, 2023. [33] Zengjie Song, Yuxi Wang, Junsong Fan, Tieniu Tan, and Zhaoxiang Zhang. Self-supervised predictive learning: A negative-free method for sound source localization in visual scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 3222–3231, 2022. [34] Weixuan Sun, Jiayi Zhang, Jianyuan Wang, Zheyuan Liu, Yiran Zhong, Tianpeng Feng, Yandong Guo, Yanhao Zhang, and Nick Barnes. Learning audio-visual source localization via false negative aware contrastive learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6420–6429, 2023. [35] Reuben Tan, Arijit Ray, Andrea Burns, Bryan A Plummer, Justin Salamon, Oriol Nieto, Bryan Russell, and Kate Saenko. Language-guided audio-visual source separation via trimodal consistency. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10575– 10584, 2023. [36] Yapeng Tian, Jing Shi, Bochen Li, Zhiyao Duan, and Chen-liang Xu. Audio-visual event localization in unconstrained videos. In Proceedings of the European conference on com-puter vision (ECCV) , pages 247–263, 2018. [37] Yaoting Wang, Weisong Liu, Guangyao Li, Jian Ding, Di Hu, and Xi Li. Prompting segmentation with sound is generalizable audio-visual source localizer. arXiv preprint arXiv:2309.07929 , 2023. [38] Ho-Hsiang Wu, Prem Seetharaman, Kundan Kumar, and Juan Pablo Bello. Wav2clip: Learning robust audio rep-resentations from clip. In ICASSP 2022-2022 IEEE Interna-tional Conference on Acoustics, Speech and Signal Process-ing (ICASSP) , pages 4563–4567. IEEE, 2022. [39] Hanyu Xuan, Zhiliang Wu, Jian Yang, Yan Yan, and Xavier Alameda-Pineda. A proposal-based paradigm for self-supervised sound source localization in videos. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 1029–1038, 2022. [40] Guy Yariv, Itai Gat, Lior Wolf, Yossi Adi, and Idan Schwartz. Audiotoken: Adaptation of text-conditioned dif-fusion models for audio-to-image generation. arXiv preprint arXiv:2305.13050 , 2023. [41] Jinxing Zhou, Jianyuan Wang, Jiayi Zhang, Weixuan Sun, Jing Zhang, Stan Birchfield, Dan Guo, Lingpeng Kong, Meng Wang, and Yiran Zhong. Audio–visual segmentation. In 
+
+European Conference on Computer Vision , pages 386–403. Springer, 2022. [42] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Conditional prompt learning for vision-language models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16816–16825, 2022. [43] Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for vision-language models. In-ternational Journal of Computer Vision , 130(9):2337–2348, 2022.

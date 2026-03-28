@@ -1,0 +1,1173 @@
+Title: MedCausalX: Adaptive Causal Reasoning with Self-Reflection for Trustworthy Medical Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2603.23085v1
+
+Published Time: Wed, 25 Mar 2026 01:04:10 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# MedCausalX: Adaptive Causal Reasoning with Self-Reflection for Trustworthy Medical Vision–Language Models 
+
+## Jianxin Lin 1,∗, Chunzheng Zhu 2,∗, Peter J. Kneuertz 1, Yunfei Bai 3, Yuan Xue 1,†
+
+1The Ohio State University 2Hunan University 3Amazon Web Services 
+
+zhuchzh@hnu.edu.cn, Peter.Kneuertz@osumc.edu, byunfei@amazon.com, xue.643@osu.edu 
+
+## Abstract 
+
+Vision-Language Models (VLMs) have enabled inter-pretable medical diagnosis by integrating visual percep-tion with linguistic reasoning. Yet, existing medical chain-of-thought (CoT) models lack explicit mechanisms to rep-resent and enforce causal reasoning, leaving them vul-nerable to spurious correlations and limiting their clini-cal reliability. We pinpoint three core challenges in med-ical CoT reasoning: how to adaptively trigger causal cor-rection, construct high-quality causal-spurious contrastive samples, and maintain causal consistency across reasoning trajectories. To address these challenges, we propose Med-CausalX, an end-to-end framework explicitly models causal reasoning chains in medical VLMs. We first introduce the CRMed dataset providing fine-grained anatomical annota-tions, structured causal reasoning chains, and counterfac-tual variants that guide the learning of causal relationships beyond superficial correlations. Building upon CRMed, MedCausalX employs a two-stage adaptive reflection ar-chitecture equipped with <causal> and <verify> to-kens, enabling the model to autonomously determine when and how to perform causal analysis and verification. Fi-nally, a trajectory-level causal correction objective opti-mized through error-attributed reinforcement learning re-fines the reasoning chain, allowing the model to distin-guish genuine causal dependencies from shortcut associa-tions. Extensive experiments on multiple benchmarks show that MedCausalX consistently outperforms state-of-the-art methods, improving diagnostic consistency by +5.4 points, reducing hallucination by over 10 points, and attaining top spatial grounding IoU, thereby setting a new standard for causally grounded medical reasoning. 
+
+## 1. Introduction 
+
+Vision-Language Models (VLMs) have shown remarkable potential in medical imaging by coupling visual percep-
+
+* Equal contribution. † Corresponding author. Please locate the                 
+
+> region and describe
+> the condition of
+> cardiac silhouette
+> Spurious identification:
+> Spurious Reasoning Pathological Error
+> Our Paradigm
+> Input Image
+> Causal Verifica tion and C orrection
+> GT Answer:
+> [[0. 42 , 0. 38, 0.81, 0. 85 ]]
+> The cardiac silhouette
+> is normal ...
+> cardiac silhouette
+> [[0.57, 0.23, 0.89, 0.54]]
+> Increased …… suggests
+> cardiac abnormality.
+> Spurious Reasoning 1
+> cardiac silhouette
+> [[0.43, 0.36, 0.82, 0.85]]
+> Cardiothoracic…… indicate
+> ventricular hypertrophy.
+> Spurious Reasoning 2
+> Cardiac silhouette [[0.4340, 0.3740, 0.8090, 0.8360]]
+> I need to adjust the diagnostic positioning …
+> cardiomediastinal silhouette normal …
+> Trigger: Normal anatomical variation
+> Shortcut: Border irregularity →Abnormality
+> Corrected interpretation :
+
+Figure 1. Existing medical VLMs often lack causality-awareness, which manifests as (1) spurious CoT reasoning attends to mis-localized anatomy or (2) overlooking causal evidence for pathol-ogy diagnosis. MedCausalX can achieve trustworthy diagnosis by adaptive causal verification and correction during inference. 
+
+tion with natural language reasoning for tasks such as di-agnostic interpretation and report generation [1, 16, 26]. By processing large-scale multimodal data, these models can provide intelligent clinical decision support [9, 13, 45, 65, 72]. To enhance the reasoning transparency, chain-of-thought (CoT) prompting has been integrated into medical VLMs [35, 49, 59], producing intermediate steps that make the diagnostic process interpretable. Despite these advances, current medical CoT models lack explicit mechanisms to represent and enforce causal dependencies, which limits their robustness and clinical re-liability [19, 41, 47]. As a result, models may implicitly exploit superficial correlations, such as global background features, language model priors, or training distribution bi-ases [84], rather than capturing true causal relations be-tween anatomy, pathology, and diagnosis. This gap between pattern recognition and causal reasoning can lead to expla-nations that sound plausible yet are not fully aligned with the underlying clinical mechanisms. In clinical practice, causal reasoning underpins diagnos-
+
+> arXiv:2603.23085v1 [cs.AI] 24 Mar 2026
+
+tic reliability [6, 62, 66]. Clinicians reason through a struc-tured chain: identify anatomical abnormalities, interpret pathological manifestations, and draw diagnostic conclu-sions grounded in established medical knowledge [63, 73]. This process ensures that decisions are supported by causal mechanisms rather than surface correlations, a property cur-rent medical VLMs do not yet reliably exhibit. Despite recent progress in structured reasoning trajecto-ries [35, 59, 68, 95], learning effective dynamic CoT reason-ing faces three open challenges. First, how to dynamically identify when causal correction is needed during reason-ing rather than statically applying CoT, which can entrench incorrect causal associations. Second, how to construct high-quality contrastive samples that juxtapose causal and non-causal associations to facilitate adaptive reasoning ver-ification while minimizing expert annotation requirements. Third, how to ensure end-to-end causal consistency across the entire reasoning trajectory instead of optimizing token-level likelihoods that ignore global causal coherence. To systematically address these challenges, we propose MedCausalX, an end-to-end framework that explicitly mod-els causal reasoning with adaptive reflection in medical VLMs. MedCausalX is grounded in three causal insights: 
+
+(1) Causal compositionality: diagnosis unfolds as a struc-tured causal hierarchy where anatomical localization condi-tions pathological characterization, and both jointly deter-mine diagnostic conclusions; (2) Causal disruption detec-tion: reasoning failures often arise from local violations of causal dependencies, motivating adaptive reflection to iden-tify and correct these disruptions; and (3) Trajectory-level causal alignment: enforcing global consistency across the reasoning trajectory, beyond token-level likelihood, aligns the model’s reasoning process with causal semantics and discourages reliance on superficial correlations. Guided by these principles, MedCausalX establishes a unified framework integrating data-level causal supervision, an adaptive reasoning mechanism, and hierarchical opti-mization into a coherent learning paradigm. It builds upon the CRMed dataset, which provides fine-grained anatomical annotations, structured causal reasoning chains, and coun-terfactual variants that enable both causal supervision and robustness evaluation. To achieve adaptive reasoning, Med-CausalX employs a two-stage reflection mechanism with 
+
+<causal> and <verify> tokens to enable autonomous transitions from preliminary causal analysis to verification and correction. Finally, a hierarchical causal optimization pipeline sequentially integrates trajectory-level supervised learning with reinforcement learning on error-attributed tra-jectories, enforcing causal consistency across the reason-ing process and disentangling genuine causal dependencies from shortcut associations. Extensive evaluation across multiple medical imaging benchmarks demonstrates that MedCausalX substantially improves compositional reasoning capabilities, enhancing diagnostic consistency, spatial localization, and halluci-nation suppression while consistently surpassing state-of-the-art methods. These results signify a paradigm shift from correlation-driven pattern matching toward causally grounded and trustworthy multimodal medical AI. The main contributions of this paper are as follows: • We build CRMed, a dataset containing fine-grained causal reasoning chains and counterfactual variants, de-signed to support causal supervision in medical vision-language models. • We introduce a reflection-driven causal reasoning paradigm that enables models to detect and correct causal disruptions during inference, transforming static chain-of-thought reasoning into an adaptive process. • We design a unified learning framework that aligns reasoning trajectories with causal semantics , integrat-ing trajectory-level supervision with error-attributed re-inforcement learning to suppress shortcut associations. • MedCausalX achieves consistent gains across diverse medical benchmarks, substantially improving localiza-tion accuracy, diagnostic consistency, and interpretability, marking a step toward clinically reliable multimodal AI. 
+
+## 2. Related Works 
+
+Chain-of-Thought and Self-Reflection. Chain-of-thought (CoT) enhances reasoning by decomposing complex prob-lems into intermediate steps [33, 43, 75, 79]. Some meth-ods further improve CoT through diverse path sampling and majority voting [76] and demonstrates that CoT can emerge without explicit prompting via alternative decoding strategies [75]. However, these methods struggle with au-tonomous self-correction without external feedback [8, 25], occasionally degrading after intrinsic correction attempts. Training-based approaches show promise via reinforce-ment learning [34] and reflection mechanisms [55, 57, 69]. In medical contexts, reflection-based methods enable physician-like reasoning via hypothesis validation [26]. Re-cent works have further improved VLM reasoning via structured knowledge integration and spatial understand-ing [23, 54, 80, 81, 85]. However, current approaches lack mechanisms to dynamically determine when causal reason-ing should be invoked. Our reflection-token mechanism en-ables adaptive reasoning selection and explicit verification of causal decomposition. 
+
+Causal Reasoning in Medical Imaging. Causal reason-ing addresses fundamental limitations of correlation-based learning that remains vulnerable to spurious associations and dataset shift [6, 19, 47, 97]. VLMs have been widely ap-plied across various domains [14, 15, 18, 70, 78, 83, 90, 99], and in the medical field, VLMs have advanced diagnos-tic reasoning by jointly processing visual and textual in-formation [24, 28, 29, 39, 51, 52, 59], with chain-of-thought prompting showing promise in multi-step clinical reasoning [35, 49]. Existing studies mitigate confounding through statistical interventions [86] or counterfactual mod-eling [4], yet these methods are limited to specific question-answering setups. Our framework introduces structured causal annotations and controlled interventions that enable systematic modeling from anatomical localization through pathological characterization to diagnostic inference. 
+
+Reinforcement Learning Optimization. Reinforcement learning aligns large language models through iterative pol-icy refinement [3, 42, 58, 71, 92, 93, 100, 101]. Reinforce-ment Learning from Human Feedback (RLHF) establishes the foundational paradigm with supervised fine-tuning, re-ward modeling, and policy optimization [12, 67, 77, 88, 89, 102]. Efficient alternatives include Direct Preference Opti-mization (DPO) [64], and Group Relative Policy Optimiza-tion (GRPO), which improves efficiency through group-level advantage estimation [20, 23, 68]. Recent analyses have revealed theoretical limitations of group-based meth-ods, including biased advantage estimation [31, 61, 87], sparse process-level guidance [17], and sensitivity to diver-gence choices [38]. In medical reasoning, composite reward functions incorporating diagnostic accuracy, causal consis-tency, and format validity have shown promise [7, 35, 40, 59], with contrast-driven approaches further improving re-ward reliability [46]. Existing systems often apply uniform corrections [50], whereas our error-attributed policy opti-mization effectively localizes causal failures and builds tar-geted preference pairs for fine-grained refinement. 
+
+## 3. Methodology 
+
+3.1. Inductive Causal Reasoning via CRMed 
+
+We aim to address two critical limitations of current Med-CoT approaches: first, reasoning annotations are often post-hoc rationalizations generated by LLMs rather than faith-ful reflections of clinical reasoning, which may introduce systematic biases and reinforce spurious associations; sec-ond, existing datasets typically lack fine-grained anatomical grounding, limiting their ability to support causal analysis in medical imaging contexts. 
+
+Structured causal factorization. We model diagnostic reasoning as a structured conditional generation process over three semantically grounded variables: anatomical an-notation A, pathological characterization P , and diagnostic conclusion Y . Conditioned on medical image I and clinical query q, we factorize the joint conditional distribution as              
+
+> pθ(Y, P, A |I, q ) = pθ(Y|A, P, I, q )·pθ(P|A, I, q )·pθ(A|I, q ).
+> (1)
+
+This factorization reflects a clinically motivated reasoning order from anatomical grounding to pathological interpre-tation and finally diagnostic decision. 
+
+Structural causal model. We formulate diagnostic reason-ing under a structural causal model (SCM): 
+
+M = ⟨V , U, F, P (U)⟩, (2) where V = {A, P, Y } , U = {Xv , X t, U c} denotes the ex-ogenous variables in the SCM, where Xv and Xt denote latent variability in the visual and textual domains respec-tively, while Uc represents unobservable confounders that persist throughout the reasoning chain. The deterministic structural functions F =
+
+{ΦL, ΦP , ΦD } define the generative mechanisms as follows: 
+
+A = Φ L(I, q, X v , U c),P = Φ P (A, X v , X t, U c),Y = Φ D (P, X v , X t, U c).
+
+(3) We assume the exogenous variables are mutually indepen-dent, i.e., P (U) = P (Xv )P (Xt)P (Uc). This SCM induces a directed acyclic graph (DAG) where the primary clinical flow A → P → Y is subject to spurious correlations in-duced by the confounders. 
+
+Approximate interventions via localized perturbations. 
+
+To distinguish genuine causal reasoning from shortcut correlations, CRMed constructs intervention-inspired sam-ples through localized perturbations that selectively alter anatomical or pathological factors while keeping unrelated evidence as stable as possible. For anatomy-targeted per-turbations, we modify spatial grounding signals, e.g. , re-placing bounding box annotations or synthesizing coun-terfactual variants with altered anatomical structures. For pathology-targeted perturbations, we modify pathological attributes within a fixed anatomical region, e.g. , by replac-ing pathology labels under the same localization or rewrit-ing the pathological component in the reasoning chain. We denote the resulting perturbed input as Iint .These perturbations are intended as proxy interventions 
+
+that approximate manipulations of the corresponding se-mantic variables (anatomical or pathological) under a lo-cality assumption, rather than exact Pearlian interventions on the endogenous variables. Accordingly, they should be interpreted as practical approximations to do (A=˜ a) or 
+
+do (P =˜ p), rather than exact structural interventions that re-place the underlying structural equations. 
+
+Interventional sample sets. To separate robust causal rea-soning from spurious pattern matching, CRMed incorpo-rates three types of samples: 
+
+Dshortcut = {(Iint , q, ˜a, p, C spur , y )}, (4) 
+
+Dpartial = {(Iint , q, a, ˜p, C flaw , y )}, (5) 
+
+Dcausal = {(I, q, a, p, C ✓, y )}, (6) where ˜a and ˜p denote perturbed anatomical and pathological factors, respectively, Cspur indicates shortcut-prone reason-ing chains, Cflaw denotes logically inconsistent pathological <causal> <verify> text 
+
+Token Reconstruction and Counterfactual Collection 
+
+Error -Attributed Dual -policy Optimization 
+
+> Off -Policy
+> On -Policy
+> text
+> Trajectories Reconstruction
+> MedCausalX
+
+SFT  
+
+> Counterfactual
+> Collection
+> Causal
+> Reasoning
+> Trajectories
+> Preference
+> Pairs
+> Preference Fine -Tuning
+> MedCausalX
+> Acc
+
+t
+
+> Acc
+
+t
+
+> <casual>..
+> <verify>..
+> < verify>..
+> <casual>..
+
+rformat 
+
+rcausal +1 
+
+racc   
+
+> 𝕀 {𝑦 #!=𝑦 ∗}
+
++0  
+
+> A1
+> P1
+> Y1A1
+> Px
+> Yz
+> Rollout
+> Tokens
+
+SCM         
+
+> <causal >Cardiomegaly with enl -
+> arged cardiac silhouette …
+> <ref>cardiac silhouette </ref>
+> <box> [x3,y3,x4 ,y4]</box>
+> <causal >The cardiac silhouette
+> appears abnormal with…
+> <ref>cardiac silhouette</ref>
+> <box> [x5,y5,x6,y6]</box>
+
+SCM 
+
+> Xv
+> I
+> A
+
+Structural Causal Modeling 
+
+> Xt
+> Y
+
+Controlled Causal Perturbations in SCM 
+
+> Causal Trajectories
+
+CRMed Construction Overview 
+
+> q
+> P
+> Xv
+> I
+> A
+
+Anatomical Intervention do( 𝑨 ")
+
+> Xt
+> Y
+> q
+> P
+> Xv
+> I
+> A
+
+Pathological Interventions do( 𝑷 ")
+
+> Xt
+> Y
+> q
+> P
+
+Question Image               
+
+> Please locate the region
+> and describe the
+> condition of cardiac
+> silhouette
+> <verify> I need to adjust the
+> diagnostic positioning and ...
+> The cardiomediastinal and hilar
+> contours are stable \n
+> <ref>cardiac silhouette</ref>
+> <box> [x1,y1,x2,y2]</box>
+> <verify >I need to reconsider this
+> medical diagnostic analysis …
+> The cardiomediastinal and hilar
+> contours are stable \n
+> <ref>cardiac silhouette</ref>
+> <box> [x1,y1,x2,y2]</box>
+> <box> [x1,y1,x2,y2]</box>
+> The cardiomediastinal and
+> hilar contours are stable
+> w/o causal Annotation
+
+Figure 2. Overview of MedCausalX framework. We first construct CRMed dataset via fine-grained annotations, then factorize reasoning via a structural causal model (SCM) with reflective tokens ( <causal> , <verify> ) enabling two-stage adaptive reasoning. After causal Supervised Fine-Tuning (SFT), MedCausalX is subsequently optimized via dual-policy that couples off-policy preference alignment (DPO) with on-policy causal reinforcement (GRPO), bridging stability and adaptability to enhance the model’s causal reasoning capability. 
+
+analysis, and C✓ represents clinically grounded causal rea-soning chains. 
+
+Reflective token augmentation for unified reasoning. 
+
+Clinical diagnosis relies on iterative self-examination: prac-titioners continuously revisit and revise hypotheses upon recognizing potential errors, rather than proceeding linearly from observation to conclusion [98]. To instantiate this re-flective process, we augment the base vocabulary V0 with reflective tokens T = {⟨ CAUSAL ⟩, ⟨VERIFY ⟩} , enabling dynamic transitions between preliminary causal analysis and verification-based correction. During training, all samples in CRMed follow a unified sequence structure: 
+
+S = ( I, q, ⟨CAUSAL ⟩, R biased , ⟨VERIFY ⟩, R gold , y ), (7) where Rbiased ∈ { Cspur , C flaw } represents reasoning chains containing spurious correlations or logical inconsistencies from Dshortcut or Dpartial , and Rgold = C✓ denotes clini-cally validated ground-truth causal chains from Dcausal . This construction enforces a two-stage reasoning protocol: the model first generates a preliminary causal analysis condi-tioned on ⟨CAUSAL ⟩, then performs verification and correc-tion triggered by ⟨VERIFY ⟩, ultimately producing refined reasoning chains with enhanced causal consistency. This format enables the model to learn adaptive causal correction through contrastive exposure to both erroneous and correct reasoning trajectories within a unified training paradigm. 
+
+3.2. Causal Reasoning Optimization 
+
+We adopt a two-stage optimization that explicitly attributes causal errors and strengthens reasoning robustness: 
+
+3.2.1. Preliminary: SFT with Causal Decomposition 
+
+In this stage, we establish foundational causal reasoning and self-correction capabilities through supervised fine-tuning on the CRMed dataset, maximizing the joint like-lihood of generating anatomical localization, causal reason-ing chains, and diagnostic predictions, conditioned on the medical image-query pair. 
+
+LSFT (θ) = −E(I,q,L,C,y )∼D [log pθ (L, C, y | I, q, T )] , (8) 
+
+where T denotes the reflective token conditioning the rea-soning mode, L represents the anatomical localization, C
+
+the causal chain, and y the final diagnostic label. 
+
+3.2.2. Refinement: Error-Attributed Optimization 
+
+After supervised trajectory fine-tuning (Eq. 8), we further refine causal reasoning via reinforcement learning.. The training is divided into two complementary stages: an off-policy preference optimization stage for efficient error correction and an on-policy reinforcement learning stage for adaptive causal refinement. Details of both training paradigms are provided below. 
+
+Stage I: Off-policy Training. We leverage collected error trajectories Derror = {(xiI&T , Y i
+
+> err
+
+, Y i
+
+> corr
+
+)}Ne 
+
+> i=1
+
+to construct preference pairs for Direct Preference Optimization (DPO). For each input xI&T , we enforce Ycorr ≻ Yerr and optimize:               
+
+> LDPO (πθ;πref ) = −E(x,Y w,Y l)∼D error
+> h
+> log σ
+> 
+> βlog πθ(Yw|x)
+> πref (Yw|x)
+> −βlog πθ(Yl|x)
+> πref (Yl|x)
+> i
+> ,
+
+(9) 
+
+where Yw = Ycorr denotes winning trajectory, Yl = Yerr , πθ
+
+is the trainable policy, πref the reference policy, β > 0 the KL coefficient, and σ(·) the sigmoid function. 
+
+Error Localization Mechanism. To enhance preference pair informativeness, we precisely identify the failure point 
+
+tfail via step-wise semantic divergence detection: 
+
+tfail = min t ∈ { 1, 2} : S(Y t
+
+> err
+
+, Y t
+
+> gt
+
+) < τ , (10) where S(·, ·) : Y × Y → [0 , 1] measures semantic simi-larity and τ ∈ (0 , 1) is a divergence threshold. We then contrast the continuations Y err  
+
+> ≥tfail
+
+and Y corr  
+
+> ≥tfail
+
+while condition-ing on the shared prefix Y corr  
+
+> <t fail
+
+, concentrating learning on critical divergence points and improving sample efficiency. 
+
+Stage II: On-policy Training. Building on error-localized and high-quality samples, we adopt Group Rel-ative Policy Optimization (GRPO) for on-policy refine-ment. For each input (x, y ∗), we sample G trajectories 
+
+{τg }Gg=1 from πθ and compute a composite reward R(g) =
+
+Rtotal (τg , y ∗) measuring correctness and reasoning quality: 
+
+LGRPO = −E{τg }Gg=1 ∼πθ
+
+"
+
+1
+
+G
+
+> G
+
+X
+
+> g=1
+
+A(g) log πθ (τg | x)
+
+#
+
+, (11) 
+
+with group-relative advantage A(g) = ( R(g) − ¯R)/(σR +ϵ),where ¯R and σR are the mean and standard deviation of re-wards within the group. This intra-group normalization sta-bilizes updates and reduces variance, improving efficiency. 
+
+Composite Reward Function. The overall reward is for-mulated as R(τ ) = Racc (τ, y ∗) + Rformat (τ ) + Rcausal (τ ),
+
+integrating three complementary components that jointly evaluate reasoning quality from predictive accuracy, struc-tural validity, and causal coherence. 
+
+(1) Accuracy Reward: Racc (τ, y ∗) = I{ˆyτ = y∗},
+
+where ˆyτ and y∗ denote the model’s output and the cor-rect label, respectively. This term assesses whether the final prediction matches the ground truth. 
+
+(2) Format Reward is used to ensure structural integrity: 
+
+Rformat (τ ) = 1
+
+|τ | 
+
+> |τ|
+
+X
+
+> t=1
+
+I{wt ∈ V valid }, (12) where |τ | is the trajectory length, wt the t-th token, and 
+
+Vvalid the predefined valid token set. We assess whether cor-rection or verification tokens follow the desired format. 
+
+(3) Causal Consistency Reward evaluates the logical co-herence across consecutive reasoning steps: 
+
+Rcausal (τ ) = 1
+
+|S τ | − 1 
+
+> |S τ|− 1
+
+X
+
+> i=1
+
+Cons (si, s i+1 ), (13) where Sτ = {s1, . . . , s |S τ |} represents the reasoning se-quence extracted from trajectory τ , and Cons (si, s i+1 )
+
+quantifies the causal consistency between consecutive steps. Together, these rewards encourage predictions that are accurate, structurally well-formed, and causally coherent, ensuring that model refinements not only correct errors but also preserve the integrity of underlying causal reasoning. 
+
+## 4. Experiments 
+
+4.1. Experimental Setup 
+
+Baselines. We compare our method with three com-prehensive categories of baselines: (1) General Vision-Language Models, including InternVL [10], GPT-4V [27], and Qwen2.5-VL [2], which exhibit strong multimodal un-derstanding capabilities; (2) Medical-Specific VLMs, such as Med-Flamingo [56], LLaVA-Med [37], RadFM [82], MedDr [21], BiomedGPT [94], and MedRegA [74], rep-resenting the state-of-the-art in medical vision-language un-derstanding; and (3) Medical Chain-of-Thought Models, in-cluding MedVLM-R1 [59] and Med-R1 [35], which incor-porate CoT reasoning processes for interpretability. 
+
+Comparison Benchmarks. We evaluate MedCausalX across five medical imaging benchmarks. MIMIC-CXR [32] contains chest X-ray image-report pairs for report gener-ation. SLAKE [44] and VQA-RAD [36] provide multi-modality radiology images with clinical question-answer pairs for visual question answering. PathVQA [22] fo-cuses on histopathological image reasoning. SA-Med2D-20M [91] supports two region-centric tasks with pixel-level annotations: Region-to-Text Identification requires recog-nizing anatomical structures given bounding boxes, while Text-to-Region Detection requires localizing specific or-gans or anomalies from textual descriptions. All experi-ments use 5-fold cross-validation for statistical reliability. 
+
+Implementation Details and Evaluation Metrics. Med-CausalX builds upon Qwen2.5-VL architecture [5] with model variants ranging from 3B to 32B parameters. Our Table 1. Comprehensive quantitative comparison on diverse region-centric tasks, including region-to-text identification and text-to-region detection. Abbreviations in this Table: Obj-F1 denotes Object F1, Reg-F1 denotes Region F1, Align-F1 denotes Alignment F1, and Acc denotes Accuracy. The best results are highlighted in bold , while the second-best are underlined. 
+
+Method Region-to-Text Identification Text-to-Region Detection Structure Identification Lesion Identification Single-Region Detection Multi-Region Detection BLEU-1 F1 Recall BertScore Acc BLEU-1 F1 Recall BertScore Acc Obj-F1 Reg-F1 Align-F1 IoU Obj-F1 Reg-F1 Align-F1 IoU 
+
+Qwen2.5-VL [2] 0.15 0.25 0.58 52.34 0.12 0.14 0.23 0.55 48.56 0.11 57.82 8.15 6.23 17.45 49.35 5.87 4.65 14.82 InternVL [11] 0.13 0.21 0.52 51.78 0.11 0.13 0.20 0.51 47.92 0.10 56.60 7.24 5.45 16.61 48.23 5.41 4.18 13.99 Med-Flamingo [56] 0.13 0.72 4.90 24.87 0.01 0.12 0.68 4.72 23.45 0.01 18.47 2.35 1.82 5.23 12.68 1.54 1.18 3.47 LLaVA-Med [37] 0.43 1.15 10.69 34.53 1.74 0.38 1.05 9.85 32.18 1.52 24.83 3.76 2.94 7.85 18.95 2.42 1.87 5.36 RadFM [82] 0.35 0.80 4.75 37.07 1.88 0.32 0.75 4.42 35.62 1.68 21.56 3.12 2.38 6.74 15.82 1.98 1.52 4.58 MedDr [21] 0.75 1.27 3.52 50.28 1.36 0.68 1.18 3.28 48.56 1.24 28.34 4.25 3.47 9.16 22.47 2.85 2.24 6.42 MedRegA [74] 78.34 78.95 79.02 91.63 73.06 61.09 61.90 63.07 82.62 59.42 77.93 45.11 36.53 42.70 68.52 24.78 22.36 31.63 
+
+MedCausalX 80.11 80.47 81.63 88.72 75.52 63.65 64.78 66.02 82.10 61.72 82.83 47.05 45.12 44.68 72.75 29.83 27.01 36.02 
+
+Table 2. Performance comparison on medical VQA benchmarks with causal reasoning evaluation. Metrics include answer Accuracy (Acc), Diagnostic Consistency (Diag-C), and Hallucination Rate (Hall, lower is better). Results are reported as mean std over 5-fold cross-validation. Best results in bold , second-best underlined. ’*’ denotes fine-tuned models. 
+
+Method SLAKE [44] VQA-RAD [36] PathVQA [22] PMC-VQA [96] Average Acc Diag-C Hall ↓ Acc Diag-C Hall ↓ Acc Diag-C Hall ↓ Acc Diag-C Hall ↓ Acc Diag-C Hall ↓
+
+General Vision-Language Models 
+
+Qwen2.5-VL [2] 68.5 1.8 58.3 2.1 62.5 1.9 52.4 2.3 54.2 2.0 65.8 1.7 48.3 2.1 52.8 1.9 68.2 2.2 58.2 1.6 56.7 1.8 63.5 2.0 56.9 1.9 55.5 1.9 65.0 1.9
+
+InternVL [11] 70.8 1.6 61.2 1.8 59.8 2.1 55.1 2.0 57.5 1.9 62.5 1.8 52.7 1.9 55.3 2.0 65.3 2.1 61.5 1.5 59.2 1.7 60.8 1.9 60.0 1.8 58.3 1.9 62.1 2.0
+
+Medical-Specific Vision-Language Models 
+
+Med-Flamingo [56] 33.2 2.7 38.5 2.5 75.2 2.3 44.6 2.6 42.8 2.4 71.8 2.5 47.9 2.4 45.6 2.3 68.5 2.6 35.9 2.8 40.5 2.5 73.8 2.4 40.4 2.6 41.9 2.4 72.3 2.5
+
+LLaVA-Med [37] 45.6 2.3 46.8 2.2 68.5 2.4 27.4 2.8 40.2 2.5 74.5 2.3 58.2 2.0 53.2 2.1 63.8 2.2 63.8 1.8 55.5 2.0 65.2 2.1 48.8 2.2 48.9 2.2 68.0 2.3
+
+RadFM [82] 82.3 1.2 70.8 1.4 51.2 1.8 60.6 1.7 63.5 1.5 55.8 1.9 40.2 2.4 50.8 2.1 66.5 1.8 45.8 2.2 56.2 1.9 62.8 1.7 57.2 1.9 60.3 1.7 59.1 1.8
+
+MedDr [21] 83.4 1.1 72.5 1.3 48.5 1.7 78.5 1.3 70.2 1.4 50.2 1.8 62.8 1.6 64.8 1.5 56.8 1.9 66.2 1.5 66.5 1.4 54.5 1.8 72.7 1.4 68.5 1.4 52.5 1.8
+
+MedRegA [74] 84.1 1.0 73.8 1.2 47.8 1.6 76.9 1.2 69.5 1.3 50.8 1.7 68.5 1.4 68.5 1.3 52.5 1.8 79.5 1.1 72.8 1.2 49.8 1.6 77.3 1.2 71.2 1.3 50.2 1.7
+
+Medical Chain-of-Thought Models 
+
+MedCoT [49]* 83.9 1.1 71.5 1.3 49.5 1.7 75.8 1.3 68.2 1.4 52.2 1.8 66.2 1.5 66.8 1.4 54.8 1.9 80.3 1.0 71.8 1.2 50.5 1.7 76.6 1.2 69.6 1.3 51.8 1.8
+
+MedVLM-R1 [59]* 85.7 0.9 75.5 1.1 45.2 1.5 77.3 1.2 71.8 1.2 47.5 1.6 70.8 1.3 70.5 1.2 49.8 1.7 82.4 0.9 75.2 1.1 45.8 1.5 79.1 1.1 73.3 1.2 47.1 1.6
+
+Med-R1 [35]* 85.4 0.9 74.8 1.1 46.5 1.6 76.9 1.2 70.5 1.3 48.8 1.7 69.5 1.4 69.2 1.3 51.5 1.8 81.9 1.0 74.5 1.1 47.2 1.6 78.4 1.1 72.3 1.2 48.5 1.7
+
+MedCausalX (Ours) 87.2 0.8 81.5 1.0 34.2 1.4 79.8 1.1 77.3 1.1 36.5 1.5 73.2 1.2 75.8 1.1 38.9 1.6 84.6 0.8 80.2 1.0 35.8 1.4 81.2 1.0 78.7 1.1 36.4 1.5 
+
+main experiments utilize the 32B variant for optimal causal reasoning capabilities. Training follows a two-stage paradigm: Stage I performs supervised fine-tuning on CRMed utilizing causal decomposition objectives (Eq. 8) for 3 epochs; Stage II applies preference optimization, com-bining off-policy DPO (2 epochs) with on-policy GRPO (2000 steps) to enhance causal consistency. Error local-ization employs semantic similarity threshold τ = 0.7
+
+for failure point identification. We use AdamW opti-mizer [30, 53, 60] ( lr = 1 × 10 −6) and train on 6 NVIDIA A100 GPUs with mixed precision. The causal consistency function Cons (si, s i+1 ) is implemented via an LLM-as-judge protocol: we prompt GPT-4o to assess whether con-secutive reasoning steps maintain valid causal dependencies and whether the corrective action triggered by ⟨VERIFY ⟩
+
+successfully rectifies the identified causal disruption, re-turning a binary score that is averaged across step pairs. The CRMed dataset augments existing benchmarks with three annotation layers: fine-grained anatomical localiza-tion (bounding boxes), structured causal chains (SCM), and reconstructed variants ( Dshortcut , Dpartial ). The Evaluation metrics spanning three categories: (1) 
+
+Linguistic and answer quality : BLEU-1, F1-score, Recall, BertScore and Accuracy (Acc) assess textual fluency and answer correctness; (2) Spatial accuracy : IoU, Region Ac-curacy, Object-F1, and Region-F1 quantify localization pre-cision; (3) Multimodal alignment : Align-F1 and Align Ac-curacy measure visual-textual correspondence. Moreover, 
+
+Hallucination Rate calculates the fraction of generated en-tities absent from image and ground-truth. 
+
+4.2. Main Results 
+
+4.2.1. Region-Centric Spatial Reasoning 
+
+Table 1 evaluates bidirectional region-text alignment. Med-CausalX achieves best performance on 16 of 18 met-rics across structure/lesion identification and single-/multi-region detection. Notably, we attain 29.83% Region-F1 on multi-region detection, outperforming both general and Q: Does the picture contain heart? Q: What does this image show ?                                                      
+
+> Q:Where is the lesion located ?Q:Where is the lesion located on the chest CT?
+> MedRegA [44]:
+> Yes ，it does X
+> Med -R1 [22 ]:
+> Yes, heart is visible X
+> MedCausalX (Ours):
+> No heart √
+> MedRegA [44]:
+> Heart X
+> Med -R1 [22 ]:
+> Chest X
+> MedCausalX (Ours ):
+> Lung √
+> MedRegA [44]:
+> Right parietal lobe X
+> Med -R1 [22 ]:
+> Right frontal lobe X
+> MedCausalX (Ours):
+> Left parietal lobe √
+> MedRegA [44]:
+> Left upper lobe X
+> Med -R1 [22 ]:
+> Right lower lobe X
+> MedCausalX (Ours):
+> Right upper lobe √
+> CausalMedX :A1
+> MedR 1:A2
+> MedRegA :A3
+> Q: Please locate
+> the region and
+> describe the
+> condition of
+> cardiac silhouette Ground Truth: GT
+> Answer2 (A2) ：
+> The heart appears to have possible
+> abnormali>es. Uncertain cardiac
+> diagnos>c impression <ref> cardiac
+> silhoueEe</ref> <box>
+> [[0.3025, 0.2994, 0.6975, 0.5979]]
+> </ box>
+> Answer3 (A3) ：
+> The cardiomedias>nal silhoueEe is
+> normal. Heart size and contour
+> appear within normal limits
+> <ref>cardiac silhoueEe</ref><box>
+> [[0.3103, 0.4697, 0.6351, 0.7152]]
+> </ box>
+> Ground Truth Answer
+> <ref>cardiac silhouette
+> </ref><box>[[0.348, 0.427,
+> 0.688, 0.684]]</box>: The
+> cardiomediastinal and
+> hilar contours are normal
+> CausalMedX (A1) ：
+> ## Step1
+> <causal> Fisrt .. directed to the
+> right hemithorax… Exploring
+> peripheral structures of the…
+> <box>[[0.55, 0.35, 0.85, 0.75]]
+> </box>
+> ## Step2
+> <verify> The cardiomediast -
+> inal . Normal cardiac impression
+> <ref>cardiac silhouette</ref>
+> <box>[[0.2968, 0.5771, 0.7186,
+> 0.8960]]</box>
+
+(a) (b) Figure 3. Comparison of causal reasoning in medical VQA and region-grounded diagnosis. (a) MedRegA and Med-R1 exhibit spurious correlations and mistakes, while MedCausalX captures correct predictions via structured causal decomposition. (b) Two-stage adaptive causal reasoning and verification, producing refined bounding boxes and logically consistent diagnostic descriptions. Attention maps are used to visualize the model’s focus. GT: ground truth; A1–A3: predictions from MedCausalX, Med-R1, and MedRegA, respectively. 
+
+medical VLMs. This stems from causal decomposition that enforces anatomical localization prior to pathological char-acterization, rather than relying on shortcut correlations. While MedRegA maintains text fluency advantages, our method surpasses it in spatial grounding (F1: +8.59%), re-vealing that previous models prioritize linguistic plausibil-ity whereas our causal supervision enforces faithful spatial-semantic correspondence crucial in multi-lesion scenarios. 
+
+4.2.2. Medical VQA with Causal Reasoning 
+
+Table 2 demonstrates MedCausalX’s consistent superior-ity across four medical VQA benchmarks. Compared to MedVLM-R1, our method achieves notable improvements in accuracy (81.2% vs 79.1%) and reduces hallucination rate (47.1% →36.4%). Trajectory-level optimization pre-vents contradictions between intermediate steps and final predictions. Even fine-tuned CoT models like MedCoT ex-hibit high hallucination, confirming that conventional se-quential reasoning cannot suppress spurious correlations. Training with CRMed effectively discriminates genuine causal dependencies from dataset artifacts, while structured causal factorization grounds predictions in precise anatom-ical evidence rather than global image statistics. 
+
+4.2.3. Grounded Report Generation 
+
+Table 3 evaluates MIMIC-CXR report generation. We achieve 37.18% BLEU-1, substantially outperforming MedRegA across linguistic, spatial, and alignment metrics. Causal factorization successfully bridges visual evidence and textual generation, while trajectory-level optimization ensures anatomically grounded descriptions rather than lin-guistically fluent but spatially inconsistent reports. This demonstrates that MedCausalX generalizes to X-ray report generation with precise spatial grounding, highlighting the 
+
+Table 3. Performance comparison on chest X-ray report genera-tion benchmark. Our method employs two-stage causal reasoning with adaptive verification based on MedCausalX-32B model. Best results are highlighted in bold , second-best are underlined. 
+
+Method BLEU-1 Region Acc Align Acc IoU 
+
+Qwen2.5-VL [2] 18.43 22.30 8.15 17.45 InternVL [11] 19.46 57.00 12.00 38.00 Med-Flamingo [56] 21.67 - - -MedDr [21] 31.27 - - -MedRegA [74] 33.18 76.59 62.29 52.07 
+
+MedCausalX 37.18 81.12 67.38 55.71 
+
+Table 4. Systematic ablation of core components and training stage variants on MIMIC-CXR benchmark evaluates each mod-ule’s contribution to causal reasoning and verification capabilities. 
+
+Configuration BLEU-1 Region Acc Align Acc IoU MedCausalX (Full) 37.18 81.12 67.38 55.71 
+
+Main Component Ablation 
+
+✗ CRMed Dataset 26.47 41.20 18.35 26.55 
+
+✗ Reflective Tokens 29.93 51.20 32.50 38.46 
+
+✗ Causal SFT 26.02 43.80 21.75 28.55 
+
+✗ RL Training 26.96 63.50 47.30 38.09 
+
+✗ Error Collection 32.02 75.20 58.45 49.55 
+
+Training Stage Variants 
+
+Base Model 23.15 35.00 12.00 24.49 + Causal SFT 32.45 58.30 41.25 38.62 + DPO 35.62 78.30 63.20 52.09 + GRPO 37.18 81.12 67.38 55.71 
+
+transferability of its causal reasoning framework. 
+
+4.3. Indepth Case Analysis 
+
+Figure 3 demonstrates MedCausalX’s superior causal rea-soning through contrastive examples. Panel (a) reveals baseline failures: MedRegA misidentifies anatomical struc-Evaluation Principle :        
+
+> “Lesion region predicted by the model and
+> its corresponding diagnostic description.”
+> Q1: How accurate is the bounding box
+> localization for the specified anatomical region
+> compared to clinical standards?
+> CT=
+> (Uncertain) (Worst) (best)
+> Q2 : How well does the model’s predicted
+> pathological description align with clinical
+> accuracy and appropriateness ?
+> CF =
+> 123
+> (Uncertain) (Worst) (best)
+> 123
+> Med -R1
+> MedCausalX
+> MedRegA
+> Med -R1
+> MedCausalX
+> MedRegA
+> 1.39
+> 2.2 6
+> 2.35
+> 1.48
+> 2.14
+> 2.39
+
+Figure 4. Radiologists’ evaluation and comparative results. Left: 3-point clinical criteria for spatial localization (Q1), diagnostic de-scription (Q2). Right: radar chart comparing MedRegA, Med-R1, and MedCausalX on localization (blue) and description (orange); lower scores indicate better performance. 
+
+tures via global pattern matching, while Med-R1 produces spatially inconsistent localizations. MedCausalX correctly rejects spurious associations through structured A → P →
+
+Y decomposition. Panel (b) visualizes our reflection mech-anism with attention heatmaps and reasoning trajectories. The ⟨causal ⟩ token initiates preliminary spatial analysis on relevant anatomical regions, and subsequent ⟨verify ⟩ invo-cation refines localization with causally coherent descrip-tions. This dynamic correction, absent in static chain-of-thought baselines, enables adaptive error detection and grounds reasoning in genuine anatomical evidence rather than superficial image patterns. 
+
+4.4. Medical Expert Evaluation 
+
+We conducted an expert evaluation with board-certified ra-diologists with over 20 years of experience, assessing model outputs for X-ray report grounding (Section 4.2.3) on stan-dardized 3-point scales for spatial localization and diag-nostic quality. The evaluation protocol (left panel) was designed to reflect clinical practice, with stringent criteria for anatomical precision and pathological characterization. Radar chart analysis (right panel) reveals MedCausalX’s su-perior performance, with mean scores of 1.39 for spatial localization and 1.48 for diagnostic quality. The results provide strong expert endorsement, confirming that explicit causal factorization yields outputs that are both anatomi-cally precise and diagnostically coherent, supporting the re-liability of our causal reasoning framework. 
+
+4.5. Ablation Studies 
+
+Component Contributions. Table 4 quantifies each mod-ule’s impact. Removing CRMed causes severe degradation 
+
+Table 5. Hyperparameter sensitivity analysis. Selected configura-tion (shaded) achieves optimal balance across metrics.                                                     
+
+> Param. BLEU-1 Region Acc Align Acc IoU
+> Error Localization Threshold ( τ)
+> τ= 0 .533.47 77.85 63.91 52.74
+> τ= 0 .635.12 79.67 66.24 54.83
+> τ= 0 .7(default) 37.18 81.12 67.38 55.71
+> τ= 0 .833.23 80.17 65.82 54.96
+> τ= 0 .934.91 80.34 61.15 52.68
+> GRPO Group Size ( G)
+> G= 4 33.84 78.92 64.67 53.29
+> G= 8 (default) 37.18 81.12 67.38 55.71
+> G= 16 36.75 80.53 68.19 55.14
+> G= 32 34.91 79.28 65.43 53.85
+
+(BLEU-1: 37.18 →26.47), confirming structured causal su-pervision is indispensable for learning genuine A! →!P ! →
+
+!Y dependencies. Excluding reflective tokens reduces per-formance to 29.93%, as static pipelines cannot adaptively invoke verification. Ablating RL training shows supervised learning alone cannot distinguish causally valid from spuri-ous chains. Progressive stages reveal complementary roles: Causal SFT establishes foundations, while two-stage RL exploits collected errors for stable off-policy learning and further performs adaptive exploration. 
+
+Hyperparameter Robustness Analysis. Table 5 examines key parameter sensitivity. The error localization threshold 
+
+τ follows an inverted-U pattern. Overly sensitive detection with τ = 0 .5 introduces false positives that corrupt prefer-ence pairs, whereas conservative thresholds with τ = 0 .9
+
+miss subtle errors. The optimal value of τ = 0 .7 balances precision and recall. For the GRPO group size G, a value of 8 balances variance reduction and computational cost. Smaller groups tend to underestimate advantages, while larger groups lead to diminishing returns. Stability across 
+
+G ∈ [8 , 16] demonstrates practical robustness and indicates that minimal tuning is required for deployment. 
+
+## 5. Conclusion 
+
+This paper presents MedCausalX, a framework that explic-itly models causal reasoning in medical vision-language in-ference. By combining causal factorization ( A → P → Y ), a reflective token architecture, and dual-policy optimiza-tion combining off-policy with on-policy RL, MedCausalX shifts from correlation-driven inference to verifiable reason-ing chains. Experiments show its adaptive reflection mech-anism enables dynamic error detection and correction, out-performing existing medical CoT methods in localization, diagnostic consistency, and hallucination reduction. Train-ing with reconstructed Dshortcut and Dpartial effectively dis-tinguishes genuine causal dependencies from spurious cor-relations, highlighting the necessity of causal supervision in trustworthy clinical multimodal systems. 6. Additional Implementation Details 
+
+6.1. Detailed Experimental Configuration 
+
+MedCausalX employs Qwen2.5-VL-32B [2] as the base ar-chitecture with parameter-efficient LoRA adaptation target-ing query, key, and value projection layers. Data augmen-tation preserves diagnostic integrity through random ro-tation ( ±15 ), horizontal flipping (probability 0.5), bright-ness/contrast adjustment ( ±20% ), and Gaussian noise in-jection ( σ = 0.03 ). The framework augments vocab-ulary with reflective tokens ⟨CAUSAL ⟩ and ⟨VERIFY ⟩,enabling all training samples to follow unified structure 
+
+(I, q, ⟨CAUSAL ⟩, R biased , ⟨VERIFY ⟩, R gold , y ) for learning adaptive verification through reasoning trajectories. Training proceeds through two-stage optimization fol-lowing preliminary supervised fine-tuning. Stage I (Causal SFT) maximizes joint likelihood over anatomical localiza-tion, causal chains, and diagnostic predictions for 3 epochs using AdamW with learning rate η = 1 × 10 −6, weight de-cay 5 × 10 −5, gradient clipping threshold 1.0, and 500-step linear warmup followed by cosine annealing. Stage II inte-grates dual-policy refinement: off-policy DPO [64] over 2 epochs with KL coefficient β = 0 .1 leverages error trajec-tories where semantic similarity threshold τ = 0 .7 iden-tifies failure points tfail via S(Y t
+
+> err
+
+, Y t
+
+> gt
+
+) comparison, con-structing preference pairs contrasting erroneous continua-tions against correct trajectories; on-policy GRPO [68] over 2000 steps samples G = 8 trajectories per input, comput-ing group-relative advantages A(g) = ( R(g) − ¯R)/(σR + ϵ)
+
+with stability constant ϵ = 1 × 10 −8. Distributed train-ing across 6 NVIDIA A100 (40GB) GPUs with gradient accumulation (4 steps) and mixed precision (bfloat16) con-verges within approximately 56 hours per dataset using 5-fold cross-validation with stratified 8:1:1 splits. Table 6 de-tails the complete configuration. 
+
+6.2. Benchmark Dataset Statistics 
+
+We evaluate MedCausalX on established medical imag-ing benchmarks spanning multiple modalities and clini-cal domains. MIMIC-CXR [32] provides 377,110 chest radiographs from 227,835 imaging studies with free-text reports and 14 pathology labels for report generation tasks. SLAKE [44] contains 642 multi-modal images with 14,028 question-answer pairs across anatomy, modality, and pathology categories. VQA-RAD [36] includes 315 ra-diology images with 3,515 QA pairs emphasizing clinical reasoning. PathVQA [22] comprises 32,799 pathology im-ages with 6,719 QA pairs for histopathological interpre-tation. SA-Med2D-20M [91] offers 4.6 million 2D medi-cal images with 19.7 million segmentation masks across 10 modalities and 31 organs, enabling region-centric tasks in-cluding structure identification and lesion localization with bounding box annotations. All experiments employ 5-fold  
+
+> Figure 5. Modality distribution and factual-counterfactual com-position of CRMed dataset. The dataset spans multiple imaging modalities with constructed counterfactual variants through con-trolled interventions, enabling robust causal reasoning evaluation.
+
+cross-validation using stratified 8:1:1 train-validation-test splits for statistical reliability. 
+
+CRMed Dataset Construction. The CRMed dataset aug-ments existing benchmarks with two systematic annota-tion layers. First , we select images from SA-Med2D-20M and MIMIC-CXR based on multi-criteria quality assess-ment: (i) sufficient image resolution ( ≥512 ×512 pixels) and contrast quality (SNR >15dB), (ii) presence of diag-nostically relevant anatomical structures confirmed through clinical relevance scoring ( ≥4/5 by three board-certified radiologists). Selected images include bounding box an-notations in format (xmin , y min , x max , y max ) covering tar-get anatomical structures. Second , counterfactual variants generate Dshortcut via spatial perturbations (random shifts 
+
+±50 pixels, scale jittering ×[0 .8, 1.2] ) disrupting A → P
+
+dependencies, and Dpartial through pathology misalignment breaking P → Y causal flow while preserving image con-tent. Intervention quality is validated by ensuring IoU >0.7 between perturbed and original bounding boxes to main-tain anatomy. The resulting corpus contains 89,342 im-ages with 267,128 causal samples, averaging 4.2 reason-ing steps per chain (SD=1.3). Modality distribution spans chest X-ray (38.5%), CT (22.8%), MRI (16.2%), ultrasound (10.3%), histopathology (5.8%), endoscopy (3.2%), der-moscopy (2.1%), and fundus (1.1%), with counterfactual plausibility scores >0.85 via GPT-4V evaluation. Table 6. Complete hyperparameter configuration for MedCausalX training and inference. 
+
+Hyperparameter Value 
+
+Base Model Qwen2.5-VL-32B LoRA Rank ( r) 64 LoRA Alpha ( α) 128 LoRA Dropout 0.05 Target Modules q proj, k proj, v proj Reflective Tokens ⟨CAUSAL ⟩, ⟨VERIFY ⟩
+
+Nucleus Sampling ( p) 0.9 Temperature ( T ) 0.7 Batch Size 64 Max Tokens ( Tmax ) 2048 
+
+Causal SFT (Stage I) 
+
+Epochs 3Optimizer AdamW Learning Rate ( η) 1 × 10 −6
+
+Weight Decay 5 × 10 −5
+
+Gradient Clipping 1.0 Warmup Steps 500 LR Schedule Linear + Cosine 
+
+Dual-Policy Optimization (Stage II) 
+
+Off-policy training: 
+
+Epochs 2KL Coefficient ( β) 0.1 Error Threshold ( τ ) 0.7 
+
+On-policy training: 
+
+Training Steps 2000 Group Size ( G) 8Stability Constant ( ϵ) 1 × 10 −8
+
+Infrastructure 
+
+GPUs 6× A100 (40GB) Gradient Accumulation 4 steps Mixed Precision bfloat16 Training Time ∼72 hours/dataset Cross-validation 5-fold Data Split 8:1:1 
+
+## 7. Additional Experimental Results 
+
+7.1. Causal Reasoning Cases 
+
+MedCausalX demonstrates robust causal reasoning across multiple public medical VQA datasets. In Figure 9 (Case 1), the model successfully performs multi-object anatomical quantification, accurately identifying bilateral pulmonary structures via causal factorization. Figure 10 (Case 2) il-lustrates its capability in anatomical landmark detection, where the presence of the gastric cardia is correctly con-firmed through systematic spatial reasoning. In Figure 11 (Case 3), MedCausalX shows precise spatial localization by identifying an endocardial lesion adjacent to the lower intra-ventricular septum, leveraging structured anatomical factor-0 10 20 30 40 50 60 70 80  
+
+> Model Parameters (Billions)
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> Composite Performance
+> (Avg. Accuracy + IoU)/2
+> General VLMs
+> Qwen2.5-VL-32B
+> Qwen2.5-VL-72B
+> InternVL
+> Medical VLMs
+> Med-Flamingo
+> LLaVA-Med
+> RadFM
+> MedDr
+> MedRegA
+> Medical CoT
+> MedCoT
+> MedVLM-R1
+> Med-R1
+> Our Method
+> MedCausalX
+
+Figure 6. Comparison of model efficiency and performance across medical VLMs. MedCausalX achieves the highest composite score at 32B parameters, demonstrating superior causal reasoning capabilities while maintaining computational efficiency. 
+
+ization ( A → P → Y ). Finally, Figure 12 (Case 4) demon-strates binary anatomical detection, with the model reliably confirming uterine presence through causal verification. To-gether, these examples highlight that MedCausalX grounds its diagnostic predictions in genuine anatomical evidence, rather than relying on superficial pattern correlations. 
+
+7.2. Prompt Engineering and Reflective Tokens 
+
+MedCausalX utilizes a structured prompt template (Fig-ure 8) to guide causal reasoning through explicit task de-composition. The system prompt directs the model to systematically examine medical images, compare findings with initial predictions, and link observations to the pro-vided concept vocabulary using concrete visual evidence. This hierarchical framework ensures semantic consistency with medical ontologies while producing declarative sen-tences suitable for causal verification. Reflective tokens 
+
+<causal> and <verify> facilitate dynamic reasoning mode transitions, allowing preliminary anatomical analy-sis to trigger subsequent verification and correction phases whenever inconsistencies are detected. 
+
+7.3. Efficiency-Performance Analysis 
+
+Figure 6 compares efficiency and performance of state-of-the-art medical vision-language models using a compos-ite score averaging diagnostic accuracy and spatial ground-ing IoU. General-purpose VLMs improve modestly with scale but remain below medical-specific models. Domain-adapted medical VLMs achieve higher performance, and chain-of-thought enhanced models further benefit from structured reasoning. MedCausalX sets a new state-of-the-art, outperforming comparable 32B models and even larger specialized systems while using fewer parameters. These Table 7. Model scaling analysis across region-centric medical reasoning tasks. We evaluate MedCausalX variants with 3B, 14B, and 32B parameters to assess the impact of model capacity on causal reasoning performance. Best results are highlighted in bold , second-best are underlined. All models trained with identical data and optimization strategies.                                                                            
+
+> Model Scale Region-to-Text Identification Text-to-Region Detection Structure Identification Lesion Identification Single-Region Detection Multi-Region Detection BLEU-1 F1 Recall BertScore Acc BLEU-1 F1 Recall BertScore Acc Obj-F1 Reg-F1 Align-F1 IoU Obj-F1 Reg-F1 Align-F1 IoU
+> MedCausalX-3B 53.42 54.68 55.20 52.15 48.20 38.29 39.12 40.35 48.65 35.12 68.45 21.47 18.23 24.49 55.18 14.23 12.47 19.82 MedCausalX-14B 73.49 74.23 75.80 54.20 55.30 56.43 57.80 59.25 70.83 52.80 79.82 34.62 28.15 33.75 65.75 19.56 17.85 26.18
+> MedCausalX-32B 79.82 80.15 81.25 88.45 70.15 63.27 64.35 65.80 81.90 61.35 82.45 46.82 44.92 44.35 72.38 29.51 26.82 35.76
+
+Table 8. Model scale and architecture comparison across medical VQA benchmarks. Light blue background indicates selected con-figuration.                                              
+
+> Model VQA-RAD SLAKE PathVQA PMC-VQA Average
+> Vision-Language Models (Zero-shot)
+> LLaVA-1.5-13B [48] 53.2 58.5 52.8 56.3 55.2 InternVL-2-40B [11] 59.8 65.2 61.5 67.1 63.4 MedRegA-40B [74] 76.9 84.1 68.5 79.5 77.3
+> Medical CoT Methods (Qwen2.5-VL-32B Backbone)
+> Med-R1 [35] 76.9 85.4 69.5 81.9 78.4 MedVLM-R1 [59] 77.3 85.7 70.8 82.4 79.1
+> MedCausalX Scale Variants (Qwen2.5-VL Backbone)
+> MedCausalX-3B 67.8 75.9 62.5 68.2 68.6 MedCausalX-7B 73.5 81.8 67.3 74.9 74.4
+> MedCausalX-32B 79.8 87.2 73.2 84.6 81.2
+
+Table 9. Ablation study on training strategy configuration. Light blue background indicates selected configuration, bold values de-note best performance in each row.                                            
+
+> Config. Value VQA-RAD SLAKE PathVQA PMC-VQA Average
+> (a) Training Stage Order
+> Seq. GRPO →DPO 73.5 81.4 68.2 78.9 75.5
+> DPO →GRPO 79.8 87.2 73.2 84.6 81.2
+> (b) GRPO Group Size GG
+> 476.8 84.3 70.5 81.7 78.3 678.5 86.1 72.1 83.5 80.1
+> 879.8 87.2 73.2 84.6 81.2
+> 12 78.9 88.5 72.6 83.9 80.9 16 77.4 85.2 71.3 82.4 79.1
+
+results highlight that explicit causal reasoning and struc-tured factorization provide substantial gains beyond raw pa-rameter scaling, establishing MedCausalX as the most effi-cient and effective solution in its class. 
+
+7.4. MedCausalX Scaling Analysis 
+
+Table 7 examines how model capacity influences causal rea-soning across region-centric medical tasks. The 3B variant captures basic anatomical structures but still shows notable limitations in lesion-level reasoning, achieving only 53.42% BLEU-1 for structure identification. Scaling to 14B param-eters significantly improves performance by approximately 20 points, indicating enhanced causal decomposition and a more robust hierarchical understanding of medical con-cepts. The 32B variant achieves the best overall perfor-mance, with BLEU-1 of 79.82% and BertScore of 88.45%, demonstrating superior semantic coherence, precise spatial grounding, and consistent reasoning quality. These trends confirm that larger models enable deeper causal verification and stronger spatial–linguistic alignment, validating Med-CausalX’s scalable and versatile architecture for handling complex medical reasoning scenarios. 
+
+7.5. Model Architecture Effect 
+
+Table 8 highlights how architectural design and model ca-pacity affect VQA reasoning. MedCausalX-32B achieves 81.2% average accuracy, outperforming CoT baselines Med-R1 and MedVLM-R1 by 2–3 points, demonstrating that its causal factorization and error-attributed reinforce-ment learning architecture enables structured reasoning be-yond standard chain-of-thought. Performance scales from 68.6% at 3B to 81.2% at 32B, showing that counterfactual reasoning benefits from increased capacity. General VLMs LLaVA-1.5 (55.2%) and InternVL-2 (63.4%) lag behind, emphasizing the importance of specialized architecture for anatomically grounded diagnostic tasks. 
+
+7.6. Training Strategy Ablation 
+
+Table 9 validates our dual-stage reinforcement learning de-sign. The DPO →GRPO sequence achieves 81.2% av-erage accuracy, outperforming the reversed order by 5.7 points. This indicates that applying DPO first allows off-policy learning from error trajectories, effectively establish-ing robust reasoning foundations, while subsequent GRPO exploration refines causal intervention strategies without premature convergence to superficial patterns. Regarding group size configuration, G=8 provides an optimal bal-ance: smaller groups introduce excessive gradient noise that destabilizes causal learning, whereas larger configurations, such as G=12 or 16, exhibit diminishing returns because conservative advantage normalization suppresses the dis-covery of novel interventions, which is essential for adap-tive and flexible reasoning. 
+
+7.7. Reward Component Configuration 
+
+Table 10 highlights the interdependence of reward compo-nents in causal reasoning optimization. Balanced weighting achieves the best accuracy, outperforming accuracy-only Table 10. Ablation of reward components and error localization threshold. Light blue background indicates selected configuration.                                                           
+
+> Config. Value VQA-RAD SLAKE PathVQA PMC-VQA Average
+> (a) Reward Weight Configuration λacc /λ causal
+> λ
+> 1.0/0.0 71.5 78.9 65.3 76.2 73.0 0.7/0.3 76.8 84.1 70.5 81.7 78.3
+> 0.5/0.5 79.8 87.2 73.2 84.6 81.2
+> 0.3/0.7 78.2 85.7 71.8 83.1 79.7 0.0/1.0 67.3 74.5 61.2 71.8 68.7
+> (b) Error Localization Threshold ττ
+> 0.3 70.8 77.5 64.1 75.3 71.9 0.5 75.3 82.9 69.4 80.5 77.0
+> 0.7 79.8 87.2 73.2 84.6 81.2
+> 0.8 77.1 84.6 70.8 82.3 78.7 0.9 72.4 79.8 66.5 77.1 73.9
+
+Table 11. Out-of-domain evaluation on specialized medical VQA datasets. Models trained on core benchmarks and evaluated zero-shot on unseen domains.                                     
+
+> Method OVQA EndoVis-VQA Skin-VQA Average
+> GPT-4o [27] 43.5 39.8 46.1 43.1 LLaVA-Med [37] 47.2 44.3 49.5 47.0 InternVL-2 [11] 49.8 46.7 51.2 49.2 Med-R1 [35] 44.8 40.5 46.3 43.9 MedVLM-R1 [59] 50.3 47.1 49.8 49.1
+> MedCausalX (Ours) 58.4 54.2 59.7 57.4 0500 1000 1500 2000
+> Training Steps
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Reward
+> Training Reward
+> MedCausalX (Full)
+> w/o Off-policy
+> 0500 1000 1500 2000
+> Training Steps
+> 840
+> 860
+> 880
+> 900
+> 920
+> 940
+> Avg. Response Length
+> Rollout Response Length
+> MedCausalX (Full)
+> w/o Off-policy
+
+Figure 7. Training dynamics of on-policy GRPO optimization. MedCausalX (Full) with DPO pretraining achieves higher re-wards and maintains stable, compact reasoning compared to direct GRPO training from preliminary SFT baseline. 
+
+and causal-only setups, showing that multi-objective opti-mization prevents overfitting to diagnostic shortcuts while preserving reasoning quality. For error localization thresh-old τ , our study shows that 0.7 provides the best trade-off between sensitivity and specificity: lower thresholds gener-ate excessive false positives, while higher thresholds miss critical reasoning errors, confirming that precise error attri-bution is essential for effective causal training. 
+
+7.8. Cross-Dataset Generalization 
+
+Table 11 demonstrates MedCausalX’s superior zero-shot transfer across specialized medical domains. The model achieves an average accuracy of 57.4%. Gains are partic-ularly notable on domain-specific tasks, including OVQA in ophthalmology with an improvement of 8.1% and Skin VQA in dermatology with an improvement of 9.9%. These results suggest that causal reasoning mechanisms, such as anatomical localization, pathology identification, and coun-terfactual verification, provide structural inductive biases that generalize effectively across modalities and anatomi-cal regions. In contrast, reasoning-enhanced methods like Med-R1 and MedVLM-R1 achieve only modest improve-ments over standard models such as InternVL-2, indicating that chain-of-thought approaches lack sufficient composi-tional structure for reliable domain generalization. 
+
+7.9. Training Dynamics Analysis 
+
+Figure 7 illustrates the training dynamics of MedCausalX during on-policy GRPO optimization. The reward curves show steady improvement for both configurations, with MedCausalX (Full) benefiting from off-policy initialization to start higher. While the w/o Off-policy baseline gradually catches up, the Full version maintains a consistent advan-tage, reaching 0.845 versus 0.791, a 5.4-point gap. Rollout response lengths reveal distinct trajectories: MedCausalX (Full) maintains stable, compact reasoning around 850 to-kens throughout training, reflecting DPO’s pre-established efficiency. In contrast, the w/o Off-policy baseline exhibits a pronounced learning curve, starting at 919 tokens and ul-timately stabilizing around 870 tokens as GRPO converges. These patterns confirm that off-policy training provides im-mediate efficiency benefits, while direct GRPO requires longer optimization to achieve comparable compactness. {
+
+"system_prompt ": { 
+
+"role": "system", 
+
+"content": "You are an expert medical image analysis assistant with causal reasoning capabilities. Your task is to 
+
+analyze medical images through structured causal decomposition following the A→P→Y 
+
+(Anatomy→Pathology→Diagnosis ) framework. 
+
+1. Task Description: Examine medical images using causal factorization. Begin with precise anatomical 
+
+localization (A), proceed to pathological characterization (P), and conclude with diagnostic inference (Y). Each 
+
+stage must be causally grounded in the preceding observations. 
+
+2. Reasoning Protocol: Employ two -stage reflective reasoning: 
+
+- Stage 1 (<causal>): Generate preliminary causal analysis by systematically identifying anatomical structures, 
+
+describing their spatial relationships, and linking visual features to pathological concepts. Provide bounding box 
+
+coordinates [x1, y1, x2, y2] in normalized 0 -1 range for all anatomical references. 
+
+- Stage 2 (<verify>): Critically evaluate the initial causal chain for spurious correlations or logical 
+
+inconsistencies. Refine anatomical localization, verify pathological characterizations against visual evidence, and 
+
+correct any causal disruptions in the reasoning trajectory. 
+
+3. Causal Chain Construction: For each reasoning stage, explicitly state: 
+
+- Anatomical Observation: \"The <ref> structure_name </ref> <box>[x1,y1,x2,y2]</box> exhibits [specific 
+
+features] \"
+
+- Pathological Inference: \"Based on [anatomical evidence], the pathological manifestation indicates [finding] \"
+
+- Diagnostic Conclusion: \"The causal chain establishes: [A→P→Y relationship] \"
+
+4. Output Format: Structure your response using reflective tokens: 
+
+<causal> 
+
+[Preliminary anatomical localization and initial pathological characterization with detailed spatial annotations] 
+
+<verify> 
+
+[Critical evaluation of causal dependencies, refinement of spatial localization, and correction of spurious 
+
+associations] 
+
+5. Causal Verification Principles: 
+
+- Reject diagnoses based solely on global image statistics without anatomical grounding 
+
+- Distinguish genuine causal dependencies from confounding correlations 
+
+- Ensure spatial consistency between anatomical claims and bounding box coordinates 
+
+- Validate that pathological characterizations logically follow from observed anatomical features" 
+
+}, 
+
+"user_prompt ": { 
+
+"role": "user", 
+
+"content": [ 
+
+{
+
+"type": "image", 
+
+"image": " /path/to/ medical_image.jpg "
+
+}, 
+
+{
+
+"type": "text", 
+
+"text": "What pathological findings are present in this image ?"
+
+}
+
+]
+
+}
+
+}
+
+> Prompt Templates
+
+Figure 8. Structured prompt template for MedCausalX showing system instructions for pathological analysis approach and output format specifications enabling causal chain generation. Q: How many lungs are shown in this image? 
+
+<causal> This is a frontal chest radiograph displaying thoracic anatomy. I observe bilateral 
+
+radiolucent lung fields extending from the apices to the diaphragmatic surfaces. The 
+
+<ref>left lung</ref> <box>[0.52, 0.25, 0.85, 0.68]</box >
+
+demonstrates characteristic vascular markings extending throughout the pulmonary parenchyma 
+
+with preserved aeration. The cardiac silhouette occupies the expected left -sided position. Moving 
+
+to the contralateral side, the 
+
+<ref>right lung</ref> <box>[0.15, 0.28, 0.48, 0.72]</box >
+
+exhibits similar radiolucency with clearly demarcated costophrenic angles and hemidiaphragm 
+
+interfaces. Both lung fields maintain symmetric expansion patterns without evidence of 
+
+consolidation, atelectasis, or pleural effusion. The mediastinal contours remain centered with 
+
+preserved hilar structures bilaterally . ## Step1 
+
+<verify> I need to confirm accurate enumeration and spatial boundary verification. Systematic 
+
+examination validates two distinct anatomical units: the right pulmonary structure demonstrating 
+
+three -lobed configuration and the left pulmonary structure with two -lobed morphology, both 
+
+separated by the central mediastinum. The 
+
+<ref>right hemithorax</ ref> <box>[0.10, 0.22, 0.50, 0.75]</box >
+
+contains one complete lung unit with visible fissural margins, while the <ref>left hemithorax 
+
+</ ref> <box>[0.50, 0.20, 0.88, 0.70]</ box >
+
+contains the second complete lung unit. No supernumerary pulmonary structures, accessory lobes, 
+
+or congenital variants are present. Anatomical assessment identifies the bilateral thoracic cavities, 
+
+and pathological evaluation demonstrates normally aerated pulmonary parenchyma, confirming 
+
+the diagnostic conclusion of exactly two lungs .
+
+> ## Step2
+
+Case 1 
+
+Answer: 2 Figure 9. Chest radiograph demonstrating bilateral lung detection where MedCausalX accurately quantifies two distinct pulmonary struc-tures through structured anatomical enumeration and spatial boundary verification. Q: Does this plane of section include the gastric cardia ？
+
+<causal> This axial contrast -enhanced CT section traverses the upper abdomen at the level of 
+
+the gastroesophageal junction. I identify the 
+
+<ref>gastric fundus</ref> <box>[0.38, 0.35, 0.62, 0.68]</box> 
+
+as a gas -filled hollow viscus structure in the left upper quadrant with characteristic mucosal 
+
+folds. Adjacent to this, at the anatomical transition zone where the esophagus penetrates the 
+
+diaphragmatic hiatus, I observe the 
+
+<ref>gastric cardia region</ref> <box>[0.42, 0.38, 0.58, 0.52]</box> 
+
+demonstrating the proximal gastric pouch immediately inferior to the esophagogastric junction. 
+
+The cardia represents the anatomical segment receiving esophageal contents, positioned at the 
+
+gastric inlet where stratified squamous epithelium transitions to columnar mucosa. The imaging 
+
+plane clearly captures this critical anatomical landmark with preserved wall thickness and no 
+
+evidence of hiatal hernia displacement. ## Step1 
+
+<verify > I need to confirm definitive cardia inclusion within this imaging section. Careful and 
+
+systematic evaluation of the relevant anatomical structures demonstrates their expected spatial 
+
+relationships and continuity. The distal esophagus descends smoothly through the esophageal 
+
+hiatus, maintaining its normal caliber and orientation, while the gastroesophageal junction clearly 
+
+marks the Z -line transition, delineating the boundary between esophageal and gastric mucosa. 
+
+Immediately caudal lies the 
+
+<ref>proximal gastric cardia</ref> <box>[0.40, 0.42, 0.60, 0.56]</box >
+
+before the fundic expansion. The hepatogastric ligament insertion and left gastric artery origin 
+
+provide additional confirmation of cardia localization. The causal chain establishes that 
+
+anatomical localization identifies the gastroesophageal transition zone, pathological 
+
+characterization confirms intact mucosal architecture, and the diagnostic conclusion verifies the 
+
+presence of the cardia within this section. 
+
+> ## Step2
+
+Case 2
+
+Answer: yes Figure 10. Abdominal examination section validating gastric cardia identification through causal anatomical landmark detection, confirm-ing presence via systematic spatial relationship analysis with esophagogastric junction. Q: What is the location of the echodense image seen in the 
+
+echocardiogram? 
+
+<causal> This echocardiographic four -chamber view displays cardiac anatomy with clearly 
+
+demarcated chamber boundaries and septal structures. I observe the <ref>right atrium</ref> 
+
+<box>[0.28, 0.15, 0.58, 0.42]</box> in the superior right portion with the <ref>left 
+
+ventricle</ref> <box>[0.42, 0.52, 0.75, 0.85]</box> occupying the inferior left quadrant. Within 
+
+the cardiac septum, specifically along the <ref>lower intraventricular septum</ref> <box>[0.48, 
+
+0.58, 0.62, 0.78]</box>, I identify an echodense mass exhibiting irregular borders and 
+
+heterogeneous echogenicity. This <ref>endocardial lesion</ref> <box>[0.52, 0.64, 0.58, 0.72]</box> 
+
+projects into the left ventricular cavity with attachment to the septal endocardial surface, 
+
+consistent with a fixed intracardiac mass rather than mobile thrombus. The lesion's position 
+
+adjacent to rather than within the upper septum distinguishes it from membranous septal 
+
+pathology. ## Step1 
+
+<verify> I need to precisely confirm the lesion's septal position relative to anatomical landmarks. 
+
+Systematic evaluation establishes that the mass originates from the <ref>inferior interventricular 
+
+septum</ref> <box>[0.46, 0.60, 0.64, 0.80]</box> below the mid -septal plane, specifically in the 
+
+apical -to -mid ventricular region. The <ref>aortic root</ref> <box>[0.38, 0.32, 0.52, 0.48]</box> 
+
+and mitral valve apparatus serve as superior reference points, confirming the lesion's distance 
+
+from the upper septal structures. The mass demonstrates direct contact with the <ref>lower 
+
+septal myocardium</ref> <box>[0.50, 0.62, 0.60, 0.76]</box> without extension to the superior 
+
+membranous region. The causal chain validates that anatomical localization identifies the lower 
+
+interventricular septum, pathological characterization reveals an endocardial -based echodense 
+
+mass, and the diagnostic conclusion confirms the lesion’s proximity to the lower, rather than the 
+
+upper, septum. 
+
+> ## Step2
+
+Case 3 
+
+Answer: Adjacent to the lower intraventricular septum Figure 11. Echocardiographic image demonstrating successful causal localization of endocardial lesion positioned adjacent to lower intraventricular septum through structured anatomical-pathological reasoning chain. Q: Is uterus present? 
+
+<causal> This axial pelvic CT section demonstrates female reproductive anatomy within the true 
+
+pelvis. I identify a midline soft tissue structure positioned between the <ref>urinary 
+
+bladder</ref> <box>[0.35, 0.32, 0.65, 0.58]</box> anteriorly and the <ref>rectosigmoid 
+
+colon</ref> <box>[0.38, 0.65, 0.62, 0.85]</box> posteriorly. This intermediate structure exhibits 
+
+characteristic morphology of the <ref>uterine corpus</ref> <box>[0.42, 0.45, 0.58, 0.62]</box> 
+
+with homogeneous myometrial density and preserved endometrial cavity echogenicity. The organ 
+
+demonstrates typical pear -shaped configuration in the coronal plane with smooth serosal 
+
+surfaces. Bilateral parametrial soft tissues and vascular pedicles provide additional anatomical 
+
+confirmation. The uterus maintains normal anteverted position without evidence of surgical 
+
+absence, congenital agenesis, or displacement by pelvic masses. ## Step1 
+
+<verify> I need to definitively exclude confounding structures and confirm uterine identity. 
+
+Systematic evaluation eliminates alternative diagnoses: the structure‘s location in the 
+
+<ref> vesicouterine space</ref> <box>[0.40, 0.40, 0.60, 0.50]</box> excludes bowel loops; its 
+
+homogeneous density distinguishes it from vascular structures; and its characteristic shape 
+
+eliminates ovarian or adnexal masses. The <ref> cervicouterine junction</ref> <box>[0.44, 0.58, 
+
+0.56, 0.64]</box> transitions into the superior vaginal fornix inferiorly, confirming anatomical 
+
+continuity. Bilateral <ref>broad ligament attachments</ref> <box>[0.25, 0.48, 0.75, 0.58]</box> 
+
+extend laterally toward pelvic sidewalls. The causal chain establishes that anatomical localization 
+
+identifies a midline pelvic structure, pathological characterization reveals typical uterine 
+
+morphology and density, and the diagnostic conclusion confirms the presence of the uterus 
+
+unambiguously. 
+
+> ## Step2
+
+Case 4
+
+Answer: yes Figure 12. Pelvic CT scan validating binary anatomical detection where MedCausalX correctly confirms uterine presence through causal verification eliminating confounding structures. References 
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 , 2023. 1 [2] Shuai Bai and et al. Qwen2.5-vl: Technical report. 
+
+https : / / arxiv . org / abs / 2502 . 13923 , 2025. arXiv preprint arXiv:2502.13923. 5, 6, 7, 9 [3] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, and et al. Constitutional ai: Harmlessness from ai feedback, 2022. 3 [4] Linqin Cai, Haodu Fang, Nuoying Xu, and Bo Ren. Coun-terfactual causal-effect intervention for interpretable medi-cal visual question answering. IEEE Transactions on Med-ical Imaging , 2024. 3 [5] Zheng Cai, Maosong Cao, Haojiong Chen, Kai Chen, Keyu Chen, Xin Chen, Xun Chen, Zehui Chen, Zhi Chen, Pei Chu, et al. Internlm2 technical report. arXiv preprint arXiv:2403.17297 , 2024. 5 [6] Daniel C Castro, Ian Walker, and Ben Glocker. Causality matters in medical imaging. Nature Communications , 11 (1):3673, 2020. 2 [7] Junying Chen, Chi Gui, Ruyi Ouyang, Anningzhe Gao, Shunian Chen, Guiming Hardy Chen, Xidong Wang, Ruifei Zhang, Zhenyang Cai, Ke Ji, et al. Huatuogpt-vision, to-wards injecting medical visual knowledge into multimodal llms at scale. arXiv preprint arXiv:2406.19280 , 2024. 3 [8] Xinyun Chen, Maxwell Lin, Nathanael Sch¨ arli, and Denny Zhou. Teaching large language models to self-debug. In 
+
+ICLR , 2024. 2 [9] Yihang Chen, Yanyan Huang, Fuying Wang, Maximus Ye-ung, Yuming Jiang, Shujun Wang, and Lequan Yu. Bridging radiology and pathology foundation models via concept-based multimodal co-adaptation. In The Fourteenth Inter-national Conference on Learning Representations . 1 [10] Zhe Chen, Weiyun Wang, Hao Tian, Shenglong Ye, Zhang-wei Gao, Erfei Cui, Wenwen Tong, Kongzhi Hu, Jiapeng Luo, Zheng Ma, et al. How far are we to gpt-4v? clos-ing the gap to commercial multimodal models with open-source suites. arXiv preprint arXiv:2404.16821 , 2024. 5 [11] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, et al. Internvl: Scaling up vision founda-tion models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24185–24198, 2024. 6, 7, 11, 12 [12] Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep reinforcement learn-ing from human preferences. Advances in neural informa-tion processing systems , 30, 2017. 3 [13] LIU Chuang, Hongyan Xu, Yichao Cao, Xiu Su, Zhe Qu, Tianfa Li, Shan An, and Haogang Zhu. Tinymig: Trans-ferring generalization from vision foundation models to single-domain medical imaging. In Forty-second Interna-tional Conference on Machine Learning , 2025. 1 [14] Tianchen Deng, Xuefeng Chen, Yi Chen, Qu Chen, Yuyao Xu, Lijin Yang, Le Xu, Yu Zhang, Bo Zhang, Wuxiong Huang, and Hesheng Wang. Gaussiandwm: 3d gaussian driving world model for unified scene understanding and multi-modal generation. arXiv preprint arXiv:2512.23180 ,2025. 2 [15] Tianchen Deng, Yue Pan, Shenghai Yuan, Dong Li, Chen Wang, Mingrui Li, Long Chen, Lihua Xie, Danwei Wang, Jingchuan Wang, Javier Civera, Hesheng Wang, and Wei-dong Chen. What is the best 3d scene representation for robotics? from geometric to foundation models. arXiv preprint arXiv:2512.03422 , 2025. 2 [16] Yihe Deng, Pan Lu, Fan Yin, Ziniu Hu, Sheng Shen, Quan-quan Gu, James Zou, Kai-Wei Chang, and Wei Wang. En-hancing large vision language models with self-training on image comprehension. Advances in Neural Information Processing Systems , 37:131369–131397, 2024. 1 [17] Ruiyi Ding, Yongxuan Lv, Xianhui Meng, Jiahe Song, Chao Wang, Chen Jiang, and Yuan Cheng. Prpo: Aligning process reward with outcome reward in policy optimization. 
+
+arXiv preprint arXiv:2601.07182 , 2026. 3 [18] Rong Fu, Yiqing Lyu, Chunlei Meng, Muge Qi, Yabin Jin, Qi Zhao, Li Bao, Juntao Gao, Fuqian Shi, Nilanjan Dey, et al. Neurosymb-mrg: Differentiable abductive reasoning with active uncertainty minimization for radiology report generation. arXiv preprint arXiv:2603.01756 , 2026. 2 [19] Robert Geirhos, J¨ orn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias Bethge, and Fe-lix A Wichmann. Shortcut learning in deep neural net-works. Nature Machine Intelligence , 2(11):665–673, 2020. 1, 2 [20] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reason-ing capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. 3 [21] Sunan He, Yuxiang Nie, Zhixuan Chen, Zhiyuan Cai, Hongmei Wang, Shu Yang, and Hao Chen. Meddr: Diagnosis-guided bootstrapping for large-scale medical vision-language learning. arXiv preprint arXiv:2404.15127 , 2024. 5, 6, 7 [22] Xuehai He, Zhuo Cai, Wenlan Wei, Yichen Zhang, Luntian Mou, Eric Xing, and Pengtao Xie. Pathological visual ques-tion answering. arXiv preprint arXiv:2010.12435 , 2020. 5, 6, 9 [23] Xinhai Hou, Shaoyuan Xu, Manan Biyani, Moyan Li, Jia Liu, Todd C Hollon, and Bryan Wang. Codev: Code with images for faithful visual reasoning via tool-aware policy optimization. arXiv preprint arXiv:2511.19661 , 2025. 2, 3 [24] Mingzhe Hu, Shaoyan Pan, Yuheng Li, and Xiaofeng Yang. Advancing medical imaging with language mod-els: A journey from n-grams to chatgpt. arXiv preprint arXiv:2304.04920 , 2023. 3 [25] Jie Huang, Shixiang Shane Gu, Le Hou, Yuexin Wu, Xuezhi Wang, Hongkun Yu, and Jiawei Han. Large language models cannot self-correct reasoning yet. In 
+
+Proceedings of the International Conference on Learn-ing Representations (ICLR) 2024 , 2024. Paper ID: 8b4add8b0aa8749d80a34ca5d941c355. 2 [26] Yue Huang, Yanyuan Chen, Dexuan Xu, Weihua Yue, Huamin Zhang, Meikang Qiu, and Yu Huang. Medreflect: Teaching medical llms to self-improve via reflective correc-tion. arXiv preprint arXiv:2510.03687 , 2025. 1, 2 [27] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perel-man, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Weli-hinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. arXiv preprint arXiv:2410.21276 , 2024. 5, 12 [28] Songtao Jiang, Tuo Zheng, Yan Zhang, Yeying Jin, Li Yuan, and Zuozhu Liu. Med-moe: Mixture of domain-specific experts for lightweight medical vision-language models. In 
+
+Findings of the association for computational linguistics: EMNLP 2024 , pages 3843–3860, 2024. 3 [29] Songtao Jiang, Yuan Wang, Sibo Song, Tianxiang Hu, Chenyi Zhou, Bin Pu, Yan Zhang, Zhibo Yang, Yang Feng, Joey Tianyi Zhou, et al. Hulu-med: A transparent general-ist model towards holistic medical vision-language under-standing. arXiv preprint arXiv:2510.08668 , 2025. 3 [30] Ruinan Jin, Yingbin Liang, and Shaofeng Zou. Why adam can beat sgd: Second-moment normalization yields sharper tails. arXiv preprint arXiv:2603.03099 , 2026. 6 [31] Ruinan Jin et al. Tic-grpo: Provable and efficient optimiza-tion for reinforcement learning from human feedback. 3 [32] Alistair EW Johnson, Tom J Pollard, Seth J Berkowitz, Nathaniel R Greenbaum, Matthew P Lungren, Chih-ying Deng, Roger G Mark, and Steven Horng. Mimic-cxr, a de-identified publicly available database of chest radiographs with free-text reports. Scientific data , 6(1):317, 2019. 5, 9 [33] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language models are zero-shot reasoners. Advances in Neural Information Pro-cessing Systems , 35:22199–22213, 2022. 2 [34] Aviral Kumar, Vincent Zhuang, Rishabh Agarwal, Yi Su, John D. Co-Reyes, Avi Singh, Kate Baumli, Shariq Iqbal, Colton Bishop, Rebecca Roelofs, Lei M. Zhang, Kay McK-inney, Disha Shrivastava, Cosmin Paduraru, George Tucker, Doina Precup, Feryal Behbahani, and Aleksandra Faust. Training language models to self-correct via reinforcement learning. 2024. 2 [35] Yuxiang Lai, Jike Zhong, Ming Li, Shitian Zhao, Yuheng Li, Konstantinos Psounis, and Xiaofeng Yang. Med-r1: Re-inforcement learning for generalizable medical reasoning in vision-language models. IEEE Transactions on Medical Imaging , 2026. 1, 2, 3, 5, 6, 11, 12 [36] Jason J Lau, Soumya Gayen, Asma Ben Abacha, and Dina Demner-Fushman. A dataset of clinically generated visual questions and answers about radiology images. Scientific data , 5(1):1–10, 2018. 5, 6, 9 [37] Chunyuan Li, Cliff Wong, Sheng Zhang, Naoto Usuyama, Haotian Liu, Jianwei Yang, Tristan Naumann, Hoifung Poon, and Jianfeng Gao. Llava-med: Training a large language-and-vision assistant for biomedicine in one day. 
+
+Advances in Neural Information Processing Systems , 36: 28541–28564, 2023. 5, 6, 12 [38] Long Li, Jiaran Hao, Jason Klein Liu, Zhijian Zhou, Yant-ing Miao, Wei Pang, Xiaoyu Tan, Wei Chu, Zhe Wang, Shirui Pan, et al. The choice of divergence: A neglected key to mitigating diversity collapse in reinforcement learning with verifiable reward. arXiv preprint arXiv:2509.07430 ,2025. 3 [39] Yuqi Li, Junhao Dong, Chuanguang Yang, Shiping Wen, Piotr Koniusz, Tingwen Huang, Yingli Tian, and Yew-Soon Ong. Mmt-ard: Multimodal multi-teacher adversarial dis-tillation for robust vision-language models. arXiv preprint arXiv:2511.17448 , 2025. 3 [40] Yuqi Li, Hansheng Zeng, Fuyan Zhang, Chuanguang Yang, Yanli Li, and Weiping Ding. Efficient Medical Image Segmentation via Reinforcement Learning-Driven K-Space Sampling. IEEE Transactions on Emerging Topics in Com-putational Intelligence , 2025. 3 [41] Manxi Lin, Nina Weng, Kamil Mikolaj, Zahra Bashir, Morten B. S. Svendsen, Martin G. Tolsgaard, Anders Ny-mark Christensen, and Aasa Feragen. Shortcut learning in medical image segmentation. In Medical Image Computing and Computer Assisted Intervention – MICCAI 2024 , pages 623–633. Springer, 2024. 1 [42] Wenye Lin and Kai Han. Surgical post-training: Cutting er-rors, keeping knowledge. arXiv preprint arXiv:2603.01683 ,2026. 3 [43] Wenye Lin, Jonathan Roberts, Yunhan Yang, Samuel Al-banie, Zongqing Lu, and Kai Han. Gamebot: Transparent assessment of llm reasoning in games. In Proceedings of the 63rd Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers) , pages 7656– 7682, 2025. 2 [44] Bo Liu, Li-Ming Zhan, Li Xu, Lin Ma, Yan Yang, and Xiao-Ming Wu. Slake: A semantically-labeled knowledge-enhanced dataset for medical visual question answering. In 
+
+2021 IEEE 18th International Symposium on Biomedical Imaging (ISBI) , pages 1650–1654. IEEE, 2021. 5, 6, 9 [45] Chuang Liu, Yichao Cao, YingYing Zhang, Xiu Su, and Haogang Zhu. Perturbating, tuning, and collaborating: Har-nessing vision foundation models for single domain gen-eralization on medical imaging. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 5370– 5378, 2025. 1 [46] Dengcan Liu, Fengkai Yang, Xiaohan Wang, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao, Wei Lin, and Guojun Yin. Cdrrm: Contrast-driven rubric gener-ation for reliable and interpretable reward modeling. arXiv preprint arXiv:2603.08035 , 2026. 3 [47] Guangliang Liu, Haitao Mao, Bochuan Cao, Zhiyu Xue, Xitong Zhang, Rongrong Wang, Jiliang Tang, and Kris-ten Johnson. On the intrinsic self-correction capability of llms: Uncertainty and latent concept. arXiv preprint arXiv:2406.02378 , 2024. 1, 2 [48] Haotian Liu et al. Improved baselines with visual instruc-tion tuning. arXiv preprint arXiv:2310.03744 , 2024. 11 [49] Jiaxiang Liu, Yuan Wang, Jiawei Du, Joey Tianyi Zhou, and Zuozhu Liu. Medcot: Medical chain of thought via hierarchical expert. In Proceedings of the 2024 Confer-ence on Empirical Methods in Natural Language Process-ing (EMNLP 2024) , pages 17371–17389, 2024. 1, 3, 6 [50] Weiting Liu, Han Wu, Yufei Kuang, Xiongwei Han, Tao Zhong, Jianfeng Feng, and Wenlian Lu. Automated opti-mization modeling via a localizable error-driven perspec-tive. arXiv preprint arXiv:2602.11164 , 2026. 3 [51] Yajun Liu, Zenghui Zhang, Jiang Yue, and Weiwei Guo. Scanext: Enhancing 3d medical image segmentation with dual attention network and depth-wise convolution. He-liyon , 10(5), 2024. 3 [52] Yajun Liu, Zenghui Zhang, Jiang Yue, Weiwei Guo, and Dongying Li. M 3 hl: Mutual mask mix with high-low level feature consistency for semi-supervised medical im-age segmentation. In International Conference on Medi-cal Image Computing and Computer-Assisted Intervention ,pages 314–323. Springer, 2025. 3 [53] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 , 2017. 6 [54] Weijian Ma, Shizhao Sun, Tianyu Yu, Ruiyu Wang, Tat-Seng Chua, and Jiang Bian. Thinking with blueprints: Assisting vision-language models in spatial reasoning via structured object representation, 2026. 2 [55] Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hal-linan, Luyu Gao, Sarah Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, Shashank Gupta, Bodhisattwa Prasad Majumder, Katherine Hermann, Sean Welleck, Amir Yazdanbakhsh, and Peter Clark. Self-refine: Iterative refinement with self-feedback. In Advances in Neural Information Processing Systems , pages 46534– 46594, 2023. 2 [56] Michael Moor, Qian Huang, Shirley Wu, Michihiro Ya-sunaga, Yash Dalmia, Jure Leskovec, Cyril Zakka, Ed-uardo Pontes Reis, and Pranav Rajpurkar. Med-flamingo: a multimodal medical few-shot learner. In Machine Learn-ing for Health (ML4H) , pages 353–367. PMLR, 2023. 5, 6, 7[57] Viktor Moskvoretskii, Chris Biemann, and Irina Nik-ishina. Self-taught self-correction for small language mod-els. arXiv preprint arXiv:2503.08681 , 2025. 2 [58] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Car-roll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training lan-guage models to follow instructions with human feedback. 
+
+Advances in neural information processing systems , 35: 27730–27744, 2022. 3 [59] Jiazhen Pan, Che Liu, Junde Wu, Fenglin Liu, Jiayuan Zhu, Hongwei Bran Li, Chen Chen, Cheng Ouyang, and Daniel Rueckert. Medvlm-r1: Incentivizing medical reasoning capability of vision-language models (vlms) via reinforce-ment learning. In International Conference on Medical Im-age Computing and Computer-Assisted Intervention , pages 337–347. Springer, 2025. 1, 2, 3, 5, 6, 11, 12 [60] Yan Pan and Yuanzhi Li. Toward understanding why adam converges faster than sgd for transformers. arXiv preprint arXiv:2306.00204 , 2023. 6 [61] Lei Pang and Ruinan Jin. On the theory and practice of grpo: A trajectory-corrected approach with fast conver-gence. arXiv preprint arXiv:2508.02833 , 2025. 3 [62] Jonas Peters, Dominik Janzing, and Bernhard Scholkopf. 
+
+Elements of causal inference: foundations and learning al-gorithms . MIT press, 2017. 2 [63] Mattia Prosperi, Yi Guo, Matt Sperrin, James S Koopman, Jae S Min, Xing He, Shannan Rich, Mo Wang, Iain E Buchan, and Jiang Bian. Causal inference and counterfac-tual prediction in machine learning for actionable health-care. Nature Machine Intelligence , 2(7):369–375, 2020. 2 [64] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741, 2023. 3, 9 [65] Vishwanatha M Rao, Michael Hla, Michael Moor, Subathra Adithan, Stephen Kwak, Eric J Topol, and Pranav Ra-jpurkar. Multimodal generative ai for medical image in-terpretation. Nature , 639(8056):888–896, 2025. 1 [66] Jonathan G Richens, Ciar´ an M Lee, and Saurabh Johri. Im-proving the accuracy of medical diagnosis with causal ma-chine learning. Nature communications , 11(1):3923, 2020. 2[67] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Rad-ford, and Oleg Klimov. Proximal policy optimization algo-rithms. arXiv preprint arXiv:1707.06347 , 2017. 3 [68] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junx-iao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. 2, 3, 9 [69] Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflexion: Language agents with verbal reinforcement learning. Advances in Neural In-formation Processing Systems , 36:8634–8652, 2023. 2 [70] Haoming Song, Delin Qu, Yuanqi Yao, Qizhi Chen, Qi Lv, Yiwen Tang, Modi Shi, Guanghui Ren, Maoqing Yao, Bin Zhao, et al. Hume: Introducing system-2 thinking in visual-language-action model. arXiv preprint arXiv:2505.21432 ,2025. 2 [71] Yuqiao Tan, Minzheng Wang, Shizhu He, Huanxuan Liao, Chengfeng Zhao, Qiunan Lu, Tian Liang, Jun Zhao, and Kang Liu. Bottom-up policy optimization: Your language model policy secretly contains internal policies. arXiv preprint arXiv:2512.19673 , 2025. 3 [72] Ryutaro Tanno, David GT Barrett, Andrew Sellergren, Sumedh Ghaisas, Sumanth Dathathri, Abigail See, Jo-hannes Welbl, Charles Lau, Tao Tu, Shekoofeh Azizi, et al. Collaboration between clinicians and vision–language models in radiology report generation. Nature Medicine , 31 (2):599–608, 2025. 1 [73] Athanasios Vlontzos, Christian M¨ uller, and Bernhard Kainz. Causal reasoning in medical imaging. In Trustwor-thy AI in Medical Imaging , pages 367–381. Elsevier, 2025. 2[74] Lehan Wang, Haonan Wang, Honglong Yang, Jiaji Mao, Zehong Yang, Jun Shen, and Xiaomeng Li. Interpretable bilingual multimodal large language model for diverse biomedical tasks. arXiv preprint arXiv:2410.18387 , 2024. 5, 6, 7, 11 [75] Xuezhi Wang and Denny Zhou. Chain-of-thought reason-ing without prompting. arXiv preprint arXiv:2402.10200 ,2024. 2 [76] Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reason-ing in language models. arXiv preprint arXiv:2203.11171 ,2022. 2 [77] Yongxin Wang, Zhicheng Yang, Meng Cao, Mingfei Han, Haokun Lin, Yingying Zhu, Xiaojun Chang, and Xiaodan Liang. Care what fails: Contrastive anchored-reflection for verifiable multimodal. arXiv preprint arXiv:2512.19554 ,2025. 3 [78] Zehan Wang, Sashuai Zhou, Shaoxuan He, Haifeng Huang, Lihe Yang, Ziang Zhang, Xize Cheng, Shengpeng Ji, Tao Jin, Hengshuang Zhao, et al. Spatialclip: Learning 3d-aware image representations from spatially discriminative language. In Proceedings of the Computer Vision and Pat-tern Recognition Conference , pages 29656–29666, 2025. 2 [79] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large lan-guage models. Advances in neural information processing systems , 35:24824–24837, 2022. 2 [80] Yanbin Wei, Qiushi Huang, Yu Zhang, and James Kwok. Kicgpt: Large language model with knowledge in context for knowledge graph completion. In Findings of the asso-ciation for computational linguistics: EMNLP 2023 , pages 8667–8683, 2023. 2 [81] Yanbin Wei, Jiangyue Yan, Chun Kang, Yang Chen, Hua Liu, James Kwok, and Yu Zhang. Dynamicgtr: Leveraging graph topology representation preferences to boost vlm ca-pabilities on graph qas. arXiv preprint arXiv:2602.21864 ,2026. 2 [82] Chaoyi Wu, Xiaoman Zhang, Ya Zhang, Yanfeng Wang, and Weidi Xie. Towards generalist foundation model for radiology. arXiv preprint arXiv:2308.02463 , 2023. 5, 6 [83] Shuang Wu, Heng Liang, Yong Zhang, Yanlin Chen, and Ziyu Jia. A cross-modal densely guided knowledge dis-tillation based on modality rebalancing strategy for en-hanced unimodal emotion recognition. In Proceedings of the Thirty-Fourth International Joint Conference on Arti-ficial Intelligence, IJCAI 2025, Montreal, Canada, August 16–22, 2025 , pages 4236–4244, 2025. 2 [84] Yuechen Xie, Jie Song, Huiqiong Wang, and Mingli Song. Training data provenance verification: Did your model use synthetic data from my generative model for training? In 
+
+Proceedings of the Computer Vision and Pattern Recogni-tion Conference , pages 23817–23827, 2025. 1 [85] Yuechen Xie, Xiaoyan Zhang, Yicheng Shan, Hao Zhu, Rui Tang, Rong Wei, Mingli Song, Yuanyu Wan, and Jie Song. Spatialqa: A benchmark for evaluating spatial log-ical reasoning in vision-language models. arXiv preprint arXiv:2602.20901 , 2026. 2 [86] Zibo Xu, Qiang Li, Weizhi Nie, Weijie Wang, and Anan Liu. Structure causal models and llms integration in medi-cal visual question answering. IEEE Transactions on Med-ical Imaging , 2025. 3 [87] Fengkai Yang, Zherui Chen, Xiaohan Wang, Xiaodong Lu, Jiajun Chai, Guojun Yin, Wei Lin, Shuai Ma, Fuzhen Zhuang, Deqing Wang, et al. Your group-relative advantage is biased. arXiv preprint arXiv:2601.08521 , 2026. 3 [88] Shuo Yang, Caren Han, Yihao Ding, Shuhe Wang, and Ed-uard Hovy. Tooltree: Efficient llm tool planning via dual-feedback monte carlo tree search and bidirectional pruning. In The Fourteenth International Conference on Learning Representations . 3 [89] Shuo Yang, Soyeon Caren Han, Xueqi Ma, Yan Li, Moham-mad Reza Ghasemi Madani, and Eduard Hovy. Evotool: Self-evolving tool-use policy optimization in llm agents via blame-aware mutation and diversity-aware selection. arXiv preprint arXiv:2603.04900 , 2026. 3 [90] Ruilin Yao, Shengwu Xiong, Yichen Zhao, and Yi Rong. Visual grounding with multi-modal conditional adaptation. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 3877–3886, 2024. 2 [91] Jin Ye, Junlong Cheng, Jianpin Chen, Zhongying Deng, Tianbin Li, Haoyu Wang, Yanzhou Su, Ziyan Huang, Jilong Chen, Lei Jiang, et al. Sa-med2d-20m dataset: Segment anything in 2d medical imaging with 20 million masks. 
+
+arXiv preprint arXiv:2311.11969 , 2023. 5, 9 [92] Shuang Zeng, Xinyuan Chang, Mengwei Xie, Xinran Liu, Yifan Bai, Zheng Pan, Mu Xu, and Xing Wei. Futuresight-drive: Thinking visually with spatio-temporal cot for au-tonomous driving. arXiv preprint arXiv:2505.17685 , 2025. 3[93] Shuang Zeng, Dekang Qi, Xinyuan Chang, Feng Xiong, Shichao Xie, Xiaolong Wu, Shiyi Liang, Mu Xu, and Xing Wei. Janusvln: Decoupling semantics and spatiality with dual implicit memory for vision-language navigation. arXiv preprint arXiv:2509.22548 , 2025. 3 [94] Kai Zhang, Rong Zhou, Eashan Adhikarla, Zhiling Yan, Yixin Liu, Jun Yu, Zhengliang Liu, Xun Chen, Brian D Davison, Hui Ren, et al. A generalist vision–language foundation model for diverse biomedical tasks. Nature Medicine , 30(11):3129–3141, 2024. 5 [95] Ruohong Zhang et al. Improve vision language model chain-of-thought reasoning. arXiv preprint arXiv:2410.16198 , 2024. 2 [96] Xiaoman Zhang, Chaoyi Wu, Ziheng Zhao, Weixiong Lin, Ya Zhang, Yanfeng Wang, and Weidi Xie. Pmc-vqa: Visual instruction tuning for medical visual question answering. 
+
+arXiv preprint arXiv:2305.10415 , 2023. 6 [97] Sichen Zhao, Zhiming Xue, Yalun Qi, Xianling Zeng, and Zihan Yu. Non-intrusive graph-based bot detection for e-commerce using inductive graph neural networks. arXiv preprint arXiv:2601.22579 , 2026. 2 [98] Shuang Zhou, Mingquan Lin, Sirui Ding, Jiashuo Wang, Canyu Chen, Genevieve B Melton, James Zou, and Rui Zhang. Explainable differential diagnosis with dual-inference large language models. npj Health Systems , 2(1): 12, 2025. 4 [99] Sashuai Zhou, Qiang Zhou, Jijin Hu, Hanqing Yang, Yue Cao, Junpeng Ma, Yinchao Ma, Jun Song, Tiezheng Ge, Cheng Yu, Bo Zheng, and Zhou Zhao. Unified thinker: A general reasoning modular core for image generation, 2026. 2[100] Yixiao Zhou, Ziyu Zhao, Dongzhou Cheng, Zhiliang Wu, Jie Gui, Yi Yang, Fei Wu, Yu Cheng, and Hehe Fan. Drop-ping experts, recombining neurons: Retraining-free prun-ing for sparse mixture-of-experts llms. In Findings of the Association for Computational Linguistics: EMNLP 2025 ,pages 15169–15186, 2025. 3 [101] Yixiao Zhou, Yang Li, Dongzhou Cheng, Hehe Fan, and Yu Cheng. Look inward to explore outward: Learning tem-perature policy from llm internal states via hierarchical rl. 
+
+arXiv preprint arXiv:2602.13035 , 2026. 3 [102] Daniel M Ziegler, Nisan Stiennon, Jeffrey Wu, Tom B Brown, Alec Radford, Dario Amodei, Paul Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. arXiv preprint arXiv:1909.08593 , 2019. 3
