@@ -1,0 +1,1690 @@
+Title: T-QPM: Enabling Temporal Out-Of-Distribution Detection and Domain Generalization for Vision-Language Models in Open-World
+
+URL Source: https://arxiv.org/pdf/2603.18481v1
+
+Published Time: Fri, 20 Mar 2026 00:39:38 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# T-QPM: Enabling Temporal Out-Of-Distribution Detection and Domain Generalization for Vision-Language Models in Open-World 
+
+Aditi Naiknaware, Salimeh Sekeh 
+
+San Diego State University 
+
+{anaiknaware7153, ssekeh}@sdsu.edu 
+
+Abstract. Out-of-distribution (OOD) detection remains a critical chal-lenge in open-world learning, where models must adapt to evolving data distributions. While recent vision-language models (VLMS) like CLIP en-able multimodal OOD detection through Dual-Pattern Matching (DPM), existing methods typically suffer from two major shortcomings: (1) They rely on fixed fusion rules and assume static environments, failing under temporal drift; and (2) they lack robustness against covariate shifted in-puts. In this paper, we propose a novel two-step framework to enhance OOD detection and covariate distribution shift robustness in dynamic settings. We extend the dual-pattern regime into Temporal Quadruple-Pattern Matching (T-QPM). First, by pairing OOD images with text descriptions, we introduce cross-modal consistency patterns between ID and OOD signals, refining the decision boundary through joint image-text reasoning. Second, we address temporal distribution shifts by learn-ing lightweight fusion weights to optimally combine semantic matching and visual typicality. To ensure stability, we enforce explicit regulariza-tion based on Average Thresholded Confidence (ATC), preventing perfor-mance degradation as distributions evolve. Experiments on temporally partitioned benchmarks demonstrate that our approach significantly out-performs static baselines, offering a robust, temporally-consistent frame-work for multimodal OOD detection in non-stationary environments. 
+
+Keywords: Open-World Learning · Out-Of-Distribution Detection · Do-main Generalization · Vision-Language Models 
+
+## 1 Introduction 
+
+As the demand for intelligent systems grows, the need for computer vision algo-rithms and foundation models to handle open-world scenarios becomes increas-ingly paramount. One important characteristic of the open world for vision-language models (VLMs) is that intelligent systems will encounter new contexts and images that were not seen during training, requiring safe handling of unseen 
+
+The theoretical study in Section 4 was published in a preliminary form at the Reliable ML from Unreliable Data Workshop at NeurIPS 2025 [20].  
+
+> arXiv:2603.18481v1 [cs.CV] 19 Mar 2026 2A. Naiknaware and S. Sekeh
+
+examples (out-of-distribution (OOD) detection) and adaptation to distribution-shifted inputs (domain generalization) in temporal environments [35]. Notice-ably, the vast majority of VLMs have been driven by the closed-world set-ting [19, 23], where the label space is assumed fixed and the data distribution stationary. An open-world learning (OWL) paradigm on wild data [11] is built upon two parts: unknown rejection (OOD detection) and novel class discovery (distribution shift generalization) under dynamic domains. Within the OWL con-text, in-distribution (ID) refers to data drawn from the same distribution as the training set—the data that the model is expected to handle reliably. Prior work in both OOD detection and distribution shift has primarily focused on two cat-egories: (1) covariate shift refers to inputs that belong to the same label space as the training data but differ due to changes in the input distribution [13, 32], such as a dog image corrupted with Gaussian noise remaining labeled as “dog” yet degrading model performance; and (2) semantic shift occurs when entirely new classes are introduced at test time [30, 32], such as a classifier trained on cats and dogs encountering an elephant. While recent advances in OOD detection for VLMs have shown great promise— notably, Maximum Concept Matching (MCM) [19] leverages softmax-scaled co-sine similarity between visual and textual concept prototypes for zero-shot OOD detection, and Dual-Pattern Matching (DPM) [34] efficiently adapts CLIP for OOD detection by exploiting both visual and textual ID patterns—these meth-ods lack several fundamental aspects of OWL: (1) they largely overlook temporal dynamics, the fact that data distributions may evolve over time due to changing environments, user behavior, or data sources [31]; (2) they neglect covariate shift and domain generalization during OOD detection, treating the deployment envi-ronment as static; and (3) they limit OOD evaluation to unimodal image inputs rather than multimodal image-caption pairs, leaving the rich linguistic signal of VLMs underexploited. It is important to emphasize that temporal shifts can lead to gradual but systematic degradation of model performance if left unchecked. For example, a perception system trained on traffic patterns from one year may underperform as new road constructions, seasonal changes, or evolving driving behaviors shift the data distribution over time [2, 31]. 
+
+Our Contribution: In this paper, we propose T-QPM (Temporal Quadru-ple Pattern Matching), a novel multimodal OOD detection framework designed for open-world deployment under continuously evolving distributions. T-QPM builds on frozen CLIP backbones and operates over image-caption pairs, enabling richer cross-modal interaction than DPM approach. T-QPM explicitly models temporal distribution shift by incorporating a caption-aware temporal regular-ization loss that stabilizes confidence-based decision boundaries across timesteps, jointly optimizing for ID classification, covariate shift robustness, temporal con-sistency, and semantic OOD detection. We provide theoretical study linking temporal consistency to generalization error bound. Our experimental results show T-QPM outperforms DPM baseline significantly on wild data. T-QPM for Temporal OOD Detection 3
+
+## 2 Methodology 
+
+2.1 Preliminaries and Problem Setup 
+
+We start with preliminaries to lay the necessary context, followed by a clear de-scription of VLMS for OOD detection. We consider a deployed classifier fθ : X → 
+
+RK trained on a labeled in-distribution (ID) dataset DID = {(xi, y i)}ni=1 , drawn 
+
+i.i.d. from the joint data distribution PX Y . The function fθ predicts the label of an input sample x as ˆy(f (x)) := arg max y f y (x). Define Pin , the marginal distri-bution of the labeled data (X , Y), which is also referred to as the in-distribution. 
+
+Ptype 
+
+out is the marginal distribution out of PX ′Y′ on X ′, where the input space un-dergoes "type" shifting and the joint distribution has the same label space or different label space (depending to the "type"). We consider a generalized char-acterization of the open world setting with two types of OOD 
+
+Pwild = (1 − X
+
+> type
+
+πtype )Pin + X
+
+> type
+
+πtype Ptype 
+
+out , (1) where type = {semantic , covariate }, where πtype , P
+
+> type
+
+πtype ∈ (0 , 1) .
+
+Covariate OOD type: Taking autonomous driving as an example, a model trained on ID data with sunny weather may experience a covariate shift due to foggy/snowy weather. Under such a covariate shift, a model is expected to generalize to the OOD data—correctly predicting the sample into one of the known classes (e.g., car), despite the shift. Pcov 
+
+out is the marginal distribution of covariate shifted data 
+
+(X ′, Y) with distribution PX ′Y , where the joint distribution has the same label space as the training data, yet the input space undergoes shifting in domain. 
+
+Semantic OOD type: In autonomous driving example, the model may encounter a semantic shift, where samples are from unknown classes (e.g., bear) that the model has not been exposed to during training. Psem 
+
+out is the marginal distribution when wild data does not belong to any known categories Y = {1, 2, ..., K } and therefore should be detected as OOD sample. To detect the semantic OOD data, we train OOD detector which is a ranking function gθ : X 7 → R with parameter 
+
+θ: if gθ (x) ≤ λ then the sample x is OOD example. The threshold value λ is typically chosen so that a high fraction of ID data is correctly classified. This means that the detector gθ should predict semantic OOD data as OOD and otherwise predict as ID. 
+
+VLMs for OOD Detection. VLMs exemplified by CLIP, consist of two aligned encoders: a visual encoder ϕV and a text encoder ϕT . The visual encoder maps an input image x to a d-dimensional feature representation Fv (x) ∈ Rd, while the text encoder maps a textual prompt p to a semantic embedding ϕT (p) ∈ Rd. Both embeddings lie in a shared representation space, enabling direct similarity com-parison. For a downstream classification task with label space Y = {y1, . . . , y K },a prompt template is instantiated for each class to obtain class-specific textual descriptions. Each class embedding is normalized to produce a set of proto-type vectors {tk}Kk=1 , where tk ∈ Rd. These normalized text embeddings form a cosine-similarity classifier in the joint embedding space. 4 A. Naiknaware and S. Sekeh 
+
+Given an image x, the compatibility between the visual feature Fv (x) and each class prototype tk is measured via cosine similarity. These similarity scores are scaled by a temperature parameter and converted into a categorical distribu-tion over Y using a softmax transformation. The resulting predictive distribution reflects the semantic alignment between the image and the set of textual class descriptions. In CLIP-based OOD detection, the text embeddings {tk} serve as fixed classifier weights. Post-hoc scoring functions such as Maximum Softmax Probability (MSP) [7] or Energy-based scores [17] are applied to the resulting logits or probability distribution. The underlying assumption is that ID samples yield higher confidence or lower energy compared to OOD samples. 
+
+Problem Setup. We consider the problem of OOD detection under temporal distribution shift . At each timestep t ∈ { 0, 1, . . . , T } , a data distribution Dt
+
+over image-caption pairs (x, c ) is observed, where the visual distribution shifts gradually across timesteps. The ID label set Y = {y1, . . . , y K } remains fixed, but the visual appearance of ID classes evolves over time, inducing temporal shift .At test time, each pair (x, c ) must be classified as ID or OOD with respect to 
+
+Y, without access to OOD labels during training. Formally, at each timestep t we have access to a set of labeled ID training and covatiate shifted samples Dtrain  
+
+> t
+
+= {(xi, y i)} drawn from the current ID distribution, along with unlabeled test samples {(x, c )} that may be either ID or OOD. The goal is to learn a scoring function S(x, c, t ) ∈ R such that ID samples consistently score above a fixed threshold δ across all timesteps, while OOD samples score below it, and such that the scoring function remains robust to both temporal drift and covariate perturbations of the input. Our T-QPM method extends DPM [34] to this setting by: (i) incorporating all four cross-modal pairings between ID and test representations including image and caption modalities, (ii) adapting visual prototypes per timestep to handle temporal drift, (iii) learning a lightweight fusion of the four scores with only 2 trainable parameters, and (iv) enforcing covariate robustness through explicit consistency regularization during training. 
+
+2.2 T-QPM for OOD Detection 
+
+Our T-QPM method is designed mainly based on four phases as described below. 
+
+Phase I: Text Pattern Construction. We first construct reference patterns using the text encoder of the frozen VLM. For each ID class k ∈ { 1, . . . , K }, we employ prompt ensembling over P templates to obtain robust text representa-tions. Let {p(1)  
+
+> k
+
+, . . . , p (P ) 
+
+> k
+
+} denote the set of prompts for class k. The class text embedding is computed as: 
+
+tk = Normalize 
+
+> P
+
+X
+
+> i=1
+
+Normalize 
+
+
+
+ϕT (p(i) 
+
+> k
+
+)
+
+!
+
+, (2) where ϕT denotes the frozen CLIP text encoder and normalization is the ℓ2-norm. Collecting all ID class embeddings yields the ID text bank TID = [ t1, . . . , tK ]⊤ ∈T-QPM for Temporal OOD Detection 5 
+
+> Fig. 1: T-QPM Overview: At each timestep, ID images and their covariate-shifted views are encoded to build timestep-specific visual prototypes alongside a fixed ID Text Bank. At inference, four cross-modal scores between the test image, caption, and ID representations are fused to produce the final OOD decision.
+
+RK×d, where d is the embedding dimension. TID is computed once and kept fixed throughout all timesteps, serving as a stable semantic anchor while temporal variability is handled through timestep-specific visual statistics. 
+
+Phase II: Temporal Visual Pattern Construction. To account for temporal distribution shift [28], we compute visual reference statistics separately for each timestep, extending the DPM framework. Given an image x at timestep t, the frozen CLIP-ViT encoder produces a sequence of patch embeddings F(x) = 
+
+ϕV (x) ∈ R(N +1) ×d, where N is the number of spatial patches and the first token is the global [CLS] token. We decompose F(x) into a global token Fv (x) = 
+
+F(x)[0 , :] ∈ Rd and spatial patches Fs(x) = F(x)[1 : , :] ∈ RN ×d. For each class 
+
+k, class-specific spatial attention weights are computed as 
+
+Ak(x) = Softmax 
+
+ Fs(x) tk
+
+∥Fs(x)∥ ∥ tk∥
+
+
+
+∈ RN , (3) yielding a class-attended spatial feature ˜fk(x) = Ak(x)⊤Fs(x) ∈ Rd. The final class-specific image representation combines global and attended spatial features as fk(x) = γ ˜fk(x)+ Fv (x), where γ balances the contribution of spatial and global information, and the ID logits follow as 
+
+zID (x) = f1(x)⊤t1, . . . , fK (x)⊤tK
+
+⊤ ∈ RK . (4) Converting logits to probabilities via temperature-scaled softmax, p(x) = Softmax( zID (x)/T ),we estimate for each timestep t and class k a class-conditional visual prototype by averaging over ID training samples from Dtrain  
+
+> t
+
+:
+
+μk,t = Ep(x) | (x, y ) ∈ D train  
+
+> t
+
+, y = k ∈ RK . (5) 
+
+{μk,t }Kk=1 defines the expected ID similarity pattern at time t, allowing the notion of “normal” ID behavior to adapt to gradual visual distribution drift. 6 A. Naiknaware and S. Sekeh 
+
+Phase III: Quadruple Cross-Modal Scoring. For a test image x with asso-ciated caption c observed at timestep t, we construct four complementary OOD scores corresponding to all cross-modal pairings between ID and test represen-tations, together realizing the complete Quadruple Pattern Matching (QPM) framework in the temporal setting. The Semantic Matching Score SID (OOD image ↔ ID text ) measures alignment between the test image’s visual features and the ID class text embeddings, 
+
+SID (x) = max 
+
+> k∈{ 1,...,K }
+
+zID (x)[ k]
+
+T , (6) where higher values indicate stronger semantic similarity to known ID classes. The Visual Typicality Score SVIS (OOD image ↔ ID visual ) measures how typical the test image’s probability pattern is relative to the timestep-specific ID visual prototypes via KL divergence [25], 
+
+KL k(x, t ) = 
+
+> K
+
+X
+
+> j=1
+
+pj (x) log pj (x)
+
+μk,t [j] , SVIS (x, t ) = − min  
+
+> k
+
+KL k(x, t ), (7) where pj (x) denotes the j-th entry of p(x), and a lower KL divergence (higher 
+
+SVIS ) indicates the test image’s probability pattern is consistent with typical ID images at timestep t. To exploit the multimodal nature of the test data, each test image is accompanied by a natural language caption c, which we encode on-the-fly using the same frozen text encoder as qc = Normalize( ϕT (c)) ∈ Rd. The 
+
+Caption-Text Alignment Score SCAP -T (OOD text ↔ ID text ) then measures how strongly the caption’s semantics overlap with ID class names in text space, 
+
+SCAP -T(x) = max  
+
+> k∈{ 1,...,K }
+
+⟨qc, tk⟩, (8) with no OOD text bank constructed — the caption is compared directly against the precomputed TID at inference time. Complementing this, the Caption-Visual Alignment Score SCAP -V (OOD text ↔ ID visual ) measures whether the caption’s semantics are consistent with the visual statistics of ID data at the current timestep. Reusing qc, we project it through the ID logit computation to obtain a caption probability vector, 
+
+zCAP (x) = q⊤ 
+
+> c
+
+t1, . . . , q⊤ 
+
+> c
+
+tK
+
+⊤ ∈ RK , pCAP (x) = Softmax 
+
+ zCAP (x)
+
+T
+
+
+
+,
+
+(9) and measure its typicality against μk,t via KL divergence, 
+
+SCAP -V(x, t ) = − min  
+
+> k
+
+KL 
+
+
+
+pCAP (x) μk,t 
+
+
+
+. (10) Since both caption scores reuse qc computed once per test image, the multimodal grounding adds negligible overhead at inference. SCAP -T and SCAP -V provide complementary signals: the former detects semantic overlap in text space, while T-QPM for Temporal OOD Detection 7
+
+the latter detects whether the caption’s semantics conform to the visual statistics of ID data at timestep t. The four scores are combined with learnable positive weights β, η > 0 as 
+
+SFUSED (x, t ) = SID (x) + β · SVIS (x, t ) − γcap · SCAP -T(x) − η · SCAP -V(x, t ), (11) where γcap > 0 is a fixed hyperparameter and β, η are learned. The caption-based terms are subtracted since high alignment of the test caption with ID represen-tations is indicative of an OOD sample whose textual description overlaps with but whose visual content departs from the ID distribution. To ensure positivity, 
+
+β and η are parameterized via the softplus function by β = log(1 + e ˜β ) and 
+
+η = log(1 + e˜η ), where ˜β, ˜η ∈ R are trainable scalar parameters initialized. 
+
+Phase IV: Threshold Calibration, Training Objective, and Temporal OOD Detection. At the initial timestep t = 0 , we calibrate a decision threshold 
+
+δ as the δq -th percentile of fused scores on ID training data, 
+
+δ = quantile δq
+
+ {SFUSED (x, 0) | (x, y ) ∈ D train 0 }, (12) This threshold is fixed across all subsequent timesteps to enable consistent tem-poral comparison. At each timestep t, we then optimize only the two fusion scalars ˜β and ˜η, keeping all CLIP encoders frozen. This yields extreme parameter efficiency and avoids catastrophic forgetting of pre-trained representations [12]. Beyond OOD detection under temporal shift, the training objective is explic-itly designed to generalize over covariate shift by training on both clean and corrupted views and enforcing score consistency between them. The total loss comprises three components. First, the Balanced ID Classification Loss com-putes cross-entropy symmetrically on both clean and covariate-shifted views, 
+
+LID = 12
+
+
+
+E(x,y )∼D t
+
+LCE (zID (x), y ) + E(˜ x,y )∼D t
+
+LCE (zID (˜ x), y )
+
+, (13) where ˜x denotes a covariate-shifted version of x so that the model learns repre-sentations that are simultaneously discriminative and robust to covariate pertur-bations. Second, the Covariate Consistency Loss explicitly enforces that OOD detection scores remain stable under covariate shift [9], 
+
+LCOV = Ex∼D t
+
+h
+
+SFUSED (x, t ) − SFUSED (˜ x, t )
+
+i
+
+, (14) directly penalizing inconsistency between the OOD scores of clean and corrupted views and making the detection boundary robust to covariate shifts. Third, to prevent the effective ID coverage from drifting as the data distribution evolves, the Temporal Drift Penalty employs Above-Threshold Coverage (ATC) [6] as a soft differentiable proxy for the fraction of ID samples scoring above δ,
+
+ATC t = Ex∼D t
+
+
+
+σ
+
+ δ − SFUSED (x, t )
+
+κ
+
+ 
+
+, (15) 8 A. Naiknaware and S. Sekeh 
+
+where σ(·) is the sigmoid function and κ > 0 controls the smoothness of the ap-proximation. ATC is computed separately for clean and covariate-shifted views, and changes across consecutive timesteps are penalized as 
+
+LTEMP = ATC clean  
+
+> t
+
+− ATC clean  
+
+> t−1
+
++ ATC shift  
+
+> t
+
+− ATC shift  
+
+> t−1
+
+, (16) discouraging abrupt changes to the fraction of ID samples above the detection threshold at each timestep and stabilizing detection across the evolving data stream while simultaneously accounting for covariate robustness through the shifted ATC term. The total loss with Lagrangian multipliers λcov and λtemp is: 
+
+LTOTAL = LID + λcov LCOV + λtemp LTEMP . (17) Given a test image x with caption c at timestep t, we compute all four scores, form SFUSED (x, t ) via Eq. (11), and classify using the fixed threshold δ:
+
+D(x, t ) = 
+
+(
+
+ID if SFUSED (x, t ) ≥ δ, 
+
+OOD otherwise.  (18) Together, the four cross-modal scores realize the complete QPM framework in the temporal setting, with the training objective jointly ensuring robustness to both temporal drift and covariate shift. The Pseudocode of all Phases I-IV are provided in supplementary material (SM). 
+
+## 3 Experiments 
+
+3.1 Experimental Setup 
+
+We evaluate T-QPM on temporally evolving benchmarks designed to test se-mantic OOD detection and covariate shift robustness under continuously shifting distributions. 
+
+Datasets. For ID data, we use three temporal benchmarks: CLEAR100 [16], CLEAR10 [16], and Core50 [18]. CLEAR100 and CLEAR10 span 10 temporal buckets, each representing a distinct time period. Core50 con-sists of 10 sessions captured under varying backgrounds and lighting conditions, providing a complementary setting with more abrupt session-level domain shifts. Since T-QPM operates on image-caption pairs, all semantic OOD datasets are drawn from multimodal sources: COCO [15], ImageNet-1K-VL-Enriched [10], Visual Genome [14], Flickr30K [22], and CC12M [3], spanning everyday objects, scene descriptions, and web-crawled image-text pairs. To assess covariate shift robustness, we generate perturbed variants of each ID test set using Gaussian blur and JPEG compression corruptions, which preserve the original label space while evaluating generalization under realistic visual degradations. 
+
+Training Procedure. T-QPM is trained sequentially across timesteps, where at each timestep the model receives image-caption pairs from the current tem-poral distribution. In the CLEAR100/CLEAR10 setting, training proceeds from T-QPM for Temporal OOD Detection 9
+
+timestep 1 through timestep 10, with each bucket representing a progressively drifted visual distribution. For Core50, the model is trained across 10 recording sessions in order of acquisition. At each timestep, the model is updated using the current ID data while the projection module adapts its interference weights to the new distribution, enabling continual calibration without full retraining. 
+
+Model Architectures and Optimization. T-QPM is built on top of two frozen CLIP backbones, ViT-B/16 and ViT-B/32. All experiments use a learn-ing rate of 3 × 10 −3 with 5 epochs per timestep. The frozen backbone ensures that pretrained vision-language representations are preserved, while only the projection module is updated to adapt to temporal distribution shift. 
+
+Evaluation Protocol. Results are reported at representative early and late timesteps (e.g., t=2 and t=8 for CLEAR100) to capture model behavior before and after substantial temporal drift has accumulated (other timesteps are re-ported in the SM). We report FPR95 and AUROC as threshold-independent measures of OOD detection quality, alongside ID clean accuracy on the un-perturbed test set and ID corrupted accuracy on blur- and compression-degraded variants. All results are averaged over 3 independent trials to account for variance due to weight initialization. 
+
+3.2 Results 
+
+Figures 2 and 3 report ID classification accuracy on clean and corrupted test sets across all 10 timesteps of CLEAR100, with COCO as the semantic OOD dataset. Under Gaussian blur corruption (Figure 2), T-QPM consistently out-performs DPM across all timesteps on both clean and shifted variants. On clean data, both methods begin at comparable accuracy ( ∼0.966), but T-QPM main-tains a stable upward trend, reaching ∼0.974 by t=8 , while DPM exhibits high variance and collapses sharply to ∼0.961 at the final timestep. The performance gap is substantially amplified under covariate shift: T-QPM sustains blur-shifted accuracy in the range 0.945–0.965, whereas DPM fluctuates between 0.925–0.935 throughout, indicating that T-QPM’s quadruple matching better preserves dis-criminative features under low-frequency visual degradation. Under JPEG compression corruption (Figure 3), T-QPM demonstrates an even more pronounced advantage. On clean data, T-QPM improves steadily from 0.971 at t=0 to ∼0.979 by t=8 , while DPM again degrades sharply at the final timestep ( ∼0.959). More strikingly, on JPEG-corrupted inputs, T-QPM exhibits a consistent upward trajectory across all timesteps, reaching ∼0.991 at t=7 —while DPM remains nearly flat in the 0.920–0.932 range throughout. This ∼5– 6% sustained gap under JPEG shift suggests that T-QPM’s interference-based scoring mechanism is particularly robust to high-frequency compression artifacts, which tend to destabilize standard softmax-based confidence estimates. Taken together, both figures demonstrate that T-QPM not only maintains higher clean accuracy but generalizes significantly better under realistic covariate corruptions as temporal drift accumulates. Tables 1 and 2 report OOD detection results (FPR95 ↓ / AUROC ↑) across 3 ID datasets and 5 OOD datasets at early ( t=2 ) and late ( t=8 ) timesteps, using 10 A. Naiknaware and S. Sekeh   
+
+> Fig. 2: ID classification accuracy on clean (left) and Gaussian blur-shifted (right) test sets across all timesteps. T-QPM consistently outperforms DPM under both conditions, with the gap widening substantially under covariate shift. ID dataset: Clear100, OOD dataset: COCO with captions
+> Fig. 3: ID classification accuracy on clean (left) and JPEG shifted-shifted (right) test sets across all timesteps. T-QPM consistently outperforms DPM under both conditions, with the gap widening substantially under covariate shift. ID dataset: Clear100, OOD dataset: COCO with captions
+
+ViT-B/16 and ViT-B/32 backbones, respectively. T-QPM consistently and sub-stantially outperforms DPM across all settings. On CLEAR100 with ViT-B/16, T-QPM reduces FPR95 by over 24% against COCO and nearly halves it against Visual Genome, with DPM’s performance deteriorating further at late timestep while T-QPM remains comparatively stable. On the cleaner CLEAR10 bench-mark, T-QPM achieves near-perfect OOD detection against CC12M (FPR95 of 0.4 / AUROC 99.9), and reduces FPR95 by a factor of ten against COCO rela-tive to DPM. These gains are consistent across ViT-B/32 (Table 2), confirming that T-QPM’s caption-aware scoring generalizes across backbone architectures. Critically, while both methods degrade from early to late timesteps under accu-mulating temporal drift, T-QPM’s degradation is systematically smaller across all benchmarks and OOD datasets, demonstrating superior temporal robustness. T-QPM for Temporal OOD Detection 11 
+
+Table 1: OOD detection results across 3 ID datasets and 5 OOD datasets using ViT-16 architecture Each cell shows FPR95 ↓ / AUROC ↑. Early ( t=2 ) and late ( t=8 ) times. Clear100 Clear10 Core50 OOD Early Late Early Late Early Late FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑
+
+COCO DPM 41.53 / 88.16 46.73/ 85.55 8.61 / 97.28 9.66 / 96.38 16.40 / 95.60 24.10 / 93.20 QPM 17.42 / 96.66 20.51 / 95.77 0.89/ 99.66 1.20 / 99.38 6.20 / 98.90 9.80 / 97.60 ImageNet-1K DPM 17.58 / 95.74 22.48 / 94.41 9.51 / 98.48 14.70 / 94.74 11.20 / 97.80 17.30 / 95.40 QPM 5.97 / 98.79 7.24 / 98.59 3.65 / 99.16 5.20 / 98.95 4.10 / 99.10 6.90 / 98.70 Flickr30 DPM 21.62 / 94.26 26.10 / 92.95 6.03 / 98.28 8.31 / 97.68 14.10 / 96.10 21.50 / 93.80 QPM 7.96 / 98.20 8.95 / 98.06 1.63 / 99.65 2.6 / 99.07 5.10 / 99.00 8.20 / 98.10 CC12M DPM 10.23 / 97.74 12.51 / 97.11 7.35 / 98.53 9.29 / 98.57 10.30 / 97.80 15.20 / 95.60 QPM 2.56 / 99.48 3.63 / 99.28 0.46 / 99.99 1.59 / 99.57 2.70 / 99.50 5.10 / 99.00 Visual Genome DPM 44.42 / 87.46 50.16 / 84.37 23.06 / 93.18 38.66 / 90.52 22.80 / 94.10 34.60 / 89.80 QPM 16.18 / 96.57 19.37 / 96.07 11.85 / 97.49 13.75 / 98.12 10.40 / 97.60 16.90 / 95.80 
+
+Table 2: OOD detection results across 3 ID datasets and 5 OOD datasets using ViT-32 architecture. Each cell shows FPR95 ↓ / AUROC ↑. Early ( t=2 ) and late ( t=8 ) times. Clear100 Clear10 Core50 OOD Early Late Early Late Early Late FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑ FPR ↓/AUROC ↑
+
+COCO DPM 47.73 / 87.30 55.11 / 84.30 9.89 / 96.40 11.33 / 95.10 18.86 / 94.80 28.44 / 92.00 QPM 19.14 / 96.20 22.96 / 95.00 0.88 / 99.20 1.34 / 98.60 6.82 / 98.50 10.98 / 96.90 ImageNet-1K DPM 20.13 / 94.90 26.43 / 93.20 10.93 / 98.00 17.35 / 93.50 12.88 / 97.00 20.41 / 94.20 QPM 6.49 / 98.30 8.06 / 97.80 3.96 / 98.70 5.82 / 98.20 4.51 / 98.70 7.73 / 98.00 Flickr30 DPM 24.84 / 93.40 30.80 / 91.70 6.90 / 97.40 9.79 / 96.40 16.22 / 95.30 25.37 / 92.60 QPM 8.69 / 97.80 9.97 / 97.30 1.76 / 99.20 2.91 / 98.30 5.61 / 98.60 9.18 / 97.40 CC12M DPM 11.73 / 96.90 14.75 / 95.90 8.39 / 97.70 10.86 / 97.30 11.84 / 97.00 17.94 / 94.40 QPM 2.75 / 99.00 4.03 / 98.50 0.44 / 99.50 1.68 / 98.80 2.97 / 99.10 5.71 / 98.30 Visual Genome DPM 51.06 / 86.60 59.12 / 83.50 26.45 / 92.30 45.55 / 89.30 26.22 / 93.30 40.83 / 88.60 QPM 17.71 / 96.30 21.62 / 95.30 12.98 / 97.00 15.34 / 97.40 11.44 / 97.20 18.93 / 95.10 
+
+Ablation Study: Loss Component Analysis. Table 3 examines the contribution of each loss component LID , LCOV , LTEMP , and LOOD to overall performance in a setting where ID dataset is Clear100 and OOD dataset is COCO. When used in isolation, no single loss achieves competitive results, with LID alone performing best among them (AUROC 91.91, FPR95 24.12), while LOOD alone yields the weakest result (AUROC 88.01, FPR95 31.02). The leave-one-out experiments reveal that every component contributes meaningfully: removing LCOV causes the largest single drop (AUROC 96.41 vs. 97.81), followed by removing LTEMP 
+
+(95.71), confirming that covariate shift regularization and temporal consistency are the most critical components beyond the classification objective. The full model combining all four losses achieves the best performance (AUROC 97.81 ,FPR95 10.28 ), validating that each loss term addresses a distinct and comple-mentary aspect of the temporal OOD detection problem. 
+
+Hyperparameter Sensitivity. Figure 4 shows AUROC sweeps over the three key hyperparameters β, η, and γcap for both ViT-B/16 and ViT-B/32. All three parameters exhibit a clear optimal region followed by monotonic degradation, indicating that T-QPM is sensitive to over-regularization but stable within a rea-sonable range. β peaks near 1.0–1.5 for both backbones before declining sharply, 12 A. Naiknaware and S. Sekeh 
+
+Table 3: Ablation study of the Loss on Clear100 as ID and COCO as OOD on Vit-16. 
+
+LID LCOV LTEMP LOOD AUROC ↑ FPR95 ↓ Note 
+
+✓ × × × 91.91 24.12 LID only 
+
+× ✓ × × 85.51 39.22 LCOV only 
+
+× × ✓ × 89.21 32.92 LTEMP only 
+
+× × × ✓ 88.01 31.02 LOOD only 
+
+× ✓ ✓ ✓ 93.01 21.72 w/o LID 
+
+✓ × ✓ ✓ 96.41 19.62 w/o LCOV 
+
+✓ ✓ × ✓ 95.71 24.92 w/o LTEMP 
+
+✓ ✓ ✓ × 96.91 16.82 w/o LOOD 
+
+✓ ✓ ✓ ✓ 97.81 10.28 Full model 
+
+Fig. 4: Hyperparameter sweeps (AUROC) for β (left), η (center), and γcap (right). 
+
+while η is optimal around 0.5 and degrades steeply beyond 2.0. γcap shows a sharp optimum at ∼0.1–0.15, with performance dropping symmetrically on ei-ther side. Across all three sweeps, ViT-B/16 consistently outperforms ViT-B/32, consistent with the main results, while both architectures share nearly identical optimal hyperparameter ranges, suggesting that a single hyperparameter config-uration generalizes well across backbone choices. 
+
+## 4 A Theoretical Study on Generalization Error 
+
+Inspired by theoretical investigations in [26, 33], we have studied generalization error ( GErr t+1 (f )) of model fθ for two time steps t and t+1 . The generalization error at time step t, GErr t, is standard cross entropy loss for hypothesis f ∈ F 
+
+under covariant shift Pcov . We assume: [A1] At time step t, T V (p(yt|xt)∥U ) is constant. [A2] At time step t, F θ1 
+
+> f
+
+The class distributions predicted by f and 
+
+pθ2 (yt|xt) have same distribution with different parameter θ1 and θ2, respectively and θ1 − θ2 = δ, where δ is bounded. [A3] There exist a constant (say Zt), s.t. 
+
+EPt+1 ,cov out 
+
+H(p(yt+1 |xt+1 )) − EPt,cov out 
+
+H(p(yt|xt))) ≥ Zt + Conf t − Conf t+1 .T-QPM for Temporal OOD Detection 13 
+
+Theorem 1. (Main Theorem) Let Pt,cov and Pt,sem test be the covariate-shifted OOD and semantic OOD distribution. Denote GErr t+1 (f ) the generalization error at time t. Let Lreg be the OOD detection loss devised for MSP detectors [8], i.e., cross-entropy between predicted distribution fθ and uniform distribution. Then at two time steps t and t + 1 and under assumptions [A1] -[A3] , we have 
+
+GErr t+1 (f ) − GErr t(f ) ≥ − ˜κ ∆ cov,sem t→t+1 − ˜κ Ξ sem t→t+1 − δ2 
+
+> t
+
+EPt,cov out 
+
+(IF (θ)) + Ct→t+1 + Conf t − Conf t+1 , (19) 
+
+where ∆cov,sem t→t+1 := dF (Pt+1 ,cov out , Pt+1 ,sem out ) + dF (Pt,cov out , Pt,sem out )
+
+and Ξsem t→t+1 := EPt+1 ,sem out 
+
+r 12 (Lreg (f ) − log K) + EPt,sem out 
+
+r 12 (Lreg (f ) − log K).
+
+And Ct→t+1 = Ct+1 − Ct + Bt + Zt and δt are constants and δ2 
+
+> t
+
+= loge  
+
+> 2
+
+δ2 
+
+> t
+
+. Here 
+
+dF (Pt,cov out , Pt,sem out ) is disparity discrepancy with total variation distance) (TVD) that measures the dissimilarity of covariate-shifted OOD and semantic OOD. 
+
+Conf (fθ ) := max j∈Y fj (x) is maximum confidence, and If (θ) is Fisher Info. [4]. 
+
+The details and proof are deferred in the SM. Our theoretical finding demon-strates that for MSP detectors (without any OOD detection regularization), at two timesteps t and t + 1 , the OOD detection objective difference conflicts with OOD generalization difference. In addition, the generalization error difference over time is not only negatively correlated with OOD detection loss that the model minimizes, it also negatively correlated to the Fisher information of the network parameter under Pt,cov out . The OOD generalization error at t + 1 and t
+
+is positively correlated with confidence difference over the same period. Similar to [33] our theorem is applicable for all MSP-based OOD detectors. The inherent motivation of OOD detection methods lies in minimizing the OOD detection loss in Pt,sem out under test data, regardless of the training strategies used. 
+
+## 5 Related Work 
+
+VLMs for OOD Detection. The advent of large-scale VLMs such as CLIP [23] has opened new directions for OOD detection beyond purely unimodal ap-proaches. MCM [19] as a training-free zero-shot OOD detection method, treats textual class embeddings as concept prototypes and measures the softmax-scaled cosine similarity between visual features and ID class concepts. MCM demon-strates that multi-modal vision-language representations substantially outper-form single-modal visual baselines, particularly on large-scale benchmarks. ZOC [5] introduces a method for deriving representations of OOD class names based on the CLIP visual encoder Building on these, DPM. [34] augments text-pattern matching with an explicit visual pattern derived from aggregated ID image-text 14 A. Naiknaware and S. Sekeh 
+
+similarity scores, leveraging both modalities simultaneously. DPM introduces a domain-specific feature aggregation module and further extends to a training-required variant (DPM-T) with learnable prompts and projection layers. Our work, T-QPM, departs from both MCM and DPM by introducing a quadru-ple matching mechanism over image-caption pairs, enabling richer cross-modal interaction beyond cosine similarity. T-QPM explicitly addresses temporal dis-tribution shift—a setting neither MCM nor DPM is designed for. 
+
+Open-world learning (OWL). OWL requires models to simultaneously gener-alize to covariate shifts and detect semantic OOD samples in dynamic, evolving environments [35]. SCONE [1] addresses this by introducing an energy mar-gin framework that separates ID and covariate-shifted samples from semantic OOD using unlabeled wild data, establishing a strong static baseline. Temp-SCONE [20] extends SCONE to dynamic domains by incorporating a temporal regularization loss based on Average Thresholded Confidence (ATC), penalizing confidence turbulence between consecutive timesteps while preserving SCONE’s energy-margin separation. Complementary approaches include test-time adapta-tion methods such as TENT [27] and continual OOD detection frameworks [29], which stabilize predictions under distributional shift but do not disentangle co-variate from semantic OOD. Our T-QPM is motivated by the similar open-world, temporally evolving setting as Temp-SCONE but operates in the multimodal regime: by leveraging frozen CLIP backbones and its ability to use vision and text in a multimodal setting. 
+
+## 6 Conclusion 
+
+T-QPM consistently outperforms DPM across all evaluated settings, confirming that four-way scoring over image-caption pairs provides a more powerful and temporally robust OOD detection signal than dual-pattern matching alone. No-tably, the performance gap widens as temporal drift accumulates, suggesting that caption-aware scoring is particularly effective at maintaining stable deci-sion boundaries under evolving ID data. Furthermore, the advantage is most pronounced under covariate corruption, where T-QPM’s corrupted ID accuracy remains significantly higher than DPM’s across all timesteps, indicating that the model learns representations intrinsically more robust to both low- and high-frequency visual degradations. These observations suggest that caption quality and linguistic diversity of the OOD source are significant yet largely unexplored factors in multimodal OOD detection. The proposed T-QPM provides a temporally-aware quadruple match-ing framework for multimodal OOD detection under continuously shifting distri-butions. By building on frozen CLIP backbones and introducing a caption-aware scoring mechanism, T-QPM jointly leverages visual and linguistic ID information to produce reliable OOD detection signals across temporal benchmarks, estab-lishing a strong and principled baseline for caption-aware, temporally robust OOD detection in open-world vision-language settings and motivating further investigation into multimodal and continual learning in dynamic environments. T-QPM for Temporal OOD Detection 15 
+
+## Acknowledgements 
+
+This work has been partially supported by NSF CAREER CCF-2451457. The findings are those of the authors only and do not represent any position of these funding bodies. 
+
+## References 
+
+1. Bai, H., Canal, G., Du, X., Kwon, J., Nowak, R., Li, Y.: Feed two birds with one scone: Exploiting wild data for both out-of-distribution generalization and detection (2025), https://arxiv.org/abs/2306.09158 
+
+2. Cai, Z., Bai, G., Jiang, R., Song, X., Zhao, L.: Continuous temporal domain gener-alization. In: Advances in Neural Information Processing Systems (NeurIPS) (2024) 3. Changpinyo, S., Sharma, P., Ding, N., Soricut, R.: Conceptual 12M: Pushing web-scale image-text pre-training to recognize long-tail visual concepts. In: Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 3558–3568 (2021) 4. Cramér, H.: Mathematical methods of statistics, vol. 9. Princeton university press (1999) 5. Esmaeilpour, S., Liu, B., Robertson, E., Shu, L.: Zero-shot out-of-distribution de-tection based on the pre-trained model clip. In: Proceedings of the AAAI conference on artificial intelligence. vol. 36, pp. 6568–6576 (2022) 6. Garg, S., Balakrishnan, S., Lipton, Z.C., Neyshabur, B., Sedghi, H.: Leveraging unlabeled data to predict out-of-distribution performance (2022), https://arxiv. org/abs/2201.04234 
+
+7. Hendrycks, D., Gimpel, K.: A baseline for detecting misclassified and out-of-distribution examples in neural networks. In: International Conference on Learning Representations (ICLR) (2017) 8. Hendrycks, D., Mazeika, M., Dietterich, T.: Deep anomaly detection with outlier exposure (2019), https://arxiv.org/abs/1812.04606 
+
+9. Hendrycks, D., Mu, N., Cubuk, E.D., Zoph, B., Gilmer, J., Lakshminarayanan, B.: Augmix: A simple data processing method to improve robustness and uncertainty (2020), https://arxiv.org/abs/1912.02781 
+
+10. Hugging Face: Imagenet with captions. https://huggingface.co/datasets/ visual-layer/imagenet-1k-vl-enriched (2023) 11. Katz-Samuels, J., Nakhleh, J.B., Nowak, R., Li, Y.: Training OOD detectors in their natural habitats. In: International Conference on Machine Learning (ICML). pp. 10848–10865 (2022) 12. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., Hadsell, R.: Overcoming catastrophic forgetting in neu-ral networks. Proceedings of the National Academy of Sciences 114 (13), 3521–3526 (Mar 2017). https://doi.org/10.1073/pnas.1611835114 , http://dx.doi.org/ 10.1073/pnas.1611835114 
+
+13. Koh, P.W., Sagawa, S., Marklund, H., Xie, S.M., Zhang, M., Balsubramani, A., Hu, W., Yasunaga, M., Phillips, R.L., Gao, I., et al.: WILDS: A benchmark of in-the-wild distribution shifts. In: International Conference on Machine Learning (ICML). pp. 5637–5664 (2021) 16 A. Naiknaware and S. Sekeh 14. Krishna, R., Zhu, Y., Groth, O., Johnson, J., Hata, K., Kravitz, J., Chen, S., Kalan-tidis, Y., Li, L.J., Shamma, D.A., Bernstein, M.S., Li, F.F.: Visual genome: Con-necting language and vision using crowdsourced dense image annotations (2016), 
+
+https://arxiv.org/abs/1602.07332 
+
+15. Lin, T.Y., Maire, M., Belongie, S., Bourdev, L., Girshick, R., Hays, J., Perona, P., Ramanan, D., Zitnick, C.L., Dollár, P.: Microsoft coco: Common objects in context (2015), https://arxiv.org/abs/1405.0312 
+
+16. Lin, Z., Shi, J., Pathak, D., Ramanan, D.: The clear benchmark: Continual learning on real-world imagery (2022), https://arxiv.org/abs/2201.06289 
+
+17. Liu, W., Wang, X., Owens, J., Li, Y.: Energy-based out-of-distribution detection. In: Advances in Neural Information Processing Systems (NeurIPS). vol. 33, pp. 21464–21475 (2020) 18. Lomonaco, V., Maltoni, D.: Core50: a new dataset and benchmark for continuous object recognition (2017), https://arxiv.org/abs/1705.03550 
+
+19. Ming, Y., Cai, Z., Gu, J., Sun, Y., Li, W., Li, Y.: Delving into out-of-distribution detection with vision-language representations. In: Advances in Neural Information Processing Systems (NeurIPS) (2022) 20. Naiknaware, A., Singh, S., Homayouni, H., Sekeh, S.: Temp-SCONE: A novel out-of-distribution detection and domain generalization framework for wild data with temporal shift. NeurIPS Workshop: Reliable ML from Unreliable Data (2025) 21. Nishiyama, T., Sason, I.: On relations between the relative entropy and χ 2-divergence, generalizations and applications. Entropy 22 (5), 563 (2020) 22. Plummer, B.A., Wang, L., Cervantes, C.M., Caicedo, J.C., Hockenmaier, J., Lazeb-nik, S.: Flickr30k entities: Collecting region-to-phrase correspondences for richer image-to-sentence models (2016), https://arxiv.org/abs/1505.04870 
+
+23. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International Conference on Machine Learning (ICML). pp. 8748–8763 (2021) 24. Sason, I., Verdú, S.: f -divergence inequalities. IEEE Transactions on Information Theory 62 (11), 5973–6006 (2016) 25. Sun, Y., Ming, Y., Zhu, X., Li, Y.: Out-of-distribution detection with deep nearest neighbors. ICML (2022) 26. Tong, X., Xu, X., Huang, S.L., Zheng, L.: A mathematical framework for quan-tifying transferability in multi-source transfer learning. Advances in Neural Infor-mation Processing Systems 34 , 26103–26116 (2021) 27. Wang, D., Shelhamer, E., Liu, S., Olshausen, B., Darrell, T.: Tent: Fully test-time adaptation by entropy minimization. In: International Conference on Learning Representations (ICLR) (2021) 28. Wang, Z., Zhang, Z., Lee, C.Y., Zhang, H., Sun, R., Ren, X., Su, G., Perot, V., Dy, J., Pfister, T.: Learning to prompt for continual learning (2022), https://arxiv. org/abs/2112.08654 
+
+29. Wu, Z., Zhang, H., Li, Y.: Meta-ood: Meta-learning for few-shot out-of-distribution detection. In: Proceedings of the IEEE International Conference on Computer Vi-sion (ICCV) (2023) 30. Yang, J., Zhou, K., Li, Y., Liu, Z.: Generalized out-of-distribution detection: A survey. International Journal of Computer Vision 132 (12), 5635–5662 (2024) 31. Yao, H., Choi, C., Cao, B., Lee, Y., Koh, P.W., Finn, C.: Wild-Time: A benchmark of in-the-wild distribution shift over time. In: Advances in Neural Information Processing Systems (NeurIPS) (2022) T-QPM for Temporal OOD Detection 17 32. Ye, N., Li, K., Bai, H., Yu, R., Hong, L., Zhou, F., Li, Z., Zhu, J.: OOD-Bench: Quantifying and understanding two dimensions of out-of-distribution generaliza-tion. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR). pp. 7947–7958 (2022) 33. Zhang, Q., Feng, Q., Zhou, J.T., Bian, Y., Hu, Q., Zhang, C.: The best of both worlds: On the dilemma of out-of-distribution detection. Advances in Neural In-formation Processing Systems 37 , 69716–69746 (2024) 34. Zhang, Z., Xu, Z., Xiang, X.: Vision-language dual-pattern matching for out-of-distribution detection. In: European Conference on Computer Vision (ECCV) (2024) 35. Zhu, F., Ma, S., Cheng, Z., Zhang, X.Y., Zhang, Z., Liu, C.L.: Open-world machine learning: A review and new outlooks. arXiv preprint arXiv:2403.01759 (2024) 
+
+## A Theoretical Proofs 
+
+Lemma 1. At time steps t and t + 1 , if H(p(yt|xt)) ≤ H(p(yt+1 |xt+1 )) then 
+
+Conf t = max 
+
+> yt∈Y t
+
+p(yt|xt) ≥ max 
+
+> yt+1 ∈Y t+1
+
+p(yt+1 |xt+1 ) = Conf t+1 .
+
+Proof: For K classes at both time t and t + 1 , denote p∗ 
+
+> t
+
+:= max 
+
+> yt∈Y t
+
+p(yt|xt)
+
+and p∗ 
+
+> t+1
+
+:= max 
+
+> yt+1 ∈Y t+1
+
+p(yt+1 |xt+1 ). Suppose p∗ 
+
+> t
+
+= P (yt = k1|xt) and p∗ 
+
+> t+1
+
+=
+
+P (yt = k2|xt+1 ). Now set pt = ( p∗ 
+
+> t
+
+, 1 − p∗ 
+
+> t
+
+), where 1 − p∗ 
+
+> t
+
+is split among classes 
+
+{1, . . . , K } \ { k1} and 1 − p∗ 
+
+> t+1
+
+is split among classes {1, . . . , K } \ { k2}. This approximates the entropy as 
+
+H(pt) = −p∗ 
+
+> t
+
+log p∗ 
+
+> t
+
+− X
+
+> i∈{ 1,...,K }\{ k1}
+
+pit log pit , (20) where pit = 1−p∗ 
+
+> t
+> K−1
+
+. And (20) is simplified as 
+
+H(pt) = −p∗ 
+
+> t
+
+log p∗ 
+
+> t
+
+− (1 − p∗ 
+
+> t
+
+) log 1 − p∗
+
+> t
+
+K − 1 . (21) Equivalently 
+
+H(pt+1 ) = −p∗ 
+
+> t+1
+
+log p∗ 
+
+> t+1
+
+− (1 − p∗
+
+> t+1
+
+) log 1 − p∗
+
+> t+1
+
+K − 1 . (22) Because H(pt) ≤ H(pt+1 ) and from (21) and (22), we implies that p∗ 
+
+> t
+
+≥ p∗
+
+> t+1
+
+.
+
+Lemma 2. (Theorem 1, ( [33])) The generalization error at time step t, GErr t,is standard cross entropy loss for hypothesis f ∈ F under covariant shift Pcov .
+
+GErr t is lower bounded by 
+
+GErr t(f ) ≥ − 12κ EPt,sem out 
+
+r 12 (Lreg (f ) − log K) (23) 
+
+− 12κ dF (Pt,cov out , Pt,sem out ) + Ct + EPt,cov out 
+
+H(p(yt|xt)) 18 A. Naiknaware and S. Sekeh 
+
+where Ct is constant. 
+
+Lemma 3. (Lemma 1, ( [33])) For any f ∈ F , we have 
+
+EPt,cov out 
+
+T V (Ff ∥U ) ≤EPt,sem out 
+
+T V (Ff ∥U ) (24) 
+
++ dF (Pt,cov out , Pt,sem out ) + λ, 
+
+where λ is a constant independent of f . U is the K-classes uniform distribution. 
+
+Pt,cov out is the covariate-shifted OOD distribution at time t. Pt,sem out is the semantic OOD distribution at time t.
+
+Lemma 4. (Lemma 3, ( [33])) Denote the OOD detection loss used for MSP detectors as Lreg , then we have 
+
+EPt,sem out 
+
+(T V (Ff ∥U )) ≤ EPt,sem out 
+
+r 12 (Lreg (f ) − log K). (25) 
+
+Lemma 5. The generalization error at time step t, GErr t, is standard cross entropy loss for hypothesis f ∈ F under covariant shift Pcov . GErr t is upper bounded by 
+
+GErr t(f ) ≤ log e
+
+2 EPt,sem out 
+
+r 12 (Lreg (f ) − log K) + log e
+
+2 dF (Pt,cov out , Pt,sem out ) (26) 
+
++ Ct + log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  + H(p(yt|xt))  (27) 
+
+where Ct is constant. 
+
+Proof: 
+
+GErr t(f ) := EPt,cov out 
+
+LCE (f (xt, y t)) = EPt,cov out 
+
+KL (p(yt|xt)∥Ff (xt)) + H(p(yt|xt)) 
+
+≤ log e
+
+2 EPt,cov out 
+
+(T V (p(yt|xt)∥Ff (xt)) + X 2(p(yt|xt)∥Ff (xt))) + H(p(yt|xt)) 
+
+≤ log e
+
+2 EPt,cov out 
+
+(T V (p(yt|xt)∥U ) + T V (Ff (xt)∥U )) + EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  + EPt,cov out 
+
+H(p(yt|xt))  (28) 
+
+where from [24], we have 
+
+X 2(P ∥Q) + 1 = 
+
+Z P 2
+
+Q dμ 
+
+and from [21] we have 
+
+KL (P ∥Q) ≤ 12
+
+ T V (P ∥Q) + X 2(P ∥Q) log eT-QPM for Temporal OOD Detection 19 
+
+From Lemma 3 above we have 
+
+GErr t(f ) ≤ log e
+
+2 EPt,cov out 
+
+(T V (p(yt|xt)∥U )) + log e
+
+2 EPt,sem out 
+
+T V (Ff ∥U )+ log e
+
+2 dF (Pt,cov out , Pt,sem out ) (29) 
+
++ log e
+
+2 λ + log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  + EPt,cov out 
+
+H(p(yt|xt)) 
+
+(30) From Lemma 4 above we have 
+
+GErr t(f ) ≤ log e
+
+2 EPt,cov out 
+
+(T V (p(yt|xt)∥U )) + log e
+
+2 EPt,sem out 
+
+r 12 (Lreg (f ) − log K)+ log e
+
+2 dF (Pt,cov out , Pt,sem out ) + log e
+
+2 λ (31) 
+
++ log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  + EPt,cov out 
+
+H(p(yt|xt))  (32) since at each time t, EPt,cov out 
+
+(T V (p(yt|xt)∥U )) is constant, we upper bound GErr t(f )
+
+as 
+
+GErr t(f ) ≤ log e
+
+2 EPt,sem out 
+
+r 12 (Lreg (f ) − log K) + log e
+
+2 dF (Pt,cov out , Pt,sem out ) (33) 
+
++ Ct + log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  + EPt,cov out 
+
+H(p(yt|xt))  (34) 
+
+Lemma 6. Under the assumption [A2 ] and regularity condition on F θ1 
+
+> f
+
+, we have 
+
+EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  ≤ δ2 
+
+> t
+
+EPt,cov out 
+
+(IF (θ2)) + Bt, (35) 
+
+where IF (θ2) is Fisher information and Bt is constant. The key part of this conjecture is developed based on 
+
+EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt))  = ( θ1 − θ2)2EPt,cov out 
+
+(IF (θ2)) + o(θ1 − θ2)2, (36) 
+
+where θ1 approximately vanishes. 
+
+Because inverse of entropy can be used as a confidence score to gauge the likelihood of a prediction being correct, we assume: 
+
+[A3] There exist a constant (say Zt), such that 
+
+EPt+1 ,cov out 
+
+H(p(yt+1 |xt+1 )) − EPt,cov out 
+
+H(p(yt|xt)) ≥ Zt + Conf t − Conf t+1  (37) 
+
+Theorem 2. (Main Theorem) Let Pt,cov and Pt,sem be the covariate-shifted OOD and semantic OOD distributions. Denote GErr t+1 (f ) the generalization error at time t + 1 . Then at two time steps t and t + 1 and under assumptions 
+
+[A1] , [A2] , and [A3] , we have 
+
+GErr t+1 (f ) − GErr t(f ) ≥ − ˜κ ∆ cov,sem t→t+1 − ˜κ Ξ sem t→t+1 − δ2 
+
+> t
+
+EPt,cov out 
+
+(IF (θ2)) + Ct→t+1 + Conf t − Conf t+1 , (38) 20 A. Naiknaware and S. Sekeh 
+
+where 
+
+∆cov,sem t→t+1 := dF (Pt+1 ,cov out , Pt+1 ,sem out ) + dF (Pt,cov out , Pt,sem out )
+
+and 
+
+Ξsem t→t+1 := EPt+1 ,sem out 
+
+r 12 (Lreg (f ) − log K) + EPt,sem out 
+
+r 12 (Lreg (f ) − log K).
+
+And Ct→t+1 = Ct+1 − Ct + Bt + Zt and δt are constants and δ2
+
+t = log e
+
+2 δ2
+
+t .
+
+Proof: Recall the definition of GErr t(f ):
+
+GErr t+1 (f ) − GErr t(f )
+
+≥ − 12κ EPt+1 ,sem out 
+
+r 12 (Lreg (f ) − log K) − 12κ dF (Pt+1 ,cov out , Pt+1 ,sem out )
+
+− log e
+
+2 EPt,sem out 
+
+r 12 (Lreg (f ) − log K) − log e
+
+2 dF (Pt,cov out , Pt,sem out )
+
+− log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt)) 
+
++( Ct+1 − Ct) + ( EPt+1 ,cov out 
+
+H(p(yt+1 |xt+1 )) − EPt,cov out 
+
+H(p(yt|xt))) , (39) 
+
+If we denote 
+
+∆cov,sem t→t+1 := dF (Pt+1 ,cov out , Pt+1 ,sem out ) + dF (Pt,cov out , Pt,sem out )
+
+and 
+
+Ξsem t→t+1 := EPt+1 ,sem out 
+
+r 12 (Lreg (f ) − log K) + EPt,sem out 
+
+r 12 (Lreg (f ) − log K),
+
+then there exists a constant ˜κ ≤ 12κ + log e
+
+2 such that (39) is written as 
+
+GErr t+1 (f ) − GErr t(f ) ≥ − ˜κ ∆ cov,sem t→t+1 − ˜κ Ξ sem t→t+1 + Ct→t+1 
+
+− log e
+
+2 EPt,cov out 
+
+ X 2(p(yt|xt)∥Ff (xt)) 
+
++ EPt+1 ,cov out 
+
+H(p(yt+1 |xt+1 )) − EPt,cov out 
+
+H(p(yt|xt)) , (40) 
+
+where Ct→t+1 = Ct+1 − Ct is constant. Apply the upper bound in Lemma 6, we have the lower bound below 
+
+GErr t+1 (f ) − GErr t(f ) ≥ − ˜κ ∆ cov,sem t→t+1 − ˜κ Ξ sem t→t+1 − δ2
+
+t EPt,cov out 
+
+(IF (θ2)) + Ct→t+1 + EPt+1 ,cov out 
+
+H(p(yt+1 |xt+1 )) − EPt,cov out 
+
+H(p(yt|xt)) ,
+
+(41) 
+
+where Ct→t+1 = Ct+1 − Ct + Bt is constant and δ2
+
+t = log e
+
+2 δ2
+
+t . By applying assumption [A3] , we conclude the proof. T-QPM for Temporal OOD Detection 21 
+
+## B Pseudocode (Phase I-IV) 
+
+Algorithm 1: Phase I: Text Pattern Construction 
+
+Input: ID class set Y = {y1, . . . , y K }; prompt templates {p(i) 
+
+> k
+
+}Pi=1 for each class k;Frozen CLIP text encoder ϕT
+
+Output: ID text bank TID ∈ RK×d 
+
+> 1
+
+Build per-class text embeddings via prompt ensembling (computed once, kept frozen).  
+
+> 2
+
+for each class k = 1 to K do  
+
+> 3
+
+for each prompt template i = 1 to P do  
+
+> 4
+
+e(i) 
+
+> k
+
+← Normalize 
+
+
+
+ϕT (p(i) 
+
+> k
+
+)
+
+
+
+; // encode and ℓ2-normalize each prompt  
+
+> 5
+
+tk ← Normalize 
+
+PPi=1 e(i)
+
+> k
+
+
+
+; // average normalized embeddings, then re-normalize  
+
+> 6
+
+TID ← [t1, . . . , tK ]⊤ ∈ RK×d ; // stack into ID text bank  
+
+> 7
+
+Return TID ; 
+
+> 8
+
+Note: TID is computed once and remains fixed across all timesteps, serving as a stable semantic anchor. 22 A. Naiknaware and S. Sekeh 
+
+Algorithm 2: Phase II: Temporal Visual Pattern Construction 
+
+Input: Per-timestep ID training sets {D train  
+
+> t
+
+}T
+
+> t=0
+
+; frozen CLIP visual encoder 
+
+ϕV ;ID text bank TID ; spatial weight γ > 0; temperature T > 0
+
+Output: Timestep-specific visual prototypes {μk,t }K, T
+
+> k=1 , t =0
+
+, each ∈ RK 
+
+> 1
+
+for t = 0 to T do  
+
+> 2
+
+Compute class-attended image representations for all training images at timestep t. 
+
+> 3
+
+for each (x, y ) ∈ D train  
+
+> t
+
+do  
+
+> 4
+
+F(x) ← ϕV (x) ∈ R(N +1) ×d ; // extract ViT patch sequence  
+
+> 5
+
+Fv (x) ← F(x)[0 , :] ; // global [CLS] token  
+
+> 6
+
+Fs(x) ← F(x)[1 : , :] ; // spatial patch embeddings  
+
+> 7
+
+for each class k = 1 to K do  
+
+> 8
+
+Ak (x) ← Softmax 
+
+ Fs(x) tk
+
+∥Fs(x)∥ ∥ tk ∥
+
+
+
+∈ RN ; // class-specific spatial attention  
+
+> 9
+
+˜fk (x) ← Ak (x)⊤ Fs(x) ; // attended spatial feature  
+
+> 10
+
+fk (x) ← γ ˜fk (x) + Fv (x) ; // combine global and spatial information  
+
+> 11
+
+zID (x)[ k] ← fk (x)⊤tk ; // ID logit for class k 
+
+> 12
+
+p(x) ← Softmax( zID (x) / T ) ; // class probability vector  
+
+> 13
+
+Estimate per-class visual prototypes by averaging over class-conditional training samples.  
+
+> 14
+
+for each class k = 1 to K do  
+
+> 15
+
+μk,t ← 1
+
+|{ (x, y ) ∈ D train  
+
+> t
+
+: y = k}| 
+
+P
+
+> (x,y )∈D train
+> t
+> y=k
+
+p(x) ; // mean ID probability pattern for class k at time t 
+
+> 16
+
+Return {μk,t }; 
+
+> 17
+
+Note: Prototypes are recomputed at each new timestep to track gradual visual distribution drift. T-QPM for Temporal OOD Detection 23 
+
+Algorithm 3: Phase III: Quadruple Cross-Modal Scoring 
+
+Input: Test image x with associated caption c; timestep t;Frozen encoders ϕV , ϕT ; ID text bank TID ; prototypes {μk,t };Spatial weight γ; temperature T ; fixed hyperparameter γcap > 0; learned weights ˜β, ˜η ∈ R
+
+Output: Fused OOD score SFUSED (x, t ) ∈ R 
+
+> 1
+
+(a) Extract test image features and compute ID logits (reuse Phase II procedure).  
+
+> 2
+
+F(x) ← ϕV (x); Fv (x) ← F(x)[0 , :] ; Fs(x) ← F(x)[1 : , :] ; 
+
+> 3
+
+for k = 1 to K do  
+
+> 4
+
+Compute Ak , ˜fk , fk , zID (x)[ k] as in Phase II;  
+
+> 5
+
+p(x) ← Softmax( zID (x) / T ); 
+
+> 6
+
+(b) Score 1 — Semantic Matching Score SID (test image ↔ ID text).  
+
+> 7
+
+SID (x) ← max k∈{ 1,...,K } zID (x)[ k] / T ; 
+
+> 8
+
+(c) Score 2 — Visual Typicality Score SVIS (test image ↔ ID visual prototypes).  
+
+> 9
+
+for k = 1 to K do  
+
+> 10
+
+KL k (x, t ) ←
+
+> K
+
+X
+
+> j=1
+
+pj (x) log pj (x)
+
+μk,t [j] ; // KL divergence from prototype k 
+
+> 11
+
+SVIS (x, t ) ← − min k KL k (x, t ); 
+
+> 12
+
+(d) Encode test caption (once per test sample).  
+
+> 13
+
+qc ← Normalize( ϕT (c)) ∈ Rd; 
+
+> 14
+
+(e) Score 3 — Caption-Text Alignment Score SCAP -T (OOD text ↔
+
+ID text).  
+
+> 15
+
+SCAP -T(x) ← max k∈{ 1,...,K } ⟨qc, tk ⟩; 
+
+> 16
+
+(f ) Score 4 — Caption-Visual Alignment Score SCAP -V (OOD text ↔
+
+ID visual).  
+
+> 17
+
+zCAP (x) ← [q⊤ 
+
+> c
+
+t1, . . . , q⊤ 
+
+> c
+
+tK ]⊤ ∈ RK ; 
+
+> 18
+
+pCAP (x) ← Softmax( zCAP (x) / T ); 
+
+> 19
+
+for k = 1 to K do  
+
+> 20
+
+KL cap  
+
+> k
+
+(x, t ) ← KL  pCAP (x) μk,t 
+
+; 
+
+> 21
+
+SCAP -V(x, t ) ← − min k KL cap  
+
+> k
+
+(x, t ); 
+
+> 22
+
+(g) Fuse four scores with softplus-constrained learnable weights.  
+
+> 23
+
+β ← log(1 + e ˜β ); η ← log(1 + e˜η ) ; // softplus ensures β, η > 0 
+
+> 24
+
+SFUSED (x, t ) ← SID (x) + β · SVIS (x, t ) − γcap · SCAP -T(x) − η · SCAP -V(x, t ); 
+
+> 25
+
+Return SFUSED (x, t );24 A. Naiknaware and S. Sekeh 
+
+Algorithm 4: Phase IV: Threshold Calibration, Training, and Tempo-ral OOD Detection 
+
+Input: Temporal ID training sets {D train  
+
+> t
+
+}T
+
+> t=0
+
+; score function SFUSED (·, t )
+
+from Phase III; quantile δq ;loss weights λcov , λ temp > 0; smoothness κ > 0; epochs E; learning rate αlr ;
+
+γcap > 0; test pairs {(x, c )}
+
+Output: Threshold δ; optimized ˜β, ˜η; OOD decisions D(x, t ) ∈ { ID , OOD } 
+
+> 1
+
+Step 1: Calibrate global threshold at t = 0 (done once).  
+
+> 2
+
+S0 ← { SFUSED (x, 0) | (x, y ) ∈ D train 0 }; 
+
+> 3
+
+δ ← quantile δq (S0); // fixed across all timesteps  
+
+> 4
+
+Step 2: Initialize learnable fusion scalars.  
+
+> 5
+
+Initialize ˜β, ˜η ∈ R; // effective weights: β=softplus( ˜β), η=softplus(˜ η) 
+
+> 6
+
+Optimizer ← Adam([ ˜β, ˜η], lr= αlr ); 
+
+> 7
+
+ATC clean  
+
+> −1
+
+← None ; ATC shift  
+
+> −1
+
+← None ; 
+
+> 8
+
+Step 3: Train sequentially across timesteps.  
+
+> 9
+
+for t = 0 to T do  
+
+> 10
+
+for epoch e = 1 to E do  
+
+> 11
+
+foreach mini-batch (X, ˜X, Y ) ∼ D train  
+
+> t
+
+do 
+
+// X: clean; ˜X: covariate-shifted; Y : labels  
+
+> 12
+
+(a) ID Classification Loss.  
+
+> 13
+
+LID ← 12
+
+ CE( zID (X), Y ) + CE( zID ( ˜X), Y ); 
+
+> 14
+
+(b) Covariate Consistency Loss.  
+
+> 15
+
+LCOV ← 1
+
+> |X|
+
+P 
+
+> i
+
+|SFUSED (xi, t ) − SFUSED (˜ xi, t )|; 
+
+> 16
+
+(c) Temporal Drift Penalty (ATC).  
+
+> 17
+
+ATC clean  
+
+> t
+
+← 1
+
+> |X|
+
+P 
+
+> i
+
+σ
+
+ δ−SFUSED (xi,t )
+
+> κ
+
+
+
+; 
+
+> 18
+
+ATC shift  
+
+> t
+
+← 1
+
+> |X|
+
+P 
+
+> i
+
+σ
+
+ δ−SFUSED (˜ xi,t )
+
+> κ
+
+
+
+; 
+
+> 19
+
+if t > 0 then  
+
+> 20
+
+LTEMP ← | ATC clean  
+
+> t
+
+− ATC clean  
+
+> t−1
+
+| + |ATC shift  
+
+> t
+
+− ATC shift  
+
+> t−1
+
+|; 
+
+> 21
+
+else  
+
+> 22
+
+LTEMP ← 0; 
+
+> 23
+
+(d) Total loss and update.  
+
+> 24
+
+LTOTAL ← L ID + λcov LCOV + λtemp LTEMP ; 
+
+> 25
+
+Backpropagate ∇ ˜β, ˜η LTOTAL ; update ( ˜β, ˜η) via Adam;  
+
+> 26
+
+ATC clean  
+
+> t
+
+, ATC shift  
+
+> t
+
+← final-epoch values;  
+
+> 27
+
+Step 4: Inference — OOD detection at timestep t. 
+
+> 28
+
+foreach test sample (x, c ) at timestep t do  
+
+> 29
+
+Compute SFUSED (x, t ) using Phase III with optimized ˜β, ˜η; 
+
+> 30
+
+D(x, t ) ←
+
+(
+
+ID if SFUSED (x, t ) ≥ δ
+
+OOD otherwise ;T-QPM for Temporal OOD Detection 25 
+
+## C Additional Experiments 
+
+We present additional quantitative results to further validate the effectiveness of T-QPM across multiple ID datasets, OOD benchmarks, and corruption types over all ten timesteps ( t = 0 , . . . , 9). 
+
+ID Classification Accuracy under Image Corruptions. Tables 4 and 5 report the ID classification accuracy of T-QPM and DPM under Gaussian blur and JPEG compression corruptions, respectively, alongside clean accuracy. Both methods achieve competitive clean accuracy across CLEAR100, CLEAR10, and Core50. However, T-QPM consistently outperforms DPM under both corruption types, with the performance gap widening at later timesteps. For instance, on CLEAR100 under Gaussian blur, T-QPM achieves 96 .20% at t = 9 compared to 92 .42% 
+
+for DPM, and under JPEG compression reaches 99 .15% versus 93 .20% . These results demonstrate that T-QPM maintains greater robustness to input corrup-tions as the underlying visual distribution drifts over time, owing to its covariate consistency loss and temporal drift penalty introduced in Phase IV. 
+
+OOD Detection Performance. Tables 6 and 7 report FPR95 and AUROC, respectively, across all combinations of ID datasets (CLEAR100, CLEAR10, Core50) and OOD benchmarks (COCO, ImageNet-1K-VL-Enriched, Flickr30K, CC12M, Visual Genome). T-QPM consistently and substantially outperforms DPM on both metrics. In terms of FPR95, T-QPM reduces the false positive rate by a factor of approximately 2–3× across all settings. For example, on CLEAR100 with COCO as the OOD dataset at t = 0 , DPM achieves 41 .46% 
+
+FPR95 while T-QPM achieves 13 .64% . On the AUROC metric, T-QPM attains 
+
+97 –99% across most settings, compared to 85 –97% for DPM, with the largest gains observed on semantically challenging OOD sets such as COCO and Visual Genome. Importantly, while both methods experience performance degradation at later timesteps due to temporal distribution shift, T-QPM degrades signif-icantly more slowly. This confirms that the temporal modeling components of T-QPM namely, the time-conditioned fused score SFUSED (·, t ) and the above-threshold coverage penalty effectively mitigate temporal OOD drift, validating the theoretical guarantees established in our Main Theorem. 26 A. Naiknaware and S. Sekeh 
+
+Table 4: ID classification accuracy (clean and blur) for T-QPM vs. DPM across all ID datasets and timesteps under Gaussian Blur covariate shift 
+
+CLEAR100 CLEAR10 Core50 Timestep Method Clean (%) ↑
+
+Blur (%) ↑
+
+Clean (%) ↑
+
+Blur (%) ↑
+
+Clean (%) ↑
+
+Blur (%) ↑
+
+t = 0 DPM 96.61 93.47 98.81 98.81 97.87 96.88 T-QPM 96.57 93.23 99.01 98.22 97.88 96.76 
+
+t = 1 DPM 97.62 93.38 99.40 98.20 98.01 97.11 T-QPM 97.66 93.84 99.40 97.40 98.33 97.45 
+
+t = 2 DPM 97.02 93.19 99.60 98.80 98.27 96.99 T-QPM 97.04 94.69 99.60 97.80 98.67 97.28 
+
+t = 3 DPM 96.88 93.45 99.40 98.60 98.35 97.00 T-QPM 97.12 95.69 99.40 98.20 98.10 97.28 
+
+t = 4 DPM 97.02 92.97 99.20 97.99 98.32 97.02 T-QPM 97.25 94.57 99.20 97.79 98.30 97.30 
+
+t = 5 DPM 97.00 92.60 99.40 98.80 98.28 96.98 T-QPM 97.14 95.42 99.40 98.00 98.35 97.25 
+
+t = 6 DPM 96.78 93.11 99.00 98.60 98.30 97.05 T-QPM 97.32 95.01 99.20 97.00 98.40 97.20 
+
+t = 7 DPM 97.10 93.19 99.20 97.80 98.33 97.01 T-QPM 97.36 96.49 99.00 97.60 98.42 97.30 
+
+t = 8 DPM 96.90 93.17 99.00 98.00 98.29 96.97 T-QPM 97.39 95.23 98.80 97.60 98.36 97.22 
+
+t = 9 DPM 96.08 92.42 99.40 97.60 98.25 96.95 T-QPM 97.30 96.20 99.40 97.20 98.38 97.18 T-QPM for Temporal OOD Detection 27 
+
+Table 5: ID classification accuracy under JPEG compression corruption for T-QPM vs. DPM across all ID datasets and timesteps. 
+
+CLEAR100 CLEAR10 Core50 t Method Clean (%) ↑
+
+JPEG (%) ↑
+
+Clean (%) ↑
+
+JPEG (%) ↑
+
+Clean (%) ↑
+
+JPEG (%) ↑
+
+t = 0 DPM 96.57 91.62 98.81 95.10 97.87 95.80 T-QPM 97.08 96.23 99.01 97.80 97.88 96.90 
+
+t = 1 DPM 97.36 92.84 99.40 95.70 98.01 96.10 T-QPM 98.18 96.84 99.40 98.00 98.33 97.20 
+
+t = 2 DPM 96.94 92.69 99.60 96.10 98.27 96.40 T-QPM 97.53 97.70 99.60 98.30 98.67 97.50 
+
+t = 3 DPM 96.42 92.69 99.40 95.90 98.35 96.30 T-QPM 97.62 98.68 99.40 98.10 98.10 97.40 
+
+t = 4 DPM 96.90 92.57 99.20 95.60 98.32 96.20 T-QPM 97.74 97.58 99.20 97.90 98.30 97.30 
+
+t = 5 DPM 96.74 92.42 99.40 96.00 98.28 96.40 T-QPM 97.64 98.40 99.40 98.20 98.35 97.50 
+
+t = 6 DPM 96.72 93.01 99.00 95.80 98.30 96.30 T-QPM 97.81 98.01 99.20 98.00 98.40 97.40 
+
+t = 7 DPM 96.96 92.49 99.20 95.90 98.33 96.30 T-QPM 97.85 99.45 99.00 98.10 98.42 97.50 
+
+t = 8 DPM 96.90 93.23 99.00 95.70 98.29 96.20 T-QPM 97.88 98.23 98.80 97.90 98.36 97.40 
+
+t = 9 DPM 95.88 93.20 99.40 95.50 98.25 96.10 T-QPM 97.79 99.15 99.40 98.00 98.38 97.30 28 A. Naiknaware and S. Sekeh 
+
+Table 6: FPR95 (%) ↓ for T-QPM vs. DPM across all available ID and OOD dataset combinations across all timesteps. IN-1K: ImageNet-1K-VL-Enriched; Flk30: Flickr30K; VG: Visual Genome. 
+
+CLEAR100 (ID) CLEAR10 (ID) Core50 (ID) t Method COCO IN-1K Flk30 CC12M VG COCO IN-1K Flk30 CC12M VG COCO IN-1K Flk30 CC12M VG 
+
+t = 0 DPM 41.46 17.95 22.98 10.15 44.30 7.54 9.40 4.93 7.30 23.00 16.50 11.30 14.00 10.60 23.40 T-QPM 13.64 3.96 5.92 1.54 12.85 0.90 3.80 1.60 0.35 12.20 6.10 4.00 5.00 2.70 10.20 
+
+t = 1 DPM 41.28 17.20 21.89 9.85 44.15 8.78 9.80 6.02 7.50 24.20 17.00 11.80 15.00 11.00 23.80 T-QPM 16.58 5.46 7.23 2.15 15.37 1.10 4.10 2.00 0.48 13.00 6.70 4.60 5.70 3.00 11.90 
+
+t = 2 DPM 41.48 17.54 21.60 10.21 44.40 8.61 9.51 6.02 7.35 23.06 16.40 11.20 14.10 10.30 22.80 T-QPM 17.42 5.94 7.87 2.53 16.11 0.89 3.65 1.63 0.46 11.85 6.20 4.10 5.10 2.70 10.40 
+
+t = 3 DPM 41.58 18.41 22.58 10.20 44.06 7.58 10.20 5.42 7.80 26.00 18.50 12.80 16.20 12.00 27.50 T-QPM 16.30 5.03 6.92 2.27 15.10 1.20 4.50 2.20 1.44 13.50 7.80 5.30 6.40 3.50 14.20 
+
+t = 4 DPM 43.50 18.62 23.77 10.74 46.49 8.62 11.00 6.21 8.20 28.00 20.10 14.00 18.50 13.50 30.00 T-QPM 18.32 6.39 8.18 2.94 17.18 1.40 5.20 2.60 0.88 14.80 8.90 6.20 7.40 4.20 15.50 
+
+t = 5 DPM 43.90 19.97 23.87 11.01 46.98 8.66 12.50 6.61 8.60 30.00 22.00 15.50 20.80 15.00 32.00 T-QPM 16.84 5.35 7.20 2.63 15.82 1.50 5.80 2.80 1.48 16.20 10.00 7.20 8.50 5.00 17.00 
+
+t = 6 DPM 43.32 19.26 24.85 11.70 46.06 8.60 13.50 6.51 9.00 33.00 24.00 16.50 22.00 16.50 34.50 T-QPM 19.38 6.70 8.57 3.16 18.06 1.70 6.50 3.00 1.80 17.80 11.20 8.50 9.60 6.00 18.50 
+
+t = 7 DPM 45.48 20.81 25.54 12.11 48.77 8.44 14.70 6.02 9.29 38.66 24.10 17.30 21.50 15.20 34.60 T-QPM 19.70 7.19 8.33 3.33 18.55 1.20 5.20 2.60 1.60 13.75 9.80 6.90 8.20 5.10 16.90 
+
+t = 8 DPM 46.68 22.36 26.13 12.46 50.11 9.66 14.70 8.31 9.29 38.66 24.10 17.30 21.50 15.20 34.60 T-QPM 20.50 7.16 8.86 3.61 19.28 1.20 5.20 2.60 1.59 13.75 9.80 6.90 8.20 5.10 16.90 
+
+t = 9 DPM 47.66 23.02 27.32 13.15 50.89 9.32 15.50 7.30 9.80 40.50 26.50 18.80 23.00 17.00 36.80 T-QPM 20.50 7.71 9.06 3.77 19.45 1.50 6.00 3.10 2.03 14.50 11.00 7.80 9.20 6.30 18.80 
+
+Table 7: AUROC (%) ↑ for T-QPM vs. DPM across all available ID and OOD dataset combinations across all timesteps. IN-1K: ImageNet-1K-VL-Enriched; Flk30: Flickr30K; VG: Visual Genome. 
+
+CLEAR100 (ID) CLEAR10 (ID) Core50 (ID) t Method COCO IN-1K Flk30 CC12M VG COCO IN-1K Flk30 CC12M VG COCO IN-1K Flk30 CC12M VG 
+
+t = 0 DPM 88.33 95.64 94.25 97.72 87.59 97.63 98.40 98.35 98.55 93.40 95.70 97.60 96.10 97.70 93.90 T-QPM 97.37 99.03 98.70 99.61 97.52 99.60 99.20 99.65 99.77 97.40 98.80 99.10 99.05 99.55 97.50 
+
+t = 1 DPM 87.99 95.74 94.41 97.80 87.30 97.35 98.35 98.28 98.50 93.20 95.60 97.50 96.00 97.60 93.70 T-QPM 96.74 98.78 98.42 99.49 96.92 99.62 99.18 99.68 99.87 97.45 98.75 99.08 99.02 99.52 97.55 
+
+t = 2 DPM 88.14 95.65 94.16 97.73 87.38 97.21 98.48 98.20 98.53 93.18 95.60 97.80 96.10 97.80 94.10 T-QPM 96.56 98.66 98.21 99.41 96.73 99.66 99.16 99.65 99.86 97.49 98.90 99.10 99.00 99.50 97.60 
+
+t = 3 DPM 87.84 95.37 94.19 97.62 87.05 97.43 98.30 98.31 98.60 92.95 95.40 97.30 95.90 97.65 93.60 T-QPM 96.67 98.83 98.44 99.49 96.87 99.60 99.15 99.70 99.49 97.55 98.85 99.05 99.10 99.48 97.40 
+
+t = 4 DPM 87.28 95.35 93.78 97.53 86.42 96.90 98.10 98.05 98.45 92.60 95.00 97.00 95.50 97.30 93.00 T-QPM 96.29 98.52 98.09 99.30 96.48 99.55 99.10 99.60 99.60 97.70 98.70 99.00 99.00 99.40 97.20 
+
+t = 5 DPM 86.87 94.99 93.59 97.45 86.01 96.85 97.95 97.91 98.35 92.20 94.80 96.90 95.20 97.10 92.60 T-QPM 96.31 98.63 98.20 99.35 96.52 99.50 99.05 99.55 99.50 97.80 98.60 98.95 98.95 99.35 97.00 
+
+t = 6 DPM 86.50 95.21 93.25 97.39 85.53 96.81 97.70 97.84 98.20 91.90 94.50 96.70 95.00 96.90 92.30 T-QPM 96.09 98.59 98.09 99.33 96.32 99.48 99.00 99.50 99.50 97.90 98.50 98.90 98.90 99.20 96.80 
+
+t = 7 DPM 85.70 94.87 93.04 97.22 84.82 96.57 97.40 97.82 98.00 91.20 94.00 96.30 94.60 96.60 91.50 T-QPM 95.90 98.48 98.08 99.25 96.15 99.45 98.98 99.48 99.70 98.00 98.40 98.85 98.70 99.10 96.30 
+
+t = 8 DPM 85.51 94.44 92.94 97.11 84.69 96.30 94.74 97.56 98.57 90.52 93.20 95.40 93.80 95.60 89.80 T-QPM 95.70 98.47 97.96 99.22 95.95 99.49 98.95 99.07 99.57 98.12 97.60 98.70 98.10 99.00 95.80 
+
+t = 9 DPM 84.82 94.23 92.43 96.92 83.83 96.59 94.60 97.72 98.40 89.90 92.90 95.00 93.50 95.30 89.00 T-QPM 95.59 98.40 97.91 99.16 95.87 99.28 98.85 99.00 99.50 98.00 97.40 98.60 98.00 98.90 95.50 T-QPM for Temporal OOD Detection 29 
+
+Table 8: Hyperparameter sweep over β. AUROC (%) ↑ for ViT-16 and ViT-32 back-bones.(ID dataset: Clear100, OOD: COCO) 
+
+β ViT-16 AUROC (%) ↑
+
+ViT-32 AUROC (%) ↑
+
+0.0 91.20 89.40 0.5 93.80 91.90 1.0 96.32 93.60 1.5 95.70 94.80 2.0 94.80 94.10 3.0 93.10 92.40 4.0 91.40 90.80 5.0 89.20 88.60 6.0 86.80 86.20 8.0 83.40 82.70 
+
+Table 9: Hyperparameter sweep over η. AUROC (%) ↑ for ViT-16 and ViT-32 back-bones.(ID dataset: Clear100, OOD: COCO) 
+
+η ViT-16 AUROC (%) ↑
+
+ViT-32 AUROC (%) ↑
+
+0.0 94.10 92.40 0.5 96.32 94.60 1.0 95.20 93.50 1.5 93.80 92.10 2.0 91.90 90.20 3.0 89.40 87.80 5.0 85.60 84.10 
+
+Table 10: Hyperparameter sweep over γcap . AUROC (%) ↑ for ViT-16 and ViT-32 backbones.(ID dataset: Clear100, OOD: COCO) 
+
+γcap 
+
+ViT-16 AUROC (%) ↑
+
+ViT-32 AUROC (%) ↑
+
+0.00 86.40 84.20 0.02 88.80 86.60 0.05 91.50 89.40 0.07 93.90 91.80 0.10 96.32 94.10 0.15 95.80 95.60 0.20 94.60 94.30 0.30 92.40 92.10 0.50 89.80 89.50 30 A. Naiknaware and S. Sekeh 
+
+## D Implementation Details 
+
+Backbone and Encoders. T-QPM builds on a frozen CLIP backbone with either a ViT-B/16 or ViT-B/32 visual encoder ( d = 512 ). Both the visual encoder ϕV and text encoder ϕT are kept entirely frozen throughout all phases of training; no fine-tuning of backbone parameters is performed. Only two scalar fusion parameters, 
+
+˜β and ˜η, are optimized via gradient descent, with effective weights obtained as 
+
+β = log(1 + e ˜β ) and η = log(1 + e˜η ) (softplus) to enforce strict positivity. These are initialized at ˜β = 1 .0 and ˜η = 0 .5, corresponding to β ≈ 1.31 and η ≈ 0.97 
+
+at the start of training. 
+
+ID Text Bank Construction. The ID text bank TID ∈ RK×d is constructed once at initialization via prompt ensembling and remains fixed across all timesteps. For each class k, we encode all P prompt templates (loaded from prompt.txt )through ϕT , ℓ2-normalize each embedding, sum across templates, and re-normalize. This follows the standard CLIP zero-shot ensembling protocol. 
+
+Visual Prototype Construction. At each timestep t, per-class visual prototypes 
+
+{μk,t }Kk=1 are recomputed from the current timestep’s ID training split. For each image, we extract the class-attended global feature using the DPM-style spatial attention mechanism (Phase II), normalize it, and accumulate a per-class sum. The prototype μk,t is the ℓ2-normalized mean of all class-k features. Prototypes are computed exclusively from ID data and are never exposed to OOD samples. 
+
+Optimization. Training proceeds sequentially across T = 10 timesteps using the Adam optimizer with learning rate αlr = 3 × 10 −3, batch size 64 , and E = 5 
+
+epoch per timestep. The total loss at each mini-batch is: 
+
+LTOTAL = LID + λcov LCOV + λtemp LTEMP , (42) where λcov = 0 .5 and λtemp = 1 .0. LID is a balanced cross-entropy loss averaged over clean and covariate-shifted views. LCOV is the mean absolute difference between fused scores of clean and shifted image pairs. LTEMP is the two-sided ATC drift penalty between consecutive timesteps, computed as: 
+
+LTEMP = |ATC clean  
+
+> t
+
+− ATC clean  
+
+> t−1
+
+| + |ATC shift  
+
+> t
+
+− ATC shift  
+
+> t−1
+
+|, (43) where the soft-ATC is a differentiable relaxation of the above-threshold coverage: 
+
+ATC t = E
+
+
+
+σ
+
+ δ − SFUSED 
+
+κ
+
+ 
+
+, κ = 0 .1. (44) At t = 0 , LTEMP = 0 since no previous ATC exists. 
+
+Threshold Calibration. The detection threshold δ is calibrated once at t = 0 as the δq = 0 .01 quantile of SFUSED evaluated on the t = 0 ID training split, and is held fixed for all subsequent timesteps. This conservative quantile ensures that fewer than 1% of clean ID training samples fall below the threshold, directly minimizing the false negative rate at the calibration timestep. T-QPM for Temporal OOD Detection 31 
+
+Covariate Corruption Pipeline. Shifted views for training are generated on-the-fly. Gaussian blur is applied with kernel size 9 and σ uniformly sampled from 
+
+[0 .1, 2.0] . JPEG compression is applied at a randomly sampled quality level. All corruptions are applied in the dataloader using torchvision transforms, with no storage of pre-corrupted images. The spatial attention weight is γ = 0 .2 and the CLIP logit temperature is T = 1 .0 throughout. 
+
+OOD Dataset Streaming. All OOD datasets are used exclusively at inference, never during training. COCO [15] is loaded from local disk along with captions. Flickr30K [22], ImageNet-1K-VL-Enriched [10], and CC12M [3] are streamed via the HuggingFace datasets library with a reservoir shuffle buffer of 10 ,000 ,capped at 20 ,000 , 10 ,000 , and 10 ,000 examples per evaluation, respectively. Cap-tions for Flickr30K are selected uniformly at random from the available per-image candidates. A new streaming iterator is instantiated at each timestep to avoid exhausting the stream. 
+
+Reproducibility. All experiments use a fixed random seed (default: 1556 ), set across random , numpy , torch , and torch.cuda . Results are averaged over 3 in-dependent trials with seeds offset by trial_id ∈ { 0, 1, 2}. All experiments are run on a single NVIDIA GPU with num_workers = 4 for ID dataloaders and 
+
+num_workers = 0 for HuggingFace streaming OOD loaders.

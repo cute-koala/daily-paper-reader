@@ -1,0 +1,357 @@
+Title: Memory Over Maps: 3D Object Localization Without Reconstruction
+
+URL Source: https://arxiv.org/pdf/2603.20530v1
+
+Published Time: Tue, 24 Mar 2026 00:20:58 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Memory Over Maps: 3D Object Localization Without Reconstruction 
+
+Rui Zhou 1∗, Xander Yap 2∗, Jianwen Cao 1, Allison Lau 2, Boyang Sun 2, Marc Pollefeys 2,3
+
+> ∗
+
+Equal contribution 1University of Zurich 2ETH Zurich 3Microsoft 
+
+Abstract — Target localization is a prerequisite for embod-ied tasks such as navigation and manipulation. Conventional approaches rely on constructing explicit 3D scene representa-tions to enable target localization, such as point clouds, voxel grids, or scene graphs. While effective, these pipelines incur substantial mapping time, storage overhead, and scalability limitations. Recent advances in vision-language models suggest that rich semantic reasoning can be performed directly on 2D observations, raising a fundamental question: is a complete 3D scene reconstruction necessary for object localization? In this work, we revisit object localization and propose a map-free pipeline that stores only posed RGB-D keyframes as a lightweight visual memory—without constructing any global 3D representation of the scene. At query time, our method retrieves candidate views, re-ranks them with a vision-language model, and constructs a sparse, on-demand 3D estimate of the queried target through depth backprojection and multi-view fusion. Compared to reconstruction-based pipelines, this design drastically reduces preprocessing cost, enabling scene indexing that is over two orders of magnitude faster to build while using substantially less storage. We further validate the localized targets on downstream object-goal navigation tasks. Despite requiring no task-specific training, our approach achieves strong performance across multiple benchmarks, demonstrating that direct reasoning over image-based scene memory can effec-tively replace dense 3D reconstruction for object-centric robot navigation. Project page: https://ruizhou-cn.github.io/memory-over-maps/ 
+
+I. INTRODUCTION Finding the correct target for interaction is a fundamental prerequisite for many autonomous robotic applications, such as navigation [1], object search [2], and manipulation [3]. The success of robot autonomy relies on precise localization of the target in the environment [4], [5]. When the environ-ment is completely unknown, the robot must jointly explore the space while reasoning about potential target locations [6], [7]. However, in many practical scenarios, the robot has prior access to the environment, for example through a pre-scan using onboard sensors. This setting is common in service robotics, vacuum cleaning, inspection, and logistics applica-tions. In such cases, efficiently leveraging prior observations to identify the goal in 3D space becomes crucial. Existing approaches typically construct an explicit 3D reconstruction to enable target localization. The core idea is to fuse prior sensory inputs—such as images or LiDAR scans—into a consistent metric 3D representation of the environment. This representation provides geometric struc-ture that supports navigation and planning [8], [9], [10]. To localize semantic targets, subsequent works incorporate higher-level information such as semantic masks into the 3D  
+
+> Fig. 1. Image-based target localization without dense 3D reconstruction. Using only posed RGB-D keyframes as a lightweight visual memory, our method directly infers the 3D target location and enables a robot to navigate to the queried object without building a global scene map.
+
+map [11], [12]. More recently, lightweight abstractions such as 3D scene graphs have been proposed to enable structured reasoning and incremental updates [13], [14], [15]. With the rapid development of vision foundation models, large language models (LLMs), and vision-language models (VLMs), recent works have further injected semantic and language-aligned features into 3D maps to support open-vocabulary and concept-level queries [16], [17], [18], [5]. Despite these advances, such approaches fundamentally de-pend on accurate and often dense 3D reconstruction as an intermediate representation, which incurs substantial compu-tational cost and storage overhead [17]. Meanwhile, purely image-based methods have demonstrated strong performance in related tasks, including image retrieval [19], feature match-ing [20], monocular depth estimation [21], and semantic reasoning [22]. This leads to a fundamental question: do we still need dense 3D maps as an intermediate representation for target localization? Motivated by this question, we revisit the object local-ization problem. Given prior RGB-D scans of an environ-ment, instead of constructing an explicit 3D reconstruction, we directly operate on the raw observational data, namely posed RGB-D images. Our pipeline treats posed RGB-D keyframes as a lightweight visual memory bank . At query time, three stages convert a multimodal goal (language description, category label, or reference image) into a 3D target estimate: (1) SigLIP2 [23] embeddings indexed with FAISS [24] retrieve candidate views in sub-second time; (2) a VLM re-ranks candidates by reasoning over fine-grained attributes; (3) text-prompted segmentation with depth backprojection and multi-view spatial fusion produces a          
+
+> arXiv:2603.20530v1 [cs.RO] 20 Mar 2026 Fig. 2. Method overview. Given a query and posed RGB-D keyframes: (1) Retrieval: SigLIP2 embeddings indexed with FAISS retrieve top-Kcandidates.
+> (2) VLM Re-Rank: a VLM filters false positives (red) and promotes true matches (green). (3) 3D Localization: SAM 3 segments the target; masked depth is backprojected, predictions are grouped into object instances, and per-instance multi-view fusion produces a 3D goal estimate. No global 3D map is built. (4) Navigation: a PointNav policy navigates directly to the goal. (Scene point cloud shown for visualization only.)
+
+robust 3D goal estimate. Our approach is training-free and avoids heavy preprocessing, making it both computation-ally and storage efficient. Despite its simplicity, it achieves strong performance in open-vocabulary object localization, particularly for small or fine-grained objects and context-dependent queries, where reconstruction-based approaches often struggle. These results suggest that eliminating explicit 3D intermediate representations is not only feasible but can improve localization performance. We further validate the localized goals in downstream object-goal navigation tasks and demonstrate strong, and in several settings state-of-the-art performance. In addition, we deploy our pipeline in a real-world setting, where a ground robot searches for target objects using pre-scanned RGB-D sequences. As a summary, our contributions are:  
+
+> •
+
+A map-free, open-vocabulary target localization framework that operates directly on posed RGB-D keyframes through a two-stage hybrid retrieval pipeline, removing the need for explicit global 3D reconstruction and enabling scene indexing with over two orders of magnitude faster preprocessing.  
+
+> •
+
+Robust 3D localization and navigation , combining text-prompted segmentation, depth backprojection, out-lier removal, multi-view spatial fusion, and multi-goal fallback strategies for reliable target reaching.  
+
+> •
+
+Extensive evaluation across multiple simulated bench-marks and real-world experiments, demonstrating strong localization performance and state-of-the-art down-stream navigation performance without explicit 3D re-construction. II. RELATED WORK 
+
+3D Reconstruction-Based Object Localization. The dominant paradigm builds an explicit 3D representation offline and queries it at inference time. VLMaps [16] lifts LSeg [25] features onto a bird’s-eye-view grid; Open-Mask3D [4] aggregates per-view CLIP features into recon-structed point clouds; Locate3D [5] trains a 3D encoder to associate referring expressions with point-cloud regions. Scene-graph methods [18], [17], [26], [27] introduce rela-tional structure on top of reconstruction, while memory-based systems [28], [29] maintain geometric point-cloud memories updated over time. All these methods fundamen-tally depend on dense 3D reconstruction—incurring hours of preprocessing and gigabytes of per-scene storage [17]. 
+
+2D Image-Based Retrieval and Grounding. Visual place recognition [19], [20] retrieves relevant images us-ing learned descriptors but targets scene-level match-ing rather than object-level grounding. Contrastive vision-language encoders—CLIP [30], ALIGN [31], FLAVA [32], SigLIP2 [23]. This enable zero-shot text-to-image retrieval but struggle with fine-grained attributes and spatial relation-ships. VLMs [22], [33] provide richer reasoning but are prohibitively expensive over large image collections. Our method bridges these paradigms: fast embedding retrieval narrows thousands of keyframes to a handful of candidates, and a VLM re-ranks only those—combining scalability with reasoning depth, while avoiding any 3D reconstruction. 
+
+Object Goal Navigation. Trained policies [34], [35], [36], [37] learn to navigate to object categories via reinforcement learning or imitation learning, with open-vocabulary exten-sions [38], [39], [40], [41] leveraging foundation models. Zero-shot frontier methods [42], [43], [7], [44], [45], [46], [47], [48] bypass task-specific training but must search online, producing trajectories far longer than necessary; our approach replaces exploration with direct navigation to pre-localized targets. III. METHOD 
+
+A. Overview 
+
+Given a pre-scanned environment represented as an RGB-D video with known camera poses, and a multimodal query 
+
+q (natural-language description, category label, or reference image), our goal is to estimate the 3D location ˆp ∈ R3 of the target object—without constructing any explicit 3D map of the scene. We first extract a compact set of N keyframes K =
+
+{(In, D n, P n)}Nn=1 from the raw video via pose-based selec-tion (Section III-B), where In, Dn, and Pn denote the RGB image, depth map, and camera-to-world pose, respectively. At query time, our pipeline proceeds in three stages: 1) Two-Stage Hybrid Retrieval (Section III-C): a fast embedding search retrieves top-K candidate views, followed by selective VLM re-ranking that filters false positives and scores fine-grained attributes. 2) 3D Object Localization (Section III-D): text-prompted segmentation with depth backprojection and multi-view spatial fusion produces a robust 3D goal estimate. 3) Goal-Directed Navigation (Section III-E): a pre-trained PointNav policy navigates the agent directly to the localized goal, bypassing online exploration. The first two stages constitute a standalone localization system; the third extends it to embodied navigation. 
+
+B. Scene Representation 
+
+Given an RGB-D video sequence with known camera poses, we extract keyframes via pose-based selection: a new keyframe is accepted when rotation or translation relative to the last accepted frame exceeds a threshold ( θrot = 15 ◦,
+
+θtrans = 0 .25 m for indoor scenes). This yields a compact database of N keyframes K = {(In, D n, P n)}Nn=1 . The representation can be further compressed by downsampling image resolution with minimal impact on retrieval accuracy (Section IV-E). 
+
+C. Two-Stage Hybrid Retrieval 
+
+Stage 1: Fast Candidate Retrieval. We encode each keyframe image In into a visual embedding vn = f (In) ∈
+
+Rd and each query into a query embedding eq = g(q) ∈ Rd
+
+using SigLIP2 [23], where f and g denote the image and text encoders, respectively; for image queries, g is replaced by f .All embeddings are L2-normalized so that the inner product equals cosine similarity. We index {vn}Nn=1 with FAISS [24] and retrieve the top-K candidate set: 
+
+C = arg top -K 
+
+> n∈{ 1,...,N }
+
+e⊤ 
+
+> q
+
+vn (1) where C ⊂ {1, . . . , N }, |C| = K. In the feature-only path, a deduplication step skips candidates whose cosine similarity to any already-selected result exceeds 0.9, avoiding redundant views from adjacent frames. 
+
+Stage 2: VLM Re-ranking. Each of the K candidates from Stage 1 is sent to a VLM with a structured prompt: “Is a 
+
+{query } visible in this image? Reply ONLY: yes/no ⟨visibility 0–10 ⟩”. This constrains output to ∼3–5 tokens (e.g., “yes 8”). We normalize the returned integer score s ∈ { 0, . . . , 10 }
+
+to a confidence c = s/ 10 ; candidates with negative detection are discarded and the rest re-ranked by c. If no candidate is confirmed, we fall back to the highest-confidence result from the VLM pass. Stage 1 reduces VLM queries from N to K
+
+via sub-millisecond vector search. 
+
+D. 3D Object Localization 
+
+Given the top-K retrieved views, we localize the target object in 3D through text-prompted segmentation, depth backprojection, multi-instance grouping, and per-instance multi-view spatial fusion. 
+
+Text-Prompted Segmentation. For each retrieved view, we segment the target using SAM 3 [49] with the query or category label for reference images as text prompt, selecting the highest-confidence mask. Views with median masked depth >4.0 m are discarded, as distant views produce coarse masks that leak onto nearby surfaces, introducing large errors in depth backprojection. 
+
+Depth Backprojection. Masked pixels within valid depth range (0.1–20.0 m) are backprojected to 3D world coordi-nates via the pinhole camera model using known intrinsics and camera-to-world pose. The result is a sparse object point cloud Pn for each view. 
+
+Multi-Instance Grouping. The top-K predictions may correspond to multiple object instances. We group them by cloud proximity: each prediction is merged into an existing cluster if overlap ≥15% or minimum point distance <0.5 m; otherwise it seeds a new cluster. Each cluster yields a goal candidate , sorted by L2 distance to the agent. 
+
+Multi-View Spatial Fusion. A single view may only capture part of the target, producing an incomplete object cloud that biases the centroid and lacks surface points needed for close-range navigation. For each goal candidate, we recover a more complete representation by fusing multiple views. Starting from the seed cloud of the top-ranked view in the cluster, we verify whether other views in the same cluster observe the same instance by measuring 3D cloud overlap. If too few views confirm, we expand the search to nearby scene cameras whose frustum contains the target and repeat the segmentation–backprojection–overlap check. Confirmed views are fused by concatenating clouds. To remove “flying pixels” from depth discontinuities, background leakage from imprecise masks, and artifacts from imperfect mesh geome-try, we cluster the merged cloud with HDBSCAN and retain only the largest cluster, preserving the original if it retains 
+
+<5% of points. The bounding box center of the fused cloud serves as the localization prediction, while the full cloud provides surface points for downstream navigation. 
+
+E. Goal-Directed Navigation 
+
+Given the 3D goal from Section III-D, we navigate directly using a learned PointNav policy, bypassing the online search that makes frontier exploration methods [7], [44] path-inefficient. 
+
+PointNav Policy. We use a pre-trained DD-PPO [34] PointNav checkpoint (VLFM [7] configuration): a ResNet-18 visual encoder processes 224 ×224 depth images, a goal embedding encodes relative polar coordinates (ρ, θ ), and a 2-layer LSTM maintains state across steps, outputting discrete actions {STOP , FORWARD , TURN LEFT , TURN RIGHT }.
+
+Dynamic Goal Tracking. At each step, we project the object cloud into the current depth view and set the goal to the closest visible point, resetting the LSTM on goal updates. Multi-Goal Fallback. When multiple goal candidates exist, the agent navigates to the nearest instance first and switches to the next candidate if stuck. 
+
+Visibility-Based Stopping. Before executing STOP, we project the object cloud into the current frame and verify against the depth buffer, overriding STOP with FORWARD if <5% of in-view points are confirmed visible. IV. EXPERIMENTS We compare against map-based methods that invest in offline 3D reconstruction and zero-shot frontier exploration 
+
+methods that share our training-free property but rely on exhaustive online search. 
+
+A. Experimental Setup 
+
+All experiments use SigLIP2 [23] (SO400M) for fea-ture extraction, FAISS [24] for indexing, SAM 3 [49] for segmentation, and the DD-PPO PointNav policy from Section III-E (30 ◦ turn, 0.25 m step, 79 ◦ HFOV, max 500 steps). VLM re-ranking uses Qwen2.5-VL-7B-Instruct [33]. Defaults: K=10 , θrot =15 ◦, θtrans =0 .25 m, max 5 nearby views within 3 m. All methods are provided with the same underlying pose information available in each benchmark; our method uses these poses only to store posed RGB-D keyframes and backproject localized targets, without con-structing a global 3D map. All experiments were run on a single NVIDIA RTX 5090 GPU with 32 GB VRAM. For the localization benchmark (GOAT-Core), multi-view spatial fusion is applied independently to each of the top-
+
+K predictions, which are then evaluated individually under the SR@K metric without instance grouping. For the navi-gation benchmarks, predictions are first grouped into distinct object instances via multi-instance grouping (Section III-D), then spatial fusion is applied per instance; the agent navigates to the nearest instance with multi-goal fallback. Best , second-best , and third-best results are highlighted accordingly. 
+
+B. GOAT-Core 3D Localization 
+
+We report Success Rate at K (SR@K) : an episode succeeds if any of the top-K predictions falls within thresh-old τ of any ground-truth goal on the navigation plane. Let E denote the number of episodes, ˆpk ∈ R3 the k-th predicted location, Gi the set of ground-truth goal positions for episode i, and dxz (·, ·) the Euclidean distance on the xz-plane (ignoring height): SR@K = 1
+
+E
+
+> E
+
+X
+
+> i=1
+
+1
+
+
+
+min  
+
+> k≤K, g∈G i
+
+dxz (ˆ pk, g) < τ 
+
+
+
+(2) We use τ = 1 .5 m [29] for all localization experiments. 
+
+Task & Setting. Following prior work [29], we evalu-ate on GOAT-Core, a quality-controlled subset of GOAT-Bench [50] that addresses annotation issues in the full valida-tion split. GOAT-Core selects four multi-room scenes ( 4ok ,
+
+5cd , Nfv , Tee ), averaging 7.25 rooms and 218.63 m 2 per scene, with single-floor subtasks and manually corrected text                                                                                                                                  
+
+> TABLE I
+> GOAT-C ORE LOCALIZATION .SR@5 (%) ON GOAT-C ORE [29]. “–”
+> INDICATES THE METHOD DOES NOT SUPPORT THAT QUERY TYPE .
+> Scene Method Average Object Image Language
+> 4ok
+> DynaMem [28] 10.1 13.2 17.1 0.0 VLMaps [16] 63.3 75.5 41.8 70.8 LagMemo [29] 86.7 95.2 73.0 88.6 OpenFunGraph [26] 77.5 73.7 70.7 87.8 HOV-SG [17] 78.5 73.7 –82.9 Ours 90.1 92.1 85.4 92.7
+> 5cd
+> DynaMem [28] 12.2 7.0 22.2 7.3 VLMaps [16] 48.3 62.1 39.4 42.7 LagMemo [29] 65.0 80.2 63.1 49.6 OpenFunGraph [26] 57.5 72.1 38.9 58.5 HOV-SG [17] 67.9 65.1 –70.7 Ours 77.2 69.8 86.1 75.6
+> Nfv
+> DynaMem [28] 6.3 5.1 10.9 2.9 VLMaps [16] 68.3 80.0 46.8 73.6 LagMemo [29] 66.7 85.5 49.6 61.1 OpenFunGraph [26] 44.2 43.6 41.3 48.6 HOV-SG [17] 82.4 76.9 –88.6
+> Ours 71.6 76.9 60.9 77.1
+> Tee
+> DynaMem [28] 10.2 4.9 15.8 9.8 VLMaps [16] 55.0 61.3 45.1 56.9 LagMemo [29] 65.0 92.6 39.8 68.1 OpenFunGraph [26] 73.3 78.1 63.2 78.1 HOV-SG [17] 78.1 68.3 –87.8
+> Ours 85.2 80.5 92.1 82.9
+> Total
+> DynaMem [28] 9.6 7.5 16.1 5.1 VLMaps [16] 58.8 69.7 43.3 61.0 LagMemo [29] 70.8 88.4 56.4 66.8 OpenFunGraph [26] 63.1 67.1 53.4 69.0 HOV-SG [17] 76.5 70.8 –82.3
+> Ours 80.6 79.5 80.1 82.3
+
+descriptions. In total, GOAT-Core contains 480 multi-modal subtasks covering three query types: 158 object (category-level), 163 image (reference image), and 159 language 
+
+(natural-language description) goals. Image goals best stress-test cross-modal retrieval, while language goals exercise the fine-grained reasoning of VLM re-ranking. We report SR@5 per query type and the overall average (Table I). We compare against VLMaps [16], HOV-SG [17], OpenFunGraph [26], DynaMem [28], and LagMemo [29]. 
+
+Results. Our method achieves 82.3% overall SR on lan-guage goals, matching HOV-SG (82.3%) while requiring no 3D reconstruction. Our pipeline leads on image queries by a wide margin (80.1% vs. 56.4%), demonstrating that two-stage retrieval generalizes across modalities. On language queries requiring fine-grained reasoning (e.g., “the red chair near the window”), we match or surpass reconstruction-based baselines. On object (category-level) queries, however, LagMemo retains a lead (88.4% vs. 79.5%): broad labels like “chair” match many views weakly, yielding noisier masks and less precise backprojection, whereas reconstruction-based methods provide pre-built 3D coordinates for every instance. Despite this gap, our method compensates on the more challenging image queries, achieving the highest average SR. 
+
+C. Object Goal Navigation Benchmarks 
+
+We evaluate on three object goal navigation benchmarks using habitat.Env . An episode succeeds if the agent TABLE II 
+
+OBJECT GOAL NAVIGATION . SR AND SPL (%) ON (A) HM3D [51] & MP3D [52], AND (B) HM3D-OVON [53].                                                                                                                                                                                               
+
+> (a) HM3D and MP3D
+> Method Training Free Open Vocab HM3D MP3D SR ↑SPL ↑SR ↑SPL ↑
+> Trained Closed-Vocabulary
+> L3MVN [54] ××54.2 25.5 34.9 14.5 Habitat-Web [35] ××57.6 23.8 24.2 5.9 OVRL [36] ××62.0 26.8 28.6 7.4 PIRLNav-IL [37] ××64.1 27.1 ––OVRL-v2 [55] ××64.7 28.1 ––PIRLNav-IL-RL [37] ××70.4 34.1 ––
+> Trained Open-Vocabulary
+> ZSON [38] ×✓25.5 12.6 15.3 4.8 PSL [39] ×✓42.4 19.2 ––GOAT [40] ×✓50.6 24.1 ––Uni-NaVid [41] ×✓73.7 37.1 ––
+> Zero-Shot Frontier Exploration
+> VLFM [7] ✓✓52.5 30.4 36.4 17.5 SG-Nav [48] ✓✓54.0 24.9 40.2 16.0 UniGoal [44] ✓✓54.5 25.1 41.0 16.4 OpenFMNav [43] ✓✓54.9 24.4 37.2 15.7 TriHelper [47] ✓✓56.5 25.3 ––InstructNav [46] ✓✓58.0 20.9 ––Ours (w/o VLM) ✓✓74.6 47.2 54.5 30.5 Ours ✓✓76.9 50.8 53.9 31.2
+> (b) HM3D-OVON
+> Method Val Seen Val Seen Synonyms Val Unseen SR ↑SPL ↑SR ↑SPL ↑SR ↑SPL ↑
+> Trained Closed-Vocabulary
+> BC [53] 11.1 4.5 9.9 3.8 5.4 1.9 DAgger [53] 18.1 9.4 15.0 7.4 10.2 4.7 BCRL [53] 20.2 8.2 15.2 5.3 8.0 2.8 RL [53] 39.2 18.7 27.8 11.7 18.6 7.5 DAgRL [53] 41.3 21.2 29.4 14.4 18.3 7.9
+> Trained Open-Vocabulary
+> DAgRL+OD [53] 38.5 21.1 39.0 21.4 37.1 19.9 Uni-NaVid [41] 41.3 21.1 43.9 21.8 39.5 19.8 MTU3D [56] 55.0 23.6 45.0 14.7 40.8 12.1
+> Zero-Shot Frontier Exploration
+> VLFM [7] 35.2 18.6 32.4 17.3 35.2 19.6 TANGO [45] ––––35.5 19.5 Ours (w/o VLM) 52.6 37.1 55.6 37.9 47.7 33.5 Ours 55.6 40.0 60.4 43.8 51.0 36.9
+
+calls STOP within geodesic distance δ of a goal view-point ( δ=0 .1 m for HM3D/MP3D, 0.25 m for OVON). Let 
+
+Si ∈ {0, 1} be the success indicator for episode i, li
+
+the agent’s path length, and l∗ 
+
+> i
+
+the shortest-path geodesic distance. We report SR = 1
+
+> E
+
+P 
+
+> i
+
+Si and SPL [57] =
+
+> 1
+> E
+
+P 
+
+> i
+
+Si · l∗ 
+
+> i
+
+/ max( li, l ∗ 
+
+> i
+
+), which penalizes detours relative to the optimal path. 
+
+1) HM3D Object Goal Navigation: Task & Setting. 
+
+HM3D ObjectNav v2 [51]: 1,000 episodes, 36 scenes, 6 categories, δ = 0.1 m. Baselines span trained closed-vocabulary [34], [6], [35], [36], [37], [55], [40], [54], trained open-vocabulary [38], [39], [41], and zero-shot methods [42], [43], [7], [44], [46], [47], [48] (Table II a). 
+
+Results. Our pipeline achieves 76.9% SR and 50.8% SPL, the highest among all baselines. We exceed the best frontier method (VLFM, 30.4% SPL) by +20.4%, confirming that pre-localized goals eliminate the path waste of online explo-ration. VLM re-ranking adds +2.3% SR / +3.6% SPL, with gains concentrated on visually ambiguous categories (e.g., plant, tv monitor). Even without the VLM, the embedding-only variant surpasses all prior methods in SPL. 
+
+2) MP3D Object Goal Navigation: Task & Setting. We evaluate cross-dataset generalization on MP3D object goal navigation [52], [1] (2,195 episodes, 11 scenes, 21 categories, 
+
+δ = 0 .1 m). Results are reported alongside HM3D in Table II (a). 
+
+Results. Our method achieves 53.9% SR and 31.2% SPL, outperforming UniGoal by +12.9% SR and 1.9× SPL with-out any MP3D-specific tuning. The embedding-only variant (54.5% SR) slightly exceeds the VLM version, consistent with the GOAT-Core finding that VLM re-ranking is less critical for broad category-level queries. 
+
+3) HM3D-OVON Object Goal Navigation: Task & Set-ting. HM3D-OVON [53] extends HM3D object goal nav-igation to 379 categories across three splits: val seen 
+
+(3,000 episodes), val seen synonyms (3,000), and val unseen 
+
+(3,000), using the same 36 scenes with δ = 0 .25 m. Baselines include trained closed/open-vocabulary [53], [41], [56] and zero-shot methods [7], [45] (Table II (b)). 
+
+Results. Our method achieves the best SR and SPL on all three splits. The advantage is most pronounced on SPL: on 
+
+val unseen , we reach 36.9% vs. MTU3D’s 12.1% ( ∼3×), indicating that our direct navigation generalizes to novel categories far better than trained policies. Performance is consistent across splits—unlike trained baselines that de-grade sharply from val seen to val unseen —highlighting the open-vocabulary robustness of embedding-based retrieval. 
+
+TABLE III 
+
+TEXT -TO -IMAGE RETRIEVAL . AR@1 AND AR@5 ON SUN RGB-D [58].                                                        
+
+> Sensor FLAVA [32] CLIP-B [30] ALIGN [31] CLIP-L [30] Ours
+> AR@1 ↑
+> KV1 5.3 60.0 67.5 62.0 70.5
+> KV2 26.2 48.4 64.5 69.8 82.2
+> Xtion 15.2 49.7 58.2 64.7 73.1
+> RealSense 19.6 66.7 46.6 60.2 62.0 Avg. 16.6 56.2 59.2 64.2 71.9
+> AR@5 ↑
+> KV1 38.4 83.9 86.0 83.1 89.1
+> KV2 30.7 78.4 80.0 84.1 93.0
+> Xtion 31.8 80.3 84.9 84.9 89.9
+> RealSense 52.2 87.3 85.7 90.0 88.5 Avg. 38.3 82.5 84.2 85.5 90.1
+
+D. Image Retrieval Benchmarks 
+
+Task & Setting. We evaluate text-to-image retrieval on SUN RGB-D [58] (∼10,335 indoor scenes, four sensor types). A separate FAISS index is built per sensor group, and we report per-instance AR@K—the fraction of queries where at least one relevant image appears in the top-K—against CLIP-base/large [30], ALIGN [31], and FLAVA [32] (Table III). 
+
+Results. Our method ranks first on three of four sensors (KV1, KV2, Xtion), with the largest gain on KV2 (+12.4% TABLE IV 
+
+MEMORY -ACCURACY TRADE -OFF AND PIPELINE EFFICIENCY .                                                             
+
+> (a) HM3D ObjectNav SR and SPL (%) under different resolutions and keyframe settings
+> Setting Resolution #Frames Storage ↓SR ↑SPL ↑
+> Full frames 1600 ×1200 127177 150.1 GB 74.5 47.1 Keyframes 1600 ×1200 36888 43.8 GB 76.9 50.8
+> Keyframes 640 ×480 36888 9.5 GB 75.1 48.8 Keyframes 160 ×120 36888 0.9 GB 72.8 47.5
+> (b) Build time, storage (summed over 4 GOAT-Core scenes [29]), and per-query latency
+> Method Build ↓Store ↓Obj. Img. Lang. Avg.Q ↓
+> VLMaps [16] 25.9 min 4.1 GB 55ms 60ms 58ms 58 ms DynaMem [28] 19.2 min 18.8 GB 603ms 324ms 592ms 506 ms HOV-SG [17] 5.3 h 34.3 GB 2.38s –2.40s 2.39 s OpenFunGraph [26] 2.3 h 2.86 GB 25ms 39ms 25ms 30 ms Ours 35.5 s 1.4 GB 3.15s 2.86s 2.74s 2.92 s
+
+AR@1 over CLIP-large). On RealSense, CLIP-base leads AR@1 (66.7% vs. 62.0%). Averaging across sensors, we achieve 71.9% AR@1 and 90.1% AR@5. 
+
+E. Memory-Accuracy Trade-off and Efficiency 
+
+Results. Table IV a and b summarize the trade-offs. Keyframe selection reduces the frame count from 127177 to 36888 ( ∼71% fewer frames) while improving both SR (74.5% →76.9%) and SPL (47.1% →50.8%) by sharpening the embedding index and removing redundant views. Down-sampling to 640 ×480 incurs only −1.8% SR and −2.0% SPL while reducing storage ∼5× (43.8 GB →9.5 GB); even at 160 ×120, SR remains 72.8% and SPL 47.5% with just 0.9 GB (0.6% of original storage). All baselines require explicit 3D reconstruction: VLMaps [16] projects LSeg [25] features onto a bird’s-eye-view grid (4.1 GB); DynaMem [28] and HOV-SG [17] store dense per-point features (18.8 GB and 34.3 GB); OpenFunGraph [26] compresses data into object-instance nodes (2.86 GB). Our method stores only posed RGB-D keyframes and SigLIP2 embeddings indexed with FAISS, yielding the smallest storage (1.4 GB) and fastest build time (35.5 s vs. 19.2 min for the next-fastest baseline, a 32 ×
+
+speedup). Per-query latency (2.92 s) is dominated by local VLM inference and segmentation. 
+
+F. Qualitative Results 
+
+Figure 3 shows top-1 retrieved images for fine-grained and context-dependent queries across small indoor (HM3D, MP3D), large indoor (LaMAR-CAB [59]), and outdoor (LaMAR-LIN [59]) scenes, demonstrating retrieval across indoor and outdoor scenes of varying scale. Figure 4 com-pares against HOV-SG [17]: scene-graph queries sometimes return incorrect regions (e.g., localizing detergent instead of a book), whereas our two-stage pipeline retrieves the correct view and produces a fused object point cloud for accurate 3D localization. 
+
+G. Real-World Experiments 
+
+We deploy our pipeline on a Boston Dynamics Spot robot: the scene is pre-scanned with an iPad, keyframes indexed             
+
+> HM3D
+> Plant by sofa Plant above toilet Sailboat painting Bag in closet
+> MP3D
+> Coffee by flower Place to workout Place to sit Tiger plushie
+> CAB
+> Papers on desk Plant by window Light switch Earphone on desk
+> LIN
+> Swiss flag by river DHL car Yellow bike Valentino store
+
+Fig. 3. Qualitative retrieval examples. Top-1 retrieved images for natural-language queries across small indoor (HM3D [51], MP3D [52]), large indoor (LaMAR-CAB [59]), and outdoor (LaMAR-LIN [59]) scenes. 
+
+HOV-SG OURS       
+
+> Couch ✓Couch ✓
+> Book on nightstand ✗Book on nightstand ✓
+
+Fig. 4. Qualitative comparison with HOV-SG [17]. Our method retrieves the correct view with segmentation mask and produces a fused 3D point cloud, capturing fine-grained details that HOV-SG overlooks. 
+
+offline, and the robot navigates to queried objects (Figure 5). The evaluation included spatial reasoning (e.g.: ‘plate on nightstand’), fine-grained object recognition (‘the red mug’) and concept fulfillment (‘table for four’). Over 25 trials, our full pipeline achieves 88.0% SR (22/25) vs. 76.0% (19/25) for the embedding-only variant, a +12% gain from VLM re-ranking. Figure 6 illustrates how re-ranking corrects fine-grained errors that embedding retrieval alone misses. V. CONCLUSION We presented a lightweight pipeline for open-vocabulary 3D object localization and navigation that operates directly on posed RGB-D keyframes, avoiding the need for explicit 3D scene reconstruction such as point clouds, voxel grids, or scene graphs. By combining fast embedding retrieval with selective VLM re-ranking, text-prompted segmentation with multi-view spatial fusion, and goal-directed navigation, our approach enables efficient target localization directly from image memory. Despite its simplicity and training-free design, the method demonstrates strong performance across multiple benchmarks and scenarios, highlighting the (A) T HIRD -PERSON (B) R ETRIEVED + MASK (C) S POT CAMERA 
+
+> Table for one
+> Table for four
+> Plate on dining table
+> Plate on nightstand
+> Cup in the drawer
+
+Fig. 5. Real-world robot navigation. Spot navigates to queried objects in an iPad-scanned indoor scene. (a) Third-person view of the robot at the goal. (b) Top-1 retrieved image with segmentation mask (green). (c) Spot’s onboard camera view upon arrival. 
+
+WITHOUT VLM R E-R ANK   
+
+> iPad on the dining table iPhone on the table Lit lamp
+
+WITH VLM R E-R ANK   
+
+> iPad on the dining table iPhone on the table Lit lamp
+
+Fig. 6. VLM re-ranking ablation. SigLIP2 retrieves semantically similar but incorrect views (red); VLM re-ranking corrects all three queries (green). 
+
+effectiveness of reasoning directly over image observations rather than constructing dense intermediate representations. While our formulation focuses on object-centric localiza-tion from individual views, incorporating richer reasoning across keyframes could further improve handling of com-plex spatial queries and scene relationships. Extending the approach to larger and more diverse environments, including outdoor settings, represents an exciting direction for future work. REFERENCES [1] M. Savva, A. Kadian, O. Maksymets, Y. Zhao, E. Wijmans, B. Jain, J. Straub, J. Liu, V. Koltun, J. Malik, et al. , “Habitat: A platform for embodied ai research,” in Proceedings of the IEEE/CVF international conference on computer vision , 2019, pp. 9339–9347. [2] S. Y. Gadre, M. Wortsman, G. Ilharco, L. Schmidt, and S. Song, “Cows on pasture: Baselines and benchmarks for language-driven zero-shot object navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 23 171–23 181. [3] M. Ahn, A. Brohan, N. Brown, Y. Chebotar, O. Cortes, B. David, C. Finn, C. Fu, K. Gopalakrishnan, K. Hausman, et al. , “Do as i can, not as i say: Grounding language in robotic affordances,” arXiv preprint arXiv:2204.01691 , 2022. [4] A. Takmaz, E. Fedele, R. W. Sumner, M. Pollefeys, F. Tombari, and F. Engelmann, “Openmask3d: Open-vocabulary 3d instance segmen-tation,” arXiv preprint arXiv:2306.13631 , 2023. [5] S. Arnaud, P. McVay, A. Martin, A. Majumdar, K. M. Jatavallabhula, P. Thomas, R. Partsey, D. Dugas, A. Gejji, A. Sax, et al. , “Locate 3d: Real-world object localization via self-supervised learning in 3d,” 
+
+arXiv preprint arXiv:2504.14151 , 2025. [6] D. S. Chaplot, D. P. Gandhi, A. Gupta, and R. R. Salakhutdinov, “Object goal navigation using goal-oriented semantic exploration,” 
+
+Advances in Neural Information Processing Systems , vol. 33, pp. 4247–4258, 2020. [7] N. Yokoyama, S. Ha, D. Batra, J. Wang, and B. Bucher, “Vlfm: Vision-language frontier maps for zero-shot semantic navigation,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) .IEEE, 2024, pp. 42–48. [8] V. Reijgwart, A. Millane, H. Oleynikova, R. Siegwart, C. Cadena, and J. Nieto, “Voxgraph: Globally consistent, volumetric mapping using signed distance function submaps,” IEEE Robotics and Automation Letters , vol. 5, no. 1, pp. 227–234, 2019. [9] H. Oleynikova, Z. Taylor, M. Fehr, R. Siegwart, and J. Nieto, “Voxblox: Incremental 3d euclidean signed distance fields for on-board mav planning,” in 2017 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2017, pp. 1366–1373. [10] A. Hornung, K. M. Wurm, M. Bennewitz, C. Stachniss, and W. Bur-gard, “Octomap: An efficient probabilistic 3d mapping framework based on octrees,” Autonomous robots , vol. 34, no. 3, pp. 189–206, 2013. [11] A. Rosinol, M. Abate, Y. Chang, and L. Carlone, “Kimera: an open-source library for real-time metric-semantic localization and mapping,” in 2020 IEEE international conference on robotics and automation (ICRA) . IEEE, 2020, pp. 1689–1696. [12] Y. Chang, Y. Tian, J. P. How, and L. Carlone, “Kimera-multi: a system for distributed multi-robot metric-semantic simultaneous localization and mapping,” in 2021 IEEE international conference on robotics and automation (ICRA) . IEEE, 2021, pp. 11 210–11 218. [13] A. Rosinol, A. Gupta, M. Abate, J. Shi, and L. Carlone, “3d dynamic scene graphs: Actionable spatial perception with places, objects, and humans,” arXiv preprint arXiv:2002.06289 , 2020. [14] N. Hughes, Y. Chang, and L. Carlone, “Hydra: A real-time spatial perception system for 3d scene graph construction and optimization,” 
+
+arXiv preprint arXiv:2201.13360 , 2022. [15] D. Maggio, Y. Chang, N. Hughes, M. Trang, D. Griffith, C. Dougherty, E. Cristofalo, L. Schmid, and L. Carlone, “Clio: Real-time task-driven open-set 3d scene graphs,” IEEE Robotics and Automation Letters ,vol. 9, no. 10, pp. 8921–8928, 2024. [16] C. Huang, O. Mees, A. Zeng, and W. Burgard, “Visual language maps for robot navigation,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2023, pp. 10 608–10 615. [17] A. Werby, C. Huang, M. B¨ uchner, A. Valada, and W. Burgard, “Hierarchical open-vocabulary 3d scene graphs for language-grounded robot navigation,” in First Workshop on Vision-Language Models for Navigation and Manipulation at ICRA 2024 , 2024. [18] Q. Gu, A. Kuwajerwala, S. Morin, K. M. Jatavallabhula, B. Sen, A. Agarwal, C. Rivera, W. Paul, K. Ellis, R. Chellappa, et al. ,“Conceptgraphs: Open-vocabulary 3d scene graphs for perception and planning,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2024, pp. 5021–5028. [19] R. Arandjelovic, P. Gronat, A. Torii, T. Pajdla, and J. Sivic, “Netvlad: Cnn architecture for weakly supervised place recognition,” in Pro-ceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 5297–5307. [20] P.-E. Sarlin, D. DeTone, T. Malisiewicz, and A. Rabinovich, “Su-perglue: Learning feature matching with graph neural networks,” in 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 4938–4947. [21] H. Lin, S. Chen, J. Liew, D. Y. Chen, Z. Li, G. Shi, J. Feng, and B. Kang, “Depth anything 3: Recovering the visual space from any views,” arXiv preprint arXiv:2511.10647 , 2025. [22] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” 
+
+Advances in neural information processing systems , vol. 36, pp. 34 892–34 916, 2023. [23] M. Tschannen, A. Gritsenko, X. Wang, M. F. Naeem, I. Alabdul-mohsin, N. Parthasarathy, T. Evans, L. Beyer, Y. Xia, B. Mustafa, et al. ,“Siglip 2: Multilingual vision-language encoders with improved se-mantic understanding, localization, and dense features,” arXiv preprint arXiv:2502.14786 , 2025. [24] J. Johnson, M. Douze, and H. J´ egou, “Billion-scale similarity search with gpus,” IEEE transactions on big data , vol. 7, no. 3, pp. 535–547, 2019. [25] B. Li, K. Q. Weinberger, S. Belongie, V. Koltun, and R. Ranftl, “Language-driven semantic segmentation,” arXiv preprint arXiv:2201.03546 , 2022. [26] C. Zhang, A. Delitzas, F. Wang, R. Zhang, X. Ji, M. Pollefeys, and F. Engelmann, “Open-vocabulary functional 3d scene graphs for real-world indoor spaces,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 19 401–19 413. [27] A. Werby, D. Rotondi, F. Scaparro, and K. O. Arras, “Keysg: Hierarchical keyframe-based 3d scene graphs,” arXiv preprint arXiv:2510.01049 , 2025. [28] P. Liu, Z. Guo, M. Warke, S. Chintala, C. Paxton, N. M. M. Shafiullah, and L. Pinto, “Dynamem: Online dynamic spatio-semantic memory for open world mobile manipulation,” in 2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2025, pp. 13 346–13 355. [29] H. Zhou, X. Wang, H. Li, F. Sun, S. Guo, G. Qi, J. Xu, and H. Zhao, “Lagmemo: Language 3d gaussian splatting memory for multi-modal open-vocabulary multi-goal visual navigation,” arXiv preprint arXiv:2510.24118 , 2025. [30] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, et al. , “Learning transferable visual models from natural language supervision,” in International conference on machine learning . PmLR, 2021, pp. 8748–8763. [31] C. Jia, Y. Yang, Y. Xia, Y.-T. Chen, Z. Parekh, H. Pham, Q. Le, Y.-H. Sung, Z. Li, and T. Duerig, “Scaling up visual and vision-language representation learning with noisy text supervision,” in International conference on machine learning . PMLR, 2021, pp. 4904–4916. [32] A. Singh, R. Hu, V. Goswami, G. Couairon, W. Galuba, M. Rohrbach, and D. Kiela, “Flava: A foundational language and vision alignment model,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 15 638–15 650. [33] S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang, S. Wang, J. Tang, H. Zhong, Y. Zhu, M. Yang, Z. Li, J. Wan, P. Wang, W. Ding, Z. Fu, Y. Xu, J. Ye, X. Zhang, T. Xie, Z. Cheng, H. Zhang, Z. Yang, H. Xu, and J. Lin, “Qwen2.5-VL technical report,” arXiv preprint arXiv:2502.13923 , 2025. [34] E. Wijmans, A. Kadian, A. Morcos, S. Lee, I. Essa, D. Parikh, M. Savva, and D. Batra, “Dd-ppo: Learning near-perfect pointgoal navigators from 2.5 billion frames,” arXiv preprint arXiv:1911.00357 ,2019. [35] R. Ramrakhya, E. Undersander, D. Batra, and A. Das, “Habitat-web: Learning embodied object-search strategies from human demon-strations at scale,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 5173–5183. [36] K. Yadav, R. Ramrakhya, A. Majumdar, V.-P. Berges, S. Kuhar, D. Ba-tra, A. Baevski, and O. Maksymets, “Offline visual representation learning for embodied navigation,” in Workshop on Reincarnating Reinforcement Learning at ICLR 2023 , 2023. [37] R. Ramrakhya, D. Batra, E. Wijmans, and A. Das, “Pirlnav: Pretraining with imitation and rl finetuning for objectnav,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2023, pp. 17 896–17 906. [38] A. Majumdar, G. Aggarwal, B. Devnani, J. Hoffman, and D. Batra, “Zson: Zero-shot object-goal navigation using multimodal goal embed-dings,” Advances in Neural Information Processing Systems , vol. 35, pp. 32 340–32 352, 2022. [39] X. Sun, L. Liu, H. Zhi, R. Qiu, and J. Liang, “Prioritized semantic learning for zero-shot instance navigation,” in European Conference on Computer Vision . Springer, 2024, pp. 161–178. [40] M. Chang, T. Gervet, M. Khanna, S. Yenamandra, D. Shah, S. Y. Min, K. Shah, C. Paxton, S. Gupta, D. Batra, et al. , “Goat: Go to any thing,” 
+
+arXiv preprint arXiv:2311.06430 , 2023. [41] J. Zhang, K. Wang, S. Wang, M. Li, H. Liu, S. Wei, Z. Wang, Z. Zhang, and H. Wang, “Uni-navid: A video-based vision-language-action model for unifying embodied navigation tasks,” arXiv preprint arXiv:2412.06224 , 2024. [42] K. Zhou, K. Zheng, C. Pryor, Y. Shen, H. Jin, L. Getoor, and X. E. Wang, “Esc: Exploration with soft commonsense constraints for zero-shot object navigation,” in International Conference on Machine Learning . PMLR, 2023, pp. 42 829–42 842. [43] Y. Kuang, H. Lin, and M. Jiang, “Openfmnav: Towards open-set zero-shot object navigation via vision-language foundation models,” in Findings of the Association for Computational Linguistics: NAACL 2024 , 2024, pp. 338–351. [44] H. Yin, X. Xu, L. Zhao, Z. Wang, J. Zhou, and J. Lu, “Unigoal: Towards universal zero-shot goal-oriented navigation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition , 2025, pp. 19 057–19 066. [45] F. Ziliotto, T. Campari, L. Serafini, and L. Ballan, “Tango: training-free embodied ai agents for open-world tasks,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 24 603–24 613. [46] Y. Long, W. Cai, H. Wang, G. Zhan, and H. Dong, “Instructnav: Zero-shot system for generic instruction navigation in unexplored environment,” arXiv preprint arXiv:2406.04882 , 2024. [47] L. Zhang, Q. Zhang, H. Wang, E. Xiao, Z. Jiang, H. Chen, and R. Xu, “Trihelper: Zero-shot object navigation with dynamic assistance,” in 
+
+2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2024, pp. 10 035–10 042. [48] H. Yin, X. Xu, Z. Wu, J. Zhou, and J. Lu, “Sg-nav: Online 3d scene graph prompting for llm-based zero-shot object navigation,” Advances in neural information processing systems , vol. 37, pp. 5285–5307, 2024. [49] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, et al. , “Sam 3: Segment anything with concepts,” arXiv preprint arXiv:2511.16719 , 2025. [50] M. Khanna, R. Ramrakhya, G. Chhablani, S. Yenamandra, T. Gervet, M. Chang, Z. Kira, D. S. Chaplot, D. Batra, and R. Mottaghi, “Goat-bench: A benchmark for multi-modal lifelong navigation,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 16 373–16 383. [51] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. Turner, E. Undersander, W. Galuba, A. Westbury, A. X. Chang, et al. , “Habitat-matterport 3d dataset (hm3d): 1000 large-scale 3d environments for embodied ai,” arXiv preprint arXiv:2109.08238 ,2021. [52] A. Chang, A. Dai, T. Funkhouser, M. Halber, M. Niessner, M. Savva, S. Song, A. Zeng, and Y. Zhang, “Matterport3d: Learning from rgb-d data in indoor environments,” arXiv preprint arXiv:1709.06158 , 2017. [53] N. Yokoyama, R. Ramrakhya, A. Das, D. Batra, and S. Ha, “Hm3d-ovon: A dataset and benchmark for open-vocabulary object goal navigation,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2024, pp. 5543–5550. [54] B. Yu, H. Kasaei, and M. Cao, “L3mvn: Leveraging large language models for visual target navigation,” in 2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2023, pp. 3554–3560. [55] K. Yadav, A. Majumdar, R. Ramrakhya, N. Yokoyama, A. Baevski, Z. Kira, O. Maksymets, and D. Batra, “Ovrl-v2: A simple state-of-art baseline for imagenav and objectnav,” arXiv preprint arXiv:2303.07798 , 2023. [56] Z. Zhu, X. Wang, Y. Li, Z. Zhang, X. Ma, Y. Chen, B. Jia, W. Liang, Q. Yu, Z. Deng, et al. , “Move to understand a 3d scene: Bridging visual grounding and exploration for efficient and versatile embodied navigation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 8120–8132. [57] P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva, et al. ,“On evaluation of embodied navigation agents,” arXiv preprint arXiv:1807.06757 , 2018. [58] S. Song, S. P. Lichtenberg, and J. Xiao, “Sun rgb-d: A rgb-d scene un-derstanding benchmark suite,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2015, pp. 567–576. [59] P.-E. Sarlin, M. Dusmanu, J. L. Sch¨ onberger, P. Speciale, L. Gruber, V. Larsson, O. Miksik, and M. Pollefeys, “Lamar: Benchmarking local-ization and mapping for augmented reality,” in European Conference on Computer Vision . Springer, 2022, pp. 686–704.

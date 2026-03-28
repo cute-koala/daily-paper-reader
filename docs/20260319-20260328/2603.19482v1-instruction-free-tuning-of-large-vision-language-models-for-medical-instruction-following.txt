@@ -1,0 +1,291 @@
+Title: Instruction-Free Tuning of Large Vision Language Models for Medical Instruction Following
+
+URL Source: https://arxiv.org/pdf/2603.19482v1
+
+Published Time: Mon, 23 Mar 2026 00:16:36 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# Instruction-Free Tuning of Large Vision Language Models for Medical Instruction Following 
+
+Myeongkyun Kang a,b , Soopil Kim c, Xiaoxiao Li a,d , Sang Hyun Park e, ∗
+
+> a
+
+Department of Electrical and Computer Engineering, The University of British Columbia, Vancouver, BC V6T 1Z4, Canada 
+
+> b
+
+Department of Robotics and Mechatronics Engineering, Daegu Gyeongbuk Institute of Science and Technology (DGIST), Daegu, 42988, Republic of Korea 
+
+> c
+
+Division of Intelligent Robot, Daegu Gyeongbuk Institute of Science and Technology (DGIST), Daegu, 42988, Republic of Korea 
+
+> d
+
+Vector Institute, Toronto, ON M5G 0C6, Canada 
+
+> e
+
+Department of Computer Science and Engineering, Pohang University of Science and Technology (POSTECH), Pohang, 37673, Republic of Korea 
+
+Abstract 
+
+Large vision language models (LVLMs) have demonstrated impressive per-formance across a wide range of tasks. These capabilities largely stem from visual instruction tuning, which fine-tunes models on datasets consisting of curated image-instruction-output triplets. However, in the medical do-main, constructing large-scale, high-quality instruction datasets is particu-larly challenging due to the need for specialized expert knowledge. To address this issue, we propose an instruction-free tuning approach that reduces re-liance on handcrafted instructions, leveraging only image-description pairs for fine-tuning. Specifically, we introduce a momentum proxy instruction as a replacement for curated text instructions, which preserves the instruction-following capability of the pre-trained LVLM while promoting updates to parameters that remain valid during inference. Consequently, the fine-tuned LVLM can flexibly respond to domain-specific instructions, even though ex-plicit instructions are absent during fine-tuning. Additionally, we incorporate a response shuffling strategy to mitigate the model’s over-reliance on previ-ous words, facilitating more effective fine-tuning. Our approach achieves state-of-the-art accuracy on multiple-choice visual question answering tasks 
+
+> ∗
+
+Corresponding author. 
+
+Email address: sanghyunpark@postech.ac.kr (Sang Hyun Park) 
+
+> arXiv:2603.19482v1 [cs.CV] 19 Mar 2026
+
+across SKINCON, WBCAtt, CBIS, and MIMIC-CXR datasets, significantly enhancing the fine-tuning efficiency of LVLMs in medical domains. 
+
+Keywords: Instruction-Free Tuning, Large Vision Language Models, Instruction Tuning 
+
+1. Introduction 
+
+Large vision language models (LVLMs) have demonstrated strong general-purpose capabilities across a wide range of visual language understanding and generation tasks [1, 2]. This success is largely attributable to large-scale visual instruction tuning [3, 4], where models are fine-tuned on datasets con-sisting of image-instruction-output triplets (Fig. 1(a)). Despite its effective-ness in enhancing adherence to diverse human instructions, visual instruc-tion tuning is highly dependent on the scale and quality of the instruction dataset [5, 6]. Therefore, instruction-tuned LVLMs tend to perform poorly in domains with limited publicly available data, such as medicine. To mitigate this limitation, several studies have developed instruction datasets for the medical domain and leveraged them to specialize LVLMs for medical applications [7, 8]. In particular, medical images are typically accompanied by detailed textual descriptions (e.g., radiology reports or cap-tions from PubMed Central); these studies exploit this inherent property of medical image-text pairs to construct datasets for visual instruction tuning. Specifically, these approaches build upon earlier successes in general-purpose LVLMs [9] by adapting language-only large language models (LLMs) to trans-form image descriptions into conversational image-instruction-output triplets for large-scale instruction dataset construction. However, the frequent use of domain-specific abbreviations and terminology [10], along with the need for expert-level contextual understanding [11], poses a significant challenge for constructing datasets using LLMs. Meanwhile, radiology reports typically begin with a lesion description and conclude with a diagnostic impression [12], which leads to strong inter-sentence confounding dependencies within the constructed datasets. These characteristics lead to the overlooking of visual features and exacerbate hallucinations [13], thereby necessitating vi-sual instruction tuning that accounts for these factors. Therefore, we revisit fine-tuning approaches that reduce reliance on handcrafted or generated in-structions (as illustrated in Fig. 1(b)), aiming to avoid inefficiencies in con-structing instruction datasets and to mitigate potential drawbacks caused by 2(a) Instruction Tuning 
+
+> (b) Instruction-Free Tuning
+> (c) Example of image-instruction-output and image-description
+
+Figure 1: Conceptual illustrations of (a) instruction tuning, which fine-tunes the model on curated instructions and outputs, and (b) instruction-free tuning, which fine-tunes the model solely on paired textual descriptions (e.g., radiology reports). Instruction tun-ing requires instruction-image-output triplets constructed by humans or LLMs prior to fine-tuning, whereas instruction-free tuning can be performed on image-description pairs without additional steps. Examples of an image, an instruction-output pair for instruction tuning, and a description used for instruction-free tuning are shown in (c). 
+
+inadequate instructions. 
+
+Instruction-free tuning refers to fine-tuning LVLMs using only image-description pairs (e.g., radiology reports or captions), without relying on any instructions. To the best of our knowledge, this is the first work to formalize address this task for instruction-tuned LVLMs. However, fine-tuning a model without human-curated instructions introduces additional challenges, particularly when it relies on the inherent properties of paired raw data as text instructions (e.g., “Describe this medical scan” ), regardless of whether LLMs are used during dataset construction [14, 15]. In prac-tice, paired descriptions (e.g., radiology reports or captions) do not perfectly align with the natural response (e.g., “The image...” ) that would typically follow a conversational instruction (e.g., “Describe...” ). The misalignment 3between the instruction-description pairs in the fine-tuning and pre-training datasets poses a risk of degrading the instruction-following capability of the pre-trained LVLM. Specifically, this may lead to image-dependence , where the model loses its pre-trained instruction-following capability and gener-ates fixed-style responses that rely excessively on the image regardless of the given instruction (see Fig. 8). For instance, a model fine-tuned for re-port generation may fail to respond to other types of queries (e.g., “Is the texture typical...” ) and struggle to generalize to question-answering tasks be-yond report writing. Alternatively, this may result in instruction-dependence 
+
+(or parameter-dependence ), where the model responds appropriately only to instructions encountered during fine-tuning and fails to generate responses aligned with the fine-tuning data for unseen instructions (instead respond based on the pre-trained knowledge; see other LVLMs in Table 1). Further-more, due to the nature of instruction-following LVLMs, instructions seen during fine-tuning are not guaranteed to be provided at inference time, high-lighting the importance of preventing overfitting to such instructions. In response to these challenges, we introduce a proxy instruction that is optimized to align with the set of image-description pairs in the fine-tuning dataset. Unlike conventional fine-tuning, which uses text instructions and optimizes model parameters, our method jointly updates both learnable proxy instructions and model parameters. This enables the LVLM to adapt to domain-specific datasets without degrading its instruction-following capa-bility by employing a well-aligned instruction. As a result, the fine-tuned model can flexibly respond to a wide range of text instructions in the medi-cal context during inference. Furthermore, we refined the proxy instruction through an exponential moving average, i.e., a momentum proxy instruction .This mitigates overfitting to a specific proxy instruction and allows the re-maining parameters to learn compensated representations that reflect overall fine-tuning trends. Meanwhile, fine-tuning a model while maintaining its pre-trained instruction-following capability can mitigate the challenges posed by the unique characteristics of medical data. Since the diagnostic conclusion can often be inferred from the earlier words alone (e.g., findings), the model is likely to largely overlook visual features when generating the latter part of the response. In this context, we propose a strategy, response shuffling ,which randomly shuffles the sentence order of the ground truth description, thereby preventing the model from relying too heavily on previous words. Notably, employing a proxy instruction disregards the negative effects of shuffling output order during fine-tuning, enabling a simple strategy to sub-4stantially enhance medical visual question answering (VQA) performance. In summary, the contributions of this paper are as follows: 
+
+• We introduce and formalize instruction-free tuning , a novel paradigm for fine-tuning LVLMs that eliminates the need for handcrafted or gen-erated instructions, addressing a key bottleneck in adapting models to medical domains. 
+
+• We propose a momentum proxy instruction designed to preserve the instruction-following capability of the pre-trained LVLM during fine-tuning, while promoting updates for parameters that remain valid dur-ing inference. Additionally, we propose a response shuffling strategy to mitigate the model’s over-reliance on previous words, facilitating more effective fine-tuning of medical LVLMs. 
+
+• We demonstrate that our fine-tuned model achieves state-of-the-art accuracy in multiple-choice VQA evaluations on the SKINCON, WB-CAtt, CBIS, and MIMIC-CXR datasets. 
+
+2. Related Works 
+
+2.1. Instruction Tuning 
+
+Instruction tuning fine-tunes a model using a dataset consisting of instruction-input-output triplets. In particular, the instruction specifies the task (i.e., a question), the input provides supplementary context (e.g., an image), and the output is the expected response based on the instruction and input. As one of the early studies, Natural Instructions [16] fine-tuned a model with an instruction dataset constructed by integrating 61 datasets. Re-cently, an alternative approach that constructs instruction datasets using LLMs was proposed; Alpaca [17] efficiently fine-tuned the LLaMA [18] us-ing 52K instruction-output pairs generated by an instruction-tuned GPT-3.5 [19]. Moreover, Self-Instruct [20] proposed a method for enabling an LLM to follow diverse instructions by iteratively generating and fine-tuning on synthetic instruction-output data with minimal human intervention. How-ever, applying these methods to visual data is challenging because image generation in pixel space is inherently more difficult than text generation. Therefore, prior work has focused on constructing instruction datasets from paired image-text data (e.g., LLaVA [3]), rather than relying on synthetic data generation. Moreover, these methods are less effective at improving the 5performance of fine-tuned models when LLMs possess limited domain-specific knowledge. 
+
+2.2. Visual Instruction Tuning 
+
+Building on the success of instruction tuning, visual instruction tuning with LLMs was introduced for vision tasks. LLaVA [3] integrated CLIP’s vision encoder [21] with LLaMA [18], and was fine-tuned on an instruction dataset generated by language-only GPT-4 [19]. Recently, LLaMA-3.2-Vision [22] extended LLaMA 3.1 by adapting cross-attention layers to integrate the image modality with language. Additionally, alternative LLMs have been integrated into the vision domain, such as Qwen2.5-VL [23], which utilizes patch grouping and window attention to efficiently process large numbers of visual tokens. These successes in LVLMs extended to medical domains. LLaVA-Med [14] was fine-tuned on an instruction dataset generated by GPT-4 [19], based on biomedical image-caption pairs from PubMed Central (PMC). Recently, PubMedVision [15] and MedGemma [24] have been fine-tuned on carefully curated medical datasets from PMC and other publicly available sources, significantly enhancing their medical capabilities. One study [25] attempted instruction-free tuning by using language-only instruction-output pairs and image-caption pairs with a fixed set of instructions. However, none of the ex-isting methods completely avoided employing text instructions during LVLM fine-tuning. To our knowledge, this is the first approach to enable fine-tuning of instruction-tuned LVLMs without using any text instructions. 
+
+3. Method 
+
+3.1. Overview 
+
+Our framework is illustrated in Fig. 2. It comprises a vision encoder 
+
+g (a vision transformer [26] followed by projection layers) and a language model f . Given an image Xv, a prompt Xp containing an instruction (e.g., a question), and the ground truth output y (e.g., an answer or description), the image Xv is fed into g to extract key-value matrices KV v for generating responses conditioned on the image and the instruction. Specifically, f em-ploys a cross-attention layer [22, 27] to integrate the query matrix derived from Xp with KV v to generate the response ˆy. During fine-tuning, we com-pute an autoregressive loss L between y and ˆy to update the vision encoder 
+
+g, while keeping the parameters of f frozen, following [28]. The following 6Figure 2: An illustration of our instruction-free tuning framework. The vision encoder                               
+
+> gextracts key-value matrices KV vfrom an image Xv, which are then integrated into a prompt Xpfor the language model fto generate the response ˆy.For instruction-free tuning, the text instruction in Xpis replaced with the momentum proxy instruction
+> ¯t.During supervised fine-tuning, gis updated with autoregressive loss Lbetween the response ˆyand the ground truth y. In parallel, (warm-up initialized) ¯tis gradually updated via exponential moving average of the proxy instruction t. During inference, ¯tis discarded, and a conversational text instruction (e.g., “Describe...” )is used to generate a natural language response (e.g., “The image depicts...” ).
+
+section provides details of supervised fine-tuning for instruction tuning and 
+
+instruction-free tuning .
+
+3.2. Instruction Tuning 
+
+We start by formulating instruction tuning . Instruction tuning fine-tunes the model on an image Xv, a prompt Xp containing a text instruction (i.e., a question), and a ground-truth output y (i.e., an answer). Formally, super-vised fine-tuning for instruction tuning is defined as follows: 
+
+L(g) = − X
+
+> i∈I Y
+
+log f  yi | Xv, X p, y <i ; g, (1) where IY denotes the set of indices corresponding to the output sequence y,and y<i represents all previously generated tokens. However, constructing high-quality instruction datasets consisting of carefully curated instruction-output pairs corresponding to medical images is challenging and often incurs substantial costs. As a result, prior studies [15, 14] leverage inherent proper-ties of medical data as text instructions (e.g., “Describe this medical scan” ) to 7construct instruction datasets. In practice, paired descriptions (e.g., radiol-ogy reports) do not perfectly align with the natural conversational responses expected from text instructions. This misalignment between instruction-description pairs in fine-tuning and pre-training datasets risks degrading the instruction-following capability of pre-trained LVLMs. Additionally, this may lead to either (a) image-dependence , in which the model generates fixed-style responses regardless of the instruction, or (b) instruction-dependence , where the model performs well only for instructions identical to those seen during fine-tuning. To address these issues, we introduce instruction-free tuning ,which reduces reliance on curated instructions by employing only image-description pairs during fine-tuning. 
+
+3.3. Instruction-Free Tuning 
+
+In instruction-free tuning, the model is fine-tuned using an image Xv, a prompt Xp containing a proxy instruction , and a ground-truth description 
+
+y. Unlike instruction tuning, which requires curated text instructions during fine-tuning, our approach employs a proxy instruction that is optimized to align with image-description pairs. The well-aligned proxy instruction en-ables an LVLM to adapt to domain-specific datasets without degrading its pre-trained instruction-following capability. Next, we present the details of instruction-free tuning with the proxy instruction. 
+
+3.3.1. Proxy Instruction 
+
+Let the proxy instruction t = {t1, . . . , t N } be defined as a set of N con-tinuous vectors, each with the same dimensionality as the word embeddings. The proxy instruction replaces the text instruction (e.g., a question) in the prompt Xp with learnable vectors during fine-tuning, in order to preserve the LVLM’s pre-trained instruction-following capability. Given the nature of instruction-following LVLMs, where instructions seen during fine-tuning are not guaranteed to be provided at inference time, we design a proxy instruc-tion as a substitute for text instructions during fine-tuning and discard it at inference time. During fine-tuning, we feed a prompt Xp containing the proxy instruction t into f . Since f is differentiable, gradients can be propagated to update t, enabling the model to derive an well-aligned instruction from the dataset. To optimize t, we compute an autoregressive loss L between 
+
+y and ˆy, as defined in Eq. 1, with the inclusion of t. Formally, supervised 8fine-tuning for instruction-free tuning is defined as: 
+
+L(g, t ) = − X
+
+> i∈I Y
+
+log f  yi | Xv, X p, y <i ; g, t . (2) For simplicity, supplementary tokens in Xp, such as <|eot_id|> , are omit-ted. The proxy instruction is optimized to align with image-description pairs, thereby mitigating the negative impact on the pre-trained instruction-following capability of LVLMs during fine-tuning. This approach is partic-ularly suitable for medical domains, since it is infeasible to fully provide all possible instructions during fine-tuning, and overfitting to such instructions results in the aforementioned image-dependence and instruction-dependence .Notably, the proxy instruction differs from that used in Prefix-Tuning [29]. In Prefix-Tuning, the learnable vectors are used during inference, whereas in our method they serve as a proxy during fine-tuning and are discarded at inference. 
+
+3.3.2. Momentum Proxy Instruction 
+
+Although the optimized instruction t is well aligned with its correspond-ing descriptions, t is replaced with a conversational text instruction at in-ference. This can lead to overfitting and over-reliance on proxy instructions, thereby degrading the inference performance of a fine-tuned LVLM. To mit-igate this issue, we aim not to directly update the proxy instruction via gradient descent during fine-tuning. One possible alternative is to obtain a proxy instruction in a prior stage and fix it during subsequent training; however, this approach fails to capture the overall fine-tuning trends of the remaining learnable parameters. Instead, we refine the proxy instruction us-ing an exponential moving average to capture overall fine-tuning trends [30], which promotes parameter updates to the vision encoder g and reduces sen-sitivity to t during generation. Formally, we update the momentum proxy instruction ¯t as follows: 
+
+¯t ← α¯t + (1 − α)t, (3) where α ∈ [0 , 1) denotes the momentum coefficient. The parameters g are updated immediately via Eq. 2, whereas ¯t evolves gradually. Although ¯t is not directly updated via gradient descent, this design leads to more stable optimization by capturing the overall fine-tuning trends of the remaining pa-rameters. The overall instruction-free tuning procedure with the momentum 9Algorithm 1 Instruction-free tuning process.  
+
+> 1:
+
+Input: Vision encoder g, language model f , ground truth description y,learning rate η, momentum coefficient α 
+
+> 2:
+
+t ← N (0 , σ 2) 
+
+> 3:
+
+while not warmed-up do  
+
+> 4:
+
+y ← RS (y) // Response Shuffling. See Eq.4  
+
+> 5:
+
+Compute L ← L(g, t ) // See Eq.2  
+
+> 6:
+
+t ← t − η∇tL 
+
+> 7:
+
+end while  
+
+> 8:
+
+¯t ← t 
+
+> 9:
+
+while not converged do  
+
+> 10:
+
+¯t ← α¯t + (1 − α)t 
+
+> 11:
+
+y ← RS (y) 
+
+> 12:
+
+Compute L ← L(g, ¯t) 
+
+> 13:
+
+g ← g − η∇gL; t ← ¯t − η∇¯tL 
+
+> 14:
+
+end while 
+
+proxy instruction is summarized in Algorithm 1. Notably, to improve effi-ciency, we first optimize t while keeping g frozen as a warm-up stage, and then use the fine-tuned t to initialize ¯t, rather than using random initialization. 
+
+3.4. Response Shuffling 
+
+In medical domains, the past activations ( y<i ) of Xv are likely to be largely overlooked during supervised fine-tuning. Specifically, radiology re-ports typically begin with lesion descriptions and conclude with diagnostic impressions, causing the model to over-rely on previously predicted tokens and overlook visual inputs. To address this issue, we randomly shuffle y dur-ing fine-tuning to prevent the model from relying on previous tokens when generating responses. Formally, 
+
+RS (y) = Join (Shuffle (Split (y))) , (4) where Split segments y by a separator (e.g., “,”), Shuffle randomly per-mutes the segments, and Join reconstructs the permuted y using the original separator. Notably, the goal of our fine-tuning is not to train the model to generate high-quality radiology reports, but rather to adapt the model to a domain-specific dataset while preserving the pre-trained instruction-following capability. Therefore, the negative effects of shuffling the output order during fine-tuning are disregarded (see Fig. 8). 10 Figure 3: Examples of the medical report for the (a) SKINCON, (b) WBCAtt, (c) CBIS, and (d) MIMIC-CXR datasets. 
+
+4. Experiments 
+
+4.1. Datasets 
+
+We conducted experiments on four richly annotated medical datasets, as shown in the Fig. 3. 
+
+• SKINCON [31] is a dermatology dataset that contains 3230 images from the Fitzpatrick17k [32]. Each image was manually annotated by dermatologists using 48 clinical attributes, such as plaque . The dataset was split into 80% for training, 10% for validation, and 10% for testing. 
+
+• WBCAtt [33] is a dataset consisting of 10298 microscopic images of white blood cells, such as neutrophils . Each image was annotated with 11 attributes, such as cell size , based on guidelines defined by pathol-ogists. The dataset was split into 6179 images for training, 1030 for validation, and 3099 for testing. 
+
+• CBIS [34] is a digitized mammography dataset consisting of 892 mass cases and 753 calcification cases. Each mammogram was annotated with pathology , abnormality types , and BI-RADS descriptors (e.g., mass 
+
+11 Figure 4: Examples of multiple-choice VQA for the (a) SKINCON, (b) WBCAtt, (c) CBIS, and (d) MIMIC-CXR datasets. 
+
+shape ). This dataset provides cropped images of lesions extracted through ROI segmentation. For our experiments, we used cropped im-ages along with their corresponding attribute annotations. The dataset was split into 90% for training and 10% for validation, and the official test split was used for testing. 
+
+• MIMIC-CXR [35] is a chest X-ray dataset that contains 377110 im-ages corresponding to 227835 radiographic studies. Each study is paired with a free-text radiology report obtained from the Beth Israel Dea-coness Medical Center’s electronic health record system for the period 2011-2016, and we used version 2.1.0 for our experiments. To extract image-relevant content from free-text reports, we used the findings and impression sections of LLM-annotated MIMIC-CXR reports from [36]. To select frontal chest X-rays, we employed CheXmask [37] to filter out non-chest X-ray images with a Reverse Classification Accuracy (RCA) below 0.7. 
+
+4.2. Data Preparation for Instruction-Free Evaluation 
+
+To evaluate the fine-tuned LVLMs in instruction-free tuning scenarios, we converted the training split data into a medical report (see Fig. 3), while 12 the validation and test split data into a multiple-choice VQA (see Fig. 4). When converting to medical reports, attribute annotations were formatted into plain text. In the SKINCON dataset, a medical report was formatted by listing the names of the items marked as present among the 48 attributes, such as “plaque, scale.” In the WBCAtt dataset, a medical report was formatted by listing 8 attributes in the form of {value} {name} (e.g., “big cell size” ). Meanwhile, yes/no attributes, such as granularity , were added using the {name} when present, whereas label attributes were added using the 
+
+{value} . In the CBIS dataset, a medical report was formatted by listing the 
+
+{value} of abnormality and pathology attributes. The remaining attributes were added in the form of {value} {name} . For the MIMIC-CXR dataset, the preprocessed reports from [36] were used without further processing. When converting to multiple-choice VQA, attribute annotations were for-matted into question-answer pairs, usually with five options. The question was constructed using the attribute name in the form “What is the {name}?” ,whereas for the SKINCON dataset, the fixed question “What is the dermato-logic feature?” was used. For multiple-choice options, the annotated attribute value was set as the correct answer, while randomly sampled non-overlapping values from the same attribute served as the incorrect options. Attributes with fewer than five options (e.g., yes/no) were converted into a limited choice set (e.g., two options). For MIMIC-CXR evaluation, we used the Medical-CXR-VQA dataset [38]. This dataset consists of VQA pairs for chest X-ray interpretation built from the MIMIC-CXR dataset, covering questions on abnormalities, presence, view, location, level, and type. Since we used only frontal chest X-rays for our experiments, we excluded view-related question types. For consistency with the other datasets, we added incorrect options to convert the dataset into a multiple-choice VQA format with five options. Incorrect options were set to different values within the same question type, while yes/no questions were limited to two options. For abnormality-type questions with multiple disease answers, we performed VQA multiple times, considering each abnormality as a separate correct choice. To promote re-producibility and fair comparison, we release the full instruction-free tuning benchmark for the SKINCON, WBCAtt, and CBIS datasets, including the preprocessing pipelines for the medical reports and the multiple-choice VQA evaluation protocols. 13 4.3. Implementation Details 
+
+The proposed method was developed on top of LLaMA-3.2-11B-Vision-Instruct [22], and fine-tuning was performed using the torchtune framework [28]. For models with proxy instructions, the number of instruction vectors 
+
+N was set to 8, and the momentum coefficient α was set to 0.999. The warm-up stage was conducted for one epoch (approximately 3000 steps), while the fine-tuning stage was conducted for five epochs. We mainly followed the default settings in torchtune for supervised fine-tuning, such as a batch size of 2 and the AdamW optimizer. We use an input resolution of 560 ×560 for fine-tuning and evaluation. For all datasets, we specified the response style at the end of each question (e.g., “Response with . . . ”; see Fig. 4) and extracted the predicted choice (e.g., A) by parsing the model’s output. We evaluated multiple-choice VQA using accuracy by comparing the selected choices with the correct answers. We conducted each experiment three times with different random seeds for the main results and report the average accuracy. As demographic annotations were not consistently available across all datasets, these variables were not incorporated into the analysis. 
+
+5. Results 
+
+5.1. Multiple-choice VQA 5.1.1. Main Results 
+
+We first compared our method against other LVLMs without fine-tuning (w/o FT) on the SKINCON, WBCAtt, and CBIS datasets, including general LVLMs such as LLaMA-3.2-11B-Vision-Instruct [22] and Qwen2.5-VL-3B-Instruct [23], as well as medical LVLMs such as PubMedVision-7B-Qwen2.5VL [15] and MedGemma-4B-it [24]. We then compared our method with fine-tuned (FT) LLaMA-3.2-11B-Vision, Qwen2.5-VL-3B, and MedGemma-4B using a text instruction (i.e., “Describe this medical scan” ). Fine-tuning of Qwen2.5-VL-3B and MedGemma-4B followed the settings described in their original papers. Additionally, we compared our method with BLIP-2 [39], which is trained on image-text pairs and is capable of performing VQA tasks. Note that the language model in BLIP-2 is not instruction-tuned and thus has limited instruction-following ability compared to the other LVLMs in our comparison. We refer our method as InstFree , which fine-tuned the model using the momentum proxy instruction, while InstFree w/ RS fine-tuned it with both the momentum proxy instruction and response shuffling. Since 14 Table 1: Multiple-choice VQA accuracy on the SKINCON, WBCAtt, and CBIS datasets. We compared our method (InstFree) with BLIP-2 [39], MedGemma-4B [24], PubMedVision-7B [15], Qwen2.5-VL-3B [23], and LLaMA-3.2-11B-Vision [22]. FT de-notes fine-tuning, and RS denotes response shuffling. Bold indicates the highest accuracy, and underline denotes the second highest. Model SKINCON WBCAtt CBIS Avg. BLIP-2 ( w/o FT) 8.7 35.2 4.6 16.1 MedGemma-4B ( w/o FT) 14.3 37.3 39.2 30.2 PubMedVision-7B ( w/o FT) 47.0 36.3 40.6 41.3 Qwen2.5-VL-3B ( w/o FT) 37.7 32.8 36.0 35.5 LLaMA-3.2-11B-Vision ( w/o FT) 39.9 34.6 43.0 39.1 MedGemma-4B (FT) 8.9 ± 1.76 45.9 ± 1.18 42.5 ± 2.23 32.4 Qwen2.5-VL-3B (FT) 42.0 ± 0.42 39.4 ± 0.19 39.3 ± 0.12 40.2 LLaMA-3.2-11B-Vision (FT) 59.4 ± 3.85 61.7 ± 3.72 63.9 ± 0.3 61.6 InstFree 69.8 ± 0.75 68.4 ± 0.61 65.0 ± 0.37 67.7 InstFree w/ RS 75.2 ± 0.9 65.2 ± 1.39 68.3 ± 0.37 69.5 
+
+the WBCAtt and CBIS datasets provided attribute names, we reported the accuracy for each attribute separately. Table 1 shows the multiple-choice VQA accuracy on the SKINCON, WB-CAtt, and CBIS datasets. The accuracy of models without fine-tuning (w/o FT) is consistently lower than that of fine-tuned models. Notably, MedGemma-4B underperforms compared to non-medical LVLMs, which we attribute to its primary fine-tuning on specific types of medical data, such as pathology and chest X-rays, suggesting that recent medical LVLMs may face challenges in generalizing across all types of medical data. Overall, these results highlight that fine-tuning LVLMs is crucial for downstream tasks in the medical domain, as it yields substantial performance improvements. Although LLaMA-3.2-11B-Vision (FT) achieves comparable accuracy on the CBIS dataset, its average accuracy across all three datasets is lower than that of the proposed method, highlighting the limitations of naively incor-porating a text instruction during fine-tuning. In contrast, the accuracies of Qwen2.5-VL-3B (FT) and MedGemma-4B (FT) are significantly lower than that of LLaMA-3.2-11B-Vision (FT). This discrepancy is not due to the lim-ited model capacity of Qwen2.5-VL-3B and MedGemma-4B, but rather to their strong dependence on instructions, i.e., instruction-dependence . Specifi-cally, the fine-tuned model generates correct responses to certain instructions (i.e., “Describe this medical scan” ), but fails to respond appropriately to other types of instructions, such as “What is the cell shape?”, instead respond-15 (a) WBCAtt (b) CBIS    
+
+> (c) MIMIC-CXR
+> Figure 5: Radar charts of the accuracy for each attribute (or question type) across the (a) WBCAtt, (b) CBIS, and (c) MIMIC-CXR datasets. LLaMA-3.2-11B-Vision ( w/o FT) is shown in black, LLaMA-3.2-11B-Vision (FT) in green, InstFree in blue, InstFree w/ RS in red, and MedGemma-4B in yellow-green.
+
+ing based on its inherent pre-trained knowledge [40]. Notably, even though MedGemma-4B has been fine-tuned, it still shows low accuracy on the SKIN-CON dataset. This is likely due to the absence of explicit attribute names in the medical reports and the limited instruction-following capability of the pre-trained LVLM, which further exacerbates the instruction-dependence of the fine-tuned model. In summary, the limited ability of fine-tuned Qwen2.5-VL-3B and MedGemma-4B to generalize across diverse instructions leads to a significant degradation in multiple-choice VQA performance. Overall, InstFree achieves the highest accuracy across all datasets among the LVLMs compared, demonstrating the superiority of the momentum proxy instruction. In addition, employing response shuffling (i.e., InstFree w/ RS) 16 Table 2: Multiple-choice VQA accuracy of instruction-free tuning variants on the SKIN-CON, WBCAtt, and CBIS datasets. Fix and Update denote models fine-tuned with fixed and continuously updating proxy instructions, respectively. 
+
+Method SKINCON WBCAtt CBIS Avg. Fix 63.9 ± 1.52 65.1 ± 0.97 61.7 ± 1.49 63.5 Update 66.4 ± 2.55 63.6 ± 0.83 63.7 ± 0.49 64.5 InstFree 69.8 ± 0.75 68.4 ± 0.61 65.0 ± 0.37 67.7 
+
+further improves the average accuracy to 69.5%, demonstrating the effective-ness of the response shuffling. Although it shows a decrease in accuracy on WBCAtt compared to InstFree, the advantages of our response shuffling are demonstrated in attribute-wise accuracy. Fig. 5(a) and Fig. 5(b) show radar charts for each attribute on the WBCAtt and CBIS datasets, respectively. While leveraging inter-attribute correlations can improve overall accuracy, over-reliance on them may compromise the reliability of certain attribute predictions. Specifically, the WBCAtt dataset is susceptible to misclassifica-tion since some labels can be inferred from earlier parts of a response [33]. In this context, the superior accuracy achieved by response shuffling for primary targets that have strong correlations (e.g., label) highlights the effectiveness of the proposed method in reducing over-reliance on previous words. Simi-larly, applying response shuffling improves the overall accuracy on both the CBIS and SKINCON datasets, demonstrating our method’s effectiveness in enhancing the reliability of each attribute prediction across datasets. 
+
+5.1.2. Comparison with Instruction-Free Tuning Variants 
+
+We compared our method with two instruction-free tuning variants, i.e., Fix and Update, to demonstrate the effectiveness of the proposed momen-tum proxy instruction. Fix used a fixed proxy instruction derived from a prior warm-up stage and updated only the vision encoder during fine-tuning, whereas Update referred to fine-tuning in which both the proxy instruction and the vision encoder were updated via gradient descent. Table 2 shows the multiple-choice VQA accuracy of instruction-free tun-ing variants. Among the variants, accuracy differs between the Fix and Up-date, as Fix achieves higher performance on WBCAtt, while Update shows higher accuracy on SKINCON and CBIS. The superior accuracy of WBCAtt with Fix might be due to the vision encoder having fewer changes during fine-tuning, probably because the cells are always centered, which leads to 17 Table 3: VQA accuracy on the MIMIC-CXR dataset. We compared our method with MedGemma-4B [24], an instruction-tuned model trained on the MIMIC-CXR dataset, and LLaMA-3.2-11B-Vision [22]. 
+
+Model Accuracy LLaMA-3.2-11B-Vision (w/o FT) 46.9 MedGemma-4B 44.7 InstFree 58.9 ± 0.29 
+
+InstFree w/ RS 59.3 ± 0.12 
+
+more consistent image features. Notably, employing the momentum proxy instruction outperforms Fix by more than 4%, confirming the benefits of capturing overall fine-tuning trends while prioritizing updates to the vision encoder parameters. 
+
+5.2. Comparison with an Instruction Tuned Model 
+
+We evaluated our method against an instruction-tuned model on the MIMIC-CXR dataset, i.e., MedGemma-4B-it [24], to demonstrate the supe-riority of our approach over instruction-tuned baselines. MedGemma-4B was fine-tuned on the MIMIC-CXR dataset and showed strong performance in report generation and classification of five diseases: atelectasis, cardiomegaly, consolidation, edema, and pleural effusion. Also, we compared our method with an LLaMA-3.2-11B-Vision-Instruct [22] (without fine-tuning) to provide a lower bound on performance. Since reports in the MIMIC-CXR dataset consist of findings and impression sections, we perform response shuffling between these sections without using a separator. Table 3 shows multiple-choice VQA accuracy on the MIMIC-CXR dataset (i.e., Medical-CXR-VQA [38]), and Fig. 5(c) presents a radar chart of the accuracy for each question type. MedGemma-4B achieves high accuracy on presence-type questions, while exhibiting lower accuracy on other ques-tion types. We believe that the low accuracy across most MIMIC-CXR question types is due to limited exposure to diverse instructions during MedGemma-4B’s training. By contrast, presence-type questions beginning with “Is there” align closely with MedGemma-4B’s chest X-ray classification prompts and consequently yield higher accuracy. Moreover, the low accu-racy on abnormality-type questions likely stems from the much larger pool of 281 answer candidates in MIMIC-CXR, compared with the five diseases considered in the MedGemma-4B evaluation. These observations suggest 18 Table 4: Ablation study of response shuffling on the SKINCON (SKN.), WBCAtt (WBC.), and CBIS datasets. Bal denotes balanced sampling; RS (“ ”) and Rand denote models fine-tuned with an incorrect separator and randomized text instructions, respectively. 
+
+Method SKN. WBC. CBIS Avg. InstFree w/ Bal 65.4 63.4 60.8 63.2 InstFree w/ RS (“ ”) 67.9 57.9 67.2 64.3 InstFree w/ RS 75.2 65.2 68.3 69.5 
+
+FT w/ RS 74.1 62.0 67.3 67.8 FT w/ Rand 3.1 27.5 27.9 19.5 that discrepancies between training and evaluation instructions can signifi-cantly impact model performance, highlighting the challenges and limitations of constructing an instruction dataset that covers the full range of medical problems. Overall, InstFree and InstFree w/ RS achieve higher accuracy than MedGemma-4B across all question types. Given the difficulty of con-structing instruction datasets that cover all question types, our approach provides a practical solution for developing an LVLM tailored to the target dataset. 
+
+5.3. Ablation Studies 5.3.1. Ablation on Response Shuffling 
+
+We conducted ablation studies on response shuffling using the SKINCON, WBCAtt, and CBIS datasets. First, we compared InstFree w/ Bal (balanced sampling) to investigate whether the issue originates from the model overfit-ting to previous word correlations or recurring response patterns. We calcu-late the frequency of each word and assign higher selection probabilities to samples that contain words with lower overall frequencies. Second, we com-pared InstFree w/ RS (“ ”) to demonstrate that accuracy degrades when response shuffling uses incorrect separators such as “ ” (instead of the “,” sep-arator). Third, we compared FT w/ RS to show that response shuffling can improve VQA accuracy even when LLaMA-3.2-11B-Vision is fine-tuned with a text instruction. Lastly, we compared FT w/ Rand (fine-tuning LLaMA-3.2-11B-Vision with randomized text instructions) to demonstrate that di-versifying instructions does not lead to better performance (as an extension of response shuffling). To do this, we randomly select an instruction from a set of 58 predefined text instructions, such as “Please report this medical scan.” .19 Table 4 shows the accuracy of the ablation study on response shuffling across the SKINCON, WBCAtt, and CBIS datasets. InstFree w/ Bal shows lower accuracy compared to the model without balanced sampling, i.e., In-stFree. These results indicate that oversampling of specific samples leads to overfitting and results in lower accuracy, suggesting that reducing over-reliance on previous words is more important. InstFree w/ RS (“ ”) shows lower accuracy than the model that uses a comma “,” as the separator. Although standard sentence segmentation libraries are generally sufficient, domain-specific datasets often contain text with poorly structured sentences; therefore, carefully designing strategies to separate elements is necessary for effective response shuffling. While FT w/ RS shows higher accuracy than the model without response shuffling, its accuracy remains lower than that of InstFree w/ RS, highlighting the benefits of the momentum proxy instruc-tion. Meanwhile, FT w/ Rand exhibits significantly lower accuracy. This suggests that the fine-tuned model tends to ignore the given instructions, con-sistently generating responses that follow the format of our medical reports (i.e., image-dependence ), such as “plaque, scale...” This result implies that diversifying instructions during fine-tuning degrades the LVLM’s instruction-following capability, thereby leading the model to generate responses primar-ily based on the visual input. 
+
+5.3.2. Discussion of Misalignment 
+
+As shown in Table 4 (FT w/ Rand), fine-tuning the model to generate consistent responses across a broad range of instructions leads to a significant degradation of its pre-trained instruction-following capability. This degrada-tion appears to stem from a misalignment between the fine-tuning dataset and the pre-training data, as the pre-training paired outputs vary in format depending on the instruction. Similarly, both the drift from the fixed proxy instruction during fine-tuning (see Fix in Table 2) and the misalignment between a naively paired single instruction and the pre-training dataset (see FT in Table 1) can be interpreted as factors that adversely affect instruction-following capability. Meanwhile, continuously minimizing misalignment dur-ing fine-tuning may appear ideal; however, excessive reliance on instructions (which will be discarded) through direct gradient descent can ultimately lead to a degradation in VQA performance (see Update in Table 2). Within this context of misalignment, since most publicly available LVLMs do not release their datasets, manually replicating such datasets to reduce misalignment is impractical. Therefore, momentum proxy instruction offers a practical 20 Figure 6: Ablation study on the momentum coefficient α on the SKINCON, WBCAtt, and CBIS datasets.    
+
+> Figure 7: Ablation study on the number of instruction vectors Non the SKINCON, WBCAtt, and CBIS datasets.
+
+solution for fine-tuning LVLMs without instructions. 
+
+5.3.3. Ablation on Coefficients and Instruction Scale 
+
+We conducted ablation studies on the momentum proxy instruction us-ing the SKINCON, WBCAtt, and CBIS datasets by varying the momentum coefficient and the number of instruction vectors to identify optimal hyper-parameters. For the momentum coefficient α, we experimented with values of 0.9, 0.99, 0.999, and 0.9999, while setting the number of instruction vec-tors N to 8. For the number of instruction vectors N , we experimented with values of 1, 2, 4, 8, 16, and 32, while setting the momentum coefficient α to 0.999. Fig. 6 shows the accuracy of the ablation study on the momentum coef-ficient. The value 0.999 yielded the highest accuracy, indicating that exces-sively fast or slow adaptation may limit performance improvements, similar 21 to [30]. Fig. 7 shows the accuracy of the ablation study on the number of instruction vectors. The highest accuracy was achieved with 8 instruction vectors, whereas increasing the number to 32 resulted in lower performance. This may be related to general questions averaging about 8 tokens in length. 
+
+5.4. Qualitative VQA Analysis 
+
+Fig. 8 presents VQA results of LLaMA-3.2-11B-Vision on the WBCAtt dataset. In the case of descriptive instruction (a), the model without fine-tuning ( w/o FT) identifies the image as a neutrophil, whereas fine-tuned models identify it as a monocyte, demonstrating that fine-tuning allows the model to identify images more precisely. InstFree and InstFree w/ RS gen-erate correct and natural text responses, whereas FT generates responses in the format of our medical reports. This suggests that using text instructions similar to those employed during fine-tuning may lead to overfitting (e.g., fixed-format outputs) or data leakage, highlighting the advantages of using the momentum proxy instruction in terms of generation quality and safety. Furthermore, response shuffling results in inconsistent output ordering in FT 
+
+w/ RS, whereas InstFree w/ RS generates natural responses, demonstrating the greater robustness of our approach to output variability. In the case of attribute-related instruction (b), InstFree w/ RS accu-rately identifies the cell type and generates responses based on the appro-priate fine-tuned attributes, whereas w/o FT misclassifies it as a neutrophil and generates responses accordingly (e.g., dense and granular; the correct is frosted). Meanwhile, although the correct fine-tuned attributes are present in the response, FT fails to follow the instructions and generates responses that exhibit image-dependence . These results indicate that our method is highly sensitive to the given instructions and confirm its superior instruction-following capability. For instruction (c), which requires medical knowledge of relevant at-tributes, all models generate natural and accurate responses, demonstrating that they retain their pre-trained knowledge even after fine-tuning. In the case of challenging instruction (d), w/o FT identifies the cell as a neutrophil and implies dysplasia, whereas InstFree w/ RS recognizes that the shape is commonly seen in monocytes and therefore does not imply dysplasia. Meanwhile, FT generates a response that does not follow the instruction, similar to (b). These results demonstrate that our approach enables the model to respond flexibly to diverse instructions, without requiring expert-level human effort in dataset construction. In summary, the qualitative VQA 22 Figure 8: Qualitative VQA results on the WBCAtt dataset. Correct responses are marked in green, incorrect responses are marked in red, and responses that do not follow instruc-tions are marked in orange. 
+
+23 analysis not only supports the quantitative success but also demonstrates the strengths of the proposed method beyond accuracy. 
+
+6. Conclusion 
+
+We introduce an instruction-free tuning framework specifically tailored for the efficient fine-tuning of medical LVLMs. Our proposed momentum proxy instruction preserves the instruction-following capability of the pre-trained LVLM during fine-tuning, while simultaneously promoting updates to the visual encoder. This enables the fine-tuned model to flexibly respond to domain-specific instructions, even without explicit instructions during fine-tuning. Additionally, applying response shuffling during fine-tuning further mitigates the model’s over-reliance on previous words, facilitating more effec-tive fine-tuning. Experimental results demonstrate that our method achieves superior accuracy across the SKINCON, WBCAtt, CBIS, and MIMIC-CXR datasets, significantly enhancing fine-tuning efficiency in medical domains. 
+
+References 
+
+[1] H. Xiao, F. Zhou, X. Liu, T. Liu, Z. Li, X. Liu, X. Huang, A compre-hensive survey of large language models and multimodal large language models in medicine, Information Fusion 117 (2025) 102888. [2] Q. Lin, Y. Zhu, X. Mei, L. Huang, J. Ma, K. He, Z. Peng, E. Cam-bria, M. Feng, Has multimodal learning delivered universal intelligence in healthcare? a comprehensive survey, Information Fusion 116 (2025) 102795. [3] H. Liu, C. Li, Q. Wu, Y. J. Lee, Visual instruction tuning, Advances in neural information processing systems 36 (2023) 34892–34916. [4] X. Ma, H. Xie, S. J. Qin, Efficiently integrate large language models with visual perception: A survey from the training paradigm perspective, Information Fusion 125 (2026) 103419. [5] J. Wei, M. Bosma, V. Zhao, K. Guu, A. W. Yu, B. Lester, N. Du, A. M. Dai, Q. V. Le, Finetuned language models are zero-shot learners, in: International Conference on Learning Representations, 2022. 24 [6] C. Zhou, P. Liu, P. Xu, S. Iyer, J. Sun, Y. Mao, X. Ma, A. Efrat, P. Yu, L. Yu, et al., Lima: Less is more for alignment, Advances in Neural Information Processing Systems 36 (2023) 55006–55021. [7] X. Li, L. Li, Y. Jiang, H. Wang, X. Qiao, T. Feng, H. Luo, Y. Zhao, Vision-language models in medical image analysis: From simple fusion to general large models, Information Fusion (2025) 102995. [8] Z. Cao, Z. Deng, J. Ma, J. Hu, L. Ma, Mammovlm: A generative large vision–language model for mammography-related diagnostic assistance, Information Fusion 118 (2025) 102998. [9] Z. Shengyu, D. Linfeng, L. Xiaoya, Z. Sen, S. Xiaofei, W. Shuhe, L. Ji-wei, R. Hu, Z. Tianwei, F. Wu, et al., Instruction tuning for large lan-guage models: A survey, arXiv preprint arXiv:2308.10792 (2023). [10] S. Moon, S. Pakhomov, N. Liu, J. O. Ryan, G. B. Melton, A sense inventory for clinical abbreviations and acronyms created using clinical notes and medical dictionary resources, Journal of the American Medical Informatics Association 21 (2) (2014) 299–307. [11] R. Leaman, R. Khare, Z. Lu, Challenges in clinical natural language processing for automated disorder normalization, Journal of biomedical informatics 57 (2015) 28–37. [12] C. E. Kahn Jr, C. P. Langlotz, E. S. Burnside, J. A. Carrino, D. S. Chan-nin, D. M. Hovsepian, D. L. Rubin, Toward best practices in radiology reporting, Radiology 252 (3) (2009) 852–856. [13] A. Favero, L. Zancato, M. Trager, S. Choudhary, P. Perera, A. Achille, A. Swaminathan, S. Soatto, Multi-modal hallucination control by visual information grounding, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2024, pp. 14303–14312. [14] C. Li, C. Wong, S. Zhang, N. Usuyama, H. Liu, J. Yang, T. Naumann, H. Poon, J. Gao, Llava-med: Training a large language-and-vision as-sistant for biomedicine in one day, Advances in Neural Information Pro-cessing Systems 36 (2023) 28541–28564. [15] J. Chen, C. Gui, R. Ouyang, A. Gao, S. Chen, G. Chen, X. Wang, Z. Cai, K. Ji, X. Wan, et al., Towards injecting medical visual knowledge into 25 multimodal llms at scale, in: Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing, 2024, pp. 7346– 7370. [16] S. Mishra, D. Khashabi, C. Baral, H. Hajishirzi, Cross-task generaliza-tion via natural language crowdsourcing instructions, in: Proceedings of the 60th Annual Meeting of the Association for Computational Linguis-tics (Volume 1: Long Papers), 2022, pp. 3470–3487. [17] R. Taori, I. Gulrajani, T. Zhang, Y. Dubois, X. Li, C. Guestrin, P. Liang, T. B. Hashimoto, Alpaca: A strong, replicable instruction-following model, Stanford Center for Research on Foundation Models. https://crfm. stanford. edu/2023/03/13/alpaca. html 3 (6) (2023) 7. [18] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. Lachaux, T. Lacroix, B. Rozière, N. Goyal, E. Hambro, F. Azhar, et al., Llama: Open and efficient foundation language models, arXiv preprint arXiv:2302.13971 (2023). [19] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman, D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat, et al., Gpt-4 tech-nical report, arXiv preprint arXiv:2303.08774 (2023). [20] Y. Wang, Y. Kordi, S. Mishra, A. Liu, N. A. Smith, D. Khashabi, H. Ha-jishirzi, Self-instruct: Aligning language models with self-generated in-structions, in: Proceedings of the 61st Annual Meeting of the Associa-tion for Computational Linguistics (Volume 1: Long Papers), 2023, pp. 13484–13508. [21] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, et al., Learning transfer-able visual models from natural language supervision, in: International conference on machine learning, PmLR, 2021, pp. 8748–8763. [22] A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Yang, A. Fan, et al., The llama 3 herd of models, arXiv preprint arXiv:2407.21783 (2024). [23] S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang, S. Wang, J. Tang, et al., Qwen2.5-vl technical report, arXiv preprint arXiv:2502.13923 (2025). 26 [24] A. Sellergren, S. Kazemzadeh, T. Jaroensri, A. Kiraly, M. Traverse, T. Kohlberger, S. Xu, F. Jamil, C. Hughes, C. Lau, et al., Medgemma technical report, arXiv preprint arXiv:2507.05201 (2025). [25] Z. Liu, K. Zhou, X. Zhao, D. Gao, Y. Li, J.-R. Wen, Vift: Towards visual instruction-free fine-tuning for large vision-language models, in: Find-ings of the Association for Computational Linguistics: EMNLP 2025, 2025, pp. 10341–10366. [26] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, N. Houlsby, An image is worth 16x16 words: Transformers for image recognition at scale, in: International Conference on Learning Representations, 2021. [27] J.-B. Alayrac, J. Donahue, P. Luc, A. Miech, I. Barr, Y. Hasson, K. Lenc, A. Mensch, K. Millican, M. Reynolds, et al., Flamingo: a visual language model for few-shot learning, Advances in neural information processing systems 35 (2022) 23716–23736. [28] torchtune, torchtune: Pytorch’s finetuning library, https://github.com/pytorch/torchtune (2024). [29] X. L. Li, P. Liang, Prefix-tuning: Optimizing continuous prompts for generation, in: Proceedings of the 59th Annual Meeting of the Asso-ciation for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers), 2021, pp. 4582–4597. [30] K. He, H. Fan, Y. Wu, S. Xie, R. Girshick, Momentum contrast for unsupervised visual representation learning, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2020, pp. 9729–9738. [31] R. Daneshjou, M. Yuksekgonul, Z. R. Cai, R. Novoa, J. Y. Zou, Skin-con: A skin disease dataset densely annotated by domain experts for fine-grained debugging and analysis, Advances in Neural Information Processing Systems 35 (2022) 18157–18167. [32] M. Groh, C. Harris, L. Soenksen, F. Lau, R. Han, A. Kim, A. Koochek, O. Badri, Evaluating deep neural networks trained on clinical images 27 in dermatology with the fitzpatrick 17k dataset, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2021, pp. 1820–1828. [33] S. Tsutsui, W. Pang, B. Wen, Wbcatt: A white blood cell dataset an-notated with detailed morphological attributes, Advances in Neural In-formation Processing Systems 36 (2023) 50796–50824. [34] R. S. Lee, F. Gimenez, A. Hoogi, K. K. Miyake, M. Gorovoy, D. L. Rubin, A curated mammography data set for use in computer-aided detection and diagnosis research, Scientific data 4 (1) (2017) 1–9. [35] A. E. Johnson, T. J. Pollard, S. J. Berkowitz, N. R. Greenbaum, M. P. Lungren, C.-y. Deng, R. G. Mark, S. Horng, Mimic-cxr, a de-identified publicly available database of chest radiographs with free-text reports, Scientific data 6 (1) (2019) 317. [36] J. M. Zambrano Chaves, S.-C. Huang, Y. Xu, H. Xu, N. Usuyama, S. Zhang, F. Wang, Y. Xie, M. Khademi, Z. Yang, et al., A clinically accessible small multimodal radiology model and evaluation metric for chest x-ray findings, Nature Communications 16 (1) (2025) 3108. [37] N. Gaggion, C. Mosquera, L. Mansilla, J. M. Saidman, M. Aineseder, D. H. Milone, E. Ferrante, Chexmask: a large-scale dataset of anatom-ical segmentation masks for multi-center chest x-ray images, Scientific Data 11 (1) (2024) 511. [38] X. Hu, L. Gu, K. Kobayashi, L. Liu, M. Zhang, T. Harada, R. M. Sum-mers, Y. Zhu, Interpretable medical image visual question answering via multi-modal relationship graph learning, Medical Image Analysis 97 (2024) 103279. [39] J. Li, D. Li, S. Savarese, S. Hoi, Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models, in: International conference on machine learning, PMLR, 2023, pp. 19730– 19742. [40] S. Goyal, C. Baek, J. Z. Kolter, A. Raghunathan, Context-parametric inversion: Why instruction finetuning may not actually improve con-text reliance, in: The Thirteenth International Conference on Learning Representations, 2025. 28
