@@ -1,0 +1,1191 @@
+Title: StructSAM: Structure- and Spectrum-Preserving Token Merging for Segment Anything Models
+
+URL Source: https://arxiv.org/pdf/2603.07307v1
+
+Published Time: Tue, 10 Mar 2026 00:55:03 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# StructSAM: Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+Duy M. H. Nguyen 1 2 3 Tuan A. Tran ‡ 2 Duong Nguyen ‡ 2 Siwei Xie ‡ 1 Trung Q. Nguyen 2
+
+Mai T. N. Truong 2 Daniel Palenicek 4 An T. Le 5 6 Michael Barz 2 TrungTin Nguyen 7
+
+Tuan Dam 8 Ngan Le 9 Minh Vu 10 Khoa Doan 6 Vien Ngo 5 6 Pengtao Xie 11 
+
+James Zou 12 Daniel Sonntag 2 13 Jan Peters 4 Mathias Niepert 1 3 
+
+## Abstract 
+
+Recent token merging techniques for Vision Transformers (ViTs) provide substantial speedups by reducing the number of tokens processed by self-attention, often without retraining. However, their direct application to the Segment Anything Model (SAM) family is nontrivial: SAM’s image encoder mixes windowed and global attention, and its mask decoder relies on dense, prompt-conditioned features for precise boundary pre-diction. We systematically evaluate representa-tive token-merging methods on SAM and Medi-cal SAM in a strict off-the-shelf setting, and find that existing destination-selection heuristics can erode boundaries and leak prompt information as merge rates increase. We propose Struct-SAM , a resolution-preserving merge–unmerge framework tailored to SAM. StructSAM com-putes a lightweight token-energy score from first-order feature gradients, uses grid-based flatness screening to protect boundary/prompt regions, and merges tokens within flat areas toward low-energy destinations with explicit token recovery. We further provide a spectral graph coarsening view showing that score-guided merging yields bounded Laplacian spectral distortion compared to random or window-restricted baselines. Across eight natural and medical benchmarks, Struct-
+
+> ‡
+
+: Equal contribution 1University of Stuttgart, Germany 
+
+> 2
+
+German Research Center for Artificial Intelligence (DFKI) 
+
+> 3
+
+International Max Planck Research School for Intelligent Sys-tems, Germany 4Technical University of Darmstadt, Germany 
+
+> 5
+
+VinRobotics, Vietnam 6VinUniversity, Vietnam 7Queensland Uni-versity of Technology, Australia 8Hanoi University of Science and Technology (HUST), Vietnam 9University of Arkansas, USA 
+
+> 10
+
+Automation & Control Institute, Austria 11 University of Cali-fornia San Diego, USA 12 Stanford University, USA 13 Carl von Ossietzky University of Oldenburg, Germany. Correspondence to: Mathias Niepert <mathias.niepert@ki.uni-stuttgart.de >.
+
+Preprint. 
+
+SAM reduces encoder FLOPs by 25–30% (up to 40%+ with prompt-aware merging) with minor drops in mIoU/Dice, consistently outperforming ToMe, PiToMe, ToMeSD, VidToMe, and ALGM at the same compute. 
+
+## 1. Introduction 
+
+SAM (Kirillov et al., 2023) has recently emerged as a foun-dation model for segmentation, demonstrating remarkable generalization across diverse visual domains. By combining a powerful Vision Transformer (ViT) image encoder (Doso-vitskiy, 2020) with prompt-conditioned mask decoding, SAM enables flexible, interactive segmentation using points, boxes, and masks, often without any task-specific training. This versatility has led to rapid adoption beyond natural im-ages, including medical imaging, e.g., MedSAM (Ma et al., 2024), robot surgery (Wang et al., 2023a), and embodied AI systems (Li et al., 2025; Noh et al., 2025), where robust seg-mentation is a critical component. Despite these strengths, SAM’s practical deployment is severely constrained by its computational cost (Zhang et al., 2023). In particular, SAM follows a heavy encoder–light decoder design: for large variants such as ViT-L and ViT-H, the image encoder alone accounts for over 98% of the total model parameters and FLOPs, making inference expensive even when the down-stream task is lightweight or interactive. Recognizing this bottleneck, recent efforts to improve SAM’s efficiency have largely focused on model com-pression strategies, including knowledge distillation to smaller architectures (Zhang et al., 2023; Zhou et al., 2025), lightweight re-designs of the vision backbone (Xiong et al., 2024), and post-training quantization (Lv et al., 2024; Zhang et al., 2025). While effective, these approaches typically require retraining or fine-tuning the image encoder on large-scale datasets or applying task-specific calibration during deployment. Such requirements limit their applicability in scenarios where SAM is used off-the-shelf, where training data is unavailable, or where domain-specific fine-tuning is 1
+
+> arXiv:2603.07307v1 [cs.CV] 7 Mar 2026 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models
+
+undesirable due to cost and stability concerns. In practice, SAM’s pre-trained representations are already highly expressive across many domains, motivating ap-proaches that retain the original model weights while re-ducing inference cost . Token merging (Bolya et al., 2022; Tran et al., 2024) has recently emerged as a promising strat-egy for accelerating Vision Transformers by dynamically reducing the number of tokens processed by self-attention layers. By grouping similar patch tokens, token merging has shown substantial gains in both classification (Bolya et al., 2022) and segmentation tasks (Norouzi et al., 2024) for standard ViTs, often without retraining. However, di-rectly applying existing token merging methods to SAM is nontrivial . Unlike conventional ViTs, (i) SAM’s image encoder interleaves windowed and global attention and pre-serves fine-grained spatial details, which is crucial for mask prediction. Moreover, (ii) segmentation tasks inherently 
+
+require dense, structured outputs , making aggressive token reduction (Bolya & Hoffman, 2023; Kim et al., 2024) incom-patible without careful unmerging or feature upsampling mechanisms. Motivated by these challenges, we systematically study rep-resentative token-merging techniques originally developed for ViTs in images and videos (Bolya et al., 2023; Tran et al., 2024; Li et al., 2024) and dense segmentation set-tings (Norouzi et al., 2024; Bolya & Hoffman, 2023), and adapt them to the SAM family, including SAM and Medi-cal SAM. We evaluate commonly used SAM backbones (ViT-B and ViT-L) on boundary-sensitive natural-image benchmarks and on cross-domain medical segmentation datasets. Crucially, all experiments are conducted in a strict off-the-shelf setting , without any fine-tuning, to assess the accuracy–efficiency limits of inference-time token merging for foundation segmentation models. Our findings show that prior approaches, which typically rely on random, global, or window-restricted destination selection, struggle to preserve object boundaries and prompt-relevant regions, leading to noticeable degradation as the merge rate increases. To mitigate this issue, we propose a structure- and spectrum-preserving token-merging framework tailored to SAM-style architectures, called StructSAM. StructSAM (i) identifies boundary-critical tokens using a lightweight energy score computed from first-order finite differences on the encoder feature map (Ziou & Tabbone, 1998; Forsyth & Ponce, 2002), inspired by connections to spectral graph energy (Bal-akrishnan, 2004; Gutman & Zhou, 2006). Tokens near object boundaries exhibit large feature gradients and are therefore protected from merging, while tokens in visually flat regions can be safely merged. Building on this distinc-tion, StructSAM (ii) groups tokens into grid-based cells and ranks cells by flatness to select mergeable regions with spatial coherence, and (iii) merges tokens within selected cells toward low-energy destinations while explicitly un-merging to recover the original token resolution required by SAM’s mask decoder. When box prompts are available, a prompt-aware variant further restricts aggressive merging to tokens outside the prompted region for additional speedups. Finally, we show that our merging strategy admits a spectral graph-theoretic interpretation (Jin et al., 2020; Tran et al., 2024), under which it provably preserves intrinsic spectral properties of the original token space under mild condi-tions, offering a principled explanation for its stability and effectiveness. In summary, our work contributes the following points: • We present the first systematic evaluation of inference-time token merging for the SAM family (SAM and MedSAM) in a strict off-the-shelf setting, reveal-ing why existing merging strategies can fail under boundary- and prompt-sensitive segmentation. • We propose StructSAM, a boundary- and prompt-aware, structure-preserving merging strategy that lever-ages gradient-based token energy and cell flatness to protect informative regions while merging redun-dant background tokens. StructSAM achieves strong accuracy–efficiency trade-offs, reducing FLOPs by 25– 30% (and up to 40%+ with prompt-aware merging) while maintaining segmentation quality across natural and medical benchmarks. • We provide a spectral graph-theoretic analysis show-ing that, under mild assumptions, our score-guided merging yields a provable bound on spectral distortion, offering a principled explanation for its robustness in dense segmentation and the limitations of prior random or similarity-only merging approaches. 
+
+## 2. Related Work 
+
+Compression and Pruning Methods for SAM. To im-prove SAM’s efficiency, most existing methods focus on 
+
+backbone replacement or structured compression . Ap-proaches such as MobileSAM (Zhang et al., 2023), Fast-SAM (Zhao et al., 2023), EdgeSAM (Zhou et al., 2025), and EfficientSAM (Xiong et al., 2024) replace the origi-nal ViT-H encoder with lightweight architectures, including TinyViT (Wu et al., 2022), or EfficientViT (Zhang et al., 2024), often combined with task-specific training strategies. While effective, these methods typically require training new models from scratch, incurring high data and training costs and potentially weakening SAM’s pre-trained gener-alization. More recent work compresses the original SAM via structured pruning and distillation (Chen et al., 2024), which better preserves pre-trained knowledge but introduces additional optimization complexity and limited flexibility across domains and hardware settings. 2Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+In contrast, StructSAM investigates SAM off-the-shelf ac-celeration via inference-time token merging, without mod-ifying model weights or requiring retraining, offering a lightweight alternative to architectural compression. 
+
+Token Pruning and Merging in Transformers. Exist-ing methods for reducing transformer complexity mainly fall into dynamic token pruning and token merging. Token pruning has been explored in both NLP (Goyal et al., 2020; Zhong et al., 2023) and vision transformers (Yin et al., 2022; Wang et al., 2023b), where tokens are dynamically removed based on learned importance. These methods typically re-quire training and introduce input-dependent token counts, complicating batching and limiting practical speedups. To-ken merging methods, led by ToMe (Bolya et al., 2023) and follow-up works (Chen et al., 2023; Shi et al., 2024), merge similar tokens using lightweight bipartite matching, achiev-ing better efficiency-accuracy trade-offs. While attention-or guidance-based improvements exist, these approaches remain sensitive to token partitioning and distribution imbal-ance. More principled clustering or graph-based methods (Loukas & Vandergheynst, 2018; Tran et al., 2024) offer stronger guarantees but incur substantial overhead, making them less suitable for efficient ViT inference. However, these methods typically reduce tokens progressively across layers , which is not well-suited to SAM’s architecture and dense segmentation setting. 
+
+Token Reduction for Semantic Segmentation. A num-ber of methods have been developed to reduce tokens in transformer-based segmentation. Early token halting ap-proaches pause high-confidence tokens to avoid further pro-cessing, but this can limit information flow in later lay-ers (Tang et al., 2023; Liu et al., 2024). Token clustering strategies such as ELViT (Liang et al., 2022) and Ailu-Rus (Li et al., 2023) merge neighboring tokens within a single layer, yet offer limited efficiency gains due to cluster-ing overhead and one-shot reduction. Content-aware token sharing (Lu et al., 2023) uses a policy network to merge im-age patches, but it incurs additional computational cost and primarily addresses local redundancies. More recent work, ALGM (Norouzi et al., 2024), performs token merging in two adaptive stages: first locally in early layers and then globally in intermediate layers, based on cosine similarity, achieving substantial throughput improvements and even enhancing mIoU without retraining. In comparison, our algorithm introduces a structure-aware token-merging strategy that uses image-gradient-based en-ergy scores to identify protected boundary tokens and merge-able regions, thereby avoiding the random or purely local window–based merging decisions commonly adopted in existing approaches.  
+
+> Figure 1. SAM’s encoder with global and windowed attention.
+
+## 3. Method 
+
+3.1. SAM architecture 
+
+SAM employs a transformer-based image encoder for dense image representation learning. Images are first embedded into a grid of visual tokens via a patch embedding layer and processed by a hierarchical encoder that produces multi-scale features, which are then consumed by a lightweight mask decoder. To balance efficiency and global context modeling, SAM interleaves local and global attention within the encoder (Figure 1). Given an image token set X = {x1, . . . , x N }, to-kens are partitioned into disjoint spatial windows {P k}Kk=1 
+
+such that K[
+
+> k=1
+
+Pk = X , Pi ∩ P j = ∅ for i̸ = j. 
+
+At most layers, self-attention is computed independently within each window to capture local spatial dependencies. For a token xi, local attention is defined as 
+
+Attn local (xi) = X 
+
+> xj∈P (i)
+
+softmax j
+
+ q⊤ 
+
+> i
+
+kj
+
+√d
+
+
+
+vj ,
+
+where qi = q(xi), kj = k(xj ), and vj = v(xj ).To enable long-range information exchange, SAM period-ically applies global attention over locally updated tokens 
+
+˜xi = Attn local (xi):
+
+Attn global (˜ xi) = 
+
+> N
+
+X
+
+> j=1
+
+softmax j
+
+˜q⊤ 
+
+> i
+
+˜kj
+
+√d
+
+!
+
+˜vj .
+
+This design captures global context while amortizing the cost of full self-attention across selected layers. 
+
+Why SAM needs explicit token recovery. Many token reduction methods for classification ViTs progressively re-duce the token count across layers, since only a pooled representation is used at the output. In SAM, however, the mask decoder requires a dense feature grid at the original 3Structure- and Spectrum-Preserving Token Merging for Segment Anything Models Patch Embeding 
+
+> Transformer Block
+> Transformer Block
+> -1
+> -2
+> -1
+> +1
+> +2
+> +1
+> 0
+> 0
+> 0
+> -1
+> 0
+> +1
+> -1
+> 0
+> +1
+> -2
+> 0
+> +2
+
+# *
+
+# *       
+
+> 1. Image Feature Gradient 2. Cell Division & Flatness Screening
+> Protected Cells
+> Merging Cells
+> Softmax Attention
+> QKV  Projection
+> 3. Edge Aware Merging
+> Transformer Block
+> Input Image Image Feature IGradient Image GCell Division Merging
+> Token Recovery
+
+Figure 2. StructSAM overview. Feature-gradient energy identifies structurally important regions, forming a protected set that is kept at full resolution. Visually flat regions are selectively merged (one representative per mergeable cell) and followed by lightweight token recovery (unmerging), so SAM’s mask decoder still receives a dense feature grid. 
+
+token resolution, and the encoder’s window partitioning and relative positional embedding assume a consistent 2D token layout. Therefore, we perform merge–compute–unmerge 
+
+inside each attention block: we temporarily merge tokens only to reduce attention cost, and then immediately unmerge to restore a full-resolution grid for the next block and for the final decoder. 
+
+3.2. Resolution-preserving merge–unmerge interface 
+
+To reduce the computational cost of self-attention in the Seg-ment Anything Model (SAM) , we introduce a token merging mechanism tailored to SAM’s mixed local–global attention architecture. At an encoder layer ℓ, let the full-resolution token set be X (ℓ) = {x(ℓ)1 , . . . , x (ℓ) 
+
+> Nℓ
+
+}. We define a merging operator 
+
+fℓ : X (ℓ) → eX (ℓ), | eX (ℓ)| < |X (ℓ)|,
+
+which aggregates spatially redundant tokens while pre-serving boundary- and prompt-relevant information. Self-attention is computed on the merged tokens and then lifted back to the original resolution by an explicit unmerging operator f −1 
+
+> ℓ
+
+:
+
+eX (ℓ+1) = Attn 
+
+ eX (ℓ)
+
+, X (ℓ+1) = f −1
+
+> ℓ
+
+ eX (ℓ+1) 
+
+,
+
+where Attn denotes either local or global attention depend-ing on the layer. This design enables efficient attention computation while preserving the segmentation accuracy of SAM. 
+
+Plug-in baselines. Under this merge–unmerge interface, existing token merging strategies (e.g., T OME, P I-T OME,TOME-SD, V ID TOME, ALGM) correspond to different choices of how fℓ selects merge candidates and destina-tions. We compare these methods using the same interface in the Experiments section, validating across different SAM encoder sizes and datasets. 
+
+3.3. StructSAM: gradient-guided structure-aware token merging 
+
+We overview our method in Figure 2. At each transformer layer ℓ of the SAM image encoder, we consider a set of image tokens 
+
+X (ℓ) = {x(ℓ)1 , x (ℓ)2 , . . . , x (ℓ) 
+
+> Nℓ
+
+},
+
+which can be reshaped into a 2D feature map 
+
+I(ℓ) ∈ RHℓ×Wℓ×Cℓ , where |X (ℓ)| = Hℓ × Wℓ.
+
+Each token x(ℓ) 
+
+> i
+
+is associated with a spatial position p(i) = (h(i), w (i)) , corresponding to its height and width indices on the token grid. These spatial indices match those used in SAM’s decomposed relative positional embedding, pro-viding a consistent notion of spatial locality across attention and feature processing. Our goal is to reduce the number of tokens participating in self-attention at layer ℓ by merg-ing spatially redundant tokens, while preserving tokens that are critical for object boundaries and prompt-conditioned segmentation. 
+
+Feature gradient–based energy estimation. We interpret token features at layer ℓ as a discrete feature field 
+
+I(ℓ) : ( h, w ) 7 → f (ℓ) 
+
+> h,w
+
+∈ RCℓ ,
+
+and approximate local feature gradients via finite differences (or Sobel operators (Gonzalez, 2009)) over adjacent tokens: 
+
+∇xI(ℓ)(h, w ) ≈ f (ℓ) 
+
+> h, w +1
+
+− f (ℓ)
+
+> h, w −1
+
+,
+
+∇y I(ℓ)(h, w ) ≈ f (ℓ) 
+
+> h+1 , w
+
+− f (ℓ)
+
+> h−1, w
+
+.
+
+The gradient magnitude 
+
+G(ℓ)(h, w ) = 
+
+q
+
+∇xI(ℓ)(h, w ) 22 + ∇y I(ℓ)(h, w ) 22
+
+serves as a lightweight energy score: high values correspond to strong local feature variations (typically boundaries) and 4Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+are therefore protected from merging. As shown in Fig-ure 7 and Table 5, this first-order energy provides a com-parable indicator to fully connected graph–based energy measures (Tran et al., 2024), while achieving substantially lower computational overhead. 
+
+Cell partitioning aligned to attention windows. To en-able controlled and spatially coherent merging, we partition the token grid into non-overlapping spatial cells of size 
+
+s × s. For local-attention layers, we apply this partition 
+
+within each attention window Pk to prevent cross-window collapse; for global-attention layers we treat the entire grid as a single window. Let 
+
+C(ℓ) = {C (ℓ)1 , . . . , C(ℓ) 
+
+> M
+
+},
+
+> M
+
+[
+
+> m=1
+
+C(ℓ) 
+
+> m
+
+= I(ℓ), C(ℓ) 
+
+> i
+
+∩C (ℓ) 
+
+> j
+
+= ∅.
+
+Cell flatness and protected set. We assign each cell a flatness score 
+
+ϕ(C(ℓ) 
+
+> m
+
+) = − max 
+
+> (h,w )∈C (ℓ)
+> m
+
+G(ℓ)(h, w ).
+
+Cells with higher flatness correspond to visually smooth regions with low structural variation, while cells containing large gradient responses are more likely to include object boundaries. Given a target merge rate r ∈ [0 , 1) (fraction of tokens removed at layer ℓ), we sort cells by ϕ and select the first Mmerge cells as mergeable , where Mmerge is chosen so that the post-merge token count matches (1 − r)HℓWℓ.Since each mergeable s × s cell reduces s2 tokens to one token, each selected cell removes s2 − 1 tokens, and we choose Mmerge accordingly. All remaining cells form the 
+
+protected set whose tokens are kept at full resolution. 
+
+Destination and source token selection. Within each mergeable cell C(ℓ) 
+
+> m
+
+, we designate a single destination token 
+
+as the most stable representative in that region: 
+
+x(ℓ) 
+
+> m, dst
+
+= arg min  
+
+> x(ℓ)
+> i∈C (ℓ)
+> m
+
+G(ℓ)(h(i), w (i)) .
+
+All remaining tokens in the same cell form the source set 
+
+S(ℓ) 
+
+> m
+
+= C(ℓ) 
+
+> m
+
+\ { x(ℓ)
+
+> m, dst
+
+}.
+
+Cell-wise token merging. For each mergeable cell, we merge its source tokens into the destination token by aver-aging: 
+
+ef (ℓ)
+
+> x(ℓ)
+> m, dst
+
+= 1
+
+|C (ℓ) 
+
+> m
+
+|
+
+X 
+
+> x(ℓ)
+> i∈C (ℓ)
+> m
+
+f (ℓ) 
+
+> i
+
+.
+
+The merged token set eX (ℓ) is formed by (i) all tokens in protected cells, and (ii) the destination tokens for mergeable cells. 
+
+Token recovery (unmerging). After computing self-attention on the merged token set, we restore token rep-resentations to their original spatial resolution through a lightweight token recovery operation. For each merge-able cell m, the updated destination feature is duplicated back to all tokens in S(ℓ) 
+
+> m
+
+∪ { x(ℓ)
+
+> m, dst
+
+}. Tokens in protected cells keep their own updated features. This unmerging step preserves the original token layout required for dense, prompt-conditioned mask prediction, while incurring neg-ligible computational overhead. We provide end-to-end pseudocode in the appendix. 
+
+Prompt-aware variant. While SAM’s image encoder is prompt-independent, prompts specify which structures the decoder will emphasize. When box prompts are available, we map the box to token coordinates and apply a lower merge rate inside the prompted region and a higher merge rate outside, preserving prompt-relevant detail while en-abling additional speedups in background areas. 
+
+## 4. Graph Coarsening View and Spectral Stability in StructSAM 
+
+We analyze token merging in StructSAM through the lens of spectral graph theory . At a high level, tokens within each attention window define a weighted graph, and Struct-SAM’s merge–unmerge procedure induces a graph coarsen-ing followed by a canonical lifting that restores the original resolution required for dense mask prediction. Concretely, mergeable cells act as coarse nodes (one destination per cell), while protected regions remain at full resolution; the score used to select mergeable cells and destinations is the feature-gradient energy from Figure 2 (see Sec. 3). At encoder layer ℓ, tokens in each attention window Pk
+
+(spatial windows for local attention or P1 = X for global attention) form a graph Gℓ,k with normalized Laplacian Lℓ,k .After merging and lifting, we obtain a lifted graph Gℓ,k,l on the original token set. We quantify structural distortion at layer ℓ via the spectral discrepancy 
+
+SD ℓ ≜
+
+> Kℓ
+
+X
+
+> k=1
+
+λℓ,k − λℓ,k,l 1, (1) where λℓ,k and λℓ,k,l denote the eigenvalues of the original and lifted Laplacians, respectively (eigenvalues are com-pared in sorted order). Under mild assumptions on (i) window-wise separabil-ity and (ii) score-guided destination selection (formally stated in Appendix D), we show that boundary-aware, score-guided merging yields stable spectral behavior. 
+
+Theorem 1 (Informal: Layerwise spectrum stability of score-guided merging) . Fix an encoder layer ℓ with win-dows {P k}Kℓ
+
+> k=1
+
+. Let SD ℓ(SG) denote the spectral discrep-
+
+5Structure- and Spectrum-Preserving Token Merging for Segment Anything Models Ours PiToMe     
+
+> ToMe TomeSD
+> Merging Areas DST tokens
+> Figure 3. Illustration of token merging strategies. ToMe and ToMeSD treat all tokens as mergeable, while PiToMe introduces a protected set that is effective only at low merge rates. In contrast, our method preserves structurally important tokens while support-ing aggressive token reduction.
+
+ancy induced by StructSAM’s score-guided merging, and SD ℓ(Base) that of a non–score-guided baseline (e.g., ran-dom or stride-based destination selection). Then, under the assumptions: 1. If merges occur within coherent regions with high prob-ability and within-region token similarities concentrate, then E[SD ℓ(SG)] is tightly controlled and can vanish in the ideal limit; 2. If a baseline produces cross-region merges with non-negligible probability, then lim inf E[SD ℓ(Base)] > 0,i.e., it exhibits an irreducible spectral drift. 
+
+Theorem 1, proved in Appendix D, provides a theoretical explanation for why StructSAM preserves segmentation quality at high merge rates, while heuristic destination se-lection can degrade dense prediction performance. 
+
+## 5. Experiments 
+
+5.1. Experimental Setup Datasets. We evaluate our method on a diverse set of benchmarks that emphasize boundary precision, struc-tural detail preservation, and cross-domain robustness un-der token reduction. Boundary-focused datasets include DIS5K (Qin et al., 2022), which contains high-resolution images with pixel-accurate annotations of complex object boundaries; T HIN OBJECT -5K and COIFT (Liew et al., 2021), which target globally thin structures (e.g., wires and poles) and objects with fine interior thin structures, respec-tively; and HRSOD (Zeng et al., 2019), which requires precise boundary delineation in high-resolution scenes. To assess generalization, we additionally evaluate on COCO (Lin et al., 2014) for diverse natural images, CITYSCAPES (Cordts et al., 2016) for high-resolution urban driving scenes, and ADE20K (Zhou et al., 2019) for holistic scene parsing across 150 semantic categories. Finally, we include IN BREAST (Moreira et al., 2012), a full-field digital mammography repository containing 410 high-resolution DICOM mammograms with polygonal segmentation anno-tations, where MedSAM (Ma et al., 2024) demonstrates SAM’s adaptability. 
+
+Metrics We evaluate our method in terms of both seg-mentation quality and efficiency . Quality is measured using 
+
+mIoU and Boundary mIoU , the latter focusing on accu-racy near object boundaries and being particularly sensitive to token merging. Efficiency is assessed via FLOPs and 
+
+peak GPU memory usage . Together, these metrics capture the quality–efficiency trade-off of different token merging strategies. 
+
+Baseline. We compare our method against five representa-tive token merging baselines. T OME (Bolya et al., 2023) in-troduced bipartite soft matching to efficiently reduce tokens in ViTs. ToMeSD (Bolya & Hoffman, 2023) adapted this approach for diffusion models with timestep-aware merg-ing. PiToMe (Tran et al., 2024) improved merging qual-ity through pivot-based selection that preserves important tokens. VidToMe (Li et al., 2024) extended token merg-ing to exploit temporal redundancy in video transformers. ALGM (Norouzi et al., 2024) proposed adaptive local-global balancing for dense prediction tasks. While these methods achieve substantial efficiency gains, they do not explicitly consider gradient information to identify task-critical tokens. Figure 3 illustrates a comparison of different token merging techniques. Our method preserves important structural re-gions while enabling high merging rates, whereas existing approaches merge tokens indiscriminately. GGround Truth Ours ALGM    
+
+> PiToMe ToMe TomeSD
+> Figure 4. Illustration of segmentation quality at 45% merging rate. Our method preserves fine structural details and achieves higher segmentation quality than baselines, while other approaches often miss thin structures or incorrectly merge object regions into the background.
+
+6Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+5.2. Results 
+
+We evaluate segmentation quality under different token merge rates on high-quality datasets, including DIS5K-VD, HRSOD, and ThinObject5K-TE, as shown in Fig. 6 and Tab. 3. PiToMe and ToMe incur O(N 2) computational complexity in their token-merging algorithms, which limits the maximum merge rate to 50%. In contrast, other methods indiscriminately treat all tokens as merge candidates and sample them as the destination set , leading to significant performance degradation on these highly detailed datasets. Tab. 1 evaluates token compression methods on the INbreast mammography dataset using MedSAM, measuring com-putational cost (GFLOPs) and segmentation quality (Dice Score). Our method achieves 347.8 GFLOPs with a Dice score of 74.81, incurring only a 0.62-point drop from the baseline (75.43) while reducing computation by 28.5%. In contrast, competing methods exhibit substantially larger quality degradations despite comparable or higher compu-tational costs: ToMeSD (-2.10 Dice at 362.3 GFLOPs), VidToMe (-2.11 Dice at 399.8 GFLOPs), and ALGM (-5.60 Dice at 381.1 GFLOPs). Notably, our prompt-aware variant further reduces computation to 283.05 GFLOPs, a 41.8% reduction from baseline, while maintaining a Dice score of 74.72, demonstrating that leveraging bounding box prompts enables more aggressive token reduction in background re-gions without compromising segmentation accuracy. These results on medical imaging data indicate that our approach generalizes effectively beyond natural images, achieving superior efficiency-accuracy trade-offs in the clinically rele-vant domain of breast lesion segmentation.                                                             
+
+> Table 1. Token compression results on the INbreast dataset with MedSAM. We also present a prompt-aware variant of StructSAM, in which user input limits the scope of token processing for more targeted, efficient segmentation.
+> Method GFLOPs Dice Score Baseline 486.4 75.43 TomeSD 362.3 73.33 ViDTome 399.8 73.32 ALGM 381.1 69.83 Ours 347.8 74.81
+> Ours + prompt-aware 283.0 74.72
+> Table 2. Comparison on the Cityscapes dataset (merging rate: 70%).
+> SAM arch. Method AP AP50 AP75 APs APm APl Baseline 35.78 70.27 30.37 17.33 36.44 67.12 ToMeSD 30.61 65.91 24.91 16.61 28.73 56.69 ViT-L VidToMe 29.87 65.40 23.13 17.44 32.59 45.22 ALGM 29.03 65.48 22.81 17.44 27.25 51.92 ToMe 30.10 65.93 25.05 16.93 28.30 54.20 StructSAM 32.40 67.08 26.94 17.76 30.99 62.54
+
+Table 2 summarizes segmentation results on Cityscapes at a 70% merging rate using standard COCO metrics. Across ViT-L backbones, our method consistently outperforms all baselines. On ViT-L, we achieve 32.40 AP, incurring only a 3.38-point drop from the uncompressed model, while competing methods suffer substantially larger degradations. The advantage is most pronounced for large objects, where our method preserves over 93% of baseline performance, compared to 67–84% for other approaches.  
+
+> Figure 5. Token compression results on INbreast dataset using MedSAM
+
+Visualization. We present in Figure 3 and Figure 4 merging outputs of StructSAM and other techniques. We observe that StructSAM preserves fine structural details such as thin rails and sharp edges under aggressive token merging, while baseline methods tend to blur boundaries or merge slender structures into the background. 
+
+5.3. Ablation Study 
+
+Table 4 reports an ablation study on SAM-B evaluated on 
+
+DIS5K and COIFT , using both mIoU and boundary IoU (B-IoU) under two mask ratios. Across all settings, our 
+
+full method achieves the best or tied-best performance, demonstrating the effectiveness of the proposed design. 
+
+- Effect of gradient estimation. Replacing the Sobel oper-ator with a simple central difference ( Central-Diff ) leads to a clear performance drop, particularly in B-IoU. This degradation highlights the importance of accurate edge and gradient estimation for preserving object boundaries during token merging. 
+
+- Effect of flatness aggregation. Using the mean instead of the max over Sobel gradients within each cell ( Mean-Flatness ) results in slightly inferior but still competitive performance. This suggests that while both aggregation strategies are effective, the max-based flatness better cap-tures salient boundary cues. 
+
+- Effect of cell structure. Removing the cell structure en-tirely ( No-Cell ) causes a notable performance drop, espe-cially on COIFT, confirming that preserving spatially dis-tributed low-gradient regions is important for stable DST sampling. Similarly, randomly selecting cells for merging (Rand-Cell ) underperforms the full method, highlighting the benefit of flatness-guided cell selection. 
+
+- Effect of DST sampling strategy. Finally, we examine alternative DST strategies within selected cells. Select-7Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 0.0 0.35 0.45 0.55 0.65         
+
+> Merging Rate
+> 0.42
+> 0.44
+> 0.46
+> 0.48
+> Boundary mIoU
+> DIS5K-VD
+> ALGM
+> Ours
+> Baseline
+> PiToMe
+> ToMe
+> ToMeSD
+> 0.0 0.35 0.45 0.55 0.65
+> Merging Rate
+> 0.74
+> 0.75
+> 0.76
+> 0.77
+> 0.78
+> 0.79
+> HRSOD
+> ALGM
+> Ours
+> Baseline
+> PiToMe
+> ToMe
+> ToMeSD
+> 0.0 0.35 0.45 0.55 0.65
+> Merging Rate
+> 0.46
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> ThinObject5k-TE
+> ALGM
+> Ours
+> Baseline
+> PiToMe
+> ToMe
+> ToMeSD
+
+Figure 6. Comparison with existing token-merging techniques at different merge rates. Our method consistently achieves superior performance while merging over 50% of tokens. Notably, even at a merge rate of up to 65%, the segmentation quality degrades only marginally (by 1-2 mIoU) and can even surpass the original SAM model (HRSOD dataset). 
+
+Table 3. Performance of merging methods on DIS5K, ThinObject5K-TE, COIFT, and HRSOD datasets. Merging rate: 55%. GFlops Imgs/s Mem DIS5K ThinObject5K-TE COIFT HRSOD Model Method mIoU b-mIoU mIoU b-mIoU mIoU b-mIoU mIoU b-mIoU ViT-B Baseline 486.4 7.5 3.53 55.30 46.97 63.28 52.65 89.14 82.54 86.64 76.56 TomeSD 362.3 17.1 2.68 51.39 43.16 58.09 48.24 87.29 80.39 85.34 75.66 ViDTome 399.8 18.7 3.43 43.80 35.77 49.74 37.21 80.52 69.55 75.89 62.20 ALGM 381.1 18.2 2.93 54.49 45.21 62.27 50.24 86.66 79.79 85.97 76.52 StructSAM 347.8 16.3 2.68 54.61 45.57 63.30 52.06 87.74 80.85 86.67 76.84 
+
+ViT-L Baseline 1493.8 4.8 5.97 62.27 53.94 75.50 64.71 92.65 87.40 89.67 82.65 TomeSD 1188.2 7.7 4.84 60.32 50.81 73.68 61.98 90.51 84.67 88.58 80.99 
+
+ViDTome 1274.8 7.8 5.83 39.44 30.36 47.51 31.05 61.73 46.16 60.79 46.56 ALGM 1249.6 7.3 5.17 57.74 46.08 71.77 57.68 85.96 78.45 87.53 78.85 StructSAM 1167.1 5.2 4.84 61.01 51.36 75.80 63.81 90.73 84.26 88.39 80.46 
+
+Original Image PiToMe StructSAM 
+
+Figure 7. Qualitative comparisons of original images, energy scores computed as PiToMe and our StructSAM. 
+
+ing tokens with maximum gradients ( Max-DST ) or ran-domly ( Rand-DST ) consistently underperforms selecting the lowest-gradient tokens, with the gap being most pro-nounced in B-IoU. This confirms that low-gradient DST sampling is critical for boundary preservation. 
+
+- Efficiency of Token Energy Estimation. Table 5 com-pares the cost of token energy estimation with PiToMe. Un-der global attention, PiToMe requires 1.07 GFLOPs/image, while our gradient-based method reduces this to about 0.27 GFLOPs, achieving a 75% reduction; similar savings are observed under window-based attention. As illustrated in 
+
+Table 4. Ablation study on SAM-B. mIoU and boundary IoU (B-IoU) are reported in %. GradCell (Full) denotes the complete model using Sobel-based flatness and structured cell sampling. Dataset Method r = 0 .35 r = 0 .55 
+
+mIoU B-IoU mIoU B-IoU DIS5K GradCell (Full) 54.7 46.0 54.6 45.6 
+
+Central-Diff 53.8 45.6 53.3 44.6 Mean-Flatness 54.5 45.8 54.4 45.4 No-Cell 53.9 44.5 54.2 43.9 Rand-Cell 53.8 43.9 53.5 43.2 Max-Dst 54.5 45.9 53.9 45.2 Rand-Dst 54.7 46.0 54.3 45.4 COIFT GradCell (Full) 64.0 53.5 63.3 52.1 
+
+Central-Diff 60.5 50.4 59.5 49.1 Mean-Flatness 63.8 53.3 62.9 52.1 
+
+No-Cell 62.7 50.6 59.2 47.7 Rand-Cell 63.9 52.5 63.0 51.1 Max-Dst 63.3 52.7 62.0 51.4 Rand-Dst 63.7 53.2 62.8 51.9 
+
+Fig. 7, our method produces energy maps that correlate well with object structures, despite relying only on first-order gradient information . This shows that expensive fully connected token interactions are unnecessary for effec-tive energy estimation, enabling substantial computational savings without sacrificing structural sensitivity. 
+
+Table 5. FLOP counts analysis between StructSAM’s energy score with methods based on a fully connected graph as PiToMe (Tran et al., 2024). 
+
+Attention Method (10 9)FLOPs/im ↓
+
+Global PiToMe 1.0737 
+
+StructSAM (Central Diff) 0.2684 ↓75.00% 
+
+StructSAM (Sobel) 0.2732 ↓74.56% 
+
+Window PiToMe 0.0615 
+
+StructSAM (Central Diff) 0.0154 ↓74.96% 
+
+StructSAM (Sobel) 0.0210 ↓65.85% 
+
+8Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+## 6. Conclusion 
+
+We present the first systematic study of token merging for SAM-based segmentation, showing that methods designed for classification ViTs often fail to preserve structure in dense, prompt-conditioned settings. Motivated by this gap, we introduce StructSAM, based on the insight that first-order, gradient-based energy cues are sufficient to identify boundary-critical tokens without costly graph interactions. By framing token merging as a local, structure-driven pro-cess with explicit recovery, we provide an efficient and prin-cipled approach to scaling foundation segmentation models. 
+
+## Impact Statement 
+
+This work enables efficient deployment of foundation seg-mentation models in low-resource environments by substan-tially reducing inference cost without retraining or archi-tectural modification. By preserving fine-grained structural details under aggressive token reduction, our method broad-ens access to high-quality segmentation for applications with limited compute, memory, or energy budgets, includ-ing medical imaging and embedded vision systems. 
+
+## References 
+
+Balakrishnan, R. The energy of a graph. Linear Algebra and its Applications , 387:287–295, 2004. Bolya, D. and Hoffman, J. Token merging for fast stable diffusion. CVPR Workshop on Efficient Deep Learning for Computer Vision , 2023. Bolya, D., Fu, C.-Y., Dai, X., Zhang, P., Feichtenhofer, C., and Hoffman, J. Token merging: Your vit but faster. arXiv preprint arXiv:2210.09461 , 2022. Bolya, D., Fu, C.-Y., Dai, X., Zhang, P., Feichtenhofer, C., and Hoffman, J. Token merging: Your ViT but faster. In 
+
+International Conference on Learning Representations ,2023. Chen, M., Shao, W., Xu, P., Lin, M., Zhang, K., Chao, F., Ji, R., Qiao, Y., and Luo, P. Diffrate : Differentiable compression rate for efficient vision transformers. In 
+
+2023 IEEE/CVF International Conference on Computer Vision (ICCV) , pp. 17118–17128, 2023. doi: 10.1109/ ICCV51070.2023.01574. Chen, Z., Fang, G., Ma, X., and Wang, X. Slimsam: 0.1% data makes segment anything slim. Advances in Neural Information Processing Systems , 37:39434–39461, 2024. Chung, N., Hanyu, T., Nguyen, T., Le, H., Bumgarner, F., Nguyen, D. M. H., Vo, K., Yamazaki, K., Rainwater, C., Kieu, T., et al. Rethinking progression of memory state in robotic manipulation: An object-centric perspec-tive. Proceedings of the AAAI Conference on Artificial Intelligence , 2026. Cordts, M., Omran, M., Ramos, S., Rehfeld, T., Enzweiler, M., Benenson, R., Franke, U., Roth, S., and Schiele, B. The cityscapes dataset for semantic urban scene un-derstanding. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 3213–3223, 2016. Dosovitskiy, A. An image is worth 16x16 words: Trans-formers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. Forsyth, D. A. and Ponce, J. Computer vision: a modern approach . prentice hall professional technical reference, 2002. Gonzalez, R. C. Digital image processing . Pearson educa-tion india, 2009. Goyal, S., Choudhury, A. R., Raje, S., Chakaravarthy, V., Sabharwal, Y., and Verma, A. Power-bert: Accelerating bert inference via progressive word-vector elimination. In International Conference on Machine Learning , pp. 3690–3699. PMLR, 2020. Gutman, I. and Zhou, B. Laplacian energy of a graph. Linear Algebra and its applications , 414(1):29–37, 2006. Hanyu, T., Chung, N., Le, H., Nguyen, T., Ikebe, Y., Gun-derman, A., Minh, D. N. H., Vo, K., Kieu, T., Yamazaki, K., et al. Slotvla: Towards modeling of object-relation representations in robotic manipulation. IEEE Interna-tional Conference on Robotics and Automation (ICRA) ,2026. Jin, Y., Loukas, A., and JaJa, J. Graph coarsening with preserved spectral properties. In International Conference on Artificial Intelligence and Statistics , pp. 4452–4462. PMLR, 2020. Kim, M., Gao, S., Hsu, Y.-C., Shen, Y., and Jin, H. Token fusion: Bridging the gap between token pruning and token merging. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pp. 1383– 1392, 2024. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A. C., Lo, W.-Y., et al. Segment anything. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pp. 4015–4026, 2023. Li, J., Wang, Y., Zhang, X., Shi, B., Jiang, D., Li, C., Dai, W., Xiong, H., and Tian, Q. Ailurus: a scalable vit framework for dense prediction. Advances in Neural Information Processing Systems , 36:30979–30996, 2023. 9Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+Li, P., Wu, Y., Xi, Z., Li, W., Huang, Y., Zhang, Z., Chen, Y., Wang, J., Zhu, S.-C., Liu, T., et al. Controlvla: Few-shot object-centric adaptation for pre-trained vision-language-action models. arXiv preprint arXiv:2506.16211 , 2025. Li, X., Ma, C., Yang, X., and Yang, M.-H. Vidtome: Video token merging for zero-shot video editing. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 7486–7495, 2024. Liang, W., Yuan, Y., Ding, H., Luo, X., Lin, W., Jia, D., Zhang, Z., Zhang, C., and Hu, H. Expediting large-scale vision transformer for dense prediction without fine-tuning. Advances in Neural Information Process-ing Systems , 35:35462–35477, 2022. Liew, J. H., Cohen, S., Price, B., Mai, L., and Feng, J. Deep interactive thin object selection. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pp. 305–314, 2021. Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ra-manan, D., Doll ´ar, P., and Zitnick, C. L. Microsoft coco: Common objects in context. In European conference on computer vision , pp. 740–755. Springer, 2014. Liu, Y., Zhou, Q., Wang, J., Wang, Z., Wang, F., Wang, J., and Zhang, W. Dynamic token-pass transformers for semantic segmentation. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision ,pp. 1827–1836, 2024. Loukas, A. and Vandergheynst, P. Spectrally approximat-ing large graphs with smaller graphs. In International conference on machine learning , pp. 3237–3246. PMLR, 2018. Lu, C., De Geus, D., and Dubbelman, G. Content-aware token sharing for efficient semantic segmentation with vision transformers. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pp. 23631–23640, 2023. Lv, C., Chen, H., Guo, J., Ding, Y., and Liu, X. Ptq4sam: Post-training quantization for segment anything. In Pro-ceedings of the IEEE/CVF Conference on computer vision and pattern recognition , pp. 15941–15951, 2024. Ma, J., He, Y., Li, F., Han, L., You, C., and Wang, B. Seg-ment anything in medical images. Nature Communica-tions , 15(1):654, 2024. Moreira, I. C., Amaral, I., Domingues, I., Cardoso, A., Cardoso, M. J., and Cardoso, J. S. Inbreast: toward a full-field digital mammographic database. Academic radiology , 19(2):236–248, 2012. Noh, S., Kim, J., Nam, D., Back, S., Kang, R., and Lee, K. Graspsam: When segment anything model meets grasp detection. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pp. 14023–14029. IEEE, 2025. Norouzi, N., Orlova, S., De Geus, D., and Dubbelman, G. Algm: Adaptive local-then-global token merging for efficient semantic segmentation with plain vision trans-formers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 15773– 15782, 2024. Qin, X., Dai, H., Hu, X., Fan, D.-P., Shao, L., and Van Gool, L. Highly accurate dichotomous image segmentation. In 
+
+European Conference on Computer Vision , pp. 38–56. Springer, 2022. Shi, D., Tao, C., Rao, A., Yang, Z., Yuan, C., and Wang, J. Crossget: Cross-guided ensemble of tokens for ac-celerating vision-language transformers. International Conference on Machine Learning , 2024. Tang, Q., Zhang, B., Liu, J., Liu, F., and Liu, Y. Dynamic token pruning in plain vision transformers for semantic segmentation. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , pp. 777–786, 2023. Tran, C., MH Nguyen, D., Nguyen, M.-D., Nguyen, T., Le, N., Xie, P., Sonntag, D., Zou, J. Y., Nguyen, B., and Niepert, M. Accelerating transformers with spectrum-preserving token merging. Advances in Neural Informa-tion Processing Systems , 37:30772–30810, 2024. Tran, T. A., Nguyen, D. M., Tran, H.-C., Barz, M., Doan, K. D., Wattenhofer, R., Vien, N. A., Niepert, M., Sonntag, D., and Swoboda, P. How many tokens do 3d point cloud transformer architectures really need? The Thirty-Ninth Annual Conference on Neural Information Processing Systems (NeurIPS) , 2025. Vo, K., Hanyu, T., Ikebe, Y., Pham, T. T., Chung, N., Vu, M. N., Minh, D. N. H., Nguyen, A., Gunderman, A., Rain-water, C., et al. Clutter-resistant vision-language-action models through object-centric and geometry grounding. 
+
+arXiv preprint arXiv:2512.22519 , 2025. Wang, A., Islam, M., Xu, M., Zhang, Y., and Ren, H. Sam meets robotic surgery: an empirical study on generaliza-tion, robustness and adaptation. In International confer-ence on medical image computing and computer-assisted intervention , pp. 234–244. Springer, 2023a. Wang, H., Dedhia, B., and Jha, N. K. Zero-tprune: Zero-shot token pruning through leveraging of the at-tention graph in pre-trained transformers. arXiv preprint arXiv:2305.17328 , 2023b. 10 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+Wu, K., Zhang, J., Peng, H., Liu, M., Xiao, B., Fu, J., and Yuan, L. Tinyvit: Fast pretraining distillation for small vision transformers. In European conference on computer vision , pp. 68–85. Springer, 2022. Xiong, Y., Varadarajan, B., Wu, L., Xiang, X., Xiao, F., Zhu, C., Dai, X., Wang, D., Sun, F., Iandola, F., et al. Effi-cientsam: Leveraged masked image pretraining for effi-cient segment anything. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 16111–16121, 2024. Yin, H., Vahdat, A., Alvarez, J. M., Mallya, A., Kautz, J., and Molchanov, P. A-vit: Adaptive tokens for efficient vision transformer. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 10809–10818, 2022. Zeng, Y., Zhang, P., Zhang, J., Lin, Z., and Lu, H. Towards high-resolution salient object detection. In Proceedings of the IEEE/CVF international conference on computer vision , pp. 7234–7243, 2019. Zhang, C., Han, D., Qiao, Y., Kim, J. U., Bae, S.-H., Lee, S., and Hong, C. S. Faster segment anything: Towards lightweight sam for mobile applications. arXiv preprint arXiv:2306.14289 , 2023. Zhang, W., Zhong, Y., Ando, S., and Yoshioka, K. Ahcptq: Accurate and hardware-compatible post-training quanti-zation for segment anything model. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pp. 22383–22392, 2025. Zhang, Z., Cai, H., and Han, S. Efficientvit-sam: Acceler-ated segment anything model without performance loss. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pp. 7859–7863, 2024. Zhao, X., Ding, W., An, Y., Du, Y., Yu, T., Li, M., Tang, M., and Wang, J. Fast segment anything. arXiv preprint arXiv:2306.12156 , 2023. Zhong, Q., Ding, L., Liu, J., Liu, X., Zhang, M., Du, B., and Tao, D. Revisiting token dropping strategy in efficient bert pretraining. arXiv preprint arXiv:2305.15273 , 2023. Zhou, B., Zhao, H., Puig, X., Xiao, T., Fidler, S., Barriuso, A., and Torralba, A. Semantic understanding of scenes through the ade20k dataset. International Journal of Computer Vision , 127(3):302–321, 2019. Zhou, C., Li, X., Loy, C. C., and Dai, B. Edgesam: Prompt-in-the-loop distillation for sam. International Journal of Computer Vision , 133(12):8452–8468, 2025. Ziou, D. and Tabbone, S. Edge detection techniques-an overview. Pattern Recognition and Image Analysis: Ad-vances in Mathematical Theory and Applications , 8(4): 537–559, 1998. 11 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+## A. Limitations 
+
+Despite these advantages, StructSAM has several limitations. First, our current formulation relies on fixed, hand-crafted gradient operators (e.g., Sobel or central differences), which may be suboptimal for highly textured regions or domain-specific imagery. Second, the use of predefined cell partitions introduces an additional design choice that may require tuning for different input resolutions or architectures. Finally, while our method is evaluated primarily in the context of SAM-based segmentation, its effectiveness for other vision tasks or transformer architectures remains to be fully explored. These limitations suggest several promising directions for future work. An interesting extension would be to learn adaptive or task-specific gradient operators that retain the efficiency of first-order information while improving robustness. In addition, dynamically adjusting cell structures or sampling strategies based on content or model depth could further enhance flexibility. More broadly, we believe that StructSAM opens up new opportunities for rethinking token merging as a local, structure-driven problem rather than a global graph optimization task, and we hope this perspective will inspire more efficient designs for scalable vision transformers as well as other relevant domain applications in 3D perception learning (Tran et al., 2025) or robotic manipulation with object-centric conditional inputs (Chung et al., 2026; Hanyu et al., 2026; Vo et al., 2025). 
+
+## B. Implementation Details 
+
+B.1. Pseudo Code 
+
+We provide pseudocode for StructSAM’s token partitioning procedure in Algorithm 1. 
+
+Algorithm 1 StructSAM token partitioning and merge map (cell-wise) 
+
+Input: Token tensor T ∈ RH×W ×C ; cell size sx, s y ; merge rate r ∈ [0 , 1) 
+
+Procedure: Source tokens A (to be merged); kept tokens B; assignment map π for unmerging  
+
+> 1:
+
+Initialize empty sets A, B and empty map π 
+
+> 2:
+
+Partition T into non-overlapping cells {Ci ∈ Rsx×sy ×C } 
+
+> 3:
+
+for each cell Ci do  
+
+> 4:
+
+Compute gradient magnitudes G(t) for tokens t ∈ Ci 
+
+> 5:
+
+Compute cell flatness ϕi ← − max t∈Ci G(t) 
+
+> 6:
+
+end for  
+
+> 7:
+
+Sort cells by ϕi in decreasing order ▷ Higher ϕi = flatter (more mergeable)  
+
+> 8:
+
+Mmerge ←
+
+ r · H · Wsxsy − 1
+
+
+
+▷ #cells needed to remove rHW tokens  
+
+> 9:
+
+M ← first Mmerge cells in the sorted list ▷ mergeable cells  
+
+> 10:
+
+P ← remaining cells ▷ protected cells  
+
+> 11:
+
+for each protected cell Ci ∈ P do  
+
+> 12:
+
+B ← B ∪ Ci ▷ keep all tokens  
+
+> 13:
+
+end for  
+
+> 14:
+
+for each mergeable cell Ci ∈ M do  
+
+> 15:
+
+Compute G(t) for tokens t ∈ Ci 
+
+> 16:
+
+tdst ← arg min t∈Ci G(t) ▷ stable destination token  
+
+> 17:
+
+B ← B ∪ { tdst } 
+
+> 18:
+
+for each token t ∈ Ci \ { tdst } do  
+
+> 19:
+
+A ← A ∪ { t} 
+
+> 20:
+
+π(t) ← tdst ▷ unmerge target  
+
+> 21:
+
+end for  
+
+> 22:
+
+end for  
+
+> 23:
+
+return A, B, π 
+
+Bounding Box Generation Following the standard SAM evaluation protocol, we use bounding box prompts derived from ground truth segmentation masks. For each ground truth mask, we compute the tight axis-aligned bounding box by extracting the minimum and maximum coordinates of foreground pixels (threshold ¿ 128). The resulting boxes are provided to SAM in the format of top-left and bottom-right corners as spatial prompts. This deterministic box generation ensures 12 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models  
+
+> Figure 8. Segmentation results on INbreast dataset using MedSAM
+
+reproducible evaluation while simulating realistic user-provided region annotations. For our prompt-aware token merging strategy, pixel-space boxes are converted to token-space coordinates by dividing by the patch size (16 pixels), enabling differentiated merging policies for tokens inside versus outside the prompted region. 
+
+## C. Additional Results 
+
+We present in Figure 8 a visualization of token-merging outputs from different algorithms on a typical image from the INbreast dataset. 
+
+## D. Formal Proofs for Section 4 
+
+This appendix provides a formal counterpart of the informal statement in Theorem 1. In particular, we make explicit (i) the window-wise graph construction used by SAM’s mixed local/global attention, (ii) the coarsening–lifting proxy that defines our spectral metric, and (iii) the step-by-step perturbation argument showing vanishing spectral distortion for score-guided merging (StructSAM) and a non-vanishing distortion for non–score-guided baselines. 
+
+Connection to StructSAM scoring. In StructSAM, the score map S used in the unified destination rule below is instanti-ated by the feature-gradient energy S(h, w ) = G(ℓ)(h, w ) defined in the Method section (first-order finite differences or Sobel gradients on the encoder feature map). Mergeable cells are selected by high flatness ϕ(Cm) = − max (h,w )∈C m S(h, w ),and the destination token in each mergeable cell is the minimum-score token (corresponding to σ = −1 in Equation (8)). This choice is designed to (i) avoid merging across strong gradients (boundaries) and (ii) select stable representatives in visually flat regions. 
+
+Encoder-level spectral distortion. Let L be the number of encoder layers. We measure the cumulative spectral distortion across the encoder by 
+
+Denc ≜
+
+> L
+
+X
+
+> ℓ=1
+
+SD ℓ, (2) where SD ℓ is the layerwise spectral discrepancy defined in Equation (1). Thus, Denc is simply the sum of per-layer spectral discrepancies. 
+
+D.1. Preliminaries: coarsening, lifting, and eigenvalue inclusion 
+
+We reuse Graph Coarsening and Graph Lifting , see e.g., Definitions 1 and 2, window-wise to interpret token merging as a graph coarsening operation and to define the lifted proxy used in our spectral analysis. 
+
+Definition 1 (Graph Coarsening) . Let G(V, E, W) be a weighted graph with |V| = N and adjacency matrix W ∈ RN ×N .Let P = {V i}i∈[n] be a partition of V into n disjoint subsets, i.e., V = S 
+
+> i∈[n]
+
+Vi and Vi ∩ V j = ∅ for i̸ = j. The coarsened graph of G with respect to P is the weighted graph Gc(Vc, Ec, Wc), where each subset Vi is collapsed into a single node 
+
+νi ∈ V c. Its adjacency entries are defined by block-averaging: 
+
+Wc[i, j ] = 1
+
+|V i| |V j |
+
+X
+
+> u∈V i
+
+X
+
+> v∈V j
+
+W[u, v ], i, j ∈ [n]. (3) 
+
+Let D be the degree matrix of G with D[p, p ] = dp := PNq=1 W[p, q ], and denote the combinatorial and normalized Laplacians by 
+
+L = D − W, L = IN − D−1/2WD −1/2. (4) 13 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+Similarly, define Dc, Lc = Dc − Wc, and Lc = In − D−1/2 
+
+> c
+
+WcD−1/2 
+
+> c
+
+for Gc. We denote the eigenvalues and eigenvectors of L by (λ, u) and those of Lc by (λc, uc).
+
+Definition 2 (Graph Lifting) . Given a coarsened graph Gc(Vc, Ec, Wc) induced by a partition P = {V i}i∈[n], the lifted graph Gl(V, El, Wl) is defined on the original node set V by assigning each pair of nodes u ∈ V i, v ∈ V j the adjacency weight of their corresponding coarse nodes: 
+
+Wl[u, v ] = Wc[i, j ], ∀ u ∈ V i, v ∈ V j , i, j ∈ [n]. (5) 
+
+Let Dl be the degree matrix of Gl with Dl[p, p ] = dlp := PNq=1 Wl[p, q ]. Define the combinatorial and normalized Laplacians of Gl as 
+
+Ll = Dl − Wl, Ll = IN − D−1/2 
+
+> l
+
+WlD−1/2 
+
+> l
+
+. (6) 
+
+We denote the eigenvalues and eigenvectors of Ll by (λl, ul).
+
+Lemma 1 (Eigenvalue inclusion under lifting) . Let Gc be a coarsened graph obtained from G by a partition P, and let Gl
+
+be the lifted graph from Gc via Definition 2. Then the eigenvalues of Ll contain all eigenvalues of Lc, and the remaining 
+
+(N − n) eigenvalues equal 1. Equivalently, as multisets, 
+
+spec( Ll) = spec( Lc) ∪ { 1}N −n.
+
+Proof of Lemma 1. Let P ∈ { 0, 1}N ×n be the cluster-membership matrix, P[u, i ] = 1{u ∈ V i}. From Equation (5), there exists Wc ∈ Rn×n such that Wl = P W c P⊤. Hence Wl has rank at most n, and so does Ml := D−1/2 
+
+> l
+
+WlD−1/2 
+
+> l
+
+.Therefore, Ml has at most n nonzero eigenvalues and at least (N − n) zero eigenvalues. Since Ll = IN − Ml, it follows that Ll has at least (N − n) eigenvalues equal to 1.It remains to identify the other n eigenvalues with those of Lc. Consider the subspace U := Range( D1/2 
+
+> l
+
+P) ⊂ RN , which consists of vectors that are constant on each cluster (up to D1/2 
+
+> l
+
+scaling). A direct substitution shows that U is invariant under 
+
+Ml, and the restriction of Ml to U is similar to Mc := D−1/2 
+
+> c
+
+WcD−1/2 
+
+> c
+
+. Hence Ml and Mc share the same n nonzero eigenvalues, and therefore Ll = I − Ml and Lc = I − Mc share the same n eigenvalues different from 1. Combining with the (N − n) eigenvalues equal to 1 completes the proof. 
+
+D.2. Token graphs induced by SAM windows 
+
+Fix an encoder layer ℓ with a window partition {P ℓ,k }Kℓ
+
+> k=1
+
+. For local-attention layers, Pℓ,k are spatial windows. For global-attention layers, Kℓ = 1 and Pℓ, 1 = X . For each window (ℓ, k ), build a weighted token graph Gℓ,k (Vℓ,k , Eℓ,k , Wℓ,k )
+
+on the tokens in that window. Let its normalized Laplacian be 
+
+Lℓ,k = INℓ,k − D−1/2 
+
+> ℓ,k
+
+Wℓ,k D−1/2 
+
+> ℓ,k
+
+, Nℓ,k = |V ℓ,k |.
+
+StructSAM performs merging within each window (equivalently, within grid cells aligned to windows), producing a coarsened graph Gℓ,k,c ; lifting yields Gℓ,k,l on Nℓ,k nodes. 
+
+Layerwise discrepancy. We adopt the main-text definition SD ℓ = PKℓ 
+
+> k=1
+
+∥λℓ,k − λℓ,k,l ∥1 from Equation (1). To avoid duplicate labels, we do not re-label this equation here. 
+
+D.3. Merge correctness event and score-guided destination rule 
+
+Fix a layer ℓ and window k. Let P(s)0,ℓ,k = {V (s)0,ℓ,k, 1, . . . , V(s)0,ℓ,k,s ℓ,k } denote an (unknown) semantic partition at merge step s
+
+(e.g., local regions separated by edges). At step s, the algorithm merges a pair (vaℓ,k,s , v bℓ,k,s ) inside that window. Define the within-region merge event 
+
+Eℓ,k,s ≜
+
+n
+
+∃i ∈ [sℓ,k ] s.t. vaℓ,k,s , v bℓ,k,s ∈ V (s)0,ℓ,k,i 
+
+o
+
+. (7) 
+
+Assumption 1 (Windowed separability and score-guided cell purity) . Fix a layer ℓ and window k. For each merge step 
+
+s ∈ { nℓ,k + 1 , . . . , N ℓ,k }:1. (S1) Within-region concentration. If vu, v v ∈ V (s)0,ℓ,k,i , then E[cos( vu, v v )] → 1.
+
+14 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+2. (S2) Margin across regions. There exists m ∈ (0 , 1) such that for i̸ = j, cos( vu, v v ) ≥ m > cos( vu, v w) whenever 
+
+vu, v v ∈ V (s)0,ℓ,k,i and vw ∈ V (s)0,ℓ,k,j .3. (S3) Score-guided cell purity (unified S-rule). Let Cm be a mergeable grid cell inside window (ℓ, k ). Let S : Cm → R
+
+be the cell score map used to select a destination token, and let σ ∈ { +1 , −1}. Pick the destination coordinate by 
+
+(u⋆m, v ⋆m) ∈ arg max 
+
+> (u,v )∈C m
+
+σ S (u, v ), (8) 
+
+xdst  
+
+> m
+
+← x(u⋆m, v ⋆m) ∈ B.
+
+Equivalently, in each cell select the token corresponding to the maximum value in S if S represents energy scores 
+
+(σ = +1 ), or the minimum value if S represents gradient magnitudes (σ = −1); assign these tokens to the destination set B. Then, with probability at least 1 − δℓ,k,s , the selected destination belongs to the dominant true region inside Cm,and each true region present in the window contributes at least one destination token across the selected mergeable cells. 
+
+D.4. Formal theorem statement Theorem 2 (Formal version of Theorem 1) . Fix an encoder layer ℓ with windows {P ℓ,k }Kℓ
+
+> k=1
+
+. For each window (ℓ, k ), let 
+
+G(Nℓ,k ) 
+
+> ℓ,k
+
+≡ G ℓ,k be the original token graph and let G(nℓ,k ) 
+
+> ℓ,k,l
+
+be the lifted proxy after reducing to nℓ,k tokens. Assume the following boundedness condition holds uniformly over (ℓ, k ) and merge steps: 
+
+0 < d min ≤ d(s)
+
+> ℓ,k
+
+(i) ≤ dmax , 0 ≤ W(s)
+
+> ℓ,k
+
+[i, j ] ≤ wmax , (9) 
+
+for all valid indices (degrees are bounded away from 0, and weights are uniformly bounded). Consider two merging policies applied window-wise: (i) score-guided destination selection using the unified S-rule in Equation (8) (StructSAM), and (ii) a non–score-guided baseline (e.g., stride-based or random destination selection as in ToMeSD-style variants). Then there exist constants csp > 0, crow > 0, and c0 > 0, depending only on (dmin , d max , w max ) and window sizes, such that: 1. (Telescoping spectral bound) For each layer ℓ,SD ℓ ≤ csp 
+
+> Kℓ
+
+X
+
+> k=1
+> Nℓ,k
+
+X 
+
+> s=nℓ,k +1
+
+∆ℓ,k,s , (10) 
+
+where ∆ℓ,k,s ≥ 0 is a one-step (merge-step) discrepancy term defined in Equation (13) below. 2. (Vanishing distortion for score-guided merging) Under Assumption 1, 
+
+ESD ℓ(SG)  ≤ csp 
+
+> Kℓ
+
+X
+
+> k=1
+> Nℓ,k
+
+X 
+
+> s=nℓ,k +1
+
+
+
+crow E∥vaℓ,k,s − vbℓ,k,s ∥2
+
+ + c0(1 − m) δℓ,k,s 
+
+
+
+. (11) 
+
+In particular, if max ℓ,k,s δℓ,k,s → 0 and E[cos( vaℓ,k,s , v bℓ,k,s )] → 1, then E[SD ℓ(SG)] → 0.3. (Non-vanishing distortion for non–score-guided baselines) Suppose there exists δ > 0 and an infinite subsequence of merge steps such that 
+
+inf  
+
+> ℓ,k,s
+
+P(Eℓ,k,s ) ≤ 1 − δ. (12) 
+
+Then 
+
+lim inf ESD ℓ(Base)  ≥ c0(1 − m) δ, 
+
+so the baseline exhibits an irreducible spectral drift. 
+
+D.5. Proof of Theorem 2 
+
+We proceed in three steps: (i) relate one merge to a local change in adjacency rows, (ii) convert adjacency perturbations to Laplacian perturbations, (iii) apply eigenvalue perturbation inequalities and telescope across merge steps. 15 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+One-step discrepancy quantity. At merge step s, window (ℓ, k ) merges indices (aℓ,k,s , b ℓ,k,s ). Define 
+
+∆ℓ,k,s ≜ W(s)
+
+> ℓ,k
+
+[aℓ,k,s , :] − W(s)
+
+> ℓ,k
+
+[bℓ,k,s , :] 1 + W(s)
+
+> ℓ,k
+
+[: , a ℓ,k,s ] − W(s)
+
+> ℓ,k
+
+[: , b ℓ,k,s ] 1. (13) For symmetric affinities, the two terms coincide; we keep both to cover general constructions. 
+
+Proposition 1 (Row/column drift under correct vs incorrect merges) . Fix (ℓ, k, s ). Under bounded weights W(s) 
+
+> ℓ,k
+
+∈ [0 , w max ]
+
+and unit-norm tokens, there exist constants crow , c 0 > 0 (depending only on the affinity construction) such that: 1. On Eℓ,k,s , ∆ℓ,k,s ≤ crow ∥vaℓ,k,s − vbℓ,k,s ∥2. Moreover, since ∥va − vb∥22 = 2(1 − cos( va, v b)) for unit vectors, 
+
+∆ℓ,k,s ≤ crow 
+
+q
+
+2 1 − cos( vaℓ,k,s , v bℓ,k,s ).
+
+2. On Ecℓ,k,s , if the window contains at least two regions and Assumption 1(S2) holds, then ∆ℓ,k,s ≥ c0(1 − m).Proof of Proposition 1. We give an explicit route for cosine-type affinities; other affinities follow similarly under Lipschitz-ness. Assume tokens are ℓ2-normalized, and edge weights are constructed from cosine similarity via a Lipschitz map ψ (possibly followed by clipping/normalization): W[i, j ] = ψ(cos( vi, v j )) , with |ψ(x) − ψ(y)| ≤ Lψ |x − y|. Then for any fixed j,
+
+|W[a, j ] − W[b, j ]| ≤ Lψ | cos( va, v j ) − cos( vb, v j )| = Lψ |v⊤ 
+
+> j
+
+(va − vb)| ≤ Lψ ∥va − vb∥2,
+
+since ∥vj ∥2 = 1 . Summing over j and using bounded window size yields ∥W[a, :] − W[b, :] ∥1 ≤ c′
+
+> row
+
+∥va − vb∥2, and similarly for columns. This proves the first claim with crow = 2 c′
+
+> row
+
+.For the second claim, when Ecℓ,k,s occurs, the pair comes from different regions i̸ = j. By Assumption 1(S2), their within-region similarities are at least m, while cross-region similarities are strictly below m. Hence there exists a subset of tokens (with nonzero cardinality whenever at least two regions are present) for which one of the rows has entries at least m
+
+and the other has corresponding entries below m, producing an ℓ1 row mismatch bounded below by a constant multiple of 
+
+1 − m. The same holds for columns, giving ∆ℓ,k,s ≥ c0(1 − m) for some c0 > 0.
+
+Proposition 2 (Adjacency-to-Laplacian perturbation) . Fix (ℓ, k, s ). Let L(s) 
+
+> ℓ,k
+
+be the normalized Laplacian before applying the merge at step s, and let L(s−1)  
+
+> ℓ,k,l
+
+be the lifted normalized Laplacian after the merge. Under the boundedness condition Equation (9) , there exists clap > 0 such that 
+
+L(s) 
+
+> ℓ,k
+
+− L (s−1)   
+
+> ℓ,k,l F
+
+≤ clap ∆ℓ,k,s . (14) 
+
+Proof of Proposition 2. Write L = I − D−1/2WD −1/2. A single merge modifies W only through the merged pair’s rows/columns (coarsening plus lifting), so W − Wl has support restricted to those indices, and its Frobenius norm is controlled by ∆ℓ,k,s . Moreover, degrees are uniformly bounded away from 0 and above by Equation (9), so ∥D−1/2∥2 and 
+
+∥D−1/2 
+
+> l
+
+∥2 are uniformly bounded. Using triangle inequality and submultiplicativity, 
+
+D−1/2WD −1/2 − D−1/2 
+
+> l
+
+WlD−1/2  
+
+> lF
+
+≤ c ∥W − Wl∥F + c′ ∥D − Dl∥F ,
+
+and both ∥W − Wl∥F and ∥D − Dl∥F are controlled by ∆ℓ,k,s because degrees are row sums of W. This yields Equation (14). 
+
+Lemma 2 (Hoffman–Wielandt inequality) . For symmetric matrices A, B ∈ RN ×N with eigenvalues α1 ≤ · · · ≤ αN and 
+
+β1 ≤ · · · ≤ βN ,
+
+> N
+
+X
+
+> i=1
+
+(αi − βi)2 ≤ ∥ A − B∥2 
+
+> F
+
+.
+
+Consequently, 
+
+∥α − β∥1 ≤ √N ∥A − B∥F .
+
+Proof of Lemma 2. The squared inequality is the Hoffman–Wielandt theorem. The ℓ1 bound follows from Cauchy–Schwarz: 
+
+∥α − β∥1 ≤ √N ∥α − β∥2.16 Structure- and Spectrum-Preserving Token Merging for Segment Anything Models 
+
+Proposition 3 (One-step eigenvalue drift) . Fix (ℓ, k, s ). Under Equation (9) , there exists csp > 0 such that 
+
+λ(s) 
+
+> ℓ,k
+
+− λ(s−1)   
+
+> ℓ,k,l 1
+
+≤ csp ∆ℓ,k,s . (15) 
+
+Proof of Proposition 3. Apply Lemma 2 with A = L(s) 
+
+> ℓ,k
+
+and B = L(s−1)  
+
+> ℓ,k,l
+
+, then use Proposition 2: 
+
+λ(s) 
+
+> ℓ,k
+
+− λ(s−1)   
+
+> ℓ,k,l 1
+
+≤ pNℓ,k L(s) 
+
+> ℓ,k
+
+− L (s−1)   
+
+> ℓ,k,l F
+
+≤ pNℓ,k clap ∆ℓ,k,s .
+
+Absorb pNℓ,k clap into csp .
+
+Proof of Theorem 2. Step 1: Telescoping. For a fixed window (ℓ, k ), telescope across merge steps: 
+
+∥λℓ,k − λℓ,k,l ∥1 ≤
+
+> Nℓ,k
+
+X 
+
+> s=nℓ,k +1
+
+∥λ(s) 
+
+> ℓ,k
+
+− λ(s−1)  
+
+> ℓ,k,l
+
+∥1 ≤ csp 
+
+> Nℓ,k
+
+X 
+
+> s=nℓ,k +1
+
+∆ℓ,k,s ,
+
+where the last inequality uses Proposition 3. Summing over windows k = 1 , . . . , K ℓ yields Equation (10). 
+
+Step 2: Score-guided vanishing distortion. By Assumption 1(S3), P(Ecℓ,k,s ) ≤ δℓ,k,s . Using Proposition 1 and the law of total expectation, 
+
+E[∆ ℓ,k,s ] ≤ crow E∥vaℓ,k,s − vbℓ,k,s ∥2
+
+ + c0(1 − m) P(Ecℓ,k,s ) ≤ crow E∥vaℓ,k,s − vbℓ,k,s ∥2
+
+ + c0(1 − m) δℓ,k,s .
+
+Combine with Equation (10) to obtain Equation (11). Finally, E[cos( va, v b)] → 1 implies E∥va − vb∥2 → 0 (unit vectors), hence the right-hand side vanishes when max ℓ,k,s δℓ,k,s → 0.
+
+Step 3: Baseline non-vanishing distortion. If Equation (12) holds, then along the corresponding steps P(Ecℓ,k,s ) ≥ δ. By the lower bound in Proposition 1, E[∆ ℓ,k,s ] ≥ c0(1 − m)δ. Plugging into Equation (10) yields lim inf E[SD ℓ(Base)] ≥
+
+c0(1 − m)δ, proving the claim. 
+
+Remark (A concrete sufficient condition for Equation (12)). The assumption in Equation (12) is mild for stride-based or random destination selection. For example, suppose a window contains at least two true regions with proportions p and 1 − p
+
+for some p ∈ (0 , 1) , and the baseline selects destination tokens without using S (e.g., fixed stride independent of content). Then, at many merge steps, the probability that a selected pair crosses regions is bounded below by a constant multiple of 
+
+p(1 − p), hence δ > 0 in Equation (12). This is the sense in which non–score-guided strategies exhibit an irreducible rate of erroneous merges, which translates into a non-vanishing spectral drift through Proposition 1. 17

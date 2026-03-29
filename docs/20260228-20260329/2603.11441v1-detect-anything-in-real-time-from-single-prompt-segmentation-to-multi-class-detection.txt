@@ -1,0 +1,338 @@
+Title: Detect Anything in Real Time: From Single-Prompt Segmentation to Multi-Class Detection
+
+URL Source: https://arxiv.org/pdf/2603.11441v1
+
+Published Time: Fri, 13 Mar 2026 00:27:08 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Detect Anything in Real Time: From Single-Prompt Segmentation to Multi-Class Detection 
+
+## Mehmet Kerem Turkcan 
+
+## Columbia University 
+
+> mkt2126@columbia.edu
+
+## Abstract 
+
+Recent advances in vision-language modeling have pro-duced promptable detection and segmentation systems that accept arbitrary natural language queries at inference time. Among these, SAM3 [3] achieves state-of-the-art accuracy by combining a ViT-H/14 backbone with cross-modal trans-former decoding and learned object queries. However, SAM3 processes a single text prompt per forward pass. De-tecting N categories requires N independent executions, each dominated by the 439M-parameter backbone. We present Detect Anything in Real Time (DART), a training-free framework that converts SAM3 into a real-time multi-class detector by exploiting a structural invari-ant: the visual backbone is class-agnostic , producing im-age features independent of the text prompt. This al-lows the backbone computation to be shared between all classes, reducing its cost from O(N ) to O(1) . Combined with batched multi-class decoding, detection-only infer-ence, and TensorRT FP16 deployment, these optimizations yield 5.6 × cumulative speedup at 3 classes, scaling to 25 ×
+
+at 80 classes, without modifying any model weight. On COCO val2017 (5,000 images, 80 classes), DART achieves 
+
+55.8 AP at 15.8 FPS (4 classes, 1008 ×1008) on a single RTX 4080, surpassing purpose-built open-vocabulary de-tectors trained on millions of box annotations. For extreme latency targets, adapter distillation with a frozen encoder-decoder achieves 38.7 AP with a 13.9 ms backbone. Code and models are available at https://github.com/ mkturkcan/DART .
+
+## 1. Introduction 
+
+Recent vision-language models [5, 11] can detect and seg-ment objects from natural language prompts with impres-sive fidelity. SAM3 [3] represents the current state of the art: given a text prompt and an image, it localizes and seg-ments all matching instances. The architecture comprises a 439M-parameter ViT-H/14 backbone with 32 blocks of windowed and global attention, a contrastive text encoder that maps class names to 256-dimensional token sequences, a 6+6-layer transformer encoder-decoder with cross-modal attention, and 200 learned object queries with per-query box regression and presence prediction heads. These same properties make SAM3 expensive to deploy as a multi-class detector. The model processes one text prompt per forward pass. Detecting N categories requires 
+
+N full executions, each dominated by the backbone (78% of compute, 87 of 112 ms on an RTX 4080), prohibiting real-time inference beyond a few classes. We target the training-free setting. SAM3’s training data and infrastructure are large in scale, making retrain-ing infeasible without equivalent resources. When the back-bone must be replaced for extreme latency targets, adapter distillation (training only a small feature projection layer while keeping the encoder-decoder frozen) preserves 69% of ViT-H quality (38.7 vs. 55.8 AP), whereas concurrent full-pipeline distillation retains only 10% (5.5 AP; Sec-tion 4.6). The key observation is that the ViT-H backbone is class-agnostic : it processes only the image, so its features are independent of the text prompt. This invariant, together with cacheable text embeddings and the decoder’s ability to accept batched prompts, renders nearly all of the per-class overhead redundant. We exploit these invariants through a hierarchy of training-free optimizations: backbone sharing, batched multi-class decoding, detection-only inference, TensorRT FP16 deployment with graph restructuring, and inter-frame pipelining. Applied cumulatively, these yield 5.6 × speedup at 3 classes, scaling to over 25 × at 80 classes, all without retraining. Our contributions are: • A training-free optimization hierarchy that exploits the class-agnostic backbone invariant to convert SAM3 into a real-time multi-class detector, achieving 5.6 × speedup at 3 classes with O(1) backbone cost. • Adapter distillation analysis showing that freezing the encoder-decoder and training only a lightweight FPN 1
+
+> arXiv:2603.11441v1 [cs.CV] 12 Mar 2026
+
+adapter (38.7 AP) substantially outperforms full-pipeline distillation [14] on the same backbone, suggesting that preserving the original detection pipeline is important when the training data is inaccessible. • Deployment analysis covering split-engine TRT design for open vocabulary, attention graph restructuring for cor-rect FP16 deployment, and sub-block pruning at ViT sub-block granularity. 
+
+## 2. Related Work 
+
+Open-vocabulary detection. OWL-ViT [8] adapts aCLIP backbone for open-vocabulary detection via query-based classification. Grounding DINO [7] fuses text and image features through cross-modal attention in a DETR-like architecture. YOLO-World [4] integrates CLIP embed-dings into a single-stage detector for real-time inference. Unlike these purpose-built detectors, we show that an ex-isting promptable model can be structurally repurposed for the same task without architectural changes or retraining. 
+
+Efficient ViT deployment. TensorRT [9] accelerates neu-ral networks through graph fusion and kernel autotuning. PyTorch 2.0 compilation [1] provides an alternative via cuBLAS with FP32 accumulation. We show that for deep ViTs, the ONNX graph structure determines whether TRT dispatches attention to accumulation-safe fused kernels or to generic FP16 matrix multiplications, and provide a re-structuring that enables correct FP16 deployment at lower latency than PyTorch compilation. 
+
+Efficient SAM3 variants. Concurrent with our work, Ef-ficientSAM3 [14] proposes Progressive Hierarchical Distil-lation (PHD) to transfer SAM3’s capabilities to lightweight backbones (RepViT [12], TinyViT [13], EfficientViT [2]). PHD replaces the ViT-H backbone and fine-tunes the encoder-decoder end-to-end, following the prompt-in-the-loop paradigm of EdgeSAM [16]. Their evaluation mea-sures instance segmentation quality (mask mIoU given ground-truth boxes), not open-vocabulary detection. We show in Section 4.6 that end-to-end distillation substantially degrades detection quality compared to preserving the orig-inal encoder-decoder. 
+
+Training-free pruning. BlockPruner [15] removes trans-former blocks based on reconstruction loss, originally tar-geting LLMs. We adapt it to vision transformers with sub-block granularity, decomposing each ViT block into inde-pendently removable attention and MLP sub-blocks. 
+
+## 3. Method 
+
+Given a pre-trained vision-language model M that pro-cesses one text prompt per forward pass and a set of N class names, the goal is to detect all instances of all N classes in an input image at real-time latency, without modifying any model weight. 
+
+3.1. SAM3 Cost Structure 
+
+SAM3 processes an image-text pair through five stages: (1) a ViT-H backbone (439M parameters, 32 blocks with windowed/global attention and 2D RoPE) extracts three FPN feature levels, (2) a text encoder maps the class name to 32 tokens of dimension 256, (3) a 6-layer transformer encoder fuses image and text features via cross-attention over S=5184 spatial tokens, (4) a 6-layer decoder with 200 learned queries cross-attends to encoded features, and (5) dot-product scoring, a presence head, and per-query mask prediction produce final detections. The backbone consumes 78% of per-class latency (87 of 112 ms on an RTX 4080), with the encoder-decoder, scoring heads, and mask prediction accounting for the remainder. 
+
+3.2. Exploiting Structural Invariants 
+
+Three structural properties of SAM3’s architecture ren-der the per-class overhead redundant, enabling its conver-sion from a per-class segmentation system into an efficient multi-class detector. 
+
+Backbone sharing. The backbone processes only pixel values. We compute it once per image and reuse the FPN features for all N classes, reducing backbone cost from 
+
+O(N ) to O(1) . For 3 classes, this alone provides a 2.1×
+
+speedup (Table 1). 
+
+Batched multi-class decoding. A key structural property of the encoder-decoder is that text conditioning enters ex-clusively through cross-attention, which operates indepen-dently across the batch dimension. All N class prompts can therefore be stacked along the batch axis (text features 
+
+T ∈ RLt×N ×d and image features I ∈ RS×N ×d) and pro-cessed in a single forward pass, converting N sequential executions into one batched pass. 
+
+Detection-only inference. For applications requiring only bounding boxes, the mask prediction head can be re-moved entirely. The decoder’s learned presence token re-mains available for scoring class existence, and classes with low presence probability are filtered before NMS. Together, these yield a 3.0× speedup at 3 classes (Ta-ble 1). 
+
+3.3. TensorRT FP16 Deployment 
+
+The encoder-decoder exports to TensorRT FP16 without modification (25 ms to 15 ms for 3 classes). The ViT-H backbone, however, requires attention graph restructuring. 2ViT-H Backbone Enc-Dec Seg Class 1                        
+
+> ViT-H Backbone Enc-Dec Seg Class 2
+> ViT-H Backbone Enc-Dec Seg Class 3
+> ×Nredundant
+> N×112 ms per image
+> 78% of compute
+> (a) SAM3: per-class inference
+> share backbone batch Nclasses remove masks
+> →TRT FP16
+> ViT-H Backbone
+> 1×
+> Batched Enc-Dec NMS
+> FPN
+> Text Encoder (cached)
+> N
+> 53 ms 7–41 ms <1ms
+> explicit attention, real-valued RoPE mask head removed
+> (b) DART: shared backbone + batched decoding
+> Sequential Backbone 53 ms E-D
+> 70 ms = 14.3 FPS
+> Pipelined BB (t)53 ms E-D (t)
+> BB (t+1) E-D
+> 53 ms/frame = 18.9 FPS
+> overlap
+> (c) Frame pipelining
+
+Figure 1. From SAM3 to DART. (a) SAM3 runs the full pipeline once per class. The backbone accounts for 78% of compute and is repeated N times despite being class-independent. (b) DART shares backbone features across all classes, batches the encoder-decoder, removes the mask head, and deploys both stages as TRT FP16 engines. The backbone uses restructured attention (explicit operations, real-valued RoPE) to enable correct FP16 export (§3.3). (c) For video, backbone and encoder-decoder run on separate CUDA streams: the encoder-decoder for frame t overlaps with the backbone for frame t+1 , reducing per-frame latency from 70 ms to 53 ms (4 classes, 1008px). 
+
+Hardware inference compilers fuse multi-head attention (MHA) into kernels that internally accumulate in FP32, but rely on pattern matching to identify attention subgraphs. Two common ViT constructs break this matching: complex-valued RoPE (no ONNX equivalent) and fused SDPA oper-ators that decompose into non-canonical subgraphs. When matching fails, the compiler falls back to generic FP16 matrix multiplications whose per-operation rounding er-rors ( ∼10 −4) compound through residual connections, pro-ducing catastrophically degraded features after 32 blocks (cosine similarity 0.058 vs. FP32; Table 4). We restruc-ture both operations at the PyTorch level: (1) real-valued RoPE via precomputed cos θ/sin θ buffers, and (2) explicit 
+
+QK ⊤ →Scale →Softmax → V attention. These canonical forms restore pattern matching, yielding correct FP16 at 53 ms (Table 4). 
+
+3.4. Split-Engine Design for Open Vocabulary 
+
+We decompose the pipeline into two independent TRT FP16 engines (backbone and encoder-decoder) that communicate through intermediate FPN feature tensors on GPU (Fig. 1b). The text encoder remains in PyTorch, computing embed-dings once per class set and caching them as GPU tensors. This split preserves the open-vocabulary property: chang-ing detection categories requires only recomputing text em-beddings (milliseconds), whereas a monolithic TRT export would require rebuilding the entire engine (minutes). For large vocabularies (e.g., 80 COCO classes), the encoder-decoder processes up to Nmax prompts per pass, requiring 
+
+⌈N/N max ⌉ passes when N exceeds this limit. 
+
+3.5. Inter-Frame Pipelining 
+
+The split-engine design enables inter-frame pipelining for video. The backbone and encoder-decoder run on separate CUDA streams, so the backbone for frame t+1 overlaps with the encoder-decoder for frame t (Fig. 1c). Per-frame latency is bounded by max( Tbb , T ed ) instead of their sum: FPS pipe ≤ 1max( Tbb , T ed (N )) (1) In practice, scheduling overhead reduces this bound slightly (15.8 vs. 18.8 FPS predicted at 4 classes, 1008px; Table 2). The observed gains come from overlapping kernel-launch and data-movement phases rather than compute parallelism, as each engine already saturates the GPU’s compute units. 
+
+3.6. Training-Free Sub-Block Pruning 
+
+As an orthogonal strategy, we extend BlockPruner [15] to ViT at sub-block granularity : each of the 32 blocks is de-composed into independently removable attention and MLP sub-blocks, yielding 64 candidates. A greedy search re-moves sub-blocks one at a time, selecting the one with min-imal FPN feature reconstruction loss on calibration images. The four global attention blocks (indices 7, 15, 23, 31) are protected as they provide the only cross-window informa-tion flow. We denote a backbone with K sub-blocks re-moved as SBP-K. Algorithm 1 details the procedure. 3Algorithm 1 Greedy sub-block pruning (SBP-K)
+
+Require: ViT backbone B with L blocks, calibration images X ,budget K
+
+Ensure: Pruned backbone B′ 
+
+> 1:
+
+C ← { (ℓ, attn ), (ℓ, mlp ) | ℓ = 1 . . . L } { 64 candidates } 
+
+> 2:
+
+Remove global-attention blocks from C { protect 7,15,23,31 } 
+
+> 3:
+
+F∗ ← FPN (B(X )) {reference features } 
+
+> 4:
+
+for k = 1 to K do  
+
+> 5:
+
+for each candidate c ∈ C do  
+
+> 6:
+
+Bc ← B with sub-block c removed  
+
+> 7:
+
+δc ← ∥ FPN (Bc(X )) − F∗∥2 
+
+> 8:
+
+end for  
+
+> 9:
+
+c∗ ← arg min c δc 
+
+> 10:
+
+Remove c∗ from B and C 
+
+> 11:
+
+end for  
+
+> 12:
+
+return B
+
+Table 1. Cumulative optimization hierarchy. 1008 ×1008, 3 classes, RTX 4080. Each row includes all optimizations from rows above. Level Optimization BB E-D ms Speedup 0 Naive ( N full passes) N × N × 336 1×
+
+1 Shared backbone 1× N × 162 2.1 ×
+
+2 + Batched + det-only 1× 1× 112 3.0 ×
+
+3 + Graph restructure + TRT BB TRT 1× 78 4.3 ×
+
+4 + TRT enc-dec + pipeline TRT TRT 60 5.6 ×
+
+## 4. Experiments 
+
+4.1. Setup 
+
+We conduct all experiments on a single NVIDIA RTX 4080 (16 GB VRAM) with PyTorch 2.7.0, TensorRT 10.9.0, and ONNX 1.20.1. We use the SAM3 checkpoint with ViT-H/14 (439M backbone parameters). We measure latency us-ing traffic videos from the VisDrone-VID2019 dataset (100 frames after 10-frame warmup, averaged over 5 runs), and report detection quality as standard COCO box AP (aver-aged over IoU 0.50-0.95) on the full val2017 set (5,000 im-ages, 80 classes) using the standard COCO evaluation pro-tocol. 
+
+4.2. Optimization Hierarchy 
+
+Table 1 traces the cumulative speedup as each optimization level is applied. Backbone sharing (Level 1) eliminates two of three backbone passes, cutting latency from 336 ms to 162 ms. Batching all class prompts into a single encoder-decoder pass and removing the mask head (Level 2) reduces the remaining per-class overhead, reaching 112 ms. Graph re-structuring enables correct TRT FP16 export of the back-bone (Level 3, Section 3.3), and deploying the encoder-decoder as a second TRT engine with inter-frame pipelin-
+
+Table 2. Latency breakdown by class count (1008 ×1008, RTX 4080). Backbone latency is constant; encoder-decoder scales linearly. Pipelined FPS follows Eq. 1. 
+
+N BB (ms) E-D (ms) Sum Seq. FPS Pipe. FPS Gain 1 53.2 7.9 61.1 16.3 18.7 +15% 2 53.2 11.4 64.6 15.5 17.6 +14% 4 53.2 19.2 72.4 13.8 15.8 +14% 8 53.2 34.7 87.9 11.5 12.5 +9%        
+
+> 12345678
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> 30
+> 15
+
+Number of detection classes Frames per second (FPS)   
+
+> 644px pipelined 644px sequential
+> 1008px pipelined 1008px sequential
+
+Figure 2. FPS vs. class count. At 644px, all tested class counts ex-ceed 30 FPS pipelined. At 1008px, up to 4 classes reach ≥15 FPS. Pipelining provides 8-15% improvement with diminishing returns as encoder-decoder cost approaches backbone cost. 
+
+ing (Level 4) yields the final 60 ms. Each level builds on the previous; no single optimization alone achieves more than 2.1 ×. At 80 classes the cumulative speedup exceeds 25 ×,as backbone sharing amortizes 78% of per-class cost across all categories. 
+
+4.3. Scaling with Class Count 
+
+Table 2 and Figure 2 report throughput at both resolutions. Real-time performance ( ≥15 FPS) is maintained for up to 4 classes at 1008px and all tested class counts at 644px. 
+
+4.4. Resolution and Quality Trade-offs 
+
+Table 3 compares detection quality across resolutions and pruning configurations. We find that reducing resolution from 1008 to 644 costs 30% AP (55.8 →39.1), driven almost entirely by small-object recall (AP S : 40.3 →12.4). Large-object detection remains robust (AP L: 70.7 →65.4). SBP-16 pruning costs 15% AP at 1008px with only 3% latency reduction, because the protected global-attention blocks that dominate compute cannot be removed. Resolution reduction is strictly more effective for speed: 644px at full depth (39.1 AP, 40 FPS) provides 2.7 × the throughput of 1008px SBP-16 (47.6 AP, 4Table 3. COCO val2017 detection quality (5,000 images, 80 classes). Resolution is the dominant quality lever, and small-object recall drives the gap. Configuration Res. Removed AP AP 50 AP 75 AP S AP M AP L                                                         
+
+> Full TRT FP16 1008 055.8 73.4 61.5 40.3 59.8 70.7
+> SBP-16 TRT FP16 1008 16 47.6 63.5 52.7 32.5 51.8 62.0
+> Full TRT FP16 644 039.1 63.9 39.9 12.4 44.4 65.4 SBP-16 TRT FP16 644 16 32.8 54.5 33.4 9.9 37.9 56.7 Table 4. Backbone deployment comparison. 1008px, RTX 4080. Only the explicit-attention TRT path achieves both correctness and competitive latency. Method Latency Cosine Status
+> Explicit-attn TRT FP16 53 ms 0.999 ✓
+> Fused-SDPA TRT FP16 26 ms 0.058 ×Fused-SDPA mixed (attn FP32) 128 ms 0.999 ✓
+> torch.compile FP16 75 ms 1.000 ✓
+> PyTorch eager FP16 87 ms 1.000 ✓
+
+15 FPS). 
+
+4.5. FP16 Precision Analysis 
+
+Deep residual vision transformers are vulnerable to FP16 accumulation error. Each generic FP16 matrix multiplica-tion introduces a rounding error of ∼10 −4, and these errors compound through residual connections in all 32 blocks. Because the error is distributed uniformly rather than lo-calized to specific layers, selective per-block FP32 fallback is ineffective; only ensuring that every attention layer dis-patches to accumulation-safe fused kernels restores correct-ness. Table 4 validates this analysis: the fused-SDPA TRT path, which falls back to generic FP16 MatMul, produces catastrophically degraded features with a cosine similarity of 0.058. Among the correct paths, explicit-attention graph restructuring (Section 3.3) achieves the lowest latency. 
+
+4.6. Backbone Distillation: Adapter vs. Full Pipeline 
+
+When the backbone must be replaced for extreme latency targets, the feature distribution gap between student and ViT-H must be bridged. We compare two strategies. 
+
+Adapter distillation (ours). A lightweight FPN adapter (∼5M parameters) projects student backbone features into the ViT-H feature space via multi-scale L2 matching. The SAM3 encoder-decoder remains frozen and only the adapter is trained. We train on the COCO train2017 split (118K unlabeled images) for 5 epochs ( ∼2 GPU-hours on a single RTX 4080). 
+
+Full-pipeline distillation (EfficientSAM3-PHD [14]). 
+
+This approach replaces the backbone and fine-tunes the encoder-decoder end-to-end via prompt-in-the-loop distil-lation on SA-1B. The official EfficientSAM3 evaluation measures instance segmentation (mask mIoU given ground-truth boxes) rather than open-vocabulary detection; we re-evaluate their released checkpoints on the detection task for a direct comparison. Crucially, the decoder weights are also modified. With the same RepViT-M2.3 backbone, adapter dis-tillation achieves 38.7 AP compared to 5.5 AP for Effi-cientSAM3’s full-pipeline distillation (Table 5). Note that EfficientSAM3’s 5.5 AP is measured with the presence-gating mechanism disabled; with it enabled (the default SAM3 scoring pipeline), their models produce near-zero detections (0.1 AP), indicating that end-to-end distillation disrupts the presence token without recovering it. The gap is consistent across all backbones and size categories. The adapter approach preserves the original encoder-decoder weights; the student features need only approximate the encoder’s expected input distribution. By contrast, full-pipeline distillation modifies the decoder without access to the original training data, breaking learned scoring mecha-nisms. These results suggest that, when the original training distribution is inaccessible, preserving the encoder-decoder and adapting only the feature interface is preferable to end-to-end distillation. Student backbones reach 45–51 FPS pipelined at 4classes, converging to ∼14 FPS beyond 8 classes as the encoder-decoder becomes the bottleneck (Fig. 4). 
+
+Training cost. All our adapter models train in under 2 hours on a single RTX 4080 using only COCO train2017 (118K unlabeled images, 5 epochs). This represents three orders of magnitude less compute than EfficientSAM3’s full-pipeline distillation on SA-1B, yet produces substan-tially better detection quality. The low cost makes adapter distillation practical for rapid deployment to new hardware or backbone architectures. 
+
+## 5. Discussion 
+
+Generalization beyond SAM3. The class-agnostic back-bone property exploited here is not specific to SAM3. Any vision-language architecture that processes images inde-pendently of text prompts exposes the same invariant, in-5Figure 3. Qualitative results. DART detections on COCO val2017 images using 6 open-vocabulary classes (person, car, dog, bicycle, chair, cat) at 1008px resolution with confidence threshold 0.45. All optimizations are structural: DART produces identical outputs to the per-class SAM3 baseline. Table 5. Backbone distillation comparison on COCO val2017 (80 classes, 1008 ×1008, 5,000 images). Adapter distillation preserves the original SAM3 encoder-decoder, while full-pipeline distillation replaces it. EfficientSAM3 numbers are with presence-gating disabled. 
+
+> †
+
+TRT FP16 backbone + enc-dec ( Nmax =16 , 5 passes). Method Backbone Params AP AP 50 AP 75 AP S AP L BB (ms) 
+
+Teacher (training-free, this work) 
+
+DART (ViT-H) ViT-H/14 439M 55.8 73.4 61.5 40.3 70.7 53 
+
+Adapter distillation (this work): frozen SAM3 encoder-decoder 
+
+DART (student) ‡ RepViT-M2.3 8.2M 38.7 53.1 42.3 22.6 49.9 13.9 DART (student) ‡ TinyViT-21M 21M 30.1 42.4 32.6 17.4 37.8 12.2 DART (student) ‡ EfficientViT-L2 9.2M 21.7 31.5 23.5 13.7 24.2 10.7 DART (student) ‡ EfficientViT-L1 5.3M 16.3 24.2 17.4 10.6 17.3 10.4 
+
+Full-pipeline distillation (EfficientSAM3-PHD [14]) 
+
+ES-RV-L RepViT-M2.3 8.2M 5.5 7.9 – 3.6 9.4 –ES-TV-M TinyViT-11M 11M 4.3 6.3 – 4.5 7.4 –ES-EV-M EfficientViT-B1 4.8M 4.3 6.4 – 4.5 7.4 –
+
+cluding SAM2 [11] and Grounding DINO [7]. The opti-mization hierarchy (backbone sharing, batched decoding, split-engine deployment) applies directly to these architec-tures; only the graph restructuring details may differ de-pending on the backbone’s attention implementation. 
+
+Context among open-vocabulary detectors. Table 6 sit-uates DART among purpose-built open-vocabulary detec-tors. Despite using no detection training data, DART achieves 55.8 AP, surpassing Grounding DINO-L (52.5 AP) and GLIP-L (49.8 AP), both trained on Objects365+GoldG whose categories overlap substantially with COCO. This suggests that SAM3’s segmentation pre-training yields de-tection capabilities that transfer directly without detection-specific fine-tuning. 
+
+Encoder-decoder as the next bottleneck. For vocabular-ies beyond 16 classes, the encoder-decoder dominates to-tal latency. Encoder-decoder distillation, layer pruning, or 
+
+Table 6. Context among open-vocabulary detectors (COCO val2017, 80 classes). DART uses frozen SAM3 weights with no detection training; all other methods train on large-scale detection data. †Zero-shot transfer (no COCO images in training). ‡LVIS zero-shot; COCO zero-shot not reported. Method Backbone Det. Data AP 
+
+Trained on detection data (zero-shot on COCO) †
+
+GLIP-L [6] Swin-L O365+GoldG 49.8 Grounding DINO-T [7] Swin-T O365+GoldG 48.1 Grounding DINO-L [7] Swin-L O365+GoldG+Cap4M 52.5 YOLO-World-L [4] YOLOv8-L O365+GoldG 44.9 YOLO-World-X [4] YOLOv8-X O365+GoldG 46.7 
+
+No detection training (this work) 
+
+DART (1008px) ViT-H/14 None 55.8 
+
+DART (644px) ViT-H/14 None 39.1 
+
+prompt-batching strategies that reduce per-class decoding cost are natural next steps; each would extend the Pareto 610 20 30 40 50 60  
+
+> 0.2
+> 0.4
+> 0.6148
+> 148
+> 4
+> 4
+> 4
+> 4
+> 15 FPS
+> 30 FPS
+
+Pipelined FPS    
+
+> COCO AP
+> ViT-H 1008px ViT-H 644px
+> EfficientViT-L1 EfficientViT-L2
+> TinyViT-21M RepViT-M2.3
+
+Figure 4. Speed-quality Pareto front. Numbers indicate class count. Teacher ViT-H dominates quality (55.8 AP) but is limited to 
+
+<19 FPS. Distilled students reach 45–51 FPS at 4 classes, trading AP for 2.5–3 × throughput. Among student backbones, RepViT-M2.3 achieves the highest AP (38.7) at 45 FPS. 
+
+front in Figure 4 toward higher class counts without sacri-ficing the frozen-pipeline advantage. 
+
+Limitations. Our approach inherits SAM3’s single-scale FPN design, which limits small-object recall at lower reso-lutions (AP S : 40.3 →12.4 from 1008 to 644 px). All bench-marks use a single RTX 4080; absolute latencies will differ on other hardware. 
+
+## 6. Conclusion 
+
+We have shown that SAM3 can be converted into a real-time open-vocabulary detector through training-free structural optimization, achieving 55.8 AP at 15.8 FPS (4 classes) on COCO val2017, surpassing purpose-built detectors without any detection training. Adapter distillation with a RepViT-M2.3 backbone provides a complementary path, reach-ing 38.7 AP at 45 FPS. Intermediate resolutions, encoder-decoder layer pruning, and adapter training on larger datasets remain promising directions for further improving the speed-quality trade-off. 
+
+Broader impact. By reducing the computational cost of open-vocabulary detection, DART lowers the barrier to deploying flexible object detection on commodity hard-ware. This may benefit applications in assistive technol-ogy, autonomous navigation, and ecological monitoring, where real-time detection of user-specified categories is valuable. However, the same capability also reduces the cost of deploying detection systems for surveillance. Open-vocabulary detection is particularly sensitive in this regard, as it allows arbitrary target categories to be specified with-out retraining, potentially enabling misuse that would be more difficult with fixed-category detectors. We encourage practitioners to consider privacy and consent frameworks before deployment in public spaces. 
+
+## Acknowledgements 
+
+This work was supported by the NSF Engineering Research Center for Smart Streetscapes under Award EEC-2133516. 
+
+## References 
+
+[1] Jason Ansel, Edward Yang, Horace He, Natalia Gimelshein, Animesh Jain, Michael Voznesensky, Bin Bao, Peter Bell, David Berard, Evgeni Burovski, Geeta Chauhan, An-jali Chourdia, Will Constable, Alban Desmaison, Zachary DeVito, Elias Ellison, Will Feng, Jiong Gong, Michael Gschwind, Brian Hirsh, Sherlock Huang, Kshiteej Kalam-barkar, Laurent Kirsch, Michael Lazos, Mario Lezcano, Yanbo Liang, Jason Liang, Yinghai Lu, C. K. Luk, Bert Maher, Yunjie Pan, Christian Puhrsch, Matthias Reso, Mark Saroufim, Marcos Yukio Siraichi, Helen Suk, Michael Suo, Phil Tillet, Eikan Wang, Xiaodong Wang, William Wen, Shunting Zhang, Xu Zhao, Keren Zhou, Richard Zou, Ajit Mathews, Gregory Chanan, Peng Wu, and Soumith Chin-tala. PyTorch 2: Faster machine learning through dynamic Python bytecode transformation and graph compilation. In 
+
+Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Op-erating Systems (ASPLOS) , pages 929–947. ACM, 2024. [2] Han Cai, Junyan Li, Muyan Hu, Chuang Gan, and Song Han. EfficientViT: Lightweight multi-scale attention for high-resolution dense prediction. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 17302–17313, 2023. [3] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoub-hik Debnath, Ronghang Hu, Didac Suris, Chaitanya Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew Huang, Jie Lei, Tengyu Ma, Baishan Guo, Arpit Kalla, Markus Marks, Joseph Greer, Meng Wang, Peize Sun, Roman R¨ adle, Triantafyllos Afouras, Effrosyni Mavroudi, Kather-ine Xu, Tsung-Han Wu, Yu Zhou, Liliane Momeni, Rishi Hazra, Shuangrui Ding, Sagar Vaze, Francois Porcher, Feng Li, Siyuan Li, Aishwarya Kamath, Ho Kei Cheng, Piotr Doll´ ar, Nikhila Ravi, Kate Saenko, Pengchuan Zhang, and Christoph Feichtenhofer. SAM 3: Segment anything with concepts. arXiv preprint arXiv:2511.16719 , 2025. [4] Tianheng Cheng, Lin Song, Yixiao Ge, Wenyu Liu, Xing-gang Wang, and Ying Shan. YOLO-World: Real-time open-vocabulary object detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 16901–16911, 2024. [5] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C. Berg, Wan-Yen Lo, Piotr Doll´ ar, and Ross Girshick. Segment anything. In Proceedings of the 
+
+7IEEE/CVF International Conference on Computer Vision (ICCV) , pages 4015–4026, 2023. [6] Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jian-wei Yang, Chunyuan Li, Yiwu Zhong, Lijuan Wang, Lu Yuan, Lei Zhang, Jenq-Neng Hwang, Kai-Wei Chang, and Jianfeng Gao. Grounded language-image pre-training. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pages 10965–10975, 2022. [7] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, and Lei Zhang. Grounding DINO: Mar-rying DINO with grounded pre-training for open-set object detection. In European Conference on Computer Vision (ECCV) , pages 38–55. Springer, 2024. [8] Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. Simple open-vocabulary object detection with vi-sion transformers. In European Conference on Computer Vi-sion (ECCV) , pages 728–755. Springer, 2022. [9] NVIDIA. NVIDIA TensorRT. https://developer. nvidia.com/tensorrt , 2025. [10] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In Proceedings of the 38th International Conference on Machine Learning (ICML) , pages 8748–8763. PMLR, 2021. [11] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman R¨ adle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junt-ing Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Doll´ ar, and Christoph Feicht-enhofer. SAM 2: Segment anything in images and videos. 
+
+arXiv preprint arXiv:2408.00714 , 2024. [12] Ao Wang, Hui Chen, Zijia Lin, Jungong Han, and Guiguang Ding. RepViT: Revisiting mobile CNN from ViT perspec-tive. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition (CVPR) , pages 15909– 15920, 2024. [13] Kan Wu, Jinnian Zhang, Houwen Peng, Mengchen Liu, Bin Xiao, Jianlong Fu, and Lu Yuan. TinyViT: Fast pretraining distillation for small vision transformers. In European Con-ference on Computer Vision (ECCV) , pages 68–85. Springer, 2022. [14] Chengxi Zeng, Yuxuan Jiang, and Aaron Zhang. Effi-cientSAM3: Progressive hierarchical distillation for video concept segmentation from SAM1, 2, and 3. arXiv preprint arXiv:2511.15833 , 2025. [15] Longguang Zhong, Fanqi Wan, Ruijun Chen, Xiaojun Quan, and Liangzhi Li. BlockPruner: Fine-grained pruning for large language models. arXiv preprint arXiv:2406.10594 ,2024. [16] Chong Zhou, Xiangtai Li, Chen Change Loy, and Bo Dai. EdgeSAM: Prompt-in-the-loop distillation for on-device de-ployment of SAM. arXiv preprint arXiv:2312.06660 , 2023. 
+
+8
