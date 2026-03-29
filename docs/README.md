@@ -6,86 +6,91 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-02-28 ~ 2026-03-29
-- 运行时间：2026-03-29 06:13:15 UTC
+- 最新运行日期：2026-03-29
+- 运行时间：2026-03-29 19:56:47 UTC
 - 运行状态：成功
-- 本次总论文数：21
-- 精读区：0
-- 速读区：21
+- 本次总论文数：23
+- 精读区：10
+- 速读区：13
 
 ### 今日简报（AI）
-今日精选 21 篇前沿成果，见证人形机器人全身协作与实时全类检测技术的双重突破。
-重点推荐 Cybo-Waiter 具身智能框架及 Detect Anything 实时检测方案，展现了从感知到物理交互的极致性能。
-建议优先研读实时检测与具身智能相关论文，把握 AI 迈向物理世界与精准医疗的最新路径。
-- 详情：[/20260228-20260329/README](/20260228-20260329/README)
+今日精选 23 篇前沿成果，重点攻克 SAM 3 提示词优化与开放词汇多目标跟踪两大满分课题。
+研究揭示了通过对象检索增强 SAM 3 性能的新路径，并展示了从连续视频中协同学习开放词汇跟踪的领先范式。
+建议关注 SAM 在医疗影像及移动端自动化测试中的跨界应用，探索大模型在垂直领域的落地潜力。
+- 详情：[/202603/29/README](/202603/29/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Re-Prompting SAM 3 via Object Retrieval: 3rd of the 5th PVUW MOSE Track](/202603/29/2603.23788v1-re-prompting-sam-3-via-object-retrieval-3rd-of-the-5th-pvuw-mose-track)  
+   标签：评分：10.0/10、query:sam3
+   evidence：基于SAM 3进行视频对象分割与重新提示
+2. [COVTrack++: Learning Open-Vocabulary Multi-Object Tracking from Continuous Videos via a Synergistic Paradigm](/202603/29/2603.24016v1-covtrack-learning-open-vocabulary-multi-object-tracking-from-continuous-videos-via-a-synergistic-paradigm)  
+   标签：评分：10.0/10、query:vot
+   evidence：连续视频中的开放词汇多目标跟踪
+3. [DyGeoVLN: Infusing Dynamic Geometry Foundation Model into Vision-Language Navigation](/202603/29/2603.21269v1-dygeovln-infusing-dynamic-geometry-foundation-model-into-vision-language-navigation)  
+   标签：评分：9.0/10、query:vlm
+   evidence：具有显式3D空间表示的视觉语言导航
+4. [Mitigating Objectness Bias and Region-to-Text Misalignment for Open-Vocabulary Panoptic Segmentation](/202603/29/2603.21386v1-mitigating-objectness-bias-and-region-to-text-misalignment-for-open-vocabulary-panoptic-segmentation)  
+   标签：评分：9.0/10、query:vlm
+   evidence：改进基于CLIP的视觉语言模型的区域级对齐
+5. [Group3D: MLLM-Driven Semantic Grouping for Open-Vocabulary 3D Object Detection](/202603/29/2603.21944v1-group3d-mllm-driven-semantic-grouping-for-open-vocabulary-3d-object-detection)  
+   标签：评分：9.0/10、query:vlm
+   evidence：多模态大模型驱动的3D检测语义分组
+6. [Uncertainty-guided Compositional Alignment with Part-to-Whole Semantic Representativeness in Hyperbolic Vision-Language Models](/202603/29/2603.22042v2-uncertainty-guided-compositional-alignment-with-part-to-whole-semantic-representativeness-in-hyperbolic-vision-language-models)  
+   标签：评分：9.0/10、query:vlm
+   evidence：用于层级和组合对齐的双曲视觉语言模型
+7. [3D-Layout-R1: Structured Reasoning for Language-Instructed Spatial Editing](/202603/29/2603.22279v1-3d-layout-r1-structured-reasoning-for-language-instructed-spatial-editing)  
+   标签：评分：9.0/10、query:vlm
+   evidence：视觉语言任务中的空间推理与布局编辑
+8. [Language Models Can Explain Visual Features via Steering](/202603/29/2603.22593v2-language-models-can-explain-visual-features-via-steering)  
+   标签：评分：9.0/10、query:vlm
+   evidence：利用视觉语言模型解释视觉特征
+9. [CoMaTrack: Competitive Multi-Agent Game-Theoretic Tracking with Vision-Language-Action Models](/202603/29/2603.22846v1-comatrack-competitive-multi-agent-game-theoretic-tracking-with-vision-language-action-models)  
+   标签：评分：9.0/10、query:vot
+   evidence：针对语言指定目标的具身视觉跟踪
+10. [MMTIT-Bench: A Multilingual and Multi-Scenario Benchmark with Cognition-Perception-Reasoning Guided Text-Image Machine Translation](/202603/29/2603.23896v1-mmtit-bench-a-multilingual-and-multi-scenario-benchmark-with-cognition-perception-reasoning-guided-text-image-machine-translation)  
+   标签：评分：9.0/10、query:vlm
+   evidence：针对视觉语言大模型（VLLM）的多语言基准测试
 
 ### 速读区论文标签
-1. [Uncertainty-Aware Concept and Motion Segmentation for Semi-Supervised Angiography Videos](/20260228-20260329/2603.00881v1-uncertainty-aware-concept-and-motion-segmentation-for-semi-supervised-angiography-videos)  
-   标签：评分：10.0/10、query:sam3
-   evidence：基于SAM3的半监督血管造影视频分割框架
-2. [Cybo-Waiter: A Physical Agentic Framework for Humanoid Whole-Body Locomotion-Manipulation](/20260228-20260329/2603.10675v1-cybo-waiter-a-physical-agentic-framework-for-humanoid-whole-body-locomotion-manipulation)  
-   标签：评分：10.0/10、query:sam3
-   evidence：使用SAM3为类人机器人进行3D任务相关实体定位
-3. [Detect Anything in Real Time: From Single-Prompt Segmentation to Multi-Class Detection](/20260228-20260329/2603.11441v1-detect-anything-in-real-time-from-single-prompt-segmentation-to-multi-class-detection)  
-   标签：评分：10.0/10、query:sam3
-   evidence：利用结构不变性将SAM3转换为实时多类检测器
-4. [PicoSAM3: Real-Time In-Sensor Region-of-Interest Segmentation](/20260228-20260329/2603.11917v1-picosam3-real-time-in-sensor-region-of-interest-segmentation)  
-   标签：评分：10.0/10、query:sam3
-   evidence：通过SAM3知识蒸馏优化的轻量级分割模型
-5. [Eye image segmentation using visual and concept prompts with Segment Anything Model 3 (SAM3)](/20260228-20260329/2603.17715v1-eye-image-segmentation-using-visual-and-concept-prompts-with-segment-anything-model-3-sam3)  
-   标签：评分：10.0/10、query:sam3
-   evidence：评估 SAM3 在眼部图像分割中的性能和概念提示功能
-6. [Revisiting foundation models for cell instance segmentation](/20260228-20260329/2603.17845v1-revisiting-foundation-models-for-cell-instance-segmentation)  
-   标签：评分：10.0/10、query:sam3
-   evidence：在显微镜数据集上对SAM3进行全面评估
-7. [AgentRVOS: Reasoning over Object Tracks for Zero-Shot Referring Video Object Segmentation](/20260228-20260329/2603.23489v1-agentrvos-reasoning-over-object-tracks-for-zero-shot-referring-video-object-segmentation)  
-   标签：评分：10.0/10、query:sam3
-   evidence：基于SAM3优势构建的用于视频分割的智能体流水线
-8. [Re-Prompting SAM 3 via Object Retrieval: 3rd of the 5th PVUW MOSE Track](/20260228-20260329/2603.23788v1-re-prompting-sam-3-via-object-retrieval-3rd-of-the-5th-pvuw-mose-track)  
-   标签：评分：10.0/10、query:sam3
-   evidence：基于 SAM 3 构建的视频对象分割
-9. [Choose What to Observe: Task-Aware Semantic-Geometric Representations for Visuomotor Policy](/20260228-20260329/2603.07875v1-choose-what-to-observe-task-aware-semantic-geometric-representations-for-visuomotor-policy)  
-   标签：评分：9.0/10、query:sam3
-   evidence：使用SAM3分割目标物体以增强视觉运动策略的鲁棒性
-10. [PCA-Seg: Revisiting Cost Aggregation for Open-Vocabulary Semantic and Part Segmentation](/20260228-20260329/2603.17520v1-pca-seg-revisiting-cost-aggregation-for-open-vocabulary-semantic-and-part-segmentation)  
-   标签：评分：9.0/10、query:vlm
-   evidence：用于开放词汇分割的视觉语言模型
-11. [GoalVLM: VLM-driven Object Goal Navigation for Multi-Agent System](/20260228-20260329/2603.18210v1-goalvlm-vlm-driven-object-goal-navigation-for-multi-agent-system)  
-   标签：评分：9.0/10、query:vlm
-   evidence：集成VLM和SAM3用于零样本开放词汇目标导航
-12. [UniFunc3D: Unified Active Spatial-Temporal Grounding for 3D Functionality Segmentation](/20260228-20260329/2603.23478v1-unifunc3d-unified-active-spatial-temporal-grounding-for-3d-functionality-segmentation)  
-   标签：评分：9.0/10、query:vlm
-   evidence：用于时空接地和3D分割的多模态大语言模型
-13. [StructSAM: Structure- and Spectrum-Preserving Token Merging for Segment Anything Models](/20260228-20260329/2603.07307v1-structsam-structure--and-spectrum-preserving-token-merging-for-segment-anything-models)  
-   标签：评分：8.0/10、query:sam3
-   evidence：针对Segment Anything Model (SAM) 系列的令牌合并技术
-14. [Towards Visual Query Segmentation in the Wild](/20260228-20260329/2603.08898v1-towards-visual-query-segmentation-in-the-wild)  
-   标签：评分：8.0/10、query:vot
-   evidence：视频中的视觉查询分割
-15. [BALD-SAM: Disagreement-based Active Prompting in Interactive Segmentation](/20260228-20260329/2603.10828v1-bald-sam-disagreement-based-active-prompting-in-interactive-segmentation)  
-   标签：评分：8.0/10、query:sam3
-   evidence：Segment Anything Model交互式分割中的主动提示
-16. [Towards Motion-aware Referring Image Segmentation](/20260228-20260329/2603.17413v1-towards-motion-aware-referring-image-segmentation)  
+1. [NoOVD: Novel Category Discovery and Embedding for Open-Vocabulary Object Detection](/202603/29/2603.21069v1-noovd-novel-category-discovery-and-embedding-for-open-vocabulary-object-detection)  
    标签：评分：8.0/10、query:vlm
-   evidence：运动感知指代图像分割与多模态对比学习
-17. [SSP-SAM: SAM with Semantic-Spatial Prompt for Referring Expression Segmentation](/20260228-20260329/2603.18086v1-ssp-sam-sam-with-semantic-spatial-prompt-for-referring-expression-segmentation)  
-   标签：评分：8.0/10、query:sam3
-   evidence：通过语义空间提示增强SAM以进行指代词分割
-18. [dinov3.seg: Open-Vocabulary Semantic Segmentation with DINOv3](/20260228-20260329/2603.19531v1-dinov3seg-open-vocabulary-semantic-segmentation-with-dinov3)  
+   evidence：整合冻结视觉语言模型的知识
+2. [From Natural Language to Executable Properties for Property-based Testing of Mobile Apps](/202603/29/2603.21263v1-from-natural-language-to-executable-properties-for-property-based-testing-of-mobile-apps)  
    标签：评分：8.0/10、query:vlm
-   evidence：基于视觉语言模型的开放词汇语义分割
-19. [Back to Point: Exploring Point-Language Models for Zero-Shot 3D Anomaly Detection](/20260228-20260329/2603.21511v1-back-to-point-exploring-point-language-models-for-zero-shot-3d-anomaly-detection)  
+   evidence：通过多模态大模型进行UI语义基元化
+3. [Focus on Background: Exploring SAM's Potential in Few-shot Medical Image Segmentation with Background-centric Prompting](/202603/29/2603.21287v1-focus-on-background-exploring-sams-potential-in-few-shot-medical-image-segmentation-with-background-centric-prompting)  
+   标签：评分：8.0/10、query:sam3
+   evidence：探索SAM在医学图像分割中的潜力
+4. [Back to Point: Exploring Point-Language Models for Zero-Shot 3D Anomaly Detection](/202603/29/2603.21511v1-back-to-point-exploring-point-language-models-for-zero-shot-3d-anomaly-detection)  
    标签：评分：8.0/10、query:vlm
    evidence：用于零样本3D异常检测的点云语言模型
-20. [Looking Beyond the Window: Global-Local Aligned CLIP for Training-free Open-Vocabulary Semantic Segmentation](/20260228-20260329/2603.23030v1-looking-beyond-the-window-global-local-aligned-clip-for-training-free-open-vocabulary-semantic-segmentation)  
+5. [PEARL: Geometry Aligns Semantics for Training-Free Open-Vocabulary Semantic Segmentation](/202603/29/2603.21528v1-pearl-geometry-aligns-semantics-for-training-free-open-vocabulary-semantic-segmentation)  
    标签：评分：8.0/10、query:vlm
-   evidence：基于CLIP的开放词汇语义分割与视觉语言对齐
-21. [Automatic Segmentation of 3D CT scans with SAM2 using a zero-shot approach](/20260228-20260329/2603.23116v1-automatic-segmentation-of-3d-ct-scans-with-sam2-using-a-zero-shot-approach)  
-   标签：评分：8.0/10、query:sam3
-   evidence：SAM2在3D CT分割中的零样本应用及架构修改
+   evidence：开放词汇语义分割与跨模态对齐
+6. [LiFR-Seg: Anytime High-Frame-Rate Segmentation via Event-Guided Propagation](/202603/29/2603.21115v1-lifr-seg-anytime-high-frame-rate-segmentation-via-event-guided-propagation)  
+   标签：评分：7.0/10、query:vot
+   evidence：动态场景中的高帧率分割与特征传播
+7. [The Workload-Router-Pool Architecture for LLM Inference Optimization: A Vision Paper from the vLLM Semantic Router Project](/202603/29/2603.21354v1-the-workload-router-pool-architecture-for-llm-inference-optimization-a-vision-paper-from-the-vllm-semantic-router-project)  
+   标签：评分：7.0/10、query:vlm
+   evidence：vLLM 项目中的多模态路由与语义缓存
+8. [OmniFM: Toward Modality-Robust and Task-Agnostic Federated Learning for Heterogeneous Medical Imaging](/202603/29/2603.21660v1-omnifm-toward-modality-robust-and-task-agnostic-federated-learning-for-heterogeneous-medical-imaging)  
+   标签：评分：7.0/10、query:vlm
+   evidence：多模态医学影像的任务无关联邦学习
+9. [SegMaFormer: A Hybrid State-Space and Transformer Model for Efficient Segmentation](/202603/29/2603.22002v1-segmaformer-a-hybrid-state-space-and-transformer-model-for-efficient-segmentation)  
+   标签：评分：7.0/10、query:sam3
+   evidence：用于高效3D分割的Mamba与Transformer混合架构
+10. [GHOST: Ground-projected Hypotheses from Observed Structure-from-Motion Trajectories](/202603/29/2603.20583v2-ghost-ground-projected-hypotheses-from-observed-structure-from-motion-trajectories)  
+   标签：评分：6.0/10、query:sam3
+   evidence：车辆轨迹的自监督分割
+11. [Object Pose Transformer: Unifying Unseen Object Pose Estimation](/202603/29/2603.23370v1-object-pose-transformer-unifying-unseen-object-pose-estimation)  
+   标签：评分：6.0/10、query:vot
+   evidence：基于Transformer的物体姿态估计框架
+12. [DA-Flow: Degradation-Aware Optical Flow Estimation with Diffusion Models](/202603/29/2603.23499v1-da-flow-degradation-aware-optical-flow-estimation-with-diffusion-models)  
+   标签：评分：6.0/10、query:vot
+   evidence：视频中的稠密对应估计与时空注意力
+13. [CoRe: Joint Optimization with Contrastive Learning for Medical Image Registration](/202603/29/2603.23694v1-core-joint-optimization-with-contrastive-learning-for-medical-image-registration)  
+   标签：评分：6.0/10、query:vlm
+   evidence：用于鲁棒特征表示的对比学习
 
 
 <div class="dpr-home-promo-card">
