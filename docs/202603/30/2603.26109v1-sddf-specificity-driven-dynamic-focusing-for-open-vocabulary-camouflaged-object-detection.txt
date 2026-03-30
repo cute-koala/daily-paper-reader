@@ -1,0 +1,473 @@
+Title: SDDF: Specificity-Driven Dynamic Focusing for Open-Vocabulary Camouflaged Object Detection
+
+URL Source: https://arxiv.org/pdf/2603.26109v1
+
+Published Time: Mon, 30 Mar 2026 00:34:02 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# SDDF: Specificity-Driven Dynamic Focusing for Open-Vocabulary Camouflaged Object Detection 
+
+# Jiaming Liang 1,2,∗, Yifeng Zhan 1,∗, Chunlin Liu 1, Weihua Zheng 1, Bingye Peng 1
+
+# Qiwei Liang 1,2, Boyang Cai 1, Xiaochun Mai 1,†, Qiang Nie 2,†
+
+> 1
+
+# Shenzhen University 2The Hong Kong University of Science and Technology (Guangzhou) 
+
+> ∗
+
+Equal contribution †Corresponding author 
+
+# Abstract 
+
+Open-vocabulary object detection (OVOD) aims to detect known and unknown objects in the open world by lever-aging text prompts. Benefiting from the emergence of large-scale vision–language pre-trained models, OVOD has demonstrated strong zero-shot generalization capabilities. However, when dealing with camouflaged objects, the de-tector often fails to distinguish and localize objects be-cause the visual features of the objects and the background are highly similar. To bridge this gap, we construct a benchmark named OVCOD-D by augmenting carefully se-lected camouflaged object images with fine-grained textual descriptions. Due to the limited scale of available cam-ouflaged object datasets, we adopt detectors pre-trained on large-scale object detection datasets as our baseline methods, as they possess stronger zero-shot generaliza-tion ability. In the specificity-aware sub-descriptions gen-erated by multimodal large models, there still exist con-fusing and overly decorative modifiers. To mitigate such interference, we design a sub-description principal com-ponent contrastive fusion strategy that reduces noisy tex-tual components. Furthermore, to address the challenge that the visual features of camouflaged objects are highly similar to those of their surrounding environment, we pro-pose a specificity-guided regional weak alignment and dy-namic focusing method, which aims to strengthen the de-tector’s ability to discriminate camouflaged objects from background. Under the open-set evaluation setting, the pro-posed method achieves an AP of 56.4 on the OVCOD-D benchmark. Project code and benchmark will be released at https://github.com/Zh1fen/SDDF .
+
+# 1. Introduction 
+
+Object detection, as a fundamental task in applications of scene understanding, autonomous driving and robotic per-Bear Giraffe Cat Mouse Duck Person Dog Butterfly Lizard   
+
+> AP(I oU=0.5)
+> LVIS
+> OVCOD-D -6.4 -15.3
+> -29.8
+> -49.1
+> -10.2 -7.7
+> -38.4
+> -9.9
+> -36.9
+
+Figure 1. We perform zero-shot detection with the YOLO-World-M [2] on both the LVIS [10] dataset and our OVCOD-D dataset. By comparing the AP of the overlapping categories across the two datasets, we observe a substantial performance decline on OVCOD-D, indicating that open-vocabulary detectors face signif-icant challenges when dealing with camouflaged objects. 
+
+ception, has made remarkable progress over the years [13, 22, 30–32, 45]. Unlike closed-set object detectors [7, 8, 34, 48] that can only identify multiple objects within a prede-fined category space [36], open-vocabulary object detectors are capable of recognizing unseen object categories guided by textual prompts. This enables them to adapt more flexi-bly to complex and dynamic environments. Benefiting from the success of vision-language models [29] pre-trained on large-scale image-text pairs, cross-modal alignment enables the association of textual semantic cues with visual object features, thereby endowing the model with stronger zero-shot generalization capability [20, 25, 41]. Even though recent pioneering works in OVOD, built upon the light-weight YOLO architecture [2, 14, 24, 35], have achieved an impressive balance between detection ac-curacy, zero-shot capability, and inference efficiency. As illustrated in Figure 1, OVOD exhibits limited capability in localizing common camouflaged objects, leading to sub-stantial performance degradation under camouflage con- 
+
+> arXiv:2603.26109v1 [cs.CV] 27 Mar 2026 Category id
+> Category Quantity Figure 2. We conducted a statistical analysis of per-class instance counts in the OVCOD-D dataset. In the bar chart, blue bars de-note base classes and red bars denote novel classes, revealing a pronounced long-tailed distribution of class frequencies. Addi-tionally, using the fine-grained textual descriptions associated with each category, we selected 25 categories characterized by higher lexical richness to construct a multidimensional quality-analysis heatmap. The horizontal axis reports, in sequence, lexical diver-sity, average tokens, unique words, average unique-word ratio, and the standard deviation of sentence length.
+
+ditions. Existing OVOD methods struggle with two is-sues on camouflaged objects: 1) Redundancy in textual embeddings , indicated by the low lexical diversity and avg unique ratio in Figure 2, the fine-grained descriptions from large multimodal models contain superfluous modi-fiers. In cross-modal vision-language learning, these redun-dant semantics can introduce noise, thereby misguiding the extraction of discriminative visual features. 2) Highly simi-lar object and background embeddings issue , that is, the vi-sual characteristics of camouflaged objects are highly simi-lar to those of the background, resulting in difficult decision boundary learning for camouflaged objects and background categories in the embedding space. To address the above issues, we introduce a new task setting, i.e., Open-Vocabulary Camouflaged Object Detec-tion (OVCOD), constructing a textual description-included 
+
+OVCOD-D benchmark and proposing a method named 
+
+SDDF . To alleviate the limitation of redundant textual-description embeddings, we design a sub-description prin-cipal component contrastive fusion strategy, which first re-moves interfering textual components via singular value de-composition (SVD), and then exploits the contrastiveness between the sub-description principal components with re-spect to the object and background regions to perform fu-sion, thereby preserving the specific and diverse compo-nents of sub-descriptions for camouflaged objects. Fur-thermore, to tackle the issue of highly similar object and background embeddings, we exploit fine-grained semantic priors to facilitate the discriminant learning between ob-jects and background. Specifically, we introduce a spe-cific region weak alignment method, which employs a coverage-based loss to encourage the regions with object-specificity to move closer to the ground-truth (GT) object regions, thereby strengthening the correspondence between specificity-aware textural descriptions and visual regions of the object. In particular, we design a Spatially Focused-Gated Linear Unit (SF-GLU) layer, which dynamically en-hances the visual feature responses in the object domain un-der the guidance of object sub-descriptions, thus reinforcing the model’s ability to distinguish camouflaged objects from their surroundings. Experimental results demonstrate that, under the open-set setting, our method achieves an AP of 56.4 on the OVCOD-D benchmark, while also exhibiting strong per-formance on closed-set camouflaged object detection. Our main contributions can be summarized as follows: • We construct an open-vocabulary camouflaged object de-tection benchmark, OVCOD-D, by integrating and refin-ing mainstream camouflaged object image datasets and injecting carefully curated fine-grained descriptions of camouflaged objects. • We devise a sub-description principal component con-trastive fusion strategy, while proposing a specificity-guided regional weak alignment and dynamic focusing scheme, which together exploit fine-grained semantic pri-ors to effectively enhance the model’s ability to localize and distinguish camouflaged objects. • Extensive experimental results demonstrate that our model exhibits remarkable performance in both open-set and closed-set camouflaged object detection, while re-maining sufficiently lightweight for deployment on edge devices. 
+
+# 2. Related Work 
+
+2.1. Open-Vocabulary Object Detection 
+
+Open-vocabulary object detection (OVOD) [47] aims to move beyond the reliance of traditional closed-set detec-tors on predefined category lists, enabling the recogni-tion and localization of previously unseen classes. Early approaches[15, 37] primarily followed the zero-shot learn-ing paradigm, performing cross-modal matching between pretrained visual features and semantic embeddings[27, 28]. However, the coarse granularity of these semantic rep-resentations limits their capacity to distinguish fine-grained categories. In recent years, the development of large-scale vi-sion–language pretrained models [1, 17–19, 29, 33] has ush-ered in a new phase for OVOD. Detic [46] introduces a class-agnostic detection head and prompt integration strat-egy, substantially narrowing the gap between rare and fre-quent categories. GLIP [20] presents grounding paradigm effectively addresses challenges posed by similar categories and partially occluded objects, surpassing contemporary baselines. YOLO-UniOW [24] achieved lightweight cross-modal alignment via adaptive decision learning (AdaDL), it offers an efficient solution for deployment in dynamic sce-narios. However, these open-vocabulary detection methods still exhibit notable limitations: most studies pay insuffi-cient attention to complex visual phenomena such as cam-ouflage and occlusion. In addition, the field lacks open-vocabulary datasets specifically tailored to camouflaged ob-ject detection (COD), hindering rigorous evaluation of mod-els’ open-vocabulary capabilities in fine-grained camou-flage scenarios. To tackle this challenge, we construct a fine-grained open-vocabulary object detection dataset for COD. The dataset encompasses a rich spectrum of camouflaged cat-egories and scenes and provides fine-grained descriptions, thereby enhancing the learning and detection of camou-flaged objects by vision–language models in open-world contexts and furnishing essential data support for the prac-tical deployment of dynamic detection of multiple camou-flaged objects in real-world scenarios. 
+
+2.2. Camouflaged Object Detection 
+
+Recent years have witnessed the proposal and develop-ment of numerous deep learning-based Camouflaged Ob-ject Detection (COD) models [5, 6, 21], with recent re-search increasingly focusing on uncertainty estimation in this field. These deep learning-driven COD approaches en-able the automatic learning of intricate discriminative fea-tures through neural networks. They can be categorized based on three core dimensions: network architectures, comprising linear, aggregative, branched, and hybrid types, with backbones typically involving convolution-based mod-els (e.g., ResNet [12]) or Transformer-based frameworks (e.g., Vision Transformer [4]); learning paradigms, includ-ing single-task and multi-task modes ; and supervision gran-ularities, encompassing fully supervised and weakly super-vised settings [23, 38] developed a confidence-based COD framework with dynamic supervision, producing both cam-ouflage masks and aleatoric uncertainty estimates, show-ing superior performance. [26] proposed the Uncertainty-Edge Dual Guide model, which combines probabilistic un-certainty with deterministic edge information for accurate COD. Current research mainly addresses uncertainty in seg-mentation tasks, focusing on generating confidence maps for boundary distinction. However, in large-scale image data pre-training, the image space contains diverse object categories and complex structures. When the YOLO back-bone, with relatively few parameters, learns spatial repre-sentations via joint embedding prediction, it tends to lack local representation consistency, and semantic structural features are prone to degenerating into average represen-tations. To address this issue, we design regularization losses for feature invariance, variance, and covariance with dual similarity measurement, which balances the learning of similarity and independence between patch representa-tions and alleviates the problem of representation collapse. Additionally, in the process of vision-text contrastive learn-ing, camouflaged object detection (COD) relies solely on category-level text, lacking fine-grained semantic descrip-tions. This makes it difficult to form clear decision bound-aries to distinguish between semantically highly similar backgrounds and camouflaged objects during contrastive learning. To tackle this challenge, we propose a visual feature selection and object description refinement strategy guided by object-specific descriptions; through contrastive learning between specific features and fine-grained text de-scriptions, the distance between camouflaged objects and backgrounds is effectively increased. 
+
+# 3. Methodology 
+
+In this section, we first present the overall architecture of our model, and then elaborate on the proposed sub-description principal component contrastive fusion strat-egy, as well as the specificity-guided regional weak align-ment and dynamic focusing scheme strategy, which together enable the construction of a powerful open-vocabulary cam-ouflaged object detector. 
+
+3.1. Overall Framework 
+
+As is depicted in Figure 3, the input image is first fed into the YOLO backbone and PAN to extract multi-scale fea-ture maps  ˆz(l) ∈ RHl×Wl×Cl . These feature maps are then processed by the embedding head to produce a set of ob-ject embeddings  vi ∈ Rdv . In parallel, the object attribute sub-descriptions are encoded by a text encoder into sub-description vectors  {tc,k }Kk=1 , which are further decorre-lated via SVD and refined by an Adapter. The resulting sub-description principal components are integrated with 
+
+{vi} through our sub-description principal component con-trastive fusion module to obtain a fused textual representa-tion  tfused  
+
+> c
+
+and discriminative region–text matching scores, enabling open-vocabulary recognition at the region level. On top of this, a specific-region alignment branch selects the object embedding that best matches  tc,k  and constrains its predicted box to weakly align with the ground-truth re-gion. Meanwhile, the proposed SF-GLU module uses both 
+
+tfused  
+
+> c
+
+and the region-wise similarity scores to generate a spatial gating signal that dynamically enhances the target-domain visual responses in  ˆz(l). Finally, the enhanced vi-sual features are passed to the Box Head to predict the de-tection bounding boxes  ˆbi ∈ R4.Contrastive Fusion 
+
+## Box 
+
+## Head 
+
+Specific-Region Alignment 
+
+Assign 
+
+Text 
+
+Encoder Adapt er SVD 
+
+object embeddings 
+
+cl assification_logits 
+
+text_features 
+
+image_features 
+
+Embedding 
+
+Head 
+
+D1:head 
+
+D2: legs 
+
+Dn: eyes 
+
+Backbone 
+
+SF-GLU 
+
+> SUB
+> COS
+
+L2 Distance 
+
+Region 
+
+-Text 
+
+Align Figure 3. Overall architecture of the proposed specificity-driven open-vocabulary camouflaged object detector. Fine-grained textual sub-descriptions are encoded by a text encoder and decorrelated via SVD, then refined through an adapter and integrated with visual object embeddings in the contrastive fusion module. The image is processed by a lightweight YOLO-style backbone and a PAN to extract multi-scale features, which are transformed into object embeddings and fed in parallel into the SF-GLU and the box head. 
+
+3.2. Sub-Description Principal Component Con-trastive Fusion 
+
+To more accurately distinguish camouflaged objects from the background, we employ fine-grained category attribute descriptions to refine the fused object description. However, because the object and the surroundings may share subtle local similarities, these category attribute descriptions can also contain ambiguous expressions. To mitigate such inter-ference, we first perform SVD on the attribute descriptions to suppress redundant and noisy components. Formally, given the set of sub-descriptions for category 
+
+c, denoted by  {tc,k }Kk=1 , we obtain their decorrelated and refined representations by applying SVD, followed by a three-layer MLP that serves as a text adapter: 
+
+˜tc,k = Adapter(SVD( tc,k )) , k = 1 , . . . , K,  (1) Next, we design a contrastive fusion mechanism. Specif-ically, we compute the similarity between the  vi and each sub-description, and subtract from it the similarity between the same attribute description and the average object em-bedding  vglobal . This yields an importance score  wk for the 
+
+k-th sub-description: 
+
+wk = cos  vi, ˜tc,k 
+
+ − cos  vglobal , ˜tc,k 
+
+, (2) We then apply a softmax normalization to the importance score  wk to obtain the fusion weights  βk, which is used to compute the fused object descriptions: 
+
+tfused  
+
+> c
+
+=
+
+> K
+
+X
+
+> k=1
+
+βk ˜tc,k , (3) This contrastive fusion mechanism enables the model to adaptively select highly discriminative, class-specific sub-descriptions, thereby substantially enhancing the semantic discriminability of the resulting representation. 
+
+3.3. Specificity-Guided Spatial Weak Alignment and Dynamic Focusing 
+
+In the presence of weak visual cues, especially when cam-ouflaged objects are highly similar to their surroundings, relying solely on global object semantics is insufficient for accurate localization. To alleviate this issue, we introduce 
+
+specific-region alignment to help establish a tighter con-nection between fine-grained semantics and spatial regions. However, due to the laborious and often ambiguous nature of annotating specificity regions, we adopt a weakly super-vised strategy: we select regions that are highly consistent with the sub-descriptions and encourage them to spatially approach the ground-truth object area. We define the posi-tive sample assigned by the refiner to an object embedding as  v+ 
+
+> i
+
+. Let vic,k denote the object embedding whose corre-OVCOD-D(RAN)   
+
+> COD10K-D NC4K-D CAMO-D
+
+RAN 
+
+> basic
+> new
+
+Qwen3-VL 
+
+generate prompts 
+
+describe the 
+
+background 
+
+describe the 
+
+{category} 
+
+describe the 
+
+relationship    
+
+> Lush, dappled.....
+> The bird has mottled
+> gray-brown plumage ,
+> a sharply hooked
+> beak , and cryptic
+> bark-like feather
+> patterns along its
+> neck.
+> Its....
+> "Bird",
+> ......
+> "Bird with beak
+> plumage",
+> "Bird with plumage
+> mottled",
+> ......
+> "Bird with sharp eyes",
+> ......
+> "Bird having and a
+> beak plumage pattern",
+> .......
+> Bird Prompts
+> Analyse
+
+Figure 4. Construction pipeline of OVCOD-D dataset. We extend COD10K-D, NC4K-D, and clean CAMO-D with YOLO-style detection labels and an additional red imported fire ant nest subset, then reorganize them into 40 base and 47 novel classes. Qwen3-VL-Plus generates fine-grained image descriptions from which we derive a semantic prompt library for open-vocabulary camouflaged object detection. 
+
+sponding region attains the highest similarity to the refined specific attribute description  ˜tc,k  of category  c, i.e., 
+
+ic,k = arg max   
+
+> i∈{ 1,...,N }
+
+sim  vi, ˜tc,k 
+
+, (4) Only when the refiner-assigned positive sample coin-cides with this most similar embedding, do we treat the cor-responding predicted box  ˆbc,i  as an alignment sample. We further constrain the coverage ratio between its predicted bounding box  ˆbc,i  and the ground-truth annotation  bGT  by introducing a coverage-based auxiliary loss: 
+
+Lac = 1 − ˆbc,i ∩ bGT 
+
+ˆbc,i 
+
+, (5) where  | · |  denotes the area of a region. This loss explicitly encourages regions with strong specificity-based discrimi-native power to be spatially aligned with the true object, en-abling the localization results to converge to the object area even when the visual differences between the object and the background are very subtle. On top of aligning the specificity regions with the object regions, we further encourage the visual branch to concen-trate on patch features that are both semantically discrimi-native and spatially adjacent to the object region, so as to better distinguish the object from the background. To this end, we propose the SF-GLU module, which enhances the visual feature responses within the object domain. We first compute the text–region similarity score  Sj for each object embedding as 
+
+Sj = max  
+
+> c
+
+σ (tfused  
+
+> c
+
+)⊤vj
+
+, j = 1 , . . . , N,  (6) We then identify the most likely object patch index 
+
+it = arg max   
+
+> j∈{ 1,...,N }
+
+Sj , (7) Next, we compute the spatial distance between each patch  j and the object patch  it. Let  pj ∈ R2 denote the normalized spatial coordinate of the  j-th patch; the L2 dis-tance is given by 
+
+dj,i t = pj − pit 2, j = 1 , . . . , N,  (8) We then fuse the similarity and distance information to generate the gating signal. In compact form, let  S =[S1, . . . , S N ] and  d = [ d1,i t , . . . , d N,i t ]; the SF-GLU oper-ation is defined as 
+
+SF -GLU(ˆ z, S, d) = ˆ z ⊙
+
+
+
+1 + σ Conv( S/(r · d)) 
+
+. (9) where  ⊙ denotes element-wise multiplication, and  r > 0
+
+is a temperature parameter controlling the sharpness of the gating response. The term  1 + σ(·) ensures that all regions retain at least their original features, while regions that are both semantically discriminative and spatially close to the object receive additional enhancement, enabling the model to better focus on the camouflaged object domain. 
+
+# 4. Experiments 
+
+4.1. Benchmarking Open-Vocabulary Camouflaged Object Detection 
+
+In constructing the OVCOD-D benchmark, we build upon existing camouflaged object detection image datasets and integrate text prompts generated by large multimodal mod-els, thereby expanding them into an open-vocabulary for-mat. Subsequently, we fine-tune classical open-vocabulary object detectors on the OVCOD-D dataset to establish the baseline for open-vocabulary camouflaged object detection. 
+
+Dataset Construction. Existing COD datasets focus on segmentation and lack detection-ready boxes and category Table 1. Comparison with classical open-vocabulary object detectors on the OVCOD-D dataset is conducted under an open-set setting, where all models are fine-tuned on the base classes and evaluated on the union of base and novel classes. 
+
+Method Backbone Params Pre-train AP AP 50 AP 75 AP m AP l
+
+GLIP-T [20] Swin-T 232M O365,GoldG 22.6 31.9 28.2 - -GLIPv2-T [44] Swin-T 232M O365,GoldG 25.6 36.4 29.7 - -Grounding DINO-T [25] Swin-T 172M O365,GoldG 34.8 43.9 37.7 - -YOLO-World-S [2] YOLOv8-S 77M O365,GoldG 38.5 58.0 41.4 18.7 41.1 YOLO-World-M [2] YOLOv8-M 92M O365,GoldG 43.3 62.3 46.5 24.9 46.1 YOLO-World-L [2] YOLOv8-L 110M O365,GoldG 45.7 63.2 48.9 22.9 48.4 YOLOE-S [35] YOLOv8-S 78M O365,GoldG 38.7 46.0 40.8 - -YOLOE-M [35] YOLOv8-M 94M O365,GoldG 39.9 47.7 42.7 - -DOSOD-S [14] YOLOv8-S 75M O365,GoldG 44.8 67.4 46.8 22.4 47.2 DOSOD-M [14] YOLOv8-M 90M O365,GoldG 51.8 73.8 55.6 27.9 54.5 DOSOD-L [14] YOLOv8-L 108M O365,GoldG 53.4 73.1 56.2 26.4 56.3 SDDF-S YOLOv8-S 76M O365,GoldG 48.1 70.7 50.3 25.9 50.7 SDDF-M YOLOv8-M 91M O365,GoldG 54.3 75.1 57.5 30.3 57.0 SDDF-L YOLOv8-L 109M O365,GoldG 56.4 76.4 60.7 34.4 59.0 labels [38]. As is described in Fig 4, to enable open-vocabulary COD, we extend COD10K-D, NC4K-D, and CAMO-D [39], derive consistent bounding boxes and cate-gories from masks, and standardize annotations to a YOLO-compatible TXT format. We curate CAMO-D by remov-ing non-camouflage images and add a self-constructed red fire ant nest set due to its agricultural and health signifi-cance. We restructure categories and splits, yielding 40 base classes and 47 novel classes (unseen during train-ing). To mitigate object–background semantic similar-ity, we employ Qwen3-vl-plus[40] to generate fine-grained per-image descriptions capturing background cues, object specificity, and spatial relations; from these, we distill category-level physical-feature descriptors and their fre-quencies into a semantic text repository. Overall, the dataset remedies detection-annotation and open-vocabulary gaps and strengthens vision–language linkage, providing high-quality, multidimensional data for training and evaluation in OVCOD. In summary, the dataset constructed in this work not only remedies the shortcomings of existing COD datasets in de-tection annotations and open-vocabulary compatibility but also strengthens the linkage between vision and language through fine-grained semantic descriptions and a semantic text repository. It provides high-quality, multidimensional data support for training and evaluating models in open-vocabulary camouflaged object detection. 
+
+Model Variants. Our experiments evaluate several popu-lar zero-shot detection models on LVIS, employing various architectural frameworks such as Transformer and CNN. Regarding the backbones, GLIP-T [20], GLIPv2-T [44], and Grounding DINO-T [25] utilize a Swin-Transformer ar-chitecture. Meanwhile, YOLO-World, YOLOE [35], and DOSOD [14] are based on YOLOv8, a CNN-based frame-work with residual structures. All these models are pre-trained on O365 and GoldG datasets. In terms of param-eters, models like GLIP-T have 232M params, Grounding DINO-T has 172M, while YOLO-World-S has only 13M — showcasing a wide range of parameter scales. We use their official implementations and pre-trained weights for the experimental setup. 
+
+Evaluation Metrics. Following the conventions estab-lished by classic open-vocabulary detection benchmarks [9, 10, 43], we evaluate the performance of our detector us-ing the Average Precision (AP) metric. Since these bench-marks are designed for general object detection, they cat-egorize objects into rare , common , and frequent classes based on the number of available samples, and report the corresponding metrics as AP r , AP c, and AP f , respectively. However, most camouflaged instances are inherently rare, rendering classification based on sample frequency inap-propriate. Therefore, instead of reporting AP by category frequency, we present results in terms of AP at different Intersection-over-Union (IoU) thresholds and across vari-ous object scales. 
+
+4.2. Comparisons on Open-Vocabulary Camou-flaged Object Detection 
+
+To evaluate the open-vocabulary detection capability of the detector on the proposed OVCOD-D, we fine-tune classical open-vocabulary object detectors on the base classes and then test them on both base and novel classes. Considering that classical open-vocabulary detectors typically rely on a single textual description per object cat-egory, we extend the baseline models by incorporating the same sub-description fusion mechanism detailed in the ap-pendix, so as to ensure fairness with respect to the textual information. It is worth noting that, due to the limited scale of camouflaged object data, it is difficult to construct large-scale novel categories in a manner analogous to generic ob-ject detection benchmarks for zero-shot evaluation [10]. As a consequence, the absolute magnitude of the reported per-formance is not directly comparable to that of conventional zero-shot object detection settings. As shown in Table 1, compared with other open-vocabulary detectors that also adopt a lightweight YOLO backbone and PAN, our method outperforms the best-performing DOSOD variant by 3.3 AP on the smallest model configuration. It is noteworthy that existing ground-ing models, such as GLIP and Grounding DINO, exhibit suboptimal performance on our dataset. This degradation primarily stems from a fundamental misalignment between their token-level phrase-grounding mechanisms and the tok-enization process of dense, multi-attribute sub-descriptions. Specifically, processing complex sub-description prompts via the BERT [3] tokenizer tends to fragment discrete semantic concepts and induce local contextual ambigu-ity. Such issues, further exacerbated by stringent sequence length constraints, ultimately compromise the efficacy of their deep cross-modal attention mechanisms. As the model size increases, SDDF exhibits an even more pronounced performance gain over other open-vocabulary detectors, with the largest model achieving an AP that is 8.3 points higher than that of the smallest one. In terms of object scale, SDDF yields particularly notable improvements for medium-sized camouflaged targets, achieving an AP in-crease of 8.5. 
+
+4.3. Comparisons on Camouflaged Object Detec-tion 
+
+For the task of camouflaged object detection, traditional methods mostly adopt detection heads designed for in-stance segmentation [38], which output fine-grained masks of camouflaged objects. Therefore, under a task setting fo-cused on object classification and localization with bound-ing boxes, we choose the classical YOLO-series models, in-cluding open-vocabulary detectors derived from them, and train and evaluate all categories jointly. In terms of experimental setup, to preserve the model’s ability to exploit fine-grained textual descriptions, we also employ target sub-descriptions in the closed-set camou-flaged detection experiments. Moreover, we fix the batch size to 32 and use a unified learning rate across all meth-                                                                  
+
+> Table 2. Comparisons under the closed-set setting are con-ducted to evaluate the performance of classical object detectors and open-vocabulary object detectors on the OVCOD-D dataset. The FPS is measured on a single NVIDIA RTX 4090 using the raw trained checkpoints without TensorRT, re-parameterization, or other lightweight optimizations.
+> Method Pre-train AP AP 50 AP 75 FPS
+> Training from scratch.
+> YOLOv8-S [34] ×18.6 26.5 19.0 -YOLOv8-M [34] ×21.7 31.8 22.6 -YOLOv8-L [34] ×23.7 32.0 23.4 -
+> Fine-tuned w/ DuVL-PAN and sub-descriptions
+> YOLO-World-S [2] O+G 39.3 57.3 41.3 35 YOLO-World-M [2] O+G 45.0 65.2 47.6 33 YOLO-World-L [2] O+G 46.9 66.9 49.4 29
+> Fine-tuned w/ sub-descriptions
+> DOSOD-S [14] O+G 44.9 67.2 48.7 44 DOSOD-M [14] O+G 52.9 74.0 55.1 42 DOSOD-L [14] O+G 53.6 72.9 56.8 36
+> Fine-tuned w/ sub-descriptions
+> SDDF-S O+G 48.2 70.1 51.7 39 SDDF-M O+G 54.8 73.6 58.1 36 SDDF-L O+G 59.4 80.3 63.4 33
+
+ods to ensure a fair comparison. According to the results in Table 2 , SDDF achieves an AP of 48.2 with the smallest model configuration, outperforming the strongest baseline under the same model size. As the model capacity increases, SDDF-L improves AP by 11.2 points over SDDF-S. We further observe that the performance gain is most pronounced for high-quality pre-dictions (IoU > 0.75 ), which provides additional evidence of its exceptional capability in camouflaged object detec-tion. In terms of inference latency, the model also operates at real-time frame rates, facilitating deployment and appli-cation on edge devices. 
+
+# 5. Ablation Study 
+
+5.1. Ablation study on contrastive fusion module 
+
+We conduct ablation studies on the sub-description text fu-sion strategy to investigate the effectiveness of the proposed contrastive fusion mechanism. When fusing the specificity-aware principal components, the orthogonal fusion strategy is particularly appealing, as it can mathematically ensure that different sub-descriptions (e.g., color, texture, shape) are projected onto mutually non-overlapping directions in the semantic space, thereby preserving the diversity of spe-cific semantics. To this end, we design several controlled experiments, comparing three variants: (i) orthogonal fu-sion, and (ii) the proposed orthogonal contrastive fusion strategy. As shown in Table 3, our contrastive fusion strat-Table 3. Ablation study on sub-description fusion strategies for open-vocabulary camouflaged object detection on OVCOD-D dataset. The coverage auxiliary loss weight is uniformly set to 5, and SF-GLU is disabled for all variants to ensure fair comparison. 
+
+Fusion Method AP AP 50 AP 75 
+
+Orthogonal+Contrastive 46.5 70.1 48.9 Contrastive 47.5 70.6 49.6 
+
+Orthogonal 44.0 66.4 45.6 
+
+> Table 4. Ablation study on SF-GLU module for open-vocabulary camouflaged object detection on the OVCOD-D dataset. All vari-ants adopt the contrastive fusion framework with coverage auxil-iary loss set to 5.
+
+Dynamic Focusing Module AP AP 50 AP 75 
+
+w/o GLU 47.5 70.6 49.6 GLU 46.7 69.7 49.8 SwiGLU 47.1 70.3 49.2 SF-GLU 48.1 70.7 50.3 
+
+egy achieves an AP of 47.5, the best among all variants. We conjecture that the model benefits from explicitly leverag-ing the similarity differences between sub-descriptions and target versus background regions, which helps it assess the relative importance of each sub-description that better re-flects the discriminability between camouflaged objects and the background. 
+
+5.2. Ablation study on SF-GLU module 
+
+To investigate the effects of alternative variants of the SF-GLU module under text–region similarity guidance, we de-sign several ablation experiments, including variants that re-move the GLU module entirely or replace it with the stan-dard GLU or SwiGLU modules. These modules fundamen-tally operate by modulating the sharpness of the visual fea-ture distribution. According to the experimental results presented in the Table 4, the model equipped with the SF-GLU module achieves an AP of 48.1 in open-set evaluation. We hypoth-esize that the SF-GLU module sharpens the visual feature distribution through spatial-distance–aware modulation, en-abling the network to dynamically focus on the target re-gions and effectively distinguish camouflaged objects from the background. In addition, compared with other module variants, SF-GLU is able to generate more accurate local-ization boxes for camouflaged objects, achieving an AP 75 
+
+of 50.3. 
+
+5.3. Ablation study on coverage-based auxiliary loss 
+
+To assess the impact of the coverage-aware auxiliary loss, we performed an ablation study on its weighting parameter 
+
+λ, seeking the optimal balance to yield high-quality local- 
+
+> Table 5. Ablation study on different weights of coverage-based auxiliary loss for open-vocabulary camouflaged object detection on the OVCOD-D dataset. All variants adopt the same contrastive fusion framework without using the SF-GLU module.
+
+Weight for auxiliary loss AP AP 50 AP 75 
+
+0 47.3 71.0 49.5 2 47.2 70.5 48.7 5 47.5 70.6 49.6 
+
+7 46.3 69.3 49.0 10 46.6 69.7 49.0 ization results. As shown in Table 5, we evaluated λ with values in {0, 2, 5, 7, 10 }, where λ = 0 denotes the com-plete removal of the coverage-aware auxiliary loss. Exper-imental results demonstrate that when λ increases from 0 to 5, although AP 50 decreases by 0.4, AP 75 remains stable with a slight improvement. This indicates that the coverage loss effectively eliminates background components within the predicted boxes, leading to more compact localization results. However, when λ ≥ 7, the overall AP drops sig-nificantly. We hypothesize that excessive constraints may distort feature learning in favor of geometric alignment, po-tentially biasing the model to predict bounding boxes closer to the ground- truth by misinterpreting features from non-target regions. Therefore, we ultimately adopt λ = 5 as the final weighting parameter. 
+
+# 6. Conclusion 
+
+In this work, we address the largely overlooked challenge of open-vocabulary camouflaged object detection, where significant visual similarity between targets and their sur-roundings often hinders reliable localization and recogni-tion. To facilitate research in this area, we construct the OVCOD-D benchmark by incorporating fine-grained tex-tual descriptions into carefully curated camouflaged object images. Building upon detectors pre-trained on large-scale object detection datasets, we further introduce two key con-tributions: (1) a sub-description principal component con-trastive fusion strategy that suppresses noisy or overly dec-orative textual modifiers, and (2) a specificity-guided re-gional weak alignment and dynamic focusing mechanism that enhances the model’s ability to distinguish camou-flaged objects from background regions. Comprehensive experiments under the open-set evalua-tion setting demonstrate that our method achieves an AP of 56.4 on the OVCOD-D benchmark, substantially improv-ing the detector’s discrimination capability in complex cam-ouflage scenarios. Overall, this study establishes a strong foundation for future research on open-vocabulary camou-flaged object detection. References 
+
+[1] Peixian Chen, Kekai Sheng, Mengdan Zhang, Mingbao Lin, Yunhang Shen, Shaohui Lin, Bo Ren, and Ke Li. Open vo-cabulary object detection with proposal mining and predic-tion equalization. arXiv preprint arXiv:2206.11134 , 2022. 2[2] Tianheng Cheng, Lin Song, Yixiao Ge, Wenyu Liu, Xing-gang Wang, and Ying Shan. Yolo-world: Real-time open-vocabulary object detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 16901–16911, 2024. 1, 6, 7 [3] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional trans-formers for language understanding. In Proceedings of the 2019 conference of the North American chapter of the asso-ciation for computational linguistics: human language tech-nologies, volume 1 (long and short papers) , pages 4171– 4186, 2019. 7 [4] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representa-tions , 2021. 3 [5] Deng-Ping Fan, Ge-Peng Ji, Guolei Sun, Ming-Ming Cheng, Jianbing Shen, and Ling Shao. Camouflaged object detec-tion. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , 2020. 3 [6] Deng-Ping Fan, Ge-Peng Ji, Ming-Ming Cheng, and Ling Shao. Concealed object detection. IEEE Transactions on Pattern Analysis and Machine Intelligence , 44(10):6024– 6042, 2022. 3, 12 [7] Ross Girshick. Fast r-cnn. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 1440– 1448, 2015. 1 [8] Ross Girshick, Jeff Donahue, Trevor Darrell, and Jitendra Malik. Rich feature hierarchies for accurate object detection and semantic segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pages 580–587, 2014. 1 [9] Xiuye Gu, Tsung-Yi Lin, Weicheng Kuo, and Yin Cui. Open-vocabulary object detection via vision and language knowledge distillation. arXiv preprint arXiv:2104.13921 ,2021. 6 [10] Agrim Gupta, Piotr Dollar, and Ross Girshick. Lvis: Adataset for large vocabulary instance segmentation. In Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 5356–5364, 2019. 1, 6, 7 [11] Jinpeng He, Biyuan Liu, and Huaixin Chen. Hdpnet: Hour-glass vision transformer with dual-path feature pyramid for camouflaged object detection. In 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) ,pages 8638–8647. IEEE, 2025. 12 [12] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceed-ings of the IEEE Conference on Computer Vision and Pattern Recognition , pages 770–778, 2016. 3 [13] Kaiming He, Georgia Gkioxari, Piotr Doll´ ar, and Ross Gir-shick. Mask r-cnn. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , pages 2961–2969, 2017. 1 [14] Yonghao He, Hu Su, Haiyong Yu, Cong Yang, Wei Sui, Cong Wang, and Song Liu. A light-weight framework for open-set object detection with decoupled feature alignment in joint space. In 2025 IEEE International Conference on Robotics and Automation (ICRA) , pages 13590–13596. IEEE, 2025. 1, 6, 7 [15] Ting-I Hsieh, Yi-Chen Lo, Hwann-Tzong Chen, and Tyng-Luh Liu. One-shot object detection with co-attention and co-excitation. In Advances in Neural Information Processing Systems , 2019. 2 [16] Zhou Huang, Hang Dai, Tian-Zhu Xiang, Shuo Wang, Huai-Xin Chen, Jie Qin, and Huan Xiong. Feature shrinkage pyra-mid for camouflaged object detection with transformers. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 5557–5566, 2023. 12 [17] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representa-tion learning with noisy text supervision. In International Conference on Machine Learning , pages 4904–4916. PMLR, 2021. 2 [18] Sheng Jin, Xueying Jiang, Jiaxing Huang, Lewei Lu, and Shijian Lu. Llms meet vlms: Boost open vocabulary ob-ject detection with fine-grained descriptors. In International Conference on Learning Representations , 2024. [19] Junnan Li, Ramprasaath Selvaraju, Akhilesh Gotmare, Shafiq Joty, Caiming Xiong, and Steven Chu Hong Hoi. Align before fuse: Vision and language representation learn-ing with momentum distillation. In Advances in Neural In-formation Processing Systems , pages 9694–9705, 2021. 2 [20] Liunian Harold Li, Pengchuan Zhang, Haotian Zhang, Jian-wei Yang, Chunyuan Li, Yiwu Zhong, Lijuan Wang, Lu Yuan, Lei Zhang, Jenq-Neng Hwang, et al. Grounded language-image pre-training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 10965–10975, 2022. 1, 2, 6 [21] Yanhua Liang, Guihe Qin, Minghui Sun, Xinchao Wang, Jie Yan, and Zhonghan Zhang. A systematic review of image-level camouflaged object detection with deep learning. Neu-rocomputing , 566:127050, 2024. 3 [22] Tsung-Yi Lin, Piotr Doll´ ar, Ross Girshick, Kaiming He, Bharath Hariharan, and Serge Belongie. Feature pyra-mid networks for object detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2117–2125, 2017. 1 [23] Jiawei Liu, Jing Zhang, and Nick Barnes. Modeling aleatoric uncertainty for camouflaged object detection. In 2022 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , pages 2613–2622, 2022. 3 [24] Lihao Liu, Juexiao Feng, Hui Chen, Ao Wang, Lin Song, Jungong Han, and Guiguang Ding. Yolo-uniow: Effi-cient universal open-world object detection. arXiv preprint arXiv:2412.20645 , 2024. 1, 3 [25] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang, Chunyuan Li, Jianwei Yang, Hang Su, et al. Grounding dino: Marrying dino with grounded pre-training for open-set object detection. In Pro-ceedings of the European Conference on Computer Vision ,pages 38–55. Springer, 2024. 1, 6 [26] Yixuan Lyu, Hong Zhang, Yan Li, Hanyang Liu, Yifan Yang, and Ding Yuan. Uedg:uncertainty-edge dual guided camou-flage object detection. IEEE Transactions on Multimedia ,26:4050–4060, 2024. 3 [27] Tomas Mikolov, Kai Chen, Greg Corrado, and Jeffrey Dean. Efficient estimation of word representations in vector space. 
+
+arXiv preprint arXiv:1301.3781 , 2013. 2 [28] Jeffrey Pennington, Richard Socher, and Christopher D Man-ning. Glove: Global vectors for word representation. In 
+
+Proceedings of the 2014 conference on empirical methods in natural language processing (EMNLP) , pages 1532–1543, 2014. 2 [29] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learn-ing transferable visual models from natural language super-vision. In International Conference on Machine Learning ,pages 8748–8763. PmLR, 2021. 1, 2 [30] Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi. You only look once: Unified, real-time object detec-tion. In Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 779–788, 2016. 1[31] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object detection with region proposal networks. In Advances in Neural Information Pro-cessing Systems , 2015. [32] Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, and Liang-Chieh Chen. Mobilenetv2: In-verted residuals and linear bottlenecks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4510–4520, 2018. 1 [33] Amanpreet Singh, Ronghang Hu, Vedanuj Goswami, Guil-laume Couairon, Wojciech Galuba, Marcus Rohrbach, and Douwe Kiela. Flava: A foundational language and vision alignment model. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition , pages 15638–15650, 2022. 2 [34] Rejin Varghese and Sambath M. Yolov8: A novel object detection algorithm with enhanced performance and robust-ness. In 2024 International Conference on Advances in Data Engineering and Intelligent Computing Systems (ADICS) ,pages 1–6, 2024. 1, 7 [35] Ao Wang, Lihao Liu, Hui Chen, Zijia Lin, Jungong Han, and Guiguang Ding. Yoloe: Real-time seeing anything. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 24591–24602, 2025. 1, 6 [36] Wenguan Wang, Qiuxia Lai, Huazhu Fu, Jianbing Shen, Haibin Ling, and Ruigang Yang. Salient object detection in the deep learning era: An in-depth survey. IEEE Trans-actions on Pattern Analysis and Machine Intelligence , 44(6): 3239–3259, 2022. 1 [37] Xiaolong Wang, Yufei Ye, and Abhinav Gupta. Zero-shot recognition via semantic embeddings and knowledge graphs. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6857–6866, 2018. 2 [38] Fengyang Xiao, Sujie Hu, Yuqi Shen, Chengyu Fang, Jinfa Huang, Chunming He, Longxiang Tang, Ziyun Yang, and Xiu Li. A survey of camouflaged object detection and be-yond, 2024. arXiv:2408.14562. 3, 6, 7 [39] Zhimeng Xin, Tianxu Wu, Shiming Chen, Shuo Ye, Zijing Xie, Yixiong Zou, Xinge You, and Yufei Guo. Toward real-istic camouflaged object detection: Benchmarks and method. 
+
+arXiv preprint arXiv:2501.07297 , 2025. 6 [40] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jia-long Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tian-hao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu. Qwen3 technical report, 2025. arXiv:2505.09388. 6 [41] Lewei Yao, Jianhua Han, Youpeng Wen, Xiaodan Liang, Dan Xu, Wei Zhang, Zhenguo Li, Chunjing Xu, and Hang Xu. Detclip: Dictionary-enriched visual-concept paralleled pre-training for open-world detection. In Advances in Neural Information Processing Systems , pages 9125–9138, 2022. 1 [42] Bowen Yin, Xuying Zhang, Deng-Ping Fan, Shaohui Jiao, Ming-Ming Cheng, Luc Van Gool, and Qibin Hou. Camo-former: Masked separable attention for camouflaged object detection. IEEE Transactions on Pattern Analysis and Ma-chine Intelligence , 2024. 12 [43] Alireza Zareian, Kevin Dela Rosa, Derek Hao Hu, and Shih-Fu Chang. Open-vocabulary object detection using captions. In Proceedings of the IEEE/CVF conference on computer vi-sion and pattern recognition , pages 14393–14402, 2021. 6 [44] Haotian Zhang, Pengchuan Zhang, Xiaowei Hu, Yen-Chun Chen, Liunian Harold Li, Xiyang Dai, Lijuan Wang, Lu Yuan, Jenq-Neng Hwang, and Jianfeng Gao. Glipv2: Unify-ing localization and vision-language understanding. In Ad-vances in Neural Information Processing Systems , 2022. 6 [45] Xuekai Zhang, Yueping Peng, Wei Tang, Wenchao Kang, and Zecong Ye. Review of methods for detecting concealed camouflage targets. Journal of Army Engineering University of PLA , 4(1):61–70, 2025. 1 [46] Xingyi Zhou, Rohit Girdhar, Armand Joulin, Philipp Kr¨ ahenb¨ uhl, and Ishan Misra. Detecting twenty-thousand classes using image-level supervision. In Proceedings of the European Conference on Computer Vision , pages 350–368. Springer, 2022. 2 [47] Chaoyang Zhu and Long Chen. A survey on open-vocabulary detection and segmentation: Past, present, and future, 2024. arXiv:2307.09220. 2 [48] Zhengxia Zou, Keyan Chen, Zhenwei Shi, Yuhong Guo, and Jieping Ye. Object detection in 20 years: A survey. Proceed-ings of the IEEE , 111(3):257–276, 2023. 1 
+
+# Appendix 
+
+In this appendix, we provide additional implementation details and extensive experimental results to further eluci-date our proposed method. The supplementary material is organized as follows: • In Section A, we present a comprehensive description of the dataset construction process, including details on data collection, annotation protocols, and novel class overlap analysis. • In Section B, we delineate the complete experimental pipeline, baselines’ text pipeline, and provide a full listing of hyperparameter configurations and numerical stability designs. • In Section C, we provide additional quantitative results, including comparison with state-of-the-art COD methods and analysis across specific camouflage difficulty levels. • In Section D, we conduct extended ablation studies ex-amining the influence of SVD configurations and the SF-GLU convolutional layers. • In Section E, we perform detailed qualitative comparisons through visualization of detection bounding boxes and feature maps. 
+
+# A. Dataset Information and Analysis 
+
+A.1. OVCOD-D Construction and Quality Assur-ance 
+
+The newly constructed OVCOD-D benchmark comprises 6,469 training samples and 3,957 test samples, into which 83 high-quality images of red imported fire ant (RIFA) nests have been incorporated. All RIFA nest images were col-lected in natural field environments, thereby addressing a gap in existing datasets concerning camouflaged insect-nest targets. For a reproducible construction pipeline, we established a standardized three-stage pipeline: (a) Instance masks were converted to axis-aligned YOLO-format boxes. Coordi-nates were normalized with strict boundary clamping to en-sure validity. (b) We filtered COD10K, retaining only the subset of camouflaged ones. (c) Label spaces were unified via case-insensitive matching and modifier removal, yield-ing an 87-category vocabulary. For generating fine-grained sub-descriptions of target objects, we employed the following prompt: The image contains a {display name }. YOU MUST GENERATE EXACTLY THREE SEP-ARATE SENTENCES. FIRST SENTENCE: Describe the background in ONE VERY CONCISE English sentence 
+
+containing AT LEAST THREE ADJECTIVES ,without mentioning the {display name }.
+
+SECOND SENTENCE: Only describe the 
+
+{display name } in ANOTHER VERY CON-CISE English sentence with AT LEAST THREE PHYSICAL FEATURES that distin-guish it from its surroundings. DO NOT MEN-TION “background,” “environment,” “surround-ings,” or any context-related words. 
+
+THIRD SENTENCE: Describe the physical re-lationship between the {display name } and its background in ONE VERY CONCISE English sentence .Subsequently, we obtain fine-grained object descriptions for each category and process them accordingly. Through a series of text preprocessing steps, including the removal of punctuation, conversion to lowercase, tokenization, and stop-word filtering. We extract semantically meaningful specificity-describing terms. For each species, we then construct a term-frequency statistics profile and retain the top 30 highest-frequency terms to form a species-specific vocabulary repository. We generate over 20 fine-grained sub-descriptions per class (4–8 valid tokens on average), with CLIP-native tokenization and the CLIP text encoder for text encoding. Each sub-description incorporates both the original scientific name of the species and its plural form. Furthermore, we select the top six pairs of high-frequency terms and assemble them into structured phrases, thereby ensuring that at least 20 semantically rich descrip-tive phrases are produced for each species. For Text Quality Assurance, as shown in Table A1, five sub-descriptions are randomly sampled per category (or all if fewer than five are available). Positive and negative sam-ples are identified based on three pre-defined metrics to cal-culate the precision rate. A category is deemed “qualified” if over 50% of its sampled sub-descriptions are identified as positive.         
+
+> Table A1. Human evaluation of generated textual descriptions.
+> Metric Accuracy Relevance Hallucination-free Qualified category Rate (%) 98.15 99.77 92.61 100.00
+
+A.2. Novel Class Overlap with Pretraining Data 
+
+26 out of 47 novel classes have no overlap with pre-training data. Nevertheless, the domain gap induced by high camou-flage prevents model from relying on pre-learned features. B. Implementation Setup 
+
+We conduct all experiments using PyTorch 2.1.2 with CUDA 11.8 on 8 RTX 4090 GPUs. In the data processing pipeline, we disable mosaic augmentation to better balance the difficulty of the camouflaged object detection task. We adopt an 80-epoch training schedule with a lr of 2 × 10 −4.
+
+B.1. Text Pipeline and Fusion 
+
+For sub-description text fusion in the baseline methods, we adopt a simple yet effective strategy of summing the text feature vectors followed by normalization: 
+
+tfused  
+
+> c
+
+=
+
+PKk=1 tc,k 
+
+PKk=1 tc,k 2
+
+. (A1) 
+
+tc,k denotes the embedding vector of the k-th sub-description text in category c, and tfused  
+
+> c
+
+represents the fused sub-description text for category c. Empirically, this opera-tion preserves sub-description information more effectively and yields improved detection performance. YOLO-World and DOSOD leverage CLIP to extract sub-description vectors, then the fused category embeddings subsequently passed to a Vision-Language PAN and an MLP adapter, respectively. Similarly, YOLOE utilizes Mo-bileCLIP to generate fused embeddings for its auxiliary network. In contrast, GLIP-T, GLIPv2-T, and Grounding DINO-T employ BERT for text extraction, integrating the fused results into the GLIP fusion encoder or the Ground-ingDINO neck. To ensure experimental consistency, all models are trained with an identical random seed and a learning rate (lr) of 2 × 10 −4.In terms of training configuration, we set the lr mult 
+
+of the MLP-based text adapter in SDDF to 0.01, while as-signing an lr mult of 0.5 to both the backbone and PAN. We also fix the random seed to the same value across all experiments to ensure fair and reproducible comparisons. 
+
+B.2. Numerical Stability of SF-GLU 
+
+We ensure stable convergence via Epsilon Clamping ( ϵ =10 −8), Argmax Gradient Detach, and Sigmoid-bounded gain (1 , 1 + α) with α = 1 .
+
+# C. Additional Quantitative Results 
+
+C.1. Comparison with State-of-the-Art (SOTA) COD Methods 
+
+Mainstream COD methods primarily focus on segmentation tasks. To bridge the gap between segmentation-based COD and bbox detection, we train SOTA models on the OVCOD-D under open-set setting. During inference, detection re-sults are derived from the axis-aligned bounding boxes of predicted and ground-truth masks, with localization perfor-mance evaluated using the AP shown in Table A2. 
+
+> Table A2. Comparison with SOTA COD methods on OVCOD-D.
+
+Method AP AP 50 AP 75 
+
+SINet-V2 [6] 40.2 69.3 39.4 FSPNet [16] 47.9 76.2 49.4 CamoFormer [42] 55.6 80.2 59.0 HDPNet [11] 56.3 81.5 59.6 
+
+SDDF-L (Ours) 56.4 76.4 60.7 
+
+C.2. Analysis across Specific Camouflage Difficulty Levels 
+
+To balance the impact of target scale on visual similar-ity, we define a difficulty metric by weighting the target-image CLIP cosine similarity (0.6) and a scale coefficient 
+
+1 − Abbox /Aimg (0.4), Abbox and Aimg denote target and image areas, respectively. Table A3 presents results across three quantile-split levels: Mild, Moderate, and Severe. 
+
+> Table A3. Multi-level camouflability performance of SDDF-S on OVCOD-D.
+
+Method AP mild AP mod AP severe 
+
+SDDF-S 64.2 49.8 39.0 
+
+# D. Extended Ablation Studies 
+
+D.1. Ablation Study on SVD Settings 
+
+SVD is performed on zero-centered matrices T ∈ RK×D .Retained PCs ∈ [3 , 10] . The core function of SVD lies in its ability to eliminate semantic redundancy within sub-descriptions through orthogonal decomposition, thereby rendering different sub-descriptions more semantically in-dependent in the latent space. To quantitatively evaluate this effect, we designed three comparative groups and con-ducted ablation studies atop the DOSOD baseline, system-atically investigating the impact of varying the number of retained maximum principal components in SVD on model detection performance. As show in Table A4, employing ten principal compo-nents significantly improves model performance, achieving a 2.0 AP increase over the baseline. Reducing the number of components to five leads to substantial semantic informa-tion loss, resulting in performance degradation compared to the ten-component configuration. Conversely, increasing the number to fifteen retains excessive redundancy among sub-descriptions, also yielding diminished performance rel-ative to the optimal ten-component setting. Thus, ten princi-pal components strike the ideal balance between preserving semantic integrity and eliminating redundancy. Table A4. Ablation study on different maximum number of com-ponents obtainable from SVD on the OVCOD-D dataset. All model variants adopt the fusion approach defined in Equation A1. The coverage auxiliary loss and SF-GLU are disabled. 
+
+SVD Configuration AP AP 50 AP 75 
+
+w/o SVD 44.8 67.4 46.8 w/ SVD (5) 46.5 69.8 48.3 w/ SVD (10) 46.8 69.5 49.2 
+
+w/ SVD (15) 46.1 69.2 48.4 
+
+D.2. Ablation Study on SF-GLU Convolutional Lay-ers 
+
+SF-GLU uses a single-layer 1 × 1 convolution to expand text-visual similarity to the same dimension as visual fea-tures. Table A5 shows that increasing depth degrades per-formance, confirming that single-layer adaptation is effec-tive. 
+
+> Table A5. Ablation study on the number of convolutional layers.
+
+Conv Layers AP AP 50 AP 75 
+
+1 48.1 70.7 50.3 
+
+2 47.1 69.6 49.8 4 46.0 68.7 48.6 
+
+# E. Additional Qualitative Results 
+
+E.1. Qualitative Examples 
+
+As evidenced by the visualizations in the Figure A1, the proposed SDDF method significantly outperforms the other two comparative models in precisely localizing cam-ouflaged objects, successfully detecting regions that ex-hibit high visual similarity with their surrounding environ-ments—regions that often prove challenging for competing approaches. Furthermore, when dealing with small and medium sized targets (e.g., Owl and Tiger in the fourth and third columns of Figure A1, respectively), SDDF exhibits markedly stronger robustness to interference, effectively avoiding the common pitfall of misclassifying background elements as foreground objects. In complex scenes containing multiple targets (e.g., Bird in the sixth column of Figure A1), SDDF also demonstrates superior localization accuracy and clearer separation among instances, yielding more reliable and pre-cise bounding-box predictions overall. 
+
+E.2. Attention Improvement of SF-GLU 
+
+To investigate the effectiveness of the proposed SF-GLU module in promoting feature focus on camouflaged objects, we visualize heatmap representations of the response differ-ences in feature maps before and after this module. As demonstrated in the Figure A2, regions exhibiting high activation (indicated in red and yellow) are precisely concentrated on the camouflaged targets, whereas back-ground regions (marked in blue) show significantly sup-pressed responses. This highly targeted activation pattern clearly illustrates that, by leveraging specificity-oriented sub-descriptions, the SF-GLU module successfully directs the model’s attention toward regions that exhibit strong se-mantic alignment with fine-grained descriptors, thereby en-abling effective discrimination between camouflaged ob-jects and complex, cluttered backgrounds. For instance, in the “Mouse” example, the high-response areas are tightly localized to critical parts of the animal, such as the head and body, further underscoring the mod-ule’s capability to achieve precise and semantically mean-ingful feature focusing even under severe camouflage con-ditions. Figure A1. Quantitative comparison is conducted via visualization of the detection bounding boxes. 
+
+Figure A2. Quantitative comparisons are further conducted by visualizing heatmap representations of the response differences in feature maps with and without the proposed SF-GLU. Specifically, these feature maps are extracted from the PAN outputs.

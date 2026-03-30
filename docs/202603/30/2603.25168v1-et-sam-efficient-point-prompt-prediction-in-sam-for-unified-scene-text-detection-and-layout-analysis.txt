@@ -1,0 +1,293 @@
+Title: ET-SAM: Efficient Point Prompt Prediction in SAM for Unified Scene Text Detection and Layout Analysis
+
+URL Source: https://arxiv.org/pdf/2603.25168v1
+
+Published Time: Fri, 27 Mar 2026 00:50:18 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# ET-SAM: Efficient Point Prompt Prediction in SAM for Unified Scene Text Detection and Layout Analysis 
+
+Xike Zhang 1, Maoyuan Ye 1, Juhua Liu 1, and Bo Du 1
+
+School of Computer Science, National Engineering Research Center for Multimedia Software, Institute of Artificial Intelligence, and Hubei Key Laboratory of Multimedia and Network Communication Engineering, Wuhan University, Hubei, China 
+
+Abstract. Previous works based on Segment Anything Model (SAM) have achieved promising performance in unified scene text detection and layout analysis. However, the typical reliance on pixel-level text segmen-tation for sampling thousands of foreground points as prompts leads to unsatisfied inference latency and limited data utilization . To address above issues, we propose ET-SAM , an Efficient framework with two decoders for unified scene Text detection and layout analysis based on 
+
+SAM . Technically, we customize a lightweight point decoder that pro-duces word heatmaps for achieving a few foreground points, thereby elim-inating excessive point prompts and accelerating inference. Without the dependence on pixel-level segmentation, we further design a joint train-ing strategy to leverage existing data with heterogeneous text-level an-notations. Specifically, the datasets with multi-level, word-level only, and line-level only annotations are combined in parallel as a unified training set. For these datasets, we introduce three corresponding sets of learn-able task prompts in both the point decoder and hierarchical mask de-coder to mitigate discrepancies across datasets. Extensive experiments demonstrate that, compared to the previous SAM-based architecture, ET-SAM achieves about 3× inference acceleration while obtaining com-petitive performance on HierText, and improves an average of 11.0% F-score on Total-Text, CTW1500, and ICDAR15. 
+
+Keywords: Segment Anything Model · Unified Scene Text Detection ·
+
+Layout Analysis · Point Prompt Prediction · Joint Training 
+
+## 1 Introduction 
+
+Visual text contained in images conveys rich and explicit semantic information which is pivotal for scene comprehension. Meanwhile, visual text encompasses a hierarchical structure ranging from word and text-line to full paragraph, with each granular level serving a distinct role for varying applications [20, 23, 24, 34, 36]. However, previous scene text detection methods [17, 20, 23, 30, 35, 39] typi-cally focus on a specific text level with an individual suit of parameters, lacking a unified framework for simultaneously tackling all text levels. Consequently,     
+
+> arXiv:2603.25168v1 [cs.CV] 26 Mar 2026 2X. Zhang et al.
+> Fig. 1: (a) Compared to Hi-SAM [34], ET-SAM achieves 3×inference acceleration via predicting sparse points as visual prompts, significantly reducing the latency at hier-archical segmentation and post-processing stages. (b) To facilitate data scalability, we design a joint training strategy to leverage samples with mixing text-level annotations.
+
+the unified scene text detection and layout analysis benchmark [24] has been introduced to holistically evaluate the performance across word, text-line, and paragraph levels. This benchmark is accompanied by a baseline method, the Unified Detector (UD), which leverages the Detection Transformer (DETR) [3] paradigm. Each object query in UD is optimized to segment individual words within a text line, while a dedicated layout branch constructs an affinity matrix across queries to facilitate their clustering into paragraphs. Subsequently, built upon Segment Anything Model (SAM) [14], Hi-SAM [34] innovatively integrates four-level text segmentation and enhances the accuracy via a dual-decoder framework: one segments pixel-level text for generating fore-ground point prompts, while the other segments text structures from words to paragraphs under the guide of point prompts. However, Hi-SAM exhibits limita-tions in terms of inference latency and data utilization . Concretely, Hi-SAM ran-domly samples thousands of foreground points from the pixel-level segmentation result as visual prompts, introducing excessive inference cost at the hierarchi-cal mask decoding and post-processing stages. Moreover, Hi-SAM necessitates comprehensive annotations spanning all text granularities for every training in-stance, a requirement that is constrained by the scarcity of such densely labeled data in current datasets. Thus, the scarcity of suitable training data impedes scalability, thereby constraining the application in real-world scenarios. To address the issues, we present ET-SAM, a more efficient SAM-based framework for unified scene text detection and layout analysis. Technically, to reduce the point prompts and speed up the inference, we introduce a customized lightweight point decoder that generates word-level heatmaps, enabling the ef-ficient localization of sparse foreground points characterized by peak activation values. Moreover, we devise a joint training strategy that enables the combi-nation of datasets with heterogeneous text-level annotations to facilitate data scalability. To disambiguate diverse word densities and segmentation targets while alleviating annotation inconsistencies, we further integrate distinct sets of learnable task prompts within the point decoder and hierarchical mask decoder. In summary, our main contributions are three-fold: Efficient Point Prompt Prediction in SAM for Text Detection 3
+
+– We present ET-SAM, enabling efficient point prompt prediction and speed-ing up the inference of SAM-based architecture with a tailored point decoder. 
+
+– We devise a joint training strategy to harness existing datasets characterized by heterogeneous text-level annotations, thereby fostering the scaling of data. 
+
+– Extensive experiments demonstrate that ET-SAM not only delivers roughly 
+
+3× inference acceleration over Hi-SAM with competitive performance on HierText but also secures a substantial 11.0% gain in average F-score on Total-Text, CTW1500, and ICDAR15. 
+
+## 2 Related Work 
+
+2.1 Scene Text Detection 
+
+Scene text detection has witnessed significant advancements in recent years, with most existing methodologies broadly classified into segmentation-based and regression-based paradigms. Segmentation-based approaches [1,19,20,29,30] for-mulate text detection as a dense pixel-wise segmentation task. For example, PANet [30] introduces a learnable pixel aggregation mechanism to associate pix-els with distinct text kernels. DBNet [19] incorporates differentiable binarization to jointly predict threshold maps alongside binary segmentation masks. In com-parison, regression-based methods [17, 18, 21, 23, 35, 36, 39, 41, 42] localize text regions via bounding box regression or contour curve fitting. For instance, ABC-Net [21] and DeepSolo [36] employ Bezier curves to model the top and bottom boundaries of text instances, whereas FCENet [42] reconstructs contours us-ing the inverse Fourier transform. Despite these strides, such methods typically operate at a singular text granularity with dedicated parameter sets, lacking a unified framework capable of addressing diverse text levels across words and text lines to paragraphs. 
+
+2.2 Unified Scene Text Detection and Layout Analysis 
+
+Long et al . [24] pioneered unified scene text detection and layout analysis by in-troducing the HierText dataset and the Unified Detector (UD). Built upon the DETR [3] paradigm, UD optimizes object queries for word and text-line segmen-tation while employing a layout branch to cluster them into paragraphs. Subse-quently, Hi-SAM [34] advanced this field by integrating the Segment Anything Model [14] for hierarchical text segmentation, enabling fine-grained segmentation from pixel-level strokes up to paragraphs. Nevertheless, Hi-SAM exhibits limi-tations regarding inference latency and data scalability. Specifically, its reliance on randomly sampling thousands of foreground points as visual prompts incurs prohibitive mask decoding and post-processing overheads, while its requirement for comprehensive multi-granularity annotations hinders scaling up data due to the scarcity of such densely labeled data. In response, this work introduces a customized lightweight point decoder to predict sparse foreground points for accelerating inference, alongside a joint training strategy that facilitating data utilization by leveraging heterogeneous annotation sources. 4 X. Zhang et al.  
+
+> Fig. 2: Overview of ET-SAM framework. Extracted from the word heatmap pro-duced by our point decoder, sparse points are used as visual prompts, thereby acceler-ating subsequent inference. Under the guide of point prompts and specific mask task prompts, HM-Decoder segments word, word group, text-line, and paragraph masks, which are finally used for achieving layout analysis via a union-find algorithm.
+
+2.3 Segment Anything Model 
+
+The Segment Anything Model (SAM) [14] has established itself as a cornerstone of image segmentation, exhibiting exceptional generalization and adaptability across a spectrum of domains, ranging from image matting [15], 3D segmenta-tion [4], remote sensing [8, 28], medical image segmentation [37, 38], and video tracking [5,33]. Building upon this foundation, SAM 2 [27] incorporates a stream-ing memory mechanism to enable unified segmentation and tracking for both static images and dynamic videos. Subsequently, SAM 3 [2] further consolidates object detection, segmentation, and tracking into a single framework driven by concept prompts. Following the recent advance [34] in unified scene text detec-tion and layout analysis, this work presents ET-SAM, a specialized and efficient architecture which is also based on SAM. 
+
+## 3 Methodology 
+
+3.1 Overview of ET-SAM 
+
+The ET-SAM architecture comprises four primary components: (1) an image encoder adapted from SAM with learnable adapters, aligned with the configu-ration of Hi-SAM [34]; (2) a streamlined, trainable point decoder derived from SAM’s mask decoder; (3) a frozen prompt encoder inherited directly from SAM; and (4) a hierarchical mask decoder (HM-Decoder), which is a specialized mod-ification of SAM’s mask decoder. The overall framework is depicted in Fig. 2. Specifically, the point decoder generates a word-centric heatmap from image em-beddings, where word centers exhibit peak activations. The coordinates of local maxima are then extracted as sparse points which are subsequently encoded Efficient Point Prompt Prediction in SAM for Text Detection 5 
+
+> Fig. 3: Structure of Point Decoder. ‘Trans. Conv.’ and ‘T2I Attn.’ denote trans-posed convolution and token-to-image attention, respectively.
+
+by the prompt encoder and fed into the HM-Decoder to produce masks across hierarchical text granularities. Leveraging these hierarchical masks, layout anal-ysis is naturally derived as an auxiliary output, consistent with the Hi-SAM paradigm. To orchestrate diverse segmentation tasks and alleviate inter-dataset discrepancies, both the point decoder and the HM-Decoder are augmented with learnable task prompts. In Sec. 3.2, we first detail the task prompts within the point decoder (Sec. 3.3) and HM-Decoder (Sec. 3.4), followed by descriptions on the joint training strategy (Sec. 3.5) and inference workflow (Sec. 3.6). 
+
+3.2 Task Prompt 
+
+Heterogeneity across datasets poses a challenge to model optimization. For in-stance, HierText [24] exhibits high word density and employs quadrilateral anno-tations for text lines, whereas CTW1500 [22] utilizes curved representations for text lines. Such disparities may degrade cross-dataset performance. To mitigate these discrepancies, in both the point decoder and the HM-Decoder, we incor-porate learnable task prompts that initialized with simple embeddings. These prompts serve as conditional signals: in the point decoder, they adapt to vary-ing word densities, while in the HM-Decoder, they specify distinct segmentation objectives. Specifically, we define three task configurations ( Ntask = 3 ): 
+
+– Task 0 targets multi-level datasets ( e.g ., HierText), featured with dense word distributions and requiring simultaneous prediction of hierarchical masks; 
+
+– Task 1 necessitates only word-level mask prediction; 
+
+– Task 2 focuses on text-line level mask prediction. 
+
+3.3 Point Decoder 
+
+The proposed point decoder is a streamlined variant derived from SAM’s original mask decoder. Specifically, we architecturally refine the module by: (1) replacing visual prompts with learnable point task prompt tokens; (2) consolidating the multiple Multi-Layer Perceptrons (MLPs) designed for multi-granularity mask generation into a singular MLP; and (3) removing the Intersection-over-Union 6 X. Zhang et al. 
+
+(IoU) prediction head. Consequently, the decoder directly outputs a single word-centric heatmap from image embeddings. The overall architecture is depicted in Fig. 3, where the Transformer blocks and transposed convolution layers retain the pre-trained weights from SAM’s mask decoder. 
+
+Fig. 4: A visualization of tar-get word-centric Heatmap. 
+
+Formally, let tp_out ∈ R1×256 denote the learnable output token and tp_task ∈
+
+RNtask ×256 represent the set of learnable point task prompt tokens, with Ntask indicating the total number of tasks. For a selected task i, the output token tp_out is modulated by the task prompt token tp_task [i] via element-wise addi-tion, yielding an aggregated token t′ 
+
+> p_out
+
+fed into the point decoder. Following the token-to-image attention and transposed convolution operations, we obtain the refined output token 
+
+ˆtp_out ∈ R1×256 and the intermediate mask feature map Fp ∈ R256 ×256 ×32 . Next, ˆtp_out is projected through an MLP to align its dimen-sionality with Fp. Finally, the output of the MLP is linearly projected onto Fp to generate the heatmap ˆH ∈ [0 , 1] 256 ×256 .
+
+Word Heatmap Label Generation. We construct the target heatmap H ∈
+
+[0 , 1] 256 ×256 derived from ground-truth word annotations. Specifically, the word center lines are first determined from the annotations and dense points are sam-pled along these center lines. For each sampled point P (Px, P y ), a local Gaussian kernel is generated as follows: 
+
+Hxy = exp 
+
+
+
+− (x − px)2 + ( y − py )2
+
+2σ2
+
+> w
+
+
+
+, (1) where (px, p y ) = ( Px 
+
+> 4
+
+, Py 
+
+> 4
+
+) denote the downsampled coordinates of point P on the heatmap grid, (x, y ) represents an arbitrary spatial coordinate on the heatmap, 
+
+σw is the standard deviation adjusted according to the width of the word con-tour. Finally, the heatmaps of all sampled points across all words are merged to produce the target heatmap H, taking the maximum in each grid location as the final value on H. An example of target heatmap is shown in Fig. 4. 
+
+3.4 HM-Decoder 
+
+For each point prompt, the HM-Decoder is tailored to simultaneously segments four text granularities, i.e ., an individual word, intra-line words, a complete text-line, and a paragraph (along with predicting their respective IoU scores). The detailed structure is illustrated in Fig. 5. Concretely, the output tokens th_out ∈ R1×4×256 and the mask task prompt tokens th_task ∈ RNtask ×4×256 are learnable embeddings, where Ntask denotes the number of tasks while the dimension of 4 corresponds to the number of output masks. Given K point prompt tokens tpoint ∈ RK×Np×256 encoded by Efficient Point Prompt Prediction in SAM for Text Detection 7
+
+Fig. 5: Structure of HM-Decoder. Four output tokens charge in segmentation at word, word group, text-line, and paragraph level, under the guide of point prompt and learnable mask task prompt tokens. ‘Interpolate’ indicates interpolating the spatial resolution to 384 × 384 . The IoU prediction process is omitted here. 
+
+the prompt encoder and a selected task i, we first compute the element-wise sum of th_out and the i-th task prompt token th_task [i]. The resulting tensor is subsequently broadcast to align with the number of point prompt tokens 
+
+tpoint , yielding an intermediate representation t′ 
+
+> h_out
+
+∈ RK×4×256 . Then, t′
+
+> h_out
+
+is concatenated with tpoint , forming [t′
+
+> h_out
+
+; tpoint ] ∈ RK×(4+ Np)×256 which is fed into the HM-Decoder. After the transposed convolution and token-to-image attention operations, the updated output tokens ˆth_out ∈ RK×4×256 and low-resolution mask fea-tures Flr ∈ RK×256 ×256 ×32 are produced. To generate the mask logits Ml,p ∈
+
+RK×256 ×256 ×2 for text-line and paragraph hierarchies, the corresponding slice of output tokens ˆth_out is projected via a MLP subsequently fused with the low-resolution mask features Flr through a spatially point-wise product. Conversely, for the word and word-group hierarchies, the corresponding sliced output tokens are processed by another MLP. These transformed output tokens are then com-bined with high-resolution features Fhr ∈ RK×384 ×384 ×16 , which is derived from 
+
+Flr via interpolation and convolutional refinement, to produce the final word and word-group mask logits Mw,wg ∈ RK×384 ×384 ×2. Consistent with the design of Hi-SAM [34], we generate word and word group masks at an elevated spatial resolution for better segmentation quality. 
+
+3.5 Joint Training 
+
+Acknowledging the scarcity of multi-level annotations beyond HierText [24], we stratify existing datasets into word-level, text-line-level, and multi-level cate-gories. Our objective is to jointly leverage these datasets to achieve uniform rep-resentation learning across text hierarchies. However, naive joint training poses challenges: if individual batches are dominated by samples from a single dataset or text granularity, the optimization trajectory may fluctuate significantly be-8 X. Zhang et al. 
+
+tween batches. To mitigate these issues, we first preprocess datasets within each category into a unified format, then randomly shuffle and aggregate them to construct three consolidated datasets: a multi-level set, a word-level set, and a text-line-level set. These sets are subsequently aligned in parallel to form a uni-fied training pool, with its total length dictated by the largest set. During joint training, each batch is constructed to include one sample from each of the three categories. Within every epoch, the shorter datasets are iteratively resampled until they match the length of the unified dataset. The trainable components of our framework comprise: (1) the adapters in-tegrated within the image encoder, (2) the point decoder, and (3) the HM-Decoder. Specifically, the optimization of the point decoder is governed by the Mean Squared Error (MSE) loss, which quantifies the discrepancy between the predicted heatmaps ˆH and the ground-truth targets H. This loss function is formulated as: Lpoint = ∥H − ˆH∥22.For optimizing HM-Decoder, a certain number of prompt points and their corresponding masks are first sampled. For the HierText dataset, we randomly sample 10 text-lines from each image, obtain their corresponding word groups and paragraphs, and then randomly select one word from each word group. Next, we extract extreme points from the target heatmap and take their intersections with the word masks. For each word, up to 2 points are sampled from these inter-section points. Similarly, for word-level and text-line–level datasets, we randomly sample 10 words or text-lines. We then extract extreme points from the heatmaps and take their intersections with the corresponding masks. For each mask, up to 2 points are randomly selected from these intersection points as prompt points. Finally, we obtain at most 20 prompt points along with the ground-truth masks across four text granularities. These prompt points are fed into the prompt en-coder to obtain point prompt tokens, guiding the segmentation of hierarchical masks. The losses for word, word group, text-line, and paragraph masks are com-posed of Binary Cross-Entropy (BCE) loss, Dice loss [26], and IoU MSE loss, with an equal weighting ratio of 1:1:1. The overall loss function is defined as follows: 
+
+L = 50 × L point + Lword + Lword _group + Lline + 0 .5 × L para . (2) Additionally, text-line datasets do not contain word-level ground truth, which conflicts with the word-centric nature of our heatmap generation process de-scribed in Sec. 3.3. To resolve this discrepancy, we first train the point decoder using multi-level and word-level datasets, then use the trained model to generate word heatmaps as pseudo labels. These heatmaps are further refined using avail-able text-line annotations to eliminate errors, such as suppressing false positives. 
+
+3.6 Inference Process 
+
+For a given image and selected task, the point decoder initially generates a word-level heatmap. A 3 × 3 max-pooling operation is then applied to extract extrema from the heatmap, and points whose values exceed a predefined threshold are Efficient Point Prompt Prediction in SAM for Text Detection 9
+
+selected as prompt points. These points are fed into the prompt encoder in batches of 100 to obtain point prompt tokens, which guide the HM-Decoder to segment masks and predict IoU scores across four hierarchal levels. For task 0 , we first filter out text-lines with low IoU and apply Matrix NMS [31] to suppress overlapping text-lines. The corresponding word groups and paragraphs associated with the removed text-lines are also discarded. The IoU and NMS threshold are both set to 0.5 by default. Then, we compute the IoU matrix of the paragraph masks and use a union–find algorithm to realize layout analysis following previous works [24,34]. Finally, the corresponding word groups and text lines are aggregated accordingly, completing the layout analysis [24]. For tasks 1 and 2 , we first discard low-quality masks whose IoU scores are below 0.5, and then apply Matrix NMS with a threshold of 0.5 to eliminate overlapping masks, obtaining the final word or text-line masks. 
+
+## 4 Experiments 
+
+4.1 Datasets HierText [24] comprises 8,281 training, 1,724 validation, and 1,634 test images. It is distinguished by its hierarchical annotations spanning word, text-line, and paragraph levels. Statistically, each image contains hundreds of words, exhibiting a distribution that is both sufficiently dense and relatively uniform. 
+
+Total-Text [6] contains 1,255 training images and 300 test images, featuring a large number of curved text instances and providing word-level annotations. 
+
+TextSeg [32] encompasses 2,646 training, 340 validation, and 1,038 test images. TextSeg offers both word-level and pixel-level annotations, covering a diverse array of scene and artistic text instances. 
+
+ICDAR2013 [12] contains 229 training and 233 test images, focusing primar-ily on horizontal scene text with word-level bounding box annotations. Com-pared to ICDAR2013, ICDAR15 [11] presents a more challenging scenario with 1,000 training and 500 test images. ICDAR15 incorporates multi-oriented text instances, which are annotated with quadrilateral boxes. 
+
+CTW1500 [22] consists of 1,000 training and 500 test images, featuring the text-line level benchmark with annotations in arbitrary shape. 
+
+4.2 Implementation Details Joint Training. The majority parameters of ET-SAM are inherited from SAM before training. Specifically, the image encoder adopts SAM’s ViT-L [14]. The prompt encoder is the same as in SAM while part of the parameters in point decoder and HM-Decoder are initialized from SAM’s mask decoder. We use AdamW [25] (β1 = 0 .9, β 2 = 0 .999 , weight _decay = 0 .05) as the optimizer. We train the model on 8 NVIDIA Tesla V100 (32GB) GPUs, with a batch size of 3 on each GPU, covering all three types of datasets, i.e ., multi-level, word-level, and text-line level. The learning rate is set to 1e−4. Following the data aug-mentation used in Hi-SAM [34], each image is sequentially subjected to random 10 X. Zhang et al. 
+
+Table 1: Performance comparison on the test set of HierText.                                                                      
+
+> Method Word Text-line Layout Analysis PQ FPRTPQ FPRTPQ FPRTUD [24] 48.21 61.51 67.54 56.47 78.38 62.23 79.91 79.64 80.19 77.87 53.60 68.58 76.04 62.45 78.17
+> Hi-SAM-L [34] 63.10 81.83 87.22 77.06 77.11 66.17 84.85 90.66 79.74 77.99 57.61 74.49 80.43 69.37 77.34 Ours (Joint) 62.52 80.84 85.01 77.06 77.33 65.40 84.08 88.90 79.75 77.79 57.74 74.51 80.75 69.16 77.49 Ours (FT) 63.60 81.94 85.81 78.41 77.61 66.30 84.82 89.17 80.88 78.16 58.82 75.39 81.85 69.88 78.02
+
+color jittering, random rotation, and random scaling between [0 .5, 2] [9]. The cor-responding target heatmaps and masks undergo the same rotation and scaling operations to ensure accurate loss computation. Finally, images and their masks are resized to 1024 ×1024 , while the target heatmaps are resized to 256 ×256 . We train ET-SAM for 120 epochs on a unified data pool including HierText, Total-Text, TextSeg, ICDAR2013, ICDAR2015, and CTW1500, with the learning rate divided by 10 at 100 epochs. 
+
+Fine-tuning. We fine-tune the model separately on the HierText [24], Total-Text [6], CTW1500 [22], and ICDAR15 [11] datasets. The data augmentation strategy remains consistent with that employed during joint training, while the learning rate is set to 1e−4. Fine-tuning is executed on 4 NVIDIA Tesla V100 (32GB) GPUs with a total batch size of 8. For the HierText dataset, ET-SAM is trained for 50 epochs, with the learning rate decayed by a factor of 10 at the 35th epoch. For Total-Text, CTW1500, and ICDAR15, the model is trained for 80 epochs, with the learning rate divided by 10 after 60 epochs. 
+
+4.3 Experimental Results 
+
+The main experimental results are evaluated on the HierText [24], Total-Text [6], CTW1500 [22], and ICDAR15 [11] test sets, considering both the joint training results and the fine-tuning results. For HierText, we assess performance across word, text-line, and layout analysis tasks using five metrics, including Panoptic Quality (PQ) [13], F-score (F), Precision (P), Recall (R), and Tightness (T). For Total-Text, CTW1500, and ICDAR15, the performance is quantified by three standard metrics: F-score (F), Precision (P), and Recall (R). 
+
+Unified Scene Text Detection and Layout Analysis. Table 1 compares the comprehensive performance on the test set of HierText. Under the joint training protocol, ET-SAM exhibits a marginal deficit compared to Hi-SAM at the word and text-line levels, yet surpasses it in layout analysis. After fine-tuning, ET-SAM achieves consistent gains across all hierarchies, with improvements of 1.08% PQ and 1.10% F-score at the word level, 0.90% PQ and 0.74% F-score at the text-line level, and 1.08% PQ and 0.88% F-score on layout analysis, resulting in overall superior performance compared to Hi-SAM. 
+
+Scene Text Detection on Specific Text Granularities. As shown in Tab. 2, we evaluate the text detection performance of specific text granularities on Total-Text, CTW1500, and ICDAR15 against previous state-of-the-art methods. In Efficient Point Prompt Prediction in SAM for Text Detection 11 
+
+Table 2: Performance comparison on Total-Text, CTW1500, and ICDAR15. 
+
+Method Total-Text CTW1500 ICDAR15 F P R F P R F P RPANet [30] 85.0 89.3 81.0 83.7 86.4 81.2 82.9 84.0 81.9 DBNet++ [20] 86.0 88.9 83.2 85.3 87.9 82.8 87.3 90.9 83.9 PCR [7] 85.2 88.5 82.0 84.7 87.2 82.3 - - -ABCNet v2 [23] 87.0 90.2 84.1 84.7 85.6 83.8 88.1 90.4 86.0 FCENet [42] 85.8 89.3 82.5 85.5 87.6 83.4 86.2 90.1 82.6 TESTR [40] 86.9 93.4 81.4 87.1 92.0 82.6 90.0 90.3 89.7 
+
+TextBPN++ [39] 88.5 91.8 85.3 85.5 87.3 83.8 - - -DPText-DETR [35] 89.0 91.8 86.4 88.8 91.7 86.2 - - -DeepSolo [36] 90.0 92.9 87.4 88.9 93.2 85.0 90.1 92.4 87.9 SRFormer [1] 89.7 91.5 87.9 89.6 89.4 89.8 - - -ESTextSpotter [10] 90.0 92.0 88.1 90.0 91.5 88.6 91.0 92.5 89.6 DocSAM [16] 77.0 72.1 82.6 84.2 80.5 88.1 - - -UD [24] 87.9 85.0 91.1 86.0 84.6 87.4 - - -Hi-SAM-L (zero-shot) [34] 70.2 65.5 75.6 77.4 80.1 74.9 77.4 70.3 86.1 Ours (Joint) 86.4 86.0 86.7 87.1 88.1 86.2 83.5 85.0 82.1 Ours (FT) 87.0 86.4 87.5 87.9 87.3 88.4 83.2 80.6 85.9 
+
+Fig. 6: Visualizations of unified scene text detection and layout analysis. 
+
+contrast to Hi-SAM, which is constrained by its inability to leverage mixed-granularity annotations during training, our proposed ET-SAM demonstrates substantial improvements across all three benchmarks following the joint train-ing stage, yielding an average F-score gain of 10.7%. Upon dataset-specific fine-12 X. Zhang et al.                                                   
+
+> Fig. 7: Visualizations of single-level scene text detection. Table 3: Effectiveness of the point decoder. ‘†’ indicates replacing the S-Decoder in Hi-SAM with our designed point decoder for producing foreground points. Method Word Text-line Layout Average Points Average Time PQ FPQ FPQ FHi-SAM-L 63.10 81.83 66.17 84.85 57.61 74.49 1500 4.4s Hi-SAM-L 61.04 78.82 62.29 79.30 54.59 70.43 280 1.2s Hi-SAM-L †63.50 81.74 66.96 85.30 58.35 74.63 268 1.2s
+> Ours (Joint) 62.52 80.84 65.40 84.08 57.74 74.51 287 1.4s Ours (FT) 63.60 81.94 66.30 84.82 58.82 75.39 286 1.4s
+
+tuning, ET-SAM achieves F-scores of 87.0% on Total-Text, 87.9% on CTW1500, and 83.2% on ICDAR2015, culminating in a remarkable 11.0% average improve-ment over Hi-SAM. However, there is a performance disparity persists between our unified framework and specialized state-of-the-art detectors such as DPText-DETR and SRFormer. We attribute this gap primarily to discrepancies in train-ing data volume since previous detectors adopt a large amount of synthetic data for pre-training. Consequently, we posit that this limitation can be effectively mitigated through further data scaling. 
+
+Visualizations. The visualizations of unified scene text detection and layout analysis on HierText and single-level scene text detection are presented in Fig. 6 and Fig. 7, respectively. The qualitative results demonstrate that the vast major-ity of word and text-line instances are precisely delineated, even in the presence of curved geometries. However, certain paragraph-level segments exhibit subtle imperfections, indicating room for further refinement, such as introducing better feature refinement scheme. 
+
+4.4 Ablation Studies Point Decoder. In Tab. 3, we validate the effectiveness of the point decoder. Hi-SAM randomly samples 1500 foreground points based on the pixel-level text segmentation outputs from its S-Decoder. To speed up inference, naively de-creasing the point sampling quota leads to significant performance decline. In contrast, substituting the S-Decoder with our designed point decoder yields the variant Hi-SAM-L †, which achieves superior performance alongside a 3.6 × infer-ence acceleration (reducing latency from 4.4s to 1.2s). In terms of performance, Efficient Point Prompt Prediction in SAM for Text Detection 13 
+
+Table 4: Ablations on task prompts used in point decoder and HM-Decoder.                                                               
+
+> Point Mask HierText Total-Text CTW1500 Word Text-line Layout Word Text-line PQ FPQ FPQ FFPRFPR
+> ××62.35 80.87 65.08 83.69 56.77 73.38 81.99 78.54 85.77 86.79 85.76 87.83
+> ×✓62.36 80.79 65.45 83.96 57.23 73.76 84.13 81.85 86.54 86.30 85.12 87.50
+> ✓×62.64 81.08 65.66 84.27 57.56 74.10 86.00 86.14 85.86 86.75 87.04 86.46
+> ✓✓62.52 80.84 65.40 84.08 57.74 74.51 86.37 86.02 86.72 87.14 88.07 86.24
+
+Table 5: Ablations on the data combination during joint training.                                                  
+
+> #Row Data HierText Total-Text CTW1500 Word Text-line Layout Word Text-line PQ FPQ FPQ FFPRFPR1HierText 63.50 81.74 66.96 85.30 58.35 74.63 69.02 62.62 76.87 73.48 73.01 73.96 2HierText+Total-Text+CTW1500 61.96 80.59 64.96 83.85 57.18 74.16 85.93 85.51 86.36 87.45 87.17 87.72
+> 3Row#2+IC13+IC15+TextSeg 62.52 80.84 65.40 84.08 57.74 74.51 86.37 86.02 86.72 87.14 88.07 86.24
+
+Hi-SAM-L † consistently outperforms Hi-SAM-L, especially achieving higher PQ and F-score at the text-line and layout hierarchies, indicating that our approach generates more precise and informative visual prompts. By further customiz-ing the hierarchical mask decoder and applying joint training, our full method maintains competitive performance and high efficiency. Overall, these results demonstrate that predicting sparse points as visual prompts serves as a robust and efficient alternative to Hi-SAM’s random sampling. Our experiments con-firm that the proposed point decoder facilitates significant computational savings without compromising the performance. 
+
+Task Prompts. We investigate the impact of task prompts across diverse bench-marks in Tab. 4. On HierText, a dataset characterized by high word density and hierarchical text structures, the integration of either task prompt yields performance gains. The simultaneous application of prompts to both the point decoder and HM-Decoder results in best layout analysis performance. On Total-Text, task prompts also bring clear performance gains. The task prompt in the point decoder plays a more essential role, and combining it with the mask task prompt further improves the F-score. On CTW1500, using either task prompt alone slightly decreases the F-score, but employing both task prompts together still achieves the best performance. Overall, these results underscore the effective-ness of task prompts in facilitating adaptation across diverse data distributions and varying text granularities. 
+
+Influence of Joint Training Data. Table 5 presents a comparative analy-sis of model performance on HierText, Total-Text, and CTW1500 under varying joint training data configurations. Initially, when trained exclusively on HierText, the model demonstrates limited cross-dataset generalization on Total-Text and CTW1500. With the incorporation of Total-Text and CTW1500 in joint train-ing, the performance on these two single-level datasets is significantly improved, 14 X. Zhang et al.                                                               
+
+> Table 6: Ablations on point threshold for filtering point grids on word heatmap. Point Threshold HierText Total-Text CTW1500 Word Text-line Layout Word Text-line PQ FPQ FPQ FFPRFPR0.5 62.35 80.75 65.18 84.06 57.87 74.88 84.24 79.41 89.70 86.69 85.33 88.10
+> 0.6 62.52 80.84 65.40 84.08 57.74 74.51 85.45 82.53 88.57 87.05 86.68 87.43 0.7 62.17 80.11 64.17 81.96 56.36 72.43 86.37 86.02 86.72 87.14 88.07 86.24 0.8 56.98 72.73 54.72 69.02 47.99 61.41 83.73 88.60 79.36 86.41 89.55 83.48
+
+with F-score improvements of 16.91% and 13.97%, respectively. This outcome underscores the flexibility and data scalability inherent in our joint training strategy. Meanwhile, a marginal degradation is observed on HierText, likely at-tributable to the domain shift introduced by mixing datasets with heterogeneous distributions. Subsequently, upon further integrating ICDAR2013, ICDAR2015, and TextSeg, noticeable improvements are observed on Total-Text and HierText. Collectively, these results validate that our joint training strategy can effectively harnesses diverse datasets with mixed text granularities, thereby enhancing data scalability and bolstering robustness across varied scenarios. 
+
+Influence of Prompt Point Threshold. In Tab. 6, we present a sensitivity analysis regarding the threshold for sampling prompt points derived from the word-level heatmap. The empirical results indicate an inherent trade-off, i.e ., increasing the threshold reduces the density of sampled prompt points and con-sequently enhances precision at the expense of recall. Specifically, on HierText, a threshold of 0.6 achieves the optimal balance across various text granularities. Conversely, Total-Text and CTW1500 benefit from a stricter threshold of 0.7 to maximize the F-score. Consequently, our experimental protocol standardizes the point threshold at 0.6 for HierText and 0.7 for the remaining benchmarks. 
+
+## 5 Conclusions 
+
+In this work, we present ET-SAM for unified scene text detection and layout anal-ysis, addressing the critical bottlenecks of inference latency and data utilization that have hindered the practical application of SAM-based frameworks. Instead of relying on dense, random foreground point sampling, ET-SAM leverages a tai-lored lightweight decoder to derive sparse, high-confidence points from word-level heatmaps, successfully eliminating excessive computational overhead. Further-more, we effectively harmonizes heterogeneous annotations in diverse datasets via designing a joint training strategy and introducing task prompt tokens. Ex-tensive experiments demonstrate that, compared to Hi-SAM, ET-SAM achieves approximately 3× inference acceleration with competitive performance on Hi-erText and realizes a substantial 11.0% improvement in average F-score across Total-Text, CTW1500, and ICDAR15. Efficient Point Prompt Prediction in SAM for Text Detection 15 
+
+## References 
+
+1. Bu, Q., Park, S., Khang, M., Cheng, Y.: Srformer: text detection transformer with incorporated segmentation and regression. In: Proceedings of the AAAI conference on artificial intelligence. vol. 38, pp. 855–863 (2024) 3, 11 2. Carion, N., Gustafson, L., Hu, Y.T., Debnath, S., Hu, R., Suris, D., Ryali, C., Alwala, K.V., Khedr, H., Huang, A., et al.: Sam 3: Segment anything with concepts. arXiv preprint arXiv:2511.16719 (2025) 4 3. Carion, N., Massa, F., Synnaeve, G., Usunier, N., Kirillov, A., Zagoruyko, S.: End-to-end object detection with transformers. In: ECCV. pp. 213–229 (2020) 2, 3 4. Cen, J., Zhou, Z., Fang, J., Yang, C., Shen, W., Xie, L., Zhang, X., Tian, Q.: Segment anything in 3d with nerfs. In: NeurIPS. vol. 36, pp. 25971–25990 (2023) 45. Cheng, Y., Li, L., Xu, Y., Li, X., Yang, Z., Wang, W., Yang, Y.: Segment and track anything. arXiv:2305.06558 (2023) 4 6. Ch’ng, C.K., Chan, C.S.: Total-text: A comprehensive dataset for scene text de-tection and recognition. In: 2017 14th IAPR international conference on document analysis and recognition (ICDAR). vol. 1, pp. 935–942. IEEE (2017) 9, 10 7. Dai, P., Zhang, S., Zhang, H., Cao, X.: Progressive contour regression for arbitrary-shape scene text detection. In: Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition. pp. 7393–7402 (2021) 11 8. Gao, J., Zhang, D., Wang, F., Ning, L., Zhao, Z., Li, X.: Combining sam with lim-ited data for change detection in remote sensing. IEEE Transactions on Geoscience and Remote Sensing (2025) 4 9. Ghiasi, G., Cui, Y., Srinivas, A., Qian, R., Lin, T.Y., Cubuk, E.D., Le, Q.V., Zoph, B.: Simple copy-paste is a strong data augmentation method for instance segmentation. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 2918–2928 (2021) 10 10. Huang, M., Zhang, J., Peng, D., Lu, H., Huang, C., Liu, Y., Bai, X., Jin, L.: Estextspotter: Towards better scene text spotting with explicit synergy in trans-former. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 19495–19505 (2023) 11 11. Karatzas, D., Gomez-Bigorda, L., Nicolaou, A., Ghosh, S., Bagdanov, A., Iwa-mura, M., Matas, J., Neumann, L., Chandrasekhar, V.R., Lu, S., et al.: Icdar 2015 competition on robust reading. In: 2015 13th international conference on document analysis and recognition (ICDAR). pp. 1156–1160. IEEE (2015) 9, 10 12. Karatzas, D., Shafait, F., Uchida, S., Iwamura, M., i Bigorda, L.G., Mestre, S.R., Mas, J., Mota, D.F., Almazan, J.A., De Las Heras, L.P.: Icdar 2013 robust read-ing competition. In: 2013 12th international conference on document analysis and recognition. pp. 1484–1493. IEEE (2013) 9 13. Kirillov, A., He, K., Girshick, R., Rother, C., Dollár, P.: Panoptic segmentation. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recog-nition. pp. 9404–9413 (2019) 10 14. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 4015–4026 (2023) 2, 3, 4, 9 15. Li, J., Jain, J., Shi, H.: Matting anything. In: CVPR. pp. 1775–1785 (2024) 4 16. Li, X.H., Yin, F., Liu, C.L.: Docsam: Unified document image segmentation via query decomposition and heterogeneous mixed learning. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 15021–15032 (2025) 11 16 X. Zhang et al. 17. Liao, M., Shi, B., Bai, X.: Textboxes++: A single-shot oriented scene text detector. IEEE transactions on image processing 27 (8), 3676–3690 (2018) 1, 3 18. Liao, M., Shi, B., Bai, X., Wang, X., Liu, W.: Textboxes: A fast text detector with a single deep neural network. In: Proceedings of the AAAI conference on artificial intelligence. vol. 31 (2017) 3 19. Liao, M., Wan, Z., Yao, C., Chen, K., Bai, X.: Real-time scene text detection with differentiable binarization. In: Proceedings of the AAAI conference on artificial intelligence. vol. 34, pp. 11474–11481 (2020) 3 20. Liao, M., Zou, Z., Wan, Z., Yao, C., Bai, X.: Real-time scene text detection with differentiable binarization and adaptive scale fusion. IEEE transactions on pattern analysis and machine intelligence 45 (1), 919–931 (2022) 1, 3, 11 21. Liu, Y., Chen, H., Shen, C., He, T., Jin, L., Wang, L.: Abcnet: Real-time scene text spotting with adaptive bezier-curve network. In: proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 9809–9818 (2020) 3 22. Liu, Y., Jin, L., Zhang, S., Luo, C., Zhang, S.: Curved scene text detection via transverse and longitudinal sequence connection. Pattern Recognition 90 , 337–345 (2019) 5, 9, 10 23. Liu, Y., Shen, C., Jin, L., He, T., Chen, P., Liu, C., Chen, H.: Abcnet v2: Adaptive bezier-curve network for real-time end-to-end text spotting. IEEE Transactions on Pattern Analysis and Machine Intelligence 44 (11), 8048–8064 (2021) 1, 3, 11 24. Long, S., Qin, S., Panteleev, D., Bissacco, A., Fujii, Y., Raptis, M.: Towards end-to-end unified scene text detection and layout analysis. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 1049– 1059 (2022) 1, 2, 3, 5, 7, 9, 10, 11 25. Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 (2017) 9 26. Milletari, F., Navab, N., Ahmadi, S.A.: V-net: Fully convolutional neural networks for volumetric medical image segmentation. In: 2016 fourth international confer-ence on 3D vision (3DV). pp. 565–571. Ieee (2016) 8 27. Ravi, N., Gabeur, V., Hu, Y.T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al.: Sam 2: Segment anything in images and videos. In: The Thirteenth International Conference on Learning Representations 4 28. Wang, D., Zhang, J., Du, B., Xu, M., Liu, L., Tao, D., Zhang, L.: Samrs: Scaling-up remote sensing segmentation dataset with segment anything model. In: Advances in Neural Information Processing Systems. vol. 36, pp. 8815–8827 (2023) 4 29. Wang, W., Xie, E., Li, X., Hou, W., Lu, T., Yu, G., Shao, S.: Shape robust text detection with progressive scale expansion network. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 9336–9345 (2019) 3 30. Wang, W., Xie, E., Song, X., Zang, Y., Wang, W., Lu, T., Yu, G., Shen, C.: Efficient and accurate arbitrary-shaped text detection with pixel aggregation network. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 8440–8449 (2019) 1, 3, 11 31. Wang, X., Zhang, R., Kong, T., Li, L., Shen, C.: Solov2: Dynamic and fast instance segmentation. Advances in Neural information processing systems 33 , 17721–17732 (2020) 9 32. Xu, X., Zhang, Z., Wang, Z., Price, B., Wang, Z., Shi, H.: Rethinking text segmen-tation: A novel dataset and a text-specific refinement approach. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 12045– 12055 (2021) 9 Efficient Point Prompt Prediction in SAM for Text Detection 17 33. Yang, J., Gao, M., Li, Z., Gao, S., Wang, F., Zheng, F.: Track anything: Segment anything meets videos. arXiv:2304.11968 (2023) 4 34. Ye, M., Zhang, J., Liu, J., Liu, C., Yin, B., Liu, C., Du, B., Tao, D.: Hi-sam: Marry-ing segment anything model for hierarchical text segmentation. IEEE Transactions on Pattern Analysis and Machine Intelligence (2024) 1, 2, 3, 4, 7, 9, 10, 11 35. Ye, M., Zhang, J., Zhao, S., Liu, J., Du, B., Tao, D.: Dptext-detr: Towards better scene text detection with dynamic points in transformer. In: Proceedings of the AAAI conference on artificial intelligence. vol. 37, pp. 3241–3249 (2023) 1, 3, 11 36. Ye, M., Zhang, J., Zhao, S., Liu, J., Liu, T., Du, B., Tao, D.: Deepsolo: Let trans-former decoder with explicit points solo for text spotting. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 19348– 19357 (2023) 1, 3, 11 37. Yue, W., Zhang, J., Hu, K., Wu, Q., Ge, Z., Xia, Y., Luo, J., Wang, Z.: Part to whole: Collaborative prompting for surgical instrument segmentation. arXiv:2312.14481 (2023) 4 38. Yue, W., Zhang, J., Hu, K., Xia, Y., Luo, J., Wang, Z.: Surgicalsam: Efficient class promptable surgical instrument segmentation. In: AAAI (2023) 4 39. Zhang, S.X., Yang, C., Zhu, X., Yin, X.C.: Arbitrary shape text detection via boundary transformer. IEEE Transactions on Multimedia 26 , 1747–1760 (2023) 1, 3, 11 40. Zhang, X., Su, Y., Tripathi, S., Tu, Z.: Text spotting transformers. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 9519–9528 (2022) 11 41. Zhou, X., Yao, C., Wen, H., Wang, Y., Zhou, S., He, W., Liang, J.: East: an efficient and accurate scene text detector. In: Proceedings of the IEEE conference on Computer Vision and Pattern Recognition. pp. 5551–5560 (2017) 3 42. Zhu, Y., Chen, J., Liang, L., Kuang, Z., Jin, L., Zhang, W.: Fourier contour em-bedding for arbitrary-shaped text detection. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 3123–3131 (2021) 3, 11 18 X. Zhang et al. 
+
+## A Center Point Heatmap 
+
+We have already introduced a method for generating the target heatmap based on the center lines of word instances. In addition, we investigate an alternative strategy that generates the target heatmap from word center points using an anisotropic Gaussian kernel. Specifically, we first compute the minimum bounding rectangle for each word contour according to the word annotations. Given the bounding rectangle, we obtain the center coordinates P (Px, P y ), the rotation angle θ, as well as the height h and width w. Based on these parameters, the heatmap for each word center point is generated using an anisotropic Gaussian kernel: 
+
+Hxy = exp − (( x − px) cos θ + ( y − py ) sin θ)2
+
+2σ2
+
+> h
+
++ (( x − px) sin θ − (y − py ) cos θ)2
+
+2σ2
+
+> w
+
+!! 
+
+,
+
+(3) where (px, p y ) = ( Px 
+
+> 4
+
+, Py 
+
+> 4
+
+) denote the downsampled coordinates of point P on the heatmap grid, (x, y ) represents an arbitrary spatial coordinate on the heatmap, and the standard deviations σh and σw are proportional to the height h and width w of the word bounding rectangle, respectively. Finally, the heatmaps of all words are aggregated to form the center point heatmap H, where the maximum value is taken at each grid location. 
+
+Table 7: Comparison of Target Heatmap on HierText. ‘†’ and ‘ ‡’ indicate train-ing model on HierText using the center line heatmap and center point heatmap, re-spectively, to generate prompt points. Dataset Method Word Text-line Layout Average Points Average Time PQ F PQ F PQ FVal. Set Hi-SAM-L 62.60 80.99 65.62 84.04 58.83 75.84 1500 4.4s Hi-SAM-L † 62.77 80.65 66.40 84.54 59.81 76.36 269 1.2s Hi-SAM-L ‡ 62.89 80.99 65.59 83.89 59.47 76.16 155 1.0s                         
+
+> Test Set Hi-SAM-L 63.10 81.83 66.17 84.85 57.61 74.49 1500 4.4s Hi-SAM-L †63.50 81.74 66.96 85.30 58.35 74.63 268 1.2s Hi-SAM-L ‡63.67 82.13 66.36 84.87 58.45 75.08 153 1.0s
+
+We compare the performance and efficiency of the center point heatmap and center line heatmap methods on HierText, with results presented in Tab. 7. Overall, the point–based approach achieves better performance at the word level, while the line–based method performs better at the text-line level. The former generates roughly 110 fewer prompt points than the latter and achieves an infer-ence speedup of about 0.2s. However, the center point heatmap is not suitable for curved text. As shown in Fig. 8, the heatmap centers of curved text in the red boxes do not align with the word center regions. Since curved text is relatively Efficient Point Prompt Prediction in SAM for Text Detection 19 
+
+Fig. 8: Visualizations of Center Point Heatmap. The heatmap centers of the curved texts highlighted in the red boxes are offset from the word center regions 
+
+rare in HierText, the performance difference between the two methods shown in Tab. 7 is minimal. In contrast, Total-Text and CTW1500 contain a larger pro-portion of curved text, and continuing to use the center point heatmap for joint training or fine-tuning would likely degrade performance. Therefore, we adopt the center line heatmap as the target heatmap. 
+
+## B More Comparisons on Scene Text Detection 
+
+Considering that the scale and component of our training data are different from some state-of-the-art methods, we train DPText-DETR using the same datasets as ET-SAM to ensure a fair comparison. Concretely, for Total-Text and ICDAR15, we pre-train the model using word-level annotations from HierText, together with Total-Text, TextSeg, ICDAR13, and ICDAR15. For CTW1500, we pre-train the model using text-line annotations from HierText, along with Total-Text, TextSeg, ICDAR13, ICDAR15, and CTW1500. The two pre-training stages adopt the same settings, with a batch size of 8 and a total of 350k iterations. The learning rate is set to 1e−4 and reduced to 1e−5 at 280k. Finally, the pre-trained models are fine-tuned on each target dataset individually. For Total-Text, the model is fine-tuned for 20k iterations with an initial learning rate of 5e−5, which 
+
+Table 8: Comparison of methods trained on the same dataset. ‘*’ indicates that the model is pre-trained and fine-tuned using the same datasets as ET-SAM. Method Total-Text CTW1500 ICDAR15 F P R F P R F P RDPText-DETR 89.0 91.8 86.4 88.8 91.7 86.2 - - -DPText-DETR* (Pre-train) 77.5 73.7 81.7 67.2 59.2 77.7 83.7 94.7 75.1 DPText-DETR* (FT) 84.7 84.3 85.1 86.2 84.7 87.7 83.7 94.7 75.0 ET-SAM (Joint) 86.4 86.0 86.7 87.1 88.1 86.2 83.5 85.0 82.1 ET-SAM (FT) 87.0 86.4 87.5 87.9 87.3 88.4 83.2 80.6 85.9 20 X. Zhang et al. 
+
+decays to 5e−6 at 16k. For CTW1500, we fine-tune the model for 13k iterations with a learning rate of 2e−5. For ICDAR15, the model is fine-tuned for 20k iterations with an initial learning rate of 1e−5, which is reduced to 1e−6 at 16k. We evaluate the pre-trained and fine-tuned models from the above experi-ments and compare them with ET-SAM, with the results presented in Tab. 8. With the same pre-training datasets, ET-SAM (Joint) significantly outperforms DPText-DETR* (Pre-train) on Total-Text and CTW1500, demonstrating the superior data efficiency of ET-SAM. After fine-tuning, it achieves 2.3% and 1.7% F-score improvements on Total-Text and CTW1500, respectively, while showing slightly lower performance only on ICDAR15.
