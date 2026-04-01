@@ -6,151 +6,145 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-31
-- 运行时间：2026-03-31 19:49:58 UTC
+- 最新运行日期：2026-04-01
+- 运行时间：2026-04-01 20:47:09 UTC
 - 运行状态：成功
-- 本次总论文数：43
-- 精读区：30
+- 本次总论文数：41
+- 精读区：28
 - 速读区：13
 
 ### 今日简报（AI）
-今日深度研读 43 篇论文，重点聚焦 SAM 3 目标检索与开放词汇多目标跟踪两大满分前沿突破。
-核心结论揭示了通过重提示机制优化视频分割，以及利用连续视频流协同学习实现稳健追踪的最新范式。
-建议优先研读两篇满分论文，掌握大模型在复杂视频理解与多模态对齐领域的落地路径。
-- 详情：[/202603/31/README](/202603/31/README)
+今日深度研读 41 篇前沿论文，聚焦 SAM 3 目标检索增强与能效感知视频检索两大满分突破。
+重点关注 SAM 3 的重提示技术及 EagleNet 的细粒度关系学习，两者在检索精度与能效平衡上均达到顶尖水平。
+建议优先探索大模型检索增强机制，并关注 BioVITA 等多模态对齐新基准。
+- 详情：[/202604/01/README](/202604/01/README)
 
 ### 精读区论文标签
-1. [Re-Prompting SAM 3 via Object Retrieval: 3rd of the 5th PVUW MOSE Track](/202603/31/2603.23788v1-re-prompting-sam-3-via-object-retrieval-3rd-of-the-5th-pvuw-mose-track)  
+1. [Re-Prompting SAM 3 via Object Retrieval: 3rd of the 5th PVUW MOSE Track](/202604/01/2603.23788v1-re-prompting-sam-3-via-object-retrieval-3rd-of-the-5th-pvuw-mose-track)  
    标签：评分：10.0/10、query:sam3
-   evidence：基于SAM 3进行视频对象分割与跟踪
-2. [COVTrack++: Learning Open-Vocabulary Multi-Object Tracking from Continuous Videos via a Synergistic Paradigm](/202603/31/2603.24016v1-covtrack-learning-open-vocabulary-multi-object-tracking-from-continuous-videos-via-a-synergistic-paradigm)  
+   evidence：基于SAM 3进行视频对象分割与重新提示
+2. [EagleNet: Energy-Aware Fine-Grained Relationship Learning Network for Text-Video Retrieval](/202604/01/2603.25267v2-eaglenet-energy-aware-fine-grained-relationship-learning-network-for-text-video-retrieval)  
+   标签：评分：10.0/10、query:vlm
+   evidence：用于文本-视频检索的能量感知关系学习
+3. [Inference-Time Structural Reasoning for Compositional Vision-Language Understanding](/202604/01/2603.27349v1-inference-time-structural-reasoning-for-compositional-vision-language-understanding)  
+   标签：评分：10.0/10、query:vlm
+   evidence：组合视觉语言理解与图文检索的结构化推理
+4. [Fully Spiking Neural Networks with Target Awareness for Energy-Efficient UAV Tracking](/202604/01/2603.27493v1-fully-spiking-neural-networks-with-target-awareness-for-energy-efficient-uav-tracking)  
    标签：评分：10.0/10、query:vot
-   evidence：基于连续视频数据的开放词汇多目标跟踪
-3. [Brain-Inspired Multimodal Spiking Neural Network for Image-Text Retrieval](/202603/31/2603.26787v1-brain-inspired-multimodal-spiking-neural-network-for-image-text-retrieval)  
-   标签：评分：10.0/10、query:vlm
-   evidence：用于图文检索的多模态脉冲神经网络
-4. [Meta-Contrastive Learning for Vision-Language Models via Task-Adaptive CLIP Training](/202603/31/2603.27091v1-meta-contrastive-learning-for-vision-language-models-via-task-adaptive-clip-training)  
-   标签：评分：10.0/10、query:vlm
-   evidence：任务自适应CLIP训练与元对比学习
-5. [SpatialStack: Layered Geometry-Language Fusion for 3D VLM Spatial Reasoning](/202603/31/2603.27437v1-spatialstack-layered-geometry-language-fusion-for-3d-vlm-spatial-reasoning)  
-   标签：评分：10.0/10、query:vlm
-   evidence：用于3D视觉语言模型空间推理的分层融合框架
-6. [Fully Spiking Neural Networks with Target Awareness for Energy-Efficient UAV Tracking](/202603/31/2603.27493v1-fully-spiking-neural-networks-with-target-awareness-for-energy-efficient-uav-tracking)  
-   标签：评分：10.0/10、query:vot
-   evidence：用于无人机视觉跟踪的全脉冲神经网络框架
-7. [Spatial Orthogonal Refinement for Robust RGB-Event Visual Object Tracking](/202603/31/2603.27913v1-spatial-orthogonal-refinement-for-robust-rgb-event-visual-object-tracking)  
+   evidence：使用RGB输入的节能无人机视觉跟踪
+5. [Spatial Orthogonal Refinement for Robust RGB-Event Visual Object Tracking](/202604/01/2603.27913v1-spatial-orthogonal-refinement-for-robust-rgb-event-visual-object-tracking)  
    标签：评分：10.0/10、query:vot
    evidence：鲁棒的RGB-事件视觉目标跟踪
-8. [MolmoPoint: Better Pointing for VLMs with Grounding Tokens](/202603/31/2603.28069v1-molmopoint-better-pointing-for-vlms-with-grounding-tokens)  
+6. [Efficient Inference of Large Vision Language Models](/202604/01/2603.27960v1-efficient-inference-of-large-vision-language-models)  
    标签：评分：10.0/10、query:vlm
-   evidence：使用接地Token的VLM指向机制
-9. [MedLoc-R1: Performance-Aware Curriculum Reward Scheduling for GRPO-Based Medical Visual Grounding](/202603/31/2603.28120v1-medloc-r1-performance-aware-curriculum-reward-scheduling-for-grpo-based-medical-visual-grounding)  
+   evidence：大型视觉语言模型推理的最先进技术综述
+7. [Omni-NegCLIP: Enhancing CLIP with Front-Layer Contrastive Fine-Tuning for Comprehensive Negation Understanding](/202604/01/2603.29258v1-omni-negclip-enhancing-clip-with-front-layer-contrastive-fine-tuning-for-comprehensive-negation-understanding)  
    标签：评分：10.0/10、query:vlm
-   evidence：使用强化学习的医学视觉定位
-10. [Dual-level Adaptation for Multi-Object Tracking: Building Test-Time Calibration from Experience and Intuition](/202603/31/2603.21629v1-dual-level-adaptation-for-multi-object-tracking-building-test-time-calibration-from-experience-and-intuition)  
+   evidence：微调CLIP以理解否定表达
+8. [Storing Less, Finding More: How Novelty Filtering Improves Cross-Modal Retrieval on Edge Cameras](/202604/01/2603.29631v1-storing-less-finding-more-how-novelty-filtering-improves-cross-modal-retrieval-on-edge-cameras)  
+   标签：评分：10.0/10、query:vlm
+   evidence：利用新颖性过滤在边缘摄像头上进行跨模态检索
+9. [CoMaTrack: Competitive Multi-Agent Game-Theoretic Tracking with Vision-Language-Action Models](/202604/01/2603.22846v1-comatrack-competitive-multi-agent-game-theoretic-tracking-with-vision-language-action-models)  
    标签：评分：9.0/10、query:vot
-   evidence：多目标跟踪的测试时自适应
-11. [CoMaTrack: Competitive Multi-Agent Game-Theoretic Tracking with Vision-Language-Action Models](/202603/31/2603.22846v1-comatrack-competitive-multi-agent-game-theoretic-tracking-with-vision-language-action-models)  
+   evidence：使用视觉-语言-动作模型的具身视觉跟踪
+10. [CoMaTrack: Competitive Multi-Agent Game-Theoretic Tracking with Vision-Language-Action Models](/202604/01/2603.22846v2-comatrack-competitive-multi-agent-game-theoretic-tracking-with-vision-language-action-models)  
    标签：评分：9.0/10、query:vot
    evidence：基于视觉-语言-动作模型的具身视觉跟踪
-12. [Memory-Augmented Vision-Language Agents for Persistent and Semantically Consistent Object Captioning](/202603/31/2603.24257v2-memory-augmented-vision-language-agents-for-persistent-and-semantically-consistent-object-captioning)  
+11. [COVTrack++: Learning Open-Vocabulary Multi-Object Tracking from Continuous Videos via a Synergistic Paradigm](/202604/01/2603.24016v1-covtrack-learning-open-vocabulary-multi-object-tracking-from-continuous-videos-via-a-synergistic-paradigm)  
+   标签：评分：9.0/10、query:vot
+   evidence：连续视频中的开放词汇多目标跟踪
+12. [Unbiased Multimodal Reranking for Long-Tail Short-Video Search](/202604/01/2603.24975v1-unbiased-multimodal-reranking-for-long-tail-short-video-search)  
    标签：评分：9.0/10、query:vlm
-   evidence：用于物体描述的记忆增强视觉语言智能体
-13. [Mitigating the Reasoning Tax in Vision-Language Fine-Tuning with Input-Adaptive Depth Aggregation](/202603/31/2603.26330v1-mitigating-the-reasoning-tax-in-vision-language-fine-tuning-with-input-adaptive-depth-aggregation)  
+   evidence：LLM驱动的多模态视频搜索重排序
+13. [Pixelis: Reasoning in Pixels, from Seeing to Acting](/202604/01/2603.25091v1-pixelis-reasoning-in-pixels-from-seeing-to-acting)  
    标签：评分：9.0/10、query:vlm
-   evidence：减轻视觉语言模型微调中的推理性能下降
-14. [Explaining, Verifying, and Aligning Semantic Hierarchies in Vision-Language Model Embeddings](/202603/31/2603.26798v1-explaining-verifying-and-aligning-semantic-hierarchies-in-vision-language-model-embeddings)  
+   evidence：具备像素级操作（含跟踪）的视觉语言智能体
+14. [Mitigating the Reasoning Tax in Vision-Language Fine-Tuning with Input-Adaptive Depth Aggregation](/202604/01/2603.26330v1-mitigating-the-reasoning-tax-in-vision-language-fine-tuning-with-input-adaptive-depth-aggregation)  
    标签：评分：9.0/10、query:vlm
-   evidence：分析基于CLIP的视觉语言模型嵌入中的语义层级
-15. [Beyond Textual Knowledge-Leveraging Multimodal Knowledge Bases for Enhancing Vision-and-Language Navigation](/202603/31/2603.26859v1-beyond-textual-knowledge-leveraging-multimodal-knowledge-bases-for-enhancing-vision-and-language-navigation)  
+   evidence：提升视觉语言模型的推理性能
+15. [GUIDED: Granular Understanding via Identification, Detection, and Discrimination for Fine-Grained Open-Vocabulary Object Detection](/202604/01/2603.27014v1-guided-granular-understanding-via-identification-detection-and-discrimination-for-fine-grained-open-vocabulary-object-detection)  
    标签：评分：9.0/10、query:vlm
-   evidence：整合多模态知识库的视觉语言导航
-16. [VIRST: Video-Instructed Reasoning Assistant for SpatioTemporal Segmentation](/202603/31/2603.27060v1-virst-video-instructed-reasoning-assistant-for-spatiotemporal-segmentation)  
+   evidence：利用视觉语言模型进行细粒度开放词汇目标检测
+16. [Structural Graph Probing of Vision-Language Models](/202604/01/2603.27070v1-structural-graph-probing-of-vision-language-models)  
    标签：评分：9.0/10、query:vlm
-   evidence：使用视觉语言模型进行指代性视频目标分割
-17. [Structural Graph Probing of Vision-Language Models](/202603/31/2603.27070v1-structural-graph-probing-of-vision-language-models)  
-   标签：评分：9.0/10、query:vlm
-   evidence：视觉语言模型的结构分析
-18. [MEDIC-AD: Towards Medical Vision-Language Model's Clinical Intelligence](/202603/31/2603.27176v1-medic-ad-towards-medical-vision-language-models-clinical-intelligence)  
-   标签：评分：9.0/10、query:vlm
-   evidence：面向临床的医学视觉语言模型
-19. [Inference-Time Structural Reasoning for Compositional Vision-Language Understanding](/202603/31/2603.27349v1-inference-time-structural-reasoning-for-compositional-vision-language-understanding)  
-   标签：评分：9.0/10、query:vlm
-   evidence：组合视觉语言理解的结构化推理
-20. [Falcon Perception](/202603/31/2603.27365v1-falcon-perception)  
-   标签：评分：9.0/10、query:vlm
-   evidence：用于图像和文本Token早期融合的统一Transformer架构
-21. [NeedleDB: A Generative-AI Based System for Accurate and Efficient Image Retrieval using Complex Natural Language Queries](/202603/31/2603.27464v1-needledb-a-generative-ai-based-system-for-accurate-and-efficient-image-retrieval-using-complex-natural-language-queries)  
-   标签：评分：9.0/10、query:vlm
-   evidence：使用复杂自然语言查询进行图像检索
-22. [Chat-Scene++: Exploiting Context-Rich Object Identification for 3D LLM](/202603/31/2603.27507v1-chat-scene-exploiting-context-rich-object-identification-for-3d-llm)  
-   标签：评分：9.0/10、query:vlm
-   evidence：3D视觉语言任务中的细粒度物体定位
-23. [S3KF: Spherical State-Space Kalman Filtering for Panoramic 3D Multi-Object Tracking](/202603/31/2603.27534v1-s3kf-spherical-state-space-kalman-filtering-for-panoramic-3d-multi-object-tracking)  
+   evidence：视觉语言模型的结构图探测
+17. [S3KF: Spherical State-Space Kalman Filtering for Panoramic 3D Multi-Object Tracking](/202604/01/2603.27534v1-s3kf-spherical-state-space-kalman-filtering-for-panoramic-3d-multi-object-tracking)  
    标签：评分：9.0/10、query:vot
    evidence：全景3D多目标跟踪框架
-24. [LVRPO: Language-Visual Alignment with GRPO for Multimodal Understanding and Generation](/202603/31/2603.27693v1-lvrpo-language-visual-alignment-with-grpo-for-multimodal-understanding-and-generation)  
+18. [Learning to See through Illumination Extremes with Event Streaming in Multimodal Large Language Models](/202604/01/2603.27558v1-learning-to-see-through-illumination-extremes-with-event-streaming-in-multimodal-large-language-models)  
    标签：评分：9.0/10、query:vlm
-   evidence：利用强化学习进行多模态模型的语言-视觉对齐
-25. [Efficient Inference of Large Vision Language Models](/202603/31/2603.27960v1-efficient-inference-of-large-vision-language-models)  
+   evidence：多模态大语言模型在极端光照下的视觉推理
+19. [LVRPO: Language-Visual Alignment with GRPO for Multimodal Understanding and Generation](/202604/01/2603.27693v1-lvrpo-language-visual-alignment-with-grpo-for-multimodal-understanding-and-generation)  
    标签：评分：9.0/10、query:vlm
-   evidence：加速大型视觉语言模型推理的最先进技术综述
-26. [Learning Multi-View Spatial Reasoning from Cross-View Relations](/202603/31/2603.27967v1-learning-multi-view-spatial-reasoning-from-cross-view-relations)  
+   evidence：基于强化学习偏好优化的语言视觉对齐
+20. [Hydra: Unifying Document Retrieval and Generation in a Single Vision-Language Model](/202604/01/2603.28554v1-hydra-unifying-document-retrieval-and-generation-in-a-single-vision-language-model)  
    标签：评分：9.0/10、query:vlm
-   evidence：视觉语言模型在多视图下的空间推理与定位
-27. [Progressive Prompt-Guided Cross-Modal Reasoning for Referring Image Segmentation](/202603/31/2603.27993v1-progressive-prompt-guided-cross-modal-reasoning-for-referring-image-segmentation)  
+   evidence：在单一视觉语言模型中统一文档检索与生成
+21. [Not Search, But Scan: Benchmarking MLLMs on Scan-Oriented Academic Paper Reasoning](/202604/01/2603.28651v1-not-search-but-scan-benchmarking-mllms-on-scan-oriented-academic-paper-reasoning)  
    标签：评分：9.0/10、query:vlm
-   evidence：用于将语言定位到图像区域的渐进式提示引导推理
-28. [PReD: An LLM-based Foundation Multimodal Model for Electromagnetic Perception, Recognition, and Decision](/202603/31/2603.28183v1-pred-an-llm-based-foundation-multimodal-model-for-electromagnetic-perception-recognition-and-decision)  
+   evidence：多模态大语言模型在学术论文推理上的基准测试
+22. [AMIGO: Agentic Multi-Image Grounding Oracle Benchmark](/202604/01/2603.28662v1-amigo-agentic-multi-image-grounding-oracle-benchmark)  
    标签：评分：9.0/10、query:vlm
-   evidence：基于LLM的领域特定感知基础多模态模型
-29. [Hydra: Unifying Document Retrieval and Generation in a Single Vision-Language Model](/202603/31/2603.28554v1-hydra-unifying-document-retrieval-and-generation-in-a-single-vision-language-model)  
+   evidence：视觉语言模型的智能体多图定位基准
+23. [MELT: Improve Composed Image Retrieval via the Modification Frequentation-Rarity Balance Network](/202604/01/2603.29291v1-melt-improve-composed-image-retrieval-via-the-modification-frequentation-rarity-balance-network)  
    标签：评分：9.0/10、query:vlm
-   evidence：在单个视觉语言模型中统一文档检索和生成
-30. [Domain-Invariant Prompt Learning for Vision-Language Models](/202603/31/2603.28555v1-domain-invariant-prompt-learning-for-vision-language-models)  
+   evidence：使用参考图像和修改文本进行组合图像检索
+24. [Hallucination-aware intermediate representation edit in large vision-language models](/202604/01/2603.29405v1-hallucination-aware-intermediate-representation-edit-in-large-vision-language-models)  
    标签：评分：9.0/10、query:vlm
-   evidence：基于CLIP的视觉语言模型的域不变提示学习
+   evidence：减轻大型视觉语言模型中的幻觉
+25. [AGFT: Alignment-Guided Fine-Tuning for Zero-Shot Adversarial Robustness of Vision-Language Models](/202604/01/2603.29410v1-agft-alignment-guided-fine-tuning-for-zero-shot-adversarial-robustness-of-vision-language-models)  
+   标签：评分：9.0/10、query:vlm
+   evidence：视觉语言模型零样本鲁棒性的微调方法
+26. [EarthEmbeddingExplorer: A Web Application for Cross-Modal Retrieval of Global Satellite Images](/202604/01/2603.29441v1-earthembeddingexplorer-a-web-application-for-cross-modal-retrieval-of-global-satellite-images)  
+   标签：评分：9.0/10、query:vlm
+   evidence：使用自然语言对全球卫星图像进行跨模态检索
+27. [A Comprehensive Information-Decomposition Analysis of Large Vision-Language Models](/202604/01/2603.29676v1-a-comprehensive-information-decomposition-analysis-of-large-vision-language-models)  
+   标签：评分：9.0/10、query:vlm
+   evidence：大型视觉语言模型与多模态融合分析
+28. [DIAL: Decoupling Intent and Action via Latent World Modeling for End-to-End VLA](/202604/01/2603.29844v1-dial-decoupling-intent-and-action-via-latent-world-modeling-for-end-to-end-vla)  
+   标签：评分：9.0/10、query:vlm
+   evidence：由预训练VLM加速的视觉-语言-动作（VLA）模型
 
 ### 速读区论文标签
-1. [PEARL: Geometry Aligns Semantics for Training-Free Open-Vocabulary Semantic Segmentation](/202603/31/2603.21528v1-pearl-geometry-aligns-semantics-for-training-free-open-vocabulary-semantic-segmentation)  
+1. [BioVITA: Biological Dataset, Model, and Benchmark for Visual-Textual-Acoustic Alignment](/202604/01/2603.23883v1-biovita-biological-dataset-model-and-benchmark-for-visual-textual-acoustic-alignment)  
    标签：评分：8.0/10、query:vlm
-   evidence：利用跨模态几何实现的无需训练的开放词汇语义分割
-2. [BioVITA: Biological Dataset, Model, and Benchmark for Visual-Textual-Acoustic Alignment](/202603/31/2603.23883v1-biovita-biological-dataset-model-and-benchmark-for-visual-textual-acoustic-alignment)  
-   标签：评分：8.0/10、query:vlm
-   evidence：生物应用的视觉-文本-音频对齐框架
-3. [Towards Real-World Document Parsing via Realistic Scene Synthesis and Document-Aware Training](/202603/31/2603.23885v2-towards-real-world-document-parsing-via-realistic-scene-synthesis-and-document-aware-training)  
-   标签：评分：8.0/10、query:vlm
-   evidence：用于文档解析的多模态大语言模型
-4. [MMTIT-Bench: A Multilingual and Multi-Scenario Benchmark with Cognition-Perception-Reasoning Guided Text-Image Machine Translation](/202603/31/2603.23896v1-mmtit-bench-a-multilingual-and-multi-scenario-benchmark-with-cognition-perception-reasoning-guided-text-image-machine-translation)  
-   标签：评分：8.0/10、query:vlm
-   evidence：使用视觉语言大模型（VLLM）的多语言文本-图像机器翻译基准
-5. [Language-Assisted Image Clustering Guided by Discriminative Relational Signals and Adaptive Semantic Centers](/202603/31/2603.24275v1-language-assisted-image-clustering-guided-by-discriminative-relational-signals-and-adaptive-semantic-centers)  
+   evidence：视觉-文本-音频对齐及多模态表示模型
+2. [Language-Assisted Image Clustering Guided by Discriminative Relational Signals and Adaptive Semantic Centers](/202604/01/2603.24275v1-language-assisted-image-clustering-guided-by-discriminative-relational-signals-and-adaptive-semantic-centers)  
    标签：评分：8.0/10、query:vlm
    evidence：利用视觉语言模型进行语言辅助图像聚类
-6. [Generalized multi-object classification and tracking with sparse feature resonator networks](/202603/31/2603.22539v1-generalized-multi-object-classification-and-tracking-with-sparse-feature-resonator-networks)  
-   标签：评分：7.0/10、query:vot
-   evidence：多目标分类与跟踪
-7. [Dress-ED: Instruction-Guided Editing for Virtual Try-On and Try-Off](/202603/31/2603.22607v1-dress-ed-instruction-guided-editing-for-virtual-try-on-and-try-off)  
-   标签：评分：7.0/10、query:vlm
-   evidence：基于多模态大语言模型的服装理解与多模态流水线
-8. [Automatic Segmentation of 3D CT scans with SAM2 using a zero-shot approach](/202603/31/2603.23116v1-automatic-segmentation-of-3d-ct-scans-with-sam2-using-a-zero-shot-approach)  
+3. [Boosting Document Parsing Efficiency and Performance with Coarse-to-Fine Visual Processing](/202604/01/2603.24326v1-boosting-document-parsing-efficiency-and-performance-with-coarse-to-fine-visual-processing)  
+   标签：评分：8.0/10、query:vlm
+   evidence：利用视觉语言模型进行文档解析
+4. [Language-Guided Structure-Aware Network for Camouflaged Object Detection](/202604/01/2603.24355v1-language-guided-structure-aware-network-for-camouflaged-object-detection)  
+   标签：评分：8.0/10、query:vlm
+   evidence：使用CLIP进行伪装目标检测
+5. [ViHOI: Human-Object Interaction Synthesis with Visual Priors](/202604/01/2603.24383v1-vihoi-human-object-interaction-synthesis-with-visual-priors)  
+   标签：评分：8.0/10、query:vlm
+   evidence：利用大型视觉语言模型作为先验提取引擎
+6. [FCL-COD: Weakly Supervised Camouflaged Object Detection with Frequency-aware and Contrastive Learning](/202604/01/2603.22969v1-fcl-cod-weakly-supervised-camouflaged-object-detection-with-frequency-aware-and-contrastive-learning)  
    标签：评分：7.0/10、query:sam3
-   evidence：将SAM2应用于3D医学图像分割
-9. [LightSplat: Fast and Memory-Efficient Open-Vocabulary 3D Scene Understanding in Five Seconds](/202603/31/2603.24146v1-lightsplat-fast-and-memory-efficient-open-vocabulary-3d-scene-understanding-in-five-seconds)  
+   evidence：Segment Anything Model (SAM) 在伪装目标检测中的挑战
+7. [Automatic Segmentation of 3D CT scans with SAM2 using a zero-shot approach](/202604/01/2603.23116v1-automatic-segmentation-of-3d-ct-scans-with-sam2-using-a-zero-shot-approach)  
+   标签：评分：7.0/10、query:sam3
+   evidence：使用SAM2对3D CT扫描进行零样本分割
+8. [LightSplat: Fast and Memory-Efficient Open-Vocabulary 3D Scene Understanding in Five Seconds](/202604/01/2603.24146v1-lightsplat-fast-and-memory-efficient-open-vocabulary-3d-scene-understanding-in-five-seconds)  
    标签：评分：7.0/10、query:vlm
-   evidence：利用自然语言和语义索引进行开放词汇3D场景理解
-10. [Revisiting Weakly-Supervised Video Scene Graph Generation via Pair Affinity Learning](/202603/31/2603.21559v1-revisiting-weakly-supervised-video-scene-graph-generation-via-pair-affinity-learning)  
+   evidence：使用自然语言进行开放词汇3D场景理解
+9. [Unbiased Multimodal Reranking for Long-Tail Short-Video Search](/202604/01/2603.24975v2-unbiased-multimodal-reranking-for-long-tail-short-video-search)  
+   标签：评分：7.0/10、query:vlm
+   evidence：LLM 驱动的视频搜索多模态重排序
+10. [Lookalike3D: Seeing Double in 3D](/202604/01/2603.24713v1-lookalike3d-seeing-double-in-3d)  
    标签：评分：6.0/10、query:vlm
-   evidence：视频内容解析与关系三元组
-11. [FreeArtGS: Articulated Gaussian Splatting Under Free-moving Scenario](/202603/31/2603.22102v1-freeartgs-articulated-gaussian-splatting-under-free-moving-scenario)  
+   evidence：利用基础模型语义先验的多视图图像Transformer进行相似物体检测
+11. [Towards Foundation Models for 3D Scene Understanding: Instance-Aware Self-Supervised Learning for Point Clouds](/202604/01/2603.25165v2-towards-foundation-models-for-3d-scene-understanding-instance-aware-self-supervised-learning-for-point-clouds)  
+   标签：评分：6.0/10、query:vlm
+   evidence：用于3D场景理解和实例定位的基础模型
+12. [Beyond MACs: Hardware Efficient Architecture Design for Vision Backbones](/202604/01/2603.26551v1-beyond-macs-hardware-efficient-architecture-design-for-vision-backbones)  
    标签：评分：6.0/10、query:vot
-   evidence：利用现成点跟踪先验进行关节物体重建
-12. [CAKE: Real-time Action Detection via Motion Distillation and Background-aware Contrastive Learning](/202603/31/2603.23988v1-cake-real-time-action-detection-via-motion-distillation-and-background-aware-contrastive-learning)  
-   标签：评分：6.0/10、query:vot
-   evidence：通过运动蒸馏实现实时动作检测
-13. [SemLayer: Semantic-aware Generative Segmentation and Layer Construction for Abstract Icons](/202603/31/2603.24039v1-semlayer-semantic-aware-generative-segmentation-and-layer-construction-for-abstract-icons)  
-   标签：评分：6.0/10、query:sam3
-   evidence：语义感知生成式分割
+   evidence：视觉骨干网络的硬件高效架构设计
+13. [HolisticSemGes: Semantic Grounding of Holistic Co-Speech Gesture Generation with Contrastive Flow-Matching](/202604/01/2603.26553v1-holisticsemges-semantic-grounding-of-holistic-co-speech-gesture-generation-with-contrastive-flow-matching)  
+   标签：评分：6.0/10、query:vlm
+   evidence：手势生成中的语义接地与跨模态一致性
 
 
 <div class="dpr-home-promo-card">
