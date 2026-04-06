@@ -1,0 +1,557 @@
+Title: Zero-Shot Cross-City Generalization in End-to-End Autonomous Driving: Self-Supervised versus Supervised Representations
+
+URL Source: https://arxiv.org/pdf/2603.11417v1
+
+Published Time: Fri, 13 Mar 2026 00:25:44 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Zero-Shot Cross-City Generalization in End-to-End Autonomous Driving: Self-Supervised versus Supervised Representations 
+
+Fatemeh Naeinian, Ali Hamza, Haoran Zhu, and Anna Choromanska 
+
+Abstract — End-to-end autonomous driving models are typi-cally trained on multi-city datasets using supervised ImageNet-pretrained backbones, yet their ability to generalize to unseen cities remains largely unexamined. When training and eval-uation data are geographically mixed, models may implicitly rely on city-specific cues, masking failure modes that would occur under real-domain shifts when generalizing to data from new, unseen locations. In this work, we investigate zero-shot cross-city generalization in end-to-end trajectory planning and ask: Do self-supervised visual representations improve transfer across cities? We conduct a comprehensive study by inte-grating self-supervised backbones — I-JEPA, DINOv2, and MAE — into planning frameworks. We evaluate performance under strict geographic splits on nuScenes in the open-loop setting and on NAVSIM in the closed-loop evaluation protocol. Our experiments reveal a substantial generalization gap when transferring a model relying on a traditional supervised back-bone across cities with different road topologies and driving conventions, particularly when transferring from right-side to left-side driving environments, and demonstrate that self-supervised representation learning can reduce the gap. In open-loop evaluation, a supervised backbone exhibits severe inflation when transferring from Boston to Singapore (L2 Displacement ratio 9.77 ×, collision ratio 19 .43 ×), whereas domain-specific self-supervised pretraining reduces this to 1.20 × and 0.75 ×, re-spectively. In closed-loop evaluation, self-supervised pretraining improves PDMS by up to 4% for all single-city training cities. Our results provide empirical evidence that representation learning influences the robustness of cross-city planning and establish zero-shot geographic transfer as a necessary test for evaluating the quality of the end-to-end autonomous driving systems. 
+
+I. INTRODUCTION 
+
+Autonomous driving systems must operate reliably across cities with different road structures, traffic conventions, and environmental characteristics. However, most end-to-end autonomous driving models are trained and evaluated on geographically mixed datasets, where training and validation samples have very similar urban distributions. Under such settings, performance metrics primarily reflect interpolation within a known distribution rather than true generalization. In real-world deployment, a vehicle trained in one city must operate safely in another without access to city-specific retraining. Collecting and annotating data for every possible city, or in general location, is economically and operationally infeasible, making zero-shot cross-city generalization a fun-damental requirement for scalable autonomy. Zero-shot cross-city transfer presents a more realistic and challenging evaluation scenario. As shown in Fig. 1, in this          
+
+> Department of Electrical and Computer Engineering, NYU Tandon School of Engineering, Brooklyn, NY, USA. Email: {fn2174, ah7072, hz1922, ac5455 }@nyu.edu Boston Singapore
+> Trained on Boston
+> L2 displacement increased by 10×
+> Collision rate increased by 20x
+
+Fig. 1: Cross-city transfer protocol. A model trained on one city is evaluated zero-shot on a different city. Geographic do-main shift leads to increased L2avg (trajectory displacement error) and higher collision rate, reflecting degraded driving performance under transfer. setting, a model is trained exclusively on data from one city and evaluated on a geographically distinct city. Differences in road topology, driving orientation (e.g., right-hand ver-sus left-hand traffic), traffic density, infrastructure design, and visual statistics introduce structural domain shifts that challenge learned representations. Empirically, performance often degrades drastically under such conditions, yet most prior work reports aggregate results on mixed splits without isolating the effect of geographic domain shift. As a result, the robustness of end-to-end planners under explicit city-level shift remains insufficiently understood. End-to-end autonomous driving systems [1], [2] are partic-ularly sensitive to this issue. Unlike modular pipelines, which rely on intermediate detection or mapping outputs from separate networks within each module, end-to-end systems rely on a shared backbone that serves as a feature extractor, encoding raw sensory inputs, such as multi-view images (optionally LiDAR and radar), into a latent space. A planning head is then attached to map this latent representation directly to future trajectories. These systems may optionally include auxiliary perception tasks to inject stronger inductive bias; nevertheless, they still use a shared backbone as a general feature extractor. Therefore, the robustness of the back-bone’s learned representations is crucial. If the latent features encode city-specific biases, the resulting planner may fail catastrophically when deployed in unseen environments. This motivates the central question of this work: 
+
+How does representation pretraining affect zero-shot cross-city generalization in end-to-end au-tonomous driving? 
+
+Representation learning has recently become a domi-nant paradigm in computer vision. Using large-scale super-vised pretraining (e.g., on ImageNet [3]) and self-supervised 
+
+> arXiv:2603.11417v1 [cs.CV] 12 Mar 2026
+
+learning (SSL) methods such as I-JEPA [4], DINOv2 [5], MAE [6], and V-JEPA [7], [8] have demonstrated strong transferability across downstream tasks. Recent work has also shown that such representations can achieve high per-formance in end-to-end autonomous driving under standard mixed-city training settings [9]. However, their impact on structural domain shift in trajectory planning remains un-clear. In particular, it is unknown whether stronger visual representations can mitigate performance degradation when transferring between geographically distinct cities. In this work, we explore zero-shot cross-city transfer as a controlled evaluation protocol for end-to-end autonomous driving. We rely on geographically separated splits of nuScenes [10] and NAVSIM [11]. We train end-to-end plan-ning models exclusively on one city and evaluate them on the other, thereby isolating domain shift effects. Within a uni-fied planning framework, we compare supervised ImageNet-pretrained backbones, multiple self-supervised pretrained backbones (including I-JEPA, DINOv2, and MAE), and domain-specific pretraining on driving data. Rather than focusing solely on improving benchmark metrics, our goal is to analyze how representation quality influences robustness under domain shifts in geographic data. Our experiments reveal three key findings. First, cross-city transfers induce severe, directional performance degra-dation: the magnitude of degradation differs depending on the transfer direction (e.g., Boston →Singapore versus Sin-gapore →Boston), indicating that generalization is not sym-metric across cities. Models trained on one city may fail dramatically in another, while the reverse transfer exhibits a smaller or qualitatively different collapse. Second, backbone choice impacts robustness under domain shift. Third, self-supervised pretraining on domain-relevant data substantially reduces the generalization gap. II. RELATED WORK 
+
+A. End-to-End Autonomous Driving and World Models 
+
+Early end-to-end autonomous driving systems [12], [13] directly map sensor inputs to control commands without explicit modular decomposition. Modern approaches [14] instead aim to jointly model perception, prediction, and planning within unified architectures that output future ego trajectories or control signals. Representative examples in-clude VAD [15] and UniAD [2], which integrate multi-task reasoning into structured planning pipelines. More recent planning-centric systems, including LAW [16], SSR [17], WoTE [18], World4Drive [19], TransFuser [20], Hydra-MDP [21], SeerDrive [22], SparseDrive [23], UniFuture [24], ComDrive [25], iPad [26], and METDrive [27], report strong in-domain performance by incorporating the following mech-anisms: multimodal fusion, structured scene representation, trajectory-centric supervision, and joint future generation and perception. Among these approaches, LAW explicitly models action-conditioned future latent dynamics, encourag-ing temporally consistent world representations, making it particularly suitable for studying how visual representation quality influences downstream planning behavior. Large-scale datasets such as nuScenes [10] enable open-loop evaluation, while pseudo-simulation benchmarks such as NAVSIM [28] support closed-loop assessment. Together, these benchmarks enable us to analyze the interactions among representation quality, learned planning dynamics, and zero-shot cross-city generalization. 
+
+B. Supervised Visual Backbones 
+
+Visual backbones are central to end-to-end autonomous driving systems, as they determine the quality of features used for prediction and planning. Early approaches relied on supervised pretraining on large-scale datasets such as Ima-geNet [3], commonly using convolutional architectures like ResNet [29] for their strong spatial inductive biases and sta-ble optimization. More recently, transformer-based encoders such as Vision Transformers [30] and Swin Transformer [31] have gained popularity. Finally, BEV-centric models like BEVFormer [32] explicitly model spatial structure to better support downstream planning. 
+
+C. Self-Supervised Visual Backbones 
+
+Self-supervised learning (SSL) has emerged as a key paradigm for visual representation learning, enabling large-scale pretraining without manual annotations. SSL founda-tion models such as DINOv2 [5] and MAE [6] demon-strate that robust visual representations can be effectively transferred across downstream tasks. Recently, a new SSL paradigm based on joint-embedding predictive architectures, such as I-JEPA [4] and V-JEPA [33], has emerged. JEPA enables learning compact, semantically meaningful features by predicting masked or future latent representations rather than reconstructing pixels, thereby enabling efficient video pretraining at scale. AD-L-JEPA [34] is the first JEPA-based method for the autonomous driving domain using LiDAR data. Subsequently, Drive-JEPA [9] shows that a V-JEPA-pretrained backbone can significantly improve end-to-end planning performance. However, generalizing different SSL-pretrained backbones across multi-city autonomous driving settings remains unexplored. 
+
+D. Domain Generalization in Autonomous Driving 
+
+Domain shift remains a major challenge for autonomous driving systems deployed in unseen environments. Early generalization studies relied on simulation platforms such as CARLA [35], but synthetic settings fail to capture real-world urban variability. In real-world planning, methods like RoCA [36] improve cross-domain robustness through probabilistic modeling, though strong gains often require target-domain adaptation. Other approaches leverage LLM-based evaluation [37] or multi-modal foundation models [38] to enhance reasoning under distribution shifts. Recent work also shows that in-distribution leaderboard rankings may not reflect cross-dataset robustness [39], and that representation structure plays a critical role in maintaining performance under domain shift [40]. Fig. 2: Overview of the proposed evaluation framework. Top: backbone pretraining paradigms including supervised and self-supervised methods (I-JEPA, DINOv2, MAE). Bottom: backbone integration into the LAW latent world and Transfuser model for end-to-end trajectory prediction. III. METHODS 
+
+Our objective is to isolate the effect of self-supervised visual representation pretraining on zero-shot cross-city gen-eralization of trajectory planning under controlled conditions. To this end, we design a three-stage experimental frame-work: (1) backbone pretraining using domain-specific self-supervised learning; (2) integration of the pretrained back-bone into the end-to-end autonomous driving architectures; and (3) evaluation under strict geographic zero-shot splits in both open-loop and closed-loop settings. An overview of the proposed evaluation framework is illustrated in Fig. 2. Within each architecture, the planning module is held constant, ensuring that observed differences arise from representation initialization rather than downstream design choices. 
+
+A. End-to-End Planning Architectures 
+
+We evaluate cross-city generalization in both open-loop (nuScenes) and closed-loop (NAVSIM) settings, where open-loop compares predicted trajectories against logged ground truth and closed-loop executes predictions in pseudo-simulation with recursive interaction with the environment. For open-loop evaluation, we adopt LAW [16], replacing its Swin-Transformer-Tiny backbone with a pretrained ViT. For closed-loop evaluation, given the substantially larger dataset and computational cost, we use TransFuser [20], replacing its image encoder from ResNet34 with a pretrained ViT while keeping the LiDAR encoder unchanged. We also report results on Latent Transfuser [20], an image-only variant that replaces the LiDAR branch with a fixed positional encoding. 
+
+B. Visual Backbone Variants 
+
+We evaluate three SSL pretrained visual backbones: I-JEPA, DINOv2, and MAE. Our goal is to compare generic large-scale pretrained representations against domain-specific self-supervised pretraining. 
+
+Large-Scale Pretrained Backbones on ImageNet. As a reference baseline, we use publicly available pretrained Vision Transformers: I-JEPA ViT-H/14, DINOv2 ViT-S/14, and MAE ViT-B/16, integrated into LAW and TransFuser / Latent TransFuser. Because these models differ in capacity (e.g., ViT-H/14 vs. ViT-S/14 vs. ViT-B/16), we treat them as generic baselines rather than capacity-matched comparators. 
+
+Domain-Specific Self-Supervised Pretraining. To ensure a fair comparison across self-supervised learning objectives, we perform domain-specific pretraining on nuScenes driving sequences using the same ViT-S/14 backbone configuration for all three methods (I-JEPA, DINOv2, and MAE). By keeping the architecture and capacity fixed, any observed differences can be attributed to the pretraining objective rather than model size or design. We evaluate two input resolutions using all six camera views.: 224 × 224 and 
+
+224 ×392 . The rectangular 224 ×392 resolution preserves the native aspect ratio of driving scenes, allowing us to analyze the effect of spatial geometry on representation structure. 
+
+C. Zero-Shot Cross-City Evaluation Protocol 
+
+We adopt strict geographic splits in which models are trained exclusively on data from a single city and evaluated on unseen cities without any fine-tuning, adaptation, or test-time modification. 
+
+nuScenes. nuScenes contains two geographically dis-tinct cities: Boston (right-hand driving) and Singapore (left-hand driving). We perform bidirectional transfer (Boston →Singapore and Singapore →Boston) and addi-tionally report in-domain performance (Boston →Boston, Singapore →Singapore) to establish a within-city reference baseline. 
+
+NAVSIM. NAVSIM includes Boston, Pittsburgh, Las Ve-gas (right-hand driving), and Singapore (left-hand driving). We train per city: for each training city, the model is evaluated on all other cities, yielding a complete cross-city transfer matrix. This protocol isolates structural domain shifts in traffic conventions, road topology, infrastructure, and visual ap-pearance, enabling performance degradation when moving from in-domain to cross-city evaluation to quantify the generalization gap. 
+
+D. Cross-City Generalization Gap 
+
+To quantify robustness under geographic domain shift, we measure performance change when transferring from a training city ctrain to a different test city ctest .
+
+a) Error-Based Metrics (nuScenes): For error metrics 
+
+E (e.g., L2avg and collision rate), where lower values indicate better performance, we define the error ratio as 
+
+Rerr (ctrain → ctest ) = Ecross (ctrain → ctest )
+
+Ein (ctrain → ctrain ) , (1) where Ein and Ecross denote in-domain and zero-shot cross-city performance, respectively. A value of Rerr = 1 indicates perfect preservation, while Rerr > 1 reflects degradation. 
+
+b) Score-Based Metrics (NAVSIM): For score-based metrics S (e.g., PDMS), where higher values are better, we report the average out-of-distribution (OOD) performance of a training city ci:
+
+SOOD (ci) = 1
+
+|C| − 1
+
+X 
+
+> cj̸=ci
+
+S(ci → cj ), (2) which measures the mean closed-loop performance across all unseen test cities. IV. EXPERIMENTS 
+
+A. Benchmarks and Metrics 
+
+nuScenes We evaluate open-loop end-to-end planning performance on the nuScenes dataset. This setting naturally enables the study of cross-city generalization under domain shift. Performance is measured using L2 displacement error (in meters) and collision rate (in %) for the predicted ego-vehicle trajectory over a 3-second horizon, with waypoints sampled at 2 Hz. 
+
+NAVSIM v2 To further assess robustness under closed-loop evaluation, we conduct experiments on the NAVSIM benchmark, which provides a pseudo-simulation framework built on large-scale real-world driving logs. NAVSIM evalu-ates model behavior across diverse urban scenarios using the predictive driver model score (PDMS), which aggregates five components: no-at-fault collision (NC), drivable-area compli-ance (DAC), time-to-collision (TTC), comfort (C), and ego progress (EP). Higher values indicate better performance. All evaluations follow the official NAVSIM benchmark protocol. The PDMS is derived from these metrics: 
+
+P DM S = N C × DAC × 5 × (EP + T T C ) + 2 × C
+
+12 (3) 
+
+B. Implementation Details 
+
+Pretraining: As mentioned in the previous section, we conduct domain-specific self-supervised pretraining on nuScenes using a ViT-S backbone for 100 epochs with AdamW and cosine learning rate scheduling. We intention-ally begin with a moderate-scale setup to systematically analyze representation effects before scaling to larger image and video-based models. The input resolutions are 224×224 and 224×392, and all six camera views are used. Training is performed on 2 NVIDIA H200 GPUs with a batch size of 64 per GPU. 
+
+End-to-End Autonomous Driving Finetuning: For nuScenes (LAW), models are trained for 12 epochs using AdamW with a base learning rate of 5 × 10 −5, weight decay 0.01, cosine annealing (minimum learning rate ratio 10 −3), and gradient clipping with maximum L2 norm 35. Training uses one NVIDIA L40S GPU with a batch size of 2 per GPU. For NAVSIM (TransFuser & Latent Transfuser ), models are trained for 20 epochs using Adam with a constant learning rate of 10 −4, zero weight decay, no scheduler or warmup, and gradient clipping with maximum norm 1.0. Training uses 4 NVIDIA H200 GPUs with a batch size of 32 per GPU (effective batch size 128). For all experiments, we evaluate both frozen and fully fine-tuned backbone settings to analyze the effect of representation adaptation. 
+
+C. Zero-Shot Cross-City Transfer under Open-Loop Eval-uation 
+
+We evaluate zero-shot cross-city transfer under strict city-disjoint splits on nuScenes, as summarized in Table I. 
+
+a) Multi-Domain Performance : Columns 2 and 3(L2@avg and Coll@avg under B+S →B+S) report multi-domain performance using the standard train/test split of nuScenes, where models are trained jointly on Boston and Singapore and evaluated on the official validation set. This setting serves as a reference in the absence of an explicit geographic domain shift. 
+
+b) Generic ImageNet Pretraining : Under cross-city transfer, performance degrades sharply. For exam-ple, Swin’s L2 increases from 0.60 (Boston →Boston) to 5.86 (Boston →Singapore), corresponding to a 9.77 × infla-tion, while collision rate rises by 19 .34 ×. These results demonstrate that strong in-domain performance does not imply robustness under geographic domain shift. Among generic ImageNet-pretrained backbones, only I-JEPA (ViT-H/14) achieves competitive in-domain performance on both Boston →Boston and Singapore →Singapore. In contrast, DI-NOv2 and MAE do not reach the same in-domain accuracy as Swin or I-JEPA. However, even I-JEPA (ViT-H/14, fine-tuned) exhibits substantial degradation under transfer, with a 6.12 × L2 increase for Boston →Singapore. Transfer be-havior is strongly directional. For Swin, Singapore →Boston produces a much smaller inflation ( 1.28 ×), revealing pro-nounced asymmetry in geographic generalization. Fine-tuning generic pretrained backbones improves adaptation to city-specific structure but does not eliminate the fundamental transfer gap. TABLE I: Zero-shot cross-city transfer on nuScenes (LAW). Models are trained on one city and evaluated directly on the other. L2 (m) and collision rate (%) are averaged over the 3s horizon (lower is better). sq. denotes square input resolution (224 ×224), while rect. denotes rectangular input resolution (224 ×392) that preserves the native driving scene aspect ratio. Error ratio (cross / in-domain) quantify degradation under geographic shift. ViT-S/14 backbones pretrained on nuScenes are denoted as nuSc , while ImageNet-pretrained backbones at their native capacity are denoted as IN1k .                                                                                                                                                                                                                                                                                                                         
+
+> Backbone Domain Error Ratio Multi-Domain B+S →B+S In Domain B →BCross Domain B →SIn Domain S →SCross Domain S →BB→S / B →BS→B / S →SL2 @avg ↓Coll @avg ↓L2 @avg ↓Coll @avg ↓L2 @avg ↓Coll @avg ↓L2 @avg ↓Coll @avg ↓L2 @avg ↓Coll @avg ↓L2 Coll L2 Coll
+> SwinTransformer 0.69 0.22 0.60 0.32 5.86 6.19 0.87 0.58 1.11 0.62 9.77 19.34 1.28 1.07 I-JEPA (ViT-H/14, IN1k, fine-tuned) 0.63 0.28 0.59 0.29 3.61 5.00 0.73 0.37 5.60 3.49 6.12 17.24 7.67 9.43 I-JEPA (ViT-H/14, IN1k, frozen) 0.74 0.36 0.60 0.34 5.87 1.76 0.70 0.31 0.78 0.57 9.78 5.18 1.11 1.84 I-JEPA (ViT-S/14, nuSc, sq, frozen) 0.65 0.31 0.61 0.27 4.05 4.49 0.71 0.33 0.64 0.45 6.64 16.63 0.90 1.36 I-JEPA (ViT-S/14, nuSc, sq, fine-tuned) 0.63 0.29 0.63 0.31 3.93 3.22 0.73 0.46 0.62 0.25 6.24 10.39 0.85 0.54
+> I-JEPA (ViT-S/14, nuSc, rect, frozen) 0.61 0.35 0.79 0.65 0.95 0.49 2.50 3.74 3.50 6.53 1.20 0.75 1.40 1.75 I-JEPA (ViT-S/14, nuSc, rect, fine-tuned) 0.72 0.34 0.70 0.29 1.24 1.09 3.25 4.46 3.35 5.69 1.77 3.76 1.03 1.28 DINOv2 (ViT-S/14, IN1k, fine-tuned) 2.64 2.53 2.38 2.01 3.50 3.48 3.69 3.90 3.80 6.80 1.47 1.73 1.03 1.74 DINOv2 (ViT-S/14, IN1k, frozen) 2.65 2.52 1.53 0.58 3.76 4.94 3.70 3.94 3.81 6.73 2.46 8.52 1.03 1.71 DINOv2 (ViT-S/14, nuSc, sq, frozen) 1.82 1.66 1.22 0.46 4.08 5.76 3.62 3.91 3.78 6.54 3.34 12.52 1.04 1.67 DINOv2 (ViT-S/14, nuSc, sq, fine-tuned) 1.54 0.82 1.17 0.46 4.10 5.74 3.61 3.90 3.78 6.97 3.50 12.48 1.05 1.79 DINOv2 (ViT-S/14, nuSc, rect, frozen) 1.07 0.43 0.92 0.47 3.50 3.59 3.46 4.02 3.83 6.99 3.80 7.64 1.11 1.74 DINOv2 (ViT-S/14, nuSc, rect, fine-tuned) 1.46 1.20 0.95 0.49 3.53 3.46 3.46 3.74 3.73 6.79 3.72 7.06 1.08 1.82 MAE (ViT-B/16, IN1k, fine-tuned) 1.11 1.00 0.99 0.48 3.63 4.98 2.46 1.50 2.66 1.14 3.67 10.38 1.08 0.76
+> MAE (ViT-B/16, IN1k, frozen) 1.52 0.96 1.32 0.75 4.13 5.37 3.17 3.65 3.43 5.64 3.13 7.16 1.08 1.55 MAE (ViT-S/14, nuSc, sq, frozen) 1.26 0.72 1.31 0.93 3.69 4.86 3.09 4.12 3.19 5.07 2.82 5.23 1.03 1.23 MAE (ViT-S/14, nuSc, sq, fine-tuned) 0.63 0.29 1.19 0.67 3.68 4.70 3.06 4.53 2.78 3.18 3.09 7.01 0.91 0.70
+> MAE (ViT-S/14, nuSc, rect, frozen) 0.94 0.44 1.31 0.85 3.74 5.01 2.79 2.66 2.74 2.12 2.85 5.89 0.98 0.80 MAE (ViT-S/14, nuSc, rect, fine-tuned) 0.88 0.37 0.84 0.46 3.50 5.57 1.65 1.35 2.92 3.68 4.17 12.11 1.77 2.73 0123456
+> L2 Displacement Error (m)
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Collision Rate (%)
+
+Boston Singapore           
+
+> 0.6 0.8 1.0 1.2 1.4
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 0123456
+> L2 Displacement Error (m)
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Collision Rate (%)
+
+Singapore Boston          
+
+> 0.6 0.8 1.0 1.2 1.4
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Model Family
+> Swin I-JEPA MAE DINOv2
+> Encoding
+> In-domain point Cross-domain point Transfer line
+
+Fig. 3: In-domain vs. zero-shot cross-city performance on nuScenes. Circles denote in-domain results and triangles denote cross-city transfer. Lines connect each model’s in-domain and cross-domain performance in L2avg and collision rate. Shorter lines indicate more robust cross-city transfer. 
+
+c) Domain-Specific SSL Pretraining : Self-supervised pretraining on nuScenes substantially reduces cross-city transfer inflation. For Boston →Singapore, I-JEPA (ViT-S/14, nuSc rect., frozen) lowers the L2 ratio from 9.77 × (Swin) to 1.20 × and yields a collision ratio of 0.75 ×, indicating no degradation under transfer. For Singapore →Boston, the square fine-tuned variant (I-JEPA ViT-S/14, nuSc sq., frozen) achieves an L2 ratio of 0.85 ×, further demonstrating strong cross-city preservation. Because the planning architecture and training protocol are held constant, these improvements are attributable to representation initialization rather than downstream optimization. Notably, models with comparable in-domain L2 can exhibit drastically different error ratio under zero-shot evaluation, underscoring the central role of representation quality in geographic robustness. Overall, domain-specific SSL pretraining consistently narrows the generalization gap. Both MAE and DINOv2 pretrained on nuScenes reduce transfer inflation relative to supervised Swin across most configurations, while I-JEPA achieves the most stable and lowest degradation among the evaluated SSL backbones. 
+
+d) Generalization Gap Analysis : The last four columns of Table I show that ImageNet-pretrained and supervised baselines exhibit large and direction-dependent transfer in-flation, particularly under the Boston →Singapore transfer. In contrast, several nuScenes-pretrained SSL backbones sub-stantially reduce both L2 and collision degradation, indi-cating improved cross-city transfer. Although DINOv2 and MAE do not outperform the strongest baselines under multi-domain training, they consistently reduce transfer inflation relative to the original LAW backbone (Swin) in zero-shot cross-city evaluation. This highlights an important distinc-tion: improvements in mixed-city performance do not nec-essarily correlate with robustness under explicit geographic shift. We further visualize transfer-induced degradation in Fig. 3 by connecting each model’s in-domain and cross-city performance. The Boston →Singapore direction con-sistently produces longer connecting segments, reflecting larger performance gaps, whereas Singapore →Boston yields shorter segments. This systematic asymmetry indicates that geographic transfer is structurally directional: the choice of training city directly affects downstream robustness. These I-JEPA DINOv2 MAE 
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 59.0
+> 55.3
+> 55.9
+> 56.2
+> 52.8
+> 55.4
+> 55.3
+> 55.5
+> 56.3
+> 55.1
+> 55.4
+> 54.3
+> 55.5
+> 54.0
+> 52.5
+> 58.7
+> 54.1
+> 57.1
+
+(a) Boston (TransFuser) I-JEPA DINOv2 MAE  
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 55.3
+> 58.2
+> 52.3
+> 54.8
+> 57.0
+> 55.5
+> 56.7
+> 49.5
+> 59.7
+> 53.7
+> 52.8
+> 56.3
+> 58.3
+> 60.2
+> 56.3
+> 56.5
+> 59.2
+> 60.1
+
+(b) Boston (Latent TransFuser) I-JEPA DINOv2 MAE 
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 60.6
+> 56.0
+> 55.6
+> 58.9
+> 54.1
+> 56.5
+> 58.9
+> 60.3
+> 54.5
+> 53.1
+> 53.7
+> 54.5
+> 59.2
+> 59.2
+> 55.2
+> 61.1
+> 56.6
+> 54.0
+
+(c) Pittsburgh (TransFuser) I-JEPA DINOv2 MAE  
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 60.8
+> 52.7
+> 56.5
+> 55.0
+> 58.5
+> 55.2
+> 50.9
+> 54.1
+> 57.2
+> 60.2
+> 56.9
+> 56.5
+> 59.7
+> 53.7
+> 59.7
+> 62.5
+> 61.3
+> 58.6
+
+(d) Pittsburgh (Latent TransFuser) I-JEPA DINOv2 MAE 
+
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> Avg. OOD PDMS (%)
+> 33.2
+> 48.9
+> 39.8
+> 33.7
+> 30.6
+> 35.3
+> 40.4
+> 26.9
+> 43.7
+> 27.8
+> 25.7
+> 34.9
+> 50.0
+> 43.5
+> 31.4
+> 28.6
+> 33.8
+> 31.6
+
+(e) Singapore (TransFuser) I-JEPA DINOv2 MAE  
+
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> 55
+> Avg. OOD PDMS (%)
+> 47.8
+> 50.1
+> 44.5
+> 43.9
+> 44.2
+> 47.3
+> 49.1
+> 50.3
+> 48.7
+> 49.9
+> 43.2
+> 44.0
+> 47.0
+> 46.6
+> 45.8
+> 51.3
+> 51.5
+> 47.5
+
+(f) Singapore (Latent TransFuser) I-JEPA DINOv2 MAE 
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 55.5
+> 55.0
+> 56.5
+> 57.0
+> 54.2
+> 52.1
+> 56.2
+> 56.0
+> 55.2
+> 55.6
+> 52.7
+> 54.0
+> 58.2
+> 54.8
+> 56.7
+> 53.5
+> 56.9
+> 57.0
+
+(g) Las Vegas (TransFuser) I-JEPA DINOv2 MAE  
+
+> 30
+> 40
+> 50
+> 60
+> Avg. OOD PDMS (%)
+> 52.0
+> 53.1
+> 50.8
+> 53.8
+> 58.0
+> 53.4
+> 52.7
+> 53.1
+> 53.5
+> 55.6
+> 49.3
+> 50.2
+> 58.1
+> 56.5
+> 58.2
+> 54.6
+> 55.0
+> 55.1
+
+(h) Las Vegas (Latent TransFuser) ResNet34 (ref) 
+
+IN1k 
+
+nuSc (rect) 
+
+nuSc (sq) 
+
+frozen fine-tuned 
+
+Fig. 4: Average OOD PDMS by training city on NAVSIM. For each city, TransFuser (left) and Latent TransFuser (right) are shown side by side. Each panel reports the mean PDMS across the three held-out cities. findings suggest that city selection and geographic diversity in data collection are critical factors for scalable autonomous driving deployment. 
+
+D. Zero-Shot Cross-City Transfer under Closed-Loop Evaluation 
+
+We evaluate zero-shot cross-city transfer in a closed-loop pseudo-simulation using NAVSIM across two architectures: Transfuser and Latent Transfuser. In all single-city settings, models are trained on one city and evaluated on unseen cities without adaptation. Main results are summarized in Fig. 4. 
+
+a) Multi-Domain Performance : Under standard multi-city training, supervised ResNet34 provides a strong baseline in both planning architectures. SSL-pretrained backbones perform competitively in this setting, suggesting that geo-graphically diverse supervision reduces sensitivity to repre-sentation initialization. 
+
+b) Generic ImageNet Pretraining : As shown in Fig. 4, for each training city we treat the ResNet34 result as a supervised baseline. When trained on Boston and evaluated on the remaining cities, ResNet34 achieves an average OOD PDMS of 56.8%, which is the strongest ResNet34 result across the four NAVSIM cities. In contrast, training on Singapore yields the lowest average OOD PDMS (48.9%). This degradation can be attributed to two factors: (i) the smaller data volume available for Singapore, and (ii) the left-hand driving convention, which introduces domain shift when transferring to right-hand traffic cities without adap-tation. For ImageNet-pretrained SSL backbones (I-JEPA, DINOv2, and MAE), frozen variants achieve performance close to ResNet, and in several cases, fine-tuning further improves adaptation beyond the supervised baseline. In the Latent TransFuser setting, where LiDAR is removed, cross-city behavior becomes more stable. Here, ResNet34 and ImageNet-pretrained backbones remain competitive; further-more, across all single-city training conditions, at least two SSL-pretrained backbones outperform the supervised ResNet34 baseline. This consistent improvement suggests that generic large-scale pretraining enhances zero-shot city transfer, even without domain-specific adaptation. 
+
+c) Domain-Specific SSL Pretraining : To analyze the impact of domain-specific representation learning, we eval-uate SSL backbones pretrained on the nuScenes dataset. As shown in Fig. 4, improvements within the TransFuser setting are modest and not uniformly observed across all training cities. In contrast, the effect becomes significantly more pronounced in the Latent TransFuser setting. With LiDAR removed, domain-specific SSL pretraining yields consistent gains over the supervised ResNet34 baseline. In particular, MAE pretrained on nuScenes achieves im-provements exceeding 4% in Boston, Pittsburgh, and Las Vegas, and approximately 3% in Singapore. I-JEPA and DINOv2, pretrained on nuScenes, also demonstrate gains in several settings, occasionally surpassing the ResNet34 baseline. Among the evaluated variants, MAE pretrained on nuScenes with square input resolution and evaluated in the frozen setting exhibits the most stable and consistently competitive performance across all four cities. This stability suggests that domain-specific SSL pretraining enhances zero-shot geographic generalization by encouraging representa-tions aligned with driving-specific structure rather than city-specific biases. 
+
+d) Generalization Gap Analysis : Zero-shot cross-city results reveals a clear structural pattern. Under all-city train-ing, performance differences between backbones are rela-tively small, as exposure to diverse traffic structures mitigates geographic bias during optimization. However, under strict single-city training, substantial performance gaps emerge across backbone initializations. The supervised ResNet34 baseline exhibits pronounced degradation when transferring across cities, particularly when training on Singapore and evaluating on right-hand traffic cities. Generic ImageNet-pretrained SSL backbones partially reduce this degradation, while domain-specific SSL pretraining further narrows the gap, especially in the Latent TransFuser setting. V. DISCUSSION 
+
+a) Geographic Transfer Is Structurally Asymmetric: 
+
+Cross-city degradation is directional: Boston →Singapore is consistently more severe than Singapore →Boston across evaluation settings and backbone families. Boston, Pitts-burgh, and Las Vegas use right-hand traffic, whereas Sin-gapore uses left-hand traffic. Models trained on right-hand-dominant data degrade more severely when evaluated in Sin-gapore, suggesting a mismatch between the learned structural priors and the data distribution in Singapore. 
+
+b) Limitations: Our evaluation spans two cities in open-loop and four in closed-loop settings; broader geographic diversity would further strengthen external validity. We do not explicitly disentangle weather, lighting, or seasonal ef-fects from geographic domain shift. All reported results are based on single training runs, and we do not analyze variance across random seeds. The LiDAR encoder remains a supervised ResNet34, and our study focuses exclusively on image-based self-supervised learning. Due to the substantial computational cost of large-scale video pretraining, we do not include V-JEPA in the current study. Moreover, domain-specific pretraining is conducted only on nuScenes. Extend-ing pretraining to additional driving datasets (e.g., NavTrain), incorporating video-based SSL (e.g., V-JEPA), and exploring multimodal self-supervised objectives are important direc-tions for future work. VI. CONCLUSIONS 
+
+We presented a controlled study of zero-shot cross-city generalization in end-to-end autonomous driving. Under strict geographic splits in both open-loop (nuScenes) and closed-loop (NAVSIM) settings, we show that transferring across cities induces pronounced and asymmetric degra-dation. While multi-city supervision mitigates this effect, single-city training reveals strong sensitivity to represen-tation initialization. Self-supervised pretraining, particularly domain-specific SSL, improves cross-city robustness relative to supervised ImageNet backbones. These results support zero-shot geographic transfer as a practical stress test for representation robustness in end-to-end driving systems. REFERENCES [1] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-to-end autonomous driving: Challenges and frontiers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 12, pp. 10 164– 10 183, 2024. [2] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin, W. Wang, et al. , “Planning-oriented autonomous driving,” in           
+
+> Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 17 853–17 862. [3] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein, et al. , “Imagenet large scale visual recognition challenge,” International journal of computer vision , vol. 115, no. 3, pp. 211–252, 2015. [4] M. Assran, Q. Duval, I. Misra, P. Bojanowski, P. Vincent, M. Rabbat, Y. LeCun, and N. Ballas, “Self-supervised learning from images with a joint-embedding predictive architecture,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2023, pp. 15 619–15 629. [5] M. Oquab, T. Darcet, T. Moutakanni, H. Vo, M. Szafraniec, V. Khali-dov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, et al. , “Dinov2: Learning robust visual features without supervision,” arXiv preprint arXiv:2304.07193 , 2023. [6] K. He, X. Chen, S. Xie, Y. Li, P. Doll´ ar, and R. Girshick, “Masked autoencoders are scalable vision learners,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2022, pp. 16 000–16 009.
+
+[7] M. Assran, A. Bardes, D. Fan, Q. Garrido, R. Howes, M. Muckley, A. Rizvi, C. Roberts, K. Sinha, A. Zholus, et al. , “V-jepa 2: Self-supervised video models enable understanding, prediction and plan-ning,” arXiv preprint arXiv:2506.09985 , 2025. [8] A. Kolesnikov, X. Zhai, and L. Beyer, “Revisiting self-supervised visual representation learning,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2019, pp. 1920–1929. [9] L. Wang, Z. Yang, C. Bai, G. Zhang, X. Liu, X. Zheng, X.-X. Long, C.-T. Lu, and C. Lu, “Drive-jepa: Video jepa meets multi-modal trajectory distillation for end-to-end driving,” arXiv preprint arXiv:2601.22032 , 2026. [10] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A multimodal dataset for autonomous driving,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2020, pp. 11 621–11 631. [11] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li, I. Gilitschenski, B. Ivanovic, M. Pavone, et al. , “Navsim: Data-driven non-reactive autonomous vehicle simulation and benchmarking,” Ad-vances in Neural Information Processing Systems , vol. 37, pp. 28 706– 28 719, 2024. [12] D. A. Pomerleau, “Alvinn: An autonomous land vehicle in a neural network,” Advances in neural information processing systems , vol. 1, 1988. [13] M. Bojarski, D. Del Testa, D. Dworakowski, B. Firner, B. Flepp, P. Goyal, L. D. Jackel, M. Monfort, U. Muller, J. Zhang, et al. , “End to end learning for self-driving cars,” arXiv preprint arXiv:1604.07316 ,2016. [14] J. Chen, Z. Xu, and M. Tomizuka, “End-to-end autonomous driving perception with sequential latent representation learning,” in 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2020, pp. 1999–2006. [15] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang, W. Liu, C. Huang, and X. Wang, “Vad: Vectorized scene representation for efficient autonomous driving,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 8340–8350. [16] Y. Li, L. Fan, J. He, Y. Wang, Y. Chen, Z. Zhang, and T. Tan, “Enhancing end-to-end autonomous driving with latent world model,” 
+
+arXiv preprint arXiv:2406.08481 , 2024. [17] P. Li and D. Cui, “Navigation-guided sparse scene representation for end-to-end autonomous driving,” arXiv preprint arXiv:2409.18341 ,2024. [18] Y. Li, Y. Wang, Y. Liu, J. He, L. Fan, and Z. Zhang, “End-to-end driving with online trajectory evaluation via bev world model,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 27 137–27 146. [19] Y. Zheng, P. Yang, Z. Xing, Q. Zhang, Y. Zheng, Y. Gao, P. Li, T. Zhang, Z. Xia, P. Jia, et al. , “World4drive: End-to-end autonomous driving via intention-aware physical latent world model,” in Proceed-ings of the IEEE/CVF International Conference on Computer Vision ,2025, pp. 28 632–28 642. [20] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger, “Transfuser: Imitation with transformer-based sensor fusion for au-tonomous driving,” IEEE transactions on pattern analysis and machine intelligence , vol. 45, no. 11, pp. 12 878–12 895, 2022. [21] Z. Li, K. Li, S. Wang, S. Lan, Z. Yu, Y. Ji, Z. Li, Z. Zhu, J. Kautz, Z. Wu, et al. , “Hydra-mdp: End-to-end multimodal planning with multi-target hydra-distillation,” arXiv preprint arXiv:2406.06978 ,2024. [22] B. Zhang, N. Song, J. Li, X. Zhu, J. Deng, and L. Zhang, “Future-aware end-to-end driving: Bidirectional modeling of trajectory plan-ning and scene evolution,” arXiv preprint arXiv:2510.11092 , 2025. [23] W. Sun, X. Lin, Y. Shi, C. Zhang, H. Wu, and S. Zheng, “Sparsedrive: End-to-end autonomous driving via sparse scene representation,” in 
+
+2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2025, pp. 8795–8801. [24] D. Liang, D. Zhang, X. Zhou, S. Tu, T. Feng, X. Li, Y. Zhang, M. Du, X. Tan, and X. Bai, “Unifuture: A 4d driving world model for future generation and perception,” 2026. [Online]. Available: https://arxiv.org/abs/2503.13587 [25] J. Wang, X. Zhang, Z. Xing, S. Gu, X. Guo, Y. Hu, Z. Song, Q. Zhang, X. Long, and W. Yin, “Comdrive: Comfort-oriented end-to-end autonomous driving,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2025, pp. 2682– 2689. [26] K. Guo, H. Liu, X. Wu, J. Pan, and C. Lv, “ipad: Iterative proposal-centric end-to-end autonomous driving,” arXiv preprint arXiv:2505.15111 , 2025. [27] Z. Guo, X. Lin, Z. Yagudin, A. Lykov, Y. Wang, Y. Li, and D. Tsetserukou, “Metdrive: Multimodal end-to-end autonomous driv-ing with temporal guidance,” in 2025 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2025, pp. 6027–6032. [28] W. Cao, M. Hallgarten, T. Li, D. Dauner, X. Gu, C. Wang, Y. Miron, M. Aiello, H. Li, I. Gilitschenski, et al. , “Pseudo-simulation for autonomous driving,” arXiv preprint arXiv:2506.04218 , 2025. [29] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 770–778. [30] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, et al. ,“An image is worth 16x16 words: Transformers for image recognition at scale,” arXiv preprint arXiv:2010.11929 , 2020. [31] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, “Swin transformer: Hierarchical vision transformer using shifted windows,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 10 012–10 022. [32] Z. Li, W. Wang, H. Li, E. Xie, C. Sima, T. Lu, Q. Yu, and J. Dai, “Bev-former: learning bird’s-eye-view representation from lidar-camera via spatiotemporal transformers,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 47, no. 3, pp. 2020–2036, 2024. [33] Y. Huang, “Vjepa: Variational joint embedding predictive architectures as probabilistic world models,” arXiv preprint arXiv:2601.14354 ,2026. [34] H. Zhu, Z. Dong, K. Topollai, B. Sha, and A. Choromanska, “Self-supervised representation learning with joint embedding predictive architecture for automotive lidar object detection,” arXiv preprint arXiv:2501.04969 , 2025. [35] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun, “Carla: An open urban driving simulator,” in Conference on robot learning .PMLR, 2017, pp. 1–16. [36] R. Yasarla, S. Han, H.-P. Cheng, L. Liu, S. Mahajan, A. Bhat-tacharyya, Y. Shi, R. Garrepalli, H. Cai, and F. Porikli, “Roca: Robust cross-domain end-to-end autonomous driving,” arXiv preprint arXiv:2506.10145 , 2025. [37] Z. Dong, Y. Zhu, Y. Li, K. Mahon, and Y. Sun, “Generalizing end-to-end autonomous driving in real-world environments using zero-shot llms,” arXiv preprint arXiv:2411.14256 , 2024. [38] T.-H. Wang, A. Maalouf, W. Xiao, Y. Ban, A. Amini, G. Rosman, S. Karaman, and D. Rus, “Drive anywhere: Generalizable end-to-end autonomous driving with multi-modal foundation models,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) ,2024, pp. 6687–6694. [39] Y. Yao, S. Yan, D. Goehring, W. Burgard, and J. Reichardt, “Improv-ing out-of-distribution generalization of trajectory prediction for au-tonomous driving via polynomial representations,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) .IEEE, 2024, pp. 488–495. [40] J. Singh, X. Leng, Z. Wu, L. Zheng, R. Zhang, E. Shechtman, and S. Xie, “What matters for representation alignment: Global informa-tion or spatial structure?” arXiv preprint arXiv:2512.10794 , 2025. SUPPLEMENTARY MATERIAL 
+
+VII. DATASETS 
+
+A. nuScenes Dataset 
+
+We evaluate cross-city generalization using the nuScenes dataset, which contains driving data collected in Boston (USA) and Singapore. Following prior work, we treat each city as a distinct geographic domain. Table II summarizes the city-level train and validation splits used in our experiments. TABLE II: City-level train and val splits of the nuScenes dataset used in our experiments. 
+
+Region Train Val #Scenes Hours #Scenes Hours 
+
+Boston (USA) 390 2.12 77 0.42 Singapore 310 1.68 73 0.40 
+
+B. NAVSIM Benchmark 
+
+To further evaluate cross-city transfer in closed-loop settings, We use the NAVSIM benchmark, which contains driving data from four cities: Las Vegas, Boston, Pittsburgh, and Singapore. Table III summarizes the city-level statistics of the training and evaluation splits used in our experiments. TABLE III: City-level statistics of the NAVSIM dataset used for training and evaluation. 
+
+City NavTrain NavTest #Scenes Hours #Scenes Hours 
+
+Las Vegas (USA) 818 72.68 50 4.02 Boston (USA) 255 12.14 62 3.63 Pittsburgh (USA) 140 9.68 22 1.68 Singapore 97 5.82 13 1.09 
+
+VIII. LAW R ESULTS IN CROSS -C ITY GENERALIZATION 
+
+A. Multi-Domain Performance 
+
+We report multi-domain training results for LAW on nuScenes, where models are trained jointly on Boston and Singapore and evaluated on the combined validation set (B+S →B+S). Results are reported in Table IV TABLE IV: Multi-domain training performance of LAW on nuScenes. L2 displacement error (meters) and collision rate (Coll, %) are reported. 
+
+Backbone L2 ↓ Coll ↓
+
+@1s @2s @3s @avg @1s @2s @3s @avg SwinTransformer 0.33 0.65 1.08 0.69 0.05 0.11 0.51 0.22 
+
+I-JEPA (ViT-H/14, ft) 0.28 0.59 1.01 0.63 0.09 0.17 0.57 0.28 
+
+I-JEPA (ViT-H/14, frozen) 0.37 0.70 1.15 0.74 0.17 0.23 0.67 0.36 DINOv2 (ViT-S/14, ft) 1.55 2.63 3.75 2.64 1.90 2.53 3.17 2.53 DINOv2 (ViT-S/14, frozen) 1.55 2.63 3.76 2.65 1.91 2.49 3.17 2.52 MAE (ViT-B/16, ft) 0.62 1.09 1.63 1.11 0.65 0.85 1.51 1.00 MAE (ViT-B/16, frozen) 0.87 1.50 2.19 1.52 0.56 0.83 1.50 0.96 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, frozen) 0.31 0.61 1.02 0.65 0.11 0.21 0.61 0.31 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, finetune) 0.29 0.59 1.01 0.63 0.07 0.16 0.64 0.29 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, rect, frozen) 0.27 0.57 1.00 0.61 0.13 0.22 0.69 0.35 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, finetune) 0.36 0.68 1.11 0.72 0.12 0.21 0.68 0.34 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 1.06 1.80 2.59 1.82 0.70 1.68 2.59 1.66 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 0.89 1.52 2.22 1.54 0.32 0.70 1.44 0.82 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 0.58 1.03 1.59 1.07 0.12 0.30 0.87 0.43 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 0.84 1.44 2.10 1.46 0.42 1.19 2.01 1.20 MAE (ViT-S/14, pretrained on nuScenes, sq, frozen) 0.71 1.24 1.84 1.26 0.21 0.61 1.34 0.72 MAE (ViT-S/14, pretrained on nuScenes, sq, finetune) 0.29 0.59 1.01 0.63 0.07 0.16 0.64 0.29 
+
+MAE (ViT-S/14, pretrained on nuScenes, rect, frozen) 0.49 0.91 1.43 0.94 0.10 0.26 0.97 0.44 MAE (ViT-S/14, pretrained on nuScenes, rect, finetune) 0.45 0.84 1.34 0.88 0.10 0.21 0.82 0.37 B. In-Domain Performance 
+
+We evaluate in-domain performance under strict geographic splits by training and testing within the same city (Boston →Boston and Singapore →Singapore). Table V reports L2 displacement error and collision rate for each setting. TABLE V: In-domain performance of LAW on nuScenes. L2 displacement error is reported in meters and collision rate (Coll) in %. 
+
+Backbone L2 ↓ Coll ↓
+
+@1s @2s @3s 0.9@avg @1s @2s @3s @avg (Train B, Test B) SwinTransformer 0.28 0.56 0.95 0.60 0.13 0.16 0.67 0.32 I-JEPA (ViT-H/14, ft) 0.29 0.55 0.92 0.59 0.13 0.17 0.56 0.29 
+
+I-JEPA (ViT-H/14, frozen) 0.29 0.56 0.93 0.60 0.15 0.22 0.63 0.34 DINOv2 (ViT-S/14, ft) 1.41 2.37 3.38 2.38 0.38 1.60 4.06 2.01 DINOv2 (ViT-S/14, frozen) 0.88 1.51 2.20 1.53 0.15 0.44 1.15 0.58 MAE (ViT-B/16, ft) 0.54 0.96 1.48 0.99 0.13 0.35 0.96 0.48 MAE (ViT-B/16, frozen) 0.74 1.29 1.92 1.32 0.21 0.64 1.41 0.75 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.42 4.04 5.68 4.05 3.47 4.54 5.45 4.49 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.35 3.92 5.52 3.93 1.85 3.41 4.41 3.22 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, frozen) 0.80 1.36 1.98 1.38 0.16 1.16 2.62 1.31 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, finetune) 0.85 1.39 2.02 1.42 0.34 1.80 3.01 1.72 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.44 4.08 5.71 4.08 4.58 5.71 5.99 5.43 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.46 4.10 5.75 4.10 4.52 5.72 5.97 5.40 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.08 3.49 4.92 3.50 2.23 3.85 4.67 3.58 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.10 3.52 4.96 3.53 2.21 3.77 4.40 3.46 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.44 4.08 5.71 4.08 4.58 5.71 5.99 5.43 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.46 4.10 5.75 4.10 4.52 5.72 5.97 5.40 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.08 3.49 4.92 3.50 2.23 3.85 4.67 3.58 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.10 3.52 4.96 3.53 2.21 3.77 4.40 3.46 (Train S, Test S) SwinTransformer 0.43 0.83 1.35 0.87 0.54 0.42 0.78 0.58 I-JEPA (ViT-H/14, ft) 0.32 0.68 1.18 0.73 0.12 0.27 0.73 0.37 I-JEPA (ViT-H/14, frozen) 0.30 0.65 1.15 0.70 0.08 0.22 0.64 0.31 
+
+DINOv2 (ViT-S/14, ft) 2.21 3.69 5.18 3.69 2.75 4.01 4.94 3.90 DINOv2 (ViT-S/14, frozen) 2.21 3.69 5.19 3.70 2.77 4.11 4.92 3.94 MAE (ViT-B/16, ft) 1.46 2.45 3.48 2.46 1.02 1.36 2.12 1.50 MAE (ViT-B/16, frozen) 1.89 3.16 4.45 3.17 2.55 3.81 4.60 3.65 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, frozen) 0.31 0.61 1.01 0.64 0.15 0.27 0.92 0.45 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, finetune) 0.29 0.58 0.98 0.62 0.13 0.15 0.46 0.25 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.53 4.45 6.57 4.52 5.94 7.87 7.15 6.99 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.08 3.45 4.81 3.45 1.88 6.16 7.19 5.08 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.26 3.78 5.30 3.78 4.51 7.41 7.71 6.54 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.27 3.78 5.30 3.78 4.59 7.49 7.85 6.64 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.29 3.83 5.37 3.83 4.97 7.80 8.20 6.99 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.23 3.73 5.23 3.73 4.13 7.48 8.03 6.54 MAE (ViT-S/14, pretrained on nuScenes, sq, frozen) 1.89 3.18 4.50 3.19 1.86 5.67 7.43 4.99 MAE (ViT-S/14, pretrained on nuScenes, sq, finetune) 1.64 2.77 3.94 2.78 1.48 3.35 4.95 3.26 MAE (ViT-S/14, pretrained on nuScenes, rect, frozen) 1.62 2.73 3.88 2.74 0.15 1.76 4.43 2.11 MAE (ViT-S/14, pretrained on nuScenes, rect, finetune) 1.74 2.93 4.10 2.92 1.29 3.90 6.03 3.74 
+
+C. Zero-Shot Cross-City Transfer 
+
+We evaluate strict zero-shot cross-city transfer by training on one city and evaluating on the other without fine-tuning (Boston →Singapore and Singapore →Boston). Table VI reports L2 displacement error and collision rate under this protocol. 
+
+D. Ablation Study 
+
+We evaluate randomly initialized ViT backbones under the same training and evaluation protocol as our LAW experiments. Table VII compares multi-domain training against strict single-city training, and reports in-domain and cross-city results. Overall, training from scratch leads to substantially weaker and less stable cross-city transfer than pretrained initializations, indicating that representation initialization is a key driver of robustness under geographic shift. TABLE VI: Zero-shot cross-city transfer performance of LAW on nuScenes under strict geographic splits. Models are trained on one city and evaluated on the other without fine-tuning (Boston →Singapore and Singapore →Boston). L2 displacement error is reported in meters and collision rate (Coll) in %. Lower is better. 
+
+Backbone L2 ↓ Coll ↓
+
+@1s @2s @3s @avg @1s @2s @3s @avg 
+
+(Train B, Test S) SwinTransformer 3.55 5.88 8.14 5.86 5.66 6.76 6.14 6.19 I-JEPA (ViT-H/14, pretrained) 2.16 3.61 5.05 3.61 3.95 5.22 5.83 5.00 I-JEPA (ViT-H/14, frozen) 3.59 5.90 8.13 5.87 0.14 1.34 3.80 1.76 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.42 4.04 5.68 4.05 3.47 4.54 5.45 4.49 I-JEPA (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.34 3.92 5.52 3.93 1.85 3.41 4.41 3.22 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, frozen) 0.48 0.91 1.45 0.95 0.08 0.28 1.11 0.49 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, rect, finetune) 0.74 1.20 1.77 1.24 0.26 1.02 1.99 1.09 
+
+DINOv2 (ViT-S/14, pretrained) 2.09 3.49 4.91 3.50 2.28 3.59 4.56 3.48 DINOv2 (ViT-S/14, frozen) 2.24 3.76 5.27 3.76 3.93 5.17 5.73 4.94 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.44 4.08 5.71 4.08 4.58 5.71 5.99 5.76 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.46 4.10 5.75 4.10 4.52 5.72 5.97 5.74 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.08 3.49 4.92 3.50 2.23 3.85 4.67 3.59 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.10 3.52 4.96 3.53 2.21 3.77 4.40 3.46 MAE (ViT-B/16, pretrained) 2.15 3.63 5.12 3.63 4.42 5.19 5.33 4.98 MAE (ViT-B/16, frozen) 2.48 4.13 5.79 4.13 4.54 5.68 5.88 5.37 MAE (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.20 3.69 5.19 3.69 3.93 5.04 5.59 4.86 MAE (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.19 3.68 5.19 3.68 3.65 4.89 5.55 4.70 MAE (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.22 3.74 5.27 3.74 4.05 5.23 5.74 5.01 MAE (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.10 3.50 4.90 3.50 4.62 5.79 6.31 5.57 (Train S, Test B) SwinTransformer 0.59 1.08 1.67 1.11 0.13 0.48 1.26 0.62 I-JEPA (ViT-H/14, pretrained) 3.36 5.61 7.84 5.60 1.14 3.81 5.53 3.49 I-JEPA (ViT-H/14, frozen) 0.37 0.75 1.21 0.78 0.01 0.43 1.28 0.57 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, sq, frozen) 0.31 0.61 1.01 0.64 0.15 0.27 0.92 0.45 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, sq, finetune) 0.29 0.58 0.98 0.62 0.13 0.15 0.46 0.25 
+
+I-JEPA (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.06 3.47 4.97 3.50 4.64 7.59 7.34 6.53 I-JEPA (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.00 3.34 4.69 3.35 2.95 6.68 7.45 5.69 DINOv2 (ViT-S/14, pretrained) 2.27 3.79 5.33 3.80 4.58 7.49 8.32 6.80 DINOv2 (ViT-S/14, frozen) 2.28 3.80 5.34 3.81 4.58 7.46 8.16 6.73 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, frozen) 2.26 3.78 5.30 3.78 4.51 7.41 7.71 6.54 DINOv2 (ViT-S/14, pretrained on nuScenes, sq, finetune) 2.27 3.78 5.30 3.78 4.59 7.49 7.85 6.97 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, frozen) 2.29 3.83 5.37 3.83 4.97 7.80 8.20 6.99 DINOv2 (ViT-S/14, pretrained on nuScenes, rect, finetune) 2.23 3.73 5.23 3.73 4.13 7.48 8.03 6.79 MAE (ViT-B/16, pretrained) 1.55 2.65 3.79 2.66 0.22 0.90 2.31 1.14 MAE (ViT-B/16, frozen) 2.05 3.42 4.81 3.43 2.58 6.64 7.69 5.64 MAE (ViT-S/14, pretrained on nuScenes, sq, frozen) 1.89 3.18 4.50 3.19 1.96 5.75 7.50 5.07 MAE (ViT-S/14, pretrained on nuScenes, sq, finetune) 1.64 2.77 3.94 2.78 1.46 3.25 4.81 3.18 MAE (ViT-S/14, pretrained on nuScenes, rect, frozen) 1.62 2.73 3.87 2.74 0.13 1.81 4.43 2.12 MAE (ViT-S/14, pretrained on nuScenes, rect, finetune) 1.74 2.93 4.10 2.92 1.26 3.87 5.92 3.68 
+
+TABLE VII: Ablation study. L2 is in meters; Coll is in %. Lower is better. 
+
+Model Backbone Train Test L2 ↓ Coll ↓
+
+B S B S @1s @2s @3s @avg @1s @2s @3s @avg LAW ViT-H/14 (from scratch, random init) ✓ ✓ ✓ ✓ 0.46 0.85 1.35 0.89 0.13 0.38 1.09 0.53 
+
+LAW ViT-H/14 (from scratch, random init) ✓ – – ✓ 2.17 3.63 5.10 3.64 3.81 5.09 5.69 4.86 
+
+LAW ViT-H/14 (from scratch, random init) – ✓ ✓ – 0.33 0.65 1.05 0.68 0.10 0.22 0.86 0.39 
+
+LAW ViT-B/16 (from scratch, random init) ✓ ✓ ✓ ✓ 1.34 2.27 3.25 2.29 1.61 2.34 3.10 2.35 
+
+LAW ViT-B/16 (from scratch, random init) ✓ – – ✓ 2.25 3.77 5.32 3.78 2.03 3.68 4.70 3.47 
+
+LAW ViT-B/16 (from scratch, random init) – ✓ ✓ – 2.27 3.79 5.31 3.79 4.59 7.41 8.12 6.71 
+
+LAW ViT-S/14 (from scratch, random init) ✓ ✓ ✓ ✓ 0.53 0.99 1.56 1.03 0.12 0.52 1.34 0.66 
+
+LAW ViT-S/14 (from scratch, random init) ✓ – – ✓ 2.17 3.64 5.15 3.65 3.17 4.43 5.15 4.25 
+
+LAW ViT-S/14 (from scratch, random init) – ✓ ✓ – 2.29 3.81 5.34 3.81 4.60 7.63 8.28 6.84 IX. TRANS FUSER AND LATENT TRANS FUSER RESULTS IN CROSS -C ITY GENERALIZATION 
+
+Closed-loop cross-city transfer is further evaluated using the NAVSIM benchmark with the Performance Degradation Metric Score (PDMS), which measures driving task completion while penalizing infractions (higher is better). Table VIII reports PDMS across four cities—Las Vegas, Boston, Pittsburgh, and Singapore—for both TransFuser and Latent TransFuser. For each backbone, we report results from all-city and single-city training to illustrate the impact of the geographic domain shift on closed-loop performance. 
+
+A. Visualization 
+
+Figure 5 and Figure 6 show qualitative examples of cross-city behavior under zero-shot transfer. In a curved scenario from the Las Vegas test set, all ImageNet-pretrained backbones integrated into TransFuser produce trajectories that closely follow the ground truth, indicating stable behavior under mild domain variation. Vegas #1 
+
+> Ground Truth
+> ResNet-34
+> I-JEPA nuScenes
+> DINOv2 nuScenes
+> MAE nuScenes
+
+(a) BEV (b) Trajectory 
+
+Fig. 5: Closed-loop trajectory comparison in NAVSIM (Las Vegas). Ground truth (green) is overlaid with predictions from ResNet-34 (blue), I-JEPA (orange), DINOv2 (purple), and MAE (red) pretrained on nuScenes. All models follow the overall turn structure, with minor differences in lateral alignment and curvature reflecting representation-dependent behavior under cross-city transfer. 
+
+(a) Case 1: ResNet (b) Case 2: MAE (c) Case 3: I-JEPA (d) Case 4: DINOv2 
+
+Fig. 6: Qualitative cross-city trajectory comparison in a curved intersection from the Las Vegas test set. All backbones are ImageNet-pretrained and integrated into TransFuser. Models are trained on individual cities and evaluated under zero-shot transfer. In this scenario, all models successfully follow the road geometry and remain close to the ground-truth trajectory. TABLE VIII: City-wise Performance Degradation Metric Score (PDMS, %) on NAVSIM — TransFuser vs Latent TransFuser. Training cities indicated by ✓. Higher PDMS is better. 
+
+Backbone Train City TransFuser (PDMS %) Latent TransFuser (PDMS %) 
+
+LV B P S LV B P S Total LV B P S Total ResNet34 (supervised) ✓ ✓ ✓ ✓ 88.4 81.4 75.7 59.9 79.2 87.0 79.3 74.4 67.2 79.0 
+
+ResNet34 (supervised) – ✓ – – 75.3 73.3 53.6 41.5 65.0 67.9 72.2 50.0 44.0 61.8 ResNet34 (supervised) ✓ – – – 89.2 67.0 55.1 45.3 68.6 87.2 63.6 50.9 41.9 65.5 ResNet34 (supervised) – – ✓ – 68.8 55.3 52.9 43.0 57.4 68.2 58.0 51.7 44.3 58.0 ResNet34 (supervised) – – – ✓ 57.9 45.5 43.4 41.0 48.5 59.3 43.9 41.1 44.6 48.6 I-JEPA (ViT-H/14, frozen) ✓ ✓ ✓ ✓ 86.5 77.1 71.2 68.1 77.6 85.0 76.5 69.6 68.7 76.7 I-JEPA (ViT-H/14, 100% trainable) ✓ ✓ ✓ ✓ 87.4 77.7 68.8 64.2 77.0 89.3 77.8 73.0 67.6 79.1 
+
+I-JEPA (ViT-S/14, nuScenes rect., frozen) ✓ ✓ ✓ ✓ 88.4 77.5 71.5 68.4 78.5 87.6 76.5 71.1 57.0 76.1 I-JEPA (ViT-S/14, nuScenes rect., 100% trainable) ✓ ✓ ✓ ✓ 88.9 77.7 70.8 67.0 78.4 86.6 74.8 67.2 65.3 75.7 I-JEPA (ViT-S/14, nuScenes sq., frozen) ✓ ✓ ✓ ✓ 85.5 75.9 68.2 69.4 76.6 84.5 73.3 68.0 65.1 74.7 I-JEPA (ViT-S/14, nuScenes sq., 100% trainable) ✓ ✓ ✓ ✓ 86.7 76.2 70.9 65.7 77.0 82.9 69.8 59.1 70.2 72.1 I-JEPA (ViT-H/14, frozen) – ✓ – – 74.1 71.2 54.2 48.8 65.2 70.2 66.4 54.7 41.2 61.3 I-JEPA (ViT-H/14, 100% trainable) – ✓ – – 72.5 68.0 52.4 40.9 62.1 71.7 68.5 55.0 47.8 63.6 I-JEPA (ViT-H/14, frozen) ✓ – – – 88.4 63.6 52.5 50.5 67.6 87.2 59.2 50.5 46.4 64.8 I-JEPA (ViT-H/14, 100% trainable) ✓ – – – 88.3 62.2 52.9 50.1 67.1 83.1 62.0 52.5 44.7 64.4 I-JEPA (ViT-H/14, frozen) – – ✓ – 72.1 62.2 62.5 47.4 63.3 72.0 62.9 63.9 47.5 63.7 I-JEPA (ViT-H/14, 100% trainable) – – ✓ – 70.1 60.4 60.1 37.4 60.0 64.0 60.1 55.8 33.8 56.4 I-JEPA (ViT-H/14, frozen) – – – ✓ 35.1 30.5 34.1 33.4 33.2 59.6 45.1 38.8 53.9 50.1 I-JEPA (ViT-H/14, 100% trainable) – – – ✓ 58.1 44.9 43.8 48.8 49.7 64.0 44.9 41.3 50.8 51.5 I-JEPA (ViT-S/14, nuScenes rect., frozen) – ✓ – – 71.9 66.4 47.9 47.8 61.6 65.8 67.3 47.8 43.5 59.1 I-JEPA (ViT-S/14, nuScenes rect., 100% trainable) – ✓ – – 71.9 69.9 51.6 45.2 63.0 68.6 70.1 50.4 45.6 61.8 I-JEPA (ViT-S/14, nuScenes rect., frozen) ✓ – – – 89.2 64.5 55.3 49.6 68.6 87.0 59.4 47.9 45.2 64.1 I-JEPA (ViT-S/14, nuScenes rect., 100% trainable) ✓ – – – 89.5 65.9 55.9 49.3 69.2 87.0 61.6 52.1 47.6 66.0 I-JEPA (ViT-S/14, nuScenes rect., frozen) – – ✓ – 65.5 53.6 51.9 47.8 56.3 67.6 57.9 58.6 44.1 59.1 I-JEPA (ViT-S/14, nuScenes rect., 100% trainable) – – ✓ – 72.5 58.3 58.4 45.9 61.1 66.3 55.5 54.4 43.3 56.9 I-JEPA (ViT-S/14, nuScenes rect., frozen) – – – ✓ 52.8 32.9 33.6 51.9 42.7 57.4 38.3 37.7 51.0 46.6 I-JEPA (ViT-S/14, nuScenes rect., 100% trainable) – – – ✓ 43.0 28.3 29.8 50.4 37.0 56.0 38.9 36.9 49.9 46.0 I-JEPA (ViT-S/14, nuScenes sq., frozen) – ✓ – – 68.3 68.5 50.4 39.6 60.2 72.7 70.6 50.4 47.8 63.7 I-JEPA (ViT-S/14, nuScenes sq., 100% trainable) – ✓ – – 70.8 66.6 49.2 46.4 61.3 70.2 63.0 47.1 49.1 60.0 I-JEPA (ViT-S/14, nuScenes sq., frozen) ✓ – – – 87.9 61.7 49.9 50.9 66.4 87.0 66.3 55.3 52.2 68.8 I-JEPA (ViT-S/14, nuScenes sq., 100% trainable) ✓ – – – 84.8 61.4 49.6 45.2 64.3 87.2 62.8 49.4 48.1 65.9 I-JEPA (ViT-S/14, nuScenes sq., frozen) – – ✓ – 67.4 54.6 56.9 40.2 57.1 72.6 58.8 59.1 44.2 61.2 I-JEPA (ViT-S/14, nuScenes sq., 100% trainable) – – ✓ – 70.1 55.9 58.3 43.3 59.2 67.5 53.0 50.8 45.3 56.2 I-JEPA (ViT-S/14, nuScenes sq., frozen) – – – ✓ 37.3 25.7 28.9 51.2 34.3 56.4 37.5 38.8 52.3 46.4 I-JEPA (ViT-S/14, nuScenes sq., 100% trainable) – – – ✓ 43.2 30.5 32.1 55.4 39.0 57.7 42.3 41.9 51.0 48.7 DINOv2 (ViT-S/14, frozen) ✓ ✓ ✓ ✓ 88.7 78.4 70.2 66.1 78.3 87.6 76.5 69.8 62.2 76.6 DINOv2 (ViT-S/14, 100% trainable) ✓ ✓ ✓ ✓ 86.0 74.4 66.0 68.9 75.7 86.4 72.1 63.2 56.0 72.5 DINOv2 (ViT-S/14, nuScenes rect., frozen) ✓ ✓ ✓ ✓ 87.2 78.1 72.1 71.0 78.8 87.9 75.5 70.2 66.6 77.2 DINOv2 (ViT-S/14, nuScenes rect., 100% trainable) ✓ ✓ ✓ ✓ 88.5 79.7 74.1 67.9 79.7 88.3 79.8 73.1 71.3 79.9 
+
+DINOv2 (ViT-S/14, nuScenes sq., frozen) ✓ ✓ ✓ ✓ 88.0 80.4 75.9 65.8 79.7 86.8 75.0 69.5 61.2 75.7 DINOv2 (ViT-S/14, nuScenes sq., 100% trainable) ✓ ✓ ✓ ✓ 87.7 77.1 68.4 71.5 78.0 83.7 73.0 64.2 66.7 73.8 DINOv2 (ViT-S/14, frozen) – ✓ – – 72.6 68.7 53.6 39.9 62.4 71.9 65.4 53.3 44.8 61.9 DINOv2 (ViT-S/14, 100% trainable) – ✓ – – 70.9 67.8 52.1 43.5 61.9 65.4 62.6 48.4 34.8 56.3 DINOv2 (ViT-S/14, frozen) ✓ – – – 89.0 63.8 53.7 51.0 68.2 88.3 60.9 51.5 45.7 65.8 DINOv2 (ViT-S/14, 100% trainable) ✓ – – – 87.5 64.7 54.1 49.4 67.8 87.0 58.5 52.5 48.3 65.2 DINOv2 (ViT-S/14, frozen) – – ✓ – 73.4 61.9 59.4 41.5 62.0 62.4 56.9 49.7 33.5 53.6 DINOv2 (ViT-S/14, 100% trainable) – – ✓ – 74.6 63.6 57.0 42.7 62.7 64.4 62.8 58.5 34.9 58.1 DINOv2 (ViT-S/14, frozen) – – – ✓ 50.7 36.2 34.1 38.7 41.0 64.7 41.7 40.8 52.9 51.0 DINOv2 (ViT-S/14, 100% trainable) – – – ✓ 27.3 24.7 28.8 44.0 29.4 62.6 45.8 42.3 46.7 50.9 DINOv2 (ViT-S/14, nuScenes rect., frozen) – ✓ – – 73.9 70.2 50.8 44.2 63.5 74.0 70.6 54.6 50.5 65.4 DINOv2 (ViT-S/14, nuScenes rect., 100% trainable) – ✓ – – 72.1 68.6 50.3 42.9 62.1 68.2 66.6 49.2 43.7 60.0 DINOv2 (ViT-S/14, nuScenes rect., frozen) ✓ – – – 87.6 63.7 51.4 50.5 67.1 87.5 61.4 51.2 47.9 65.9 DINOv2 (ViT-S/14, nuScenes rect., 100% trainable) ✓ – – – 88.4 64.2 54.2 48.2 67.8 87.7 63.9 53.5 49.4 67.5 DINOv2 (ViT-S/14, nuScenes rect., frozen) – – ✓ – 68.7 51.6 59.6 43.4 57.6 68.8 55.4 56.5 47.4 58.8 DINOv2 (ViT-S/14, nuScenes rect., 100% trainable) – – ✓ – 65.4 52.1 55.0 41.7 55.5 70.3 59.8 60.9 50.6 62.1 DINOv2 (ViT-S/14, nuScenes rect., frozen) – – – ✓ 54.7 38.5 38.0 50.0 45.6 55.5 46.6 44.1 53.4 50.1 DINOv2 (ViT-S/14, nuScenes rect., 100% trainable) – – – ✓ 36.1 22.5 24.9 43.9 30.9 60.0 45.9 43.7 53.8 51.4 DINOv2 (ViT-S/14, nuScenes sq., frozen) – ✓ – – 69.6 68.0 51.8 44.7 61.6 66.9 67.6 49.6 41.8 59.7 DINOv2 (ViT-S/14, nuScenes sq., 100% trainable) – ✓ – – 70.0 69.2 53.0 39.8 61.6 67.9 68.5 52.5 48.5 62.0 DINOv2 (ViT-S/14, nuScenes sq., frozen) ✓ – – – 88.0 61.3 52.1 44.7 65.8 86.6 56.0 48.5 43.6 62.8 DINOv2 (ViT-S/14, nuScenes sq., 100% trainable) ✓ – – – 87.8 61.7 51.4 48.9 66.3 86.4 57.7 45.3 47.4 63.2 DINOv2 (ViT-S/14, nuScenes sq., frozen) – – ✓ – 64.0 55.2 58.3 42.0 56.7 69.5 53.5 58.2 47.7 58.9 DINOv2 (ViT-S/14, nuScenes sq., 100% trainable) – – ✓ – 66.4 56.5 58.0 40.6 57.6 65.6 59.3 62.1 44.6 59.7 DINOv2 (ViT-S/14, nuScenes sq., frozen) – – – ✓ 29.1 21.7 26.3 50.3 29.6 50.3 41.0 38.4 45.0 44.2 DINOv2 (ViT-S/14, nuScenes sq., 100% trainable) – – – ✓ 39.2 30.6 34.8 44.9 36.6 48.7 40.3 42.9 43.8 44.2 MAE (ViT-B/16, frozen) ✓ ✓ ✓ ✓ 89.5 80.9 75.1 65.5 80.2 87.6 76.9 70.5 69.5 78.0 MAE (ViT-B/16, 100% trainable) ✓ ✓ ✓ ✓ 86.3 78.6 69.3 67.8 77.6 86.3 76.5 68.5 74.9 77.9 MAE (ViT-S/14, nuScenes rect., frozen) ✓ ✓ ✓ ✓ 90.3 80.2 74.2 73.7 81.4 85.3 77.3 72.9 69.9 77.9 MAE (ViT-S/14, nuScenes rect., 100% trainable) ✓ ✓ ✓ ✓ 89.9 82.4 77.4 72.6 82.4 89.2 79.9 70.2 68.9 79.3 
+
+MAE (ViT-S/14, nuScenes sq., frozen) ✓ ✓ ✓ ✓ 88.9 78.6 73.7 68.3 79.4 84.5 75.2 71.5 67.3 76.3 MAE (ViT-S/14, nuScenes sq., 100% trainable) ✓ ✓ ✓ ✓ 87.4 77.8 74.2 70.6 79.2 85.8 77.7 74.4 64.1 77.6 MAE (ViT-B/16, frozen) – ✓ – – 71.8 67.2 52.1 42.7 61.9 71.8 73.8 55.2 47.8 65.3 MAE (ViT-B/16, 100% trainable) – ✓ – – 71.5 67.6 49.9 40.5 61.1 70.9 74.1 56.8 52.7 66.2 MAE (ViT-B/16, frozen) ✓ – – – 89.3 67.9 54.1 52.4 69.9 87.5 67.7 54.1 52.5 69.2 MAE (ViT-B/16, 100% trainable) ✓ – – – 88.4 62.2 51.6 50.7 67.0 88.6 64.8 54.0 50.8 68.4 MAE (ViT-B/16, frozen) – – ✓ – 69.8 60.9 58.8 46.9 61.3 71.6 55.7 49.5 51.7 59.2 MAE (ViT-B/16, 100% trainable) – – ✓ – 72.9 65.1 63.7 39.5 63.4 63.9 62.7 54.8 34.7 57.1 MAE (ViT-B/16, frozen) – – – ✓ 59.4 44.9 45.5 54.3 51.4 55.4 44.0 41.7 48.5 48.1 MAE (ViT-B/16, 100% trainable) – – – ✓ 49.7 40.4 40.4 34.4 42.6 56.0 42.7 41.3 40.9 46.6 MAE (ViT-S/14, nuScenes rect., frozen) – ✓ – – 66.8 62.0 48.8 41.9 57.8 69.2 68.6 54.9 44.8 62.3 MAE (ViT-S/14, nuScenes rect., 100% trainable) – ✓ – – 74.8 70.4 52.0 49.4 64.9 69.0 73.1 56.0 44.5 63.8 MAE (ViT-S/14, nuScenes rect., frozen) ✓ – – – 88.3 64.1 54.6 51.2 68.3 86.1 65.4 54.3 55.0 68.4 MAE (ViT-S/14, nuScenes rect., 100% trainable) ✓ – – – 90.3 63.5 51.1 45.9 67.2 87.0 60.8 48.4 54.5 66.1 MAE (ViT-S/14, nuScenes rect., frozen) – – ✓ – 69.5 57.0 55.5 39.2 58.1 71.2 65.7 61.9 42.2 63.1 MAE (ViT-S/14, nuScenes rect., 100% trainable) – – ✓ – 74.8 61.4 56.7 47.1 62.7 72.6 62.1 58.0 52.8 63.3 MAE (ViT-S/14, nuScenes rect., frozen) – – – ✓ 38.7 25.7 29.8 50.6 34.8 48.3 46.2 42.9 30.3 43.7 MAE (ViT-S/14, nuScenes rect., 100% trainable) – – – ✓ 37.1 23.8 24.8 48.5 32.3 61.6 47.7 44.6 52.1 52.4 MAE (ViT-S/14, nuScenes sq., frozen) – ✓ – – 70.7 68.7 50.6 40.8 61.4 74.0 72.3 55.8 47.9 65.7 MAE (ViT-S/14, nuScenes sq., 100% trainable) – ✓ – – 71.3 68.6 56.3 43.8 63.1 75.7 71.9 54.1 50.5 66.2 MAE (ViT-S/14, nuScenes sq., frozen) ✓ – – – 87.9 67.4 53.9 49.3 68.7 87.8 62.3 52.5 50.2 67.0 MAE (ViT-S/14, nuScenes sq., 100% trainable) ✓ – – – 88.0 67.0 57.0 47.2 68.9 90.0 64.1 52.6 48.7 68.0 MAE (ViT-S/14, nuScenes sq., frozen) – – ✓ – 69.1 57.6 59.7 43.0 59.6 72.2 62.0 61.6 49.6 63.4 MAE (ViT-S/14, nuScenes sq., 100% trainable) – – ✓ – 66.7 51.8 54.1 43.5 55.9 72.2 56.9 60.4 46.8 61.1 MAE (ViT-S/14, nuScenes sq., frozen) – – – ✓ 37.3 29.6 34.5 41.4 35.0 60.3 47.6 46.5 49.8 52.0 MAE (ViT-S/14, nuScenes sq., 100% trainable) – – – ✓ 42.1 24.7 28.0 58.2 36.5 55.2 42.9 44.4 51.9 48.7

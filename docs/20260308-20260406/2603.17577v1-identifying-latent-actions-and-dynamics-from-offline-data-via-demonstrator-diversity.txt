@@ -1,0 +1,1194 @@
+Title: Identifying Latent Actions and Dynamics from Offline Data via Demonstrator Diversity
+
+URL Source: https://arxiv.org/pdf/2603.17577v1
+
+Published Time: Thu, 19 Mar 2026 01:07:26 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Identifying Latent Actions and Dynamics from Offline Data via Demonstrator Diversity 
+
+## Felix Schur ∗
+
+## Department of Mathematics, ETH Z¨ urich 
+
+Abstract 
+
+Can latent actions and environment dynamics be recovered from offline trajectories when actions are never observed? We study this question in a setting where trajectories are action-free but tagged with demonstrator identity. We assume that each demonstrator follows a distinct policy, while the environment dynamics are shared across demonstrators and identity affects the next observation only through the chosen action. Under these assumptions, the conditional next-observation distribution p(ot+1 | ot, e )is a mixture of latent action-conditioned transition kernels with demonstrator-specific mixing weights. We show that this induces, for each state, a column-stochastic nonnegative matrix factorization of the observable conditional distribution. Using sufficiently scattered policy diversity and rank conditions, we prove that the latent transitions and demonstrator policies are identifiable up to permutation of the latent action labels. We extend the result to continuous observation spaces via a Gram-determinant minimum-volume criterion, and show that continuity of the transition map over a connected state space upgrades local permutation ambiguities to a single global permutation. A small amount of labeled action data then suffices to fix this final ambiguity. These results establish demonstrator diversity as a principled source of identifiability for learning latent actions and dynamics from offline RL data. 
+
+# 1 Introduction 
+
+Recent progress in machine learning has been driven in large part by the availability of massive internet-scale datasets. Large language models can be trained on web text because both the input and the prediction target are directly observed. Reinforcement learning, by contrast, has not benefited from web-scale pretraining in the same way. Although the internet contains enormous amounts of sequential data—gameplay videos, robot videos, screen recordings, and human demonstrations—these data typically do not come with the action labels needed to train a policy or a dynamics model in the standard way [Seo et al., 2022, Baker et al., 2022]. This lack of action annotations is a central obstacle to scaling RL from passive data. A more fundamental difficulty is that, from observation-only trajectories alone, it is generally impossible to tell whether a change from ot to ot+1 was caused by an action or whether it is simply a random event in the environment. As a simple example, imagine a video of a television screen whose channel changes over time. From the video alone, we cannot tell whether the TV is broken and changes channels by itself, or whether an unseen agent is using a remote control. Both mechanisms can produce the same observed transitions. More generally, if we only observe the marginal conditional distribution p(ot+1 | ot) under a single behavior policy, then action choice and environment stochasticity are confounded: many different latent action spaces, policies, and transition kernels can induce exactly the same observed next-observation distribution. Thus, latent actions and action-conditioned dynamics are not identifiable from a single stream of observation-only data without additional structure. We propose to resolve this ambiguity by exploiting demonstrator diversity. The intuition is again simple. If a channel switch happens with the same probability 
+
+> ∗felix.schur@stat.math.ethz.ch
+
+1
+
+> arXiv:2603.17577v1 [cs.LG] 18 Mar 2026
+
+for all viewers, then it is natural to attribute it to the TV itself rather than to the viewer. But if the transition probabilities differ systematically across viewers, then this variation must be mediated by action choice, provided that viewer identity has no direct effect on the TV beyond the chosen action. In other words, demonstrator identity induces variation in the latent policy while the transition dynamics remain shared. If the demonstrator policies are sufficiently diverse, this variation is rich enough to make the latent actions and dynamics identifiable. We formalize this idea in a setting where the action at is unobserved, but the demonstrator identity e is observed together with ( ot, o t+1 ). We assume that each demonstrator follows a potentially different policy πe(a | o), while the environment dynamics p(o′ | o, a ) are shared across demonstrators and identity affects the next observation only through the action. Under these assumptions, for each fixed o the observable conditional distribution p(· | o, e ) admits a mixture decomposition over latent actions, 
+
+p(· | o, e ) = 
+
+> k
+
+X
+
+> a=1
+
+p(· | o, a ) πe(a | o).
+
+This yields a column-stochastic factorization of the observable conditionals into latent action-conditioned transition kernels and demonstrator-specific action probabilities. Our main result shows that when the demonstrator policies are sufficiently diverse, this factorization becomes identifiable up to a permutation of the latent action labels. In the finite case, we cast the problem as a column-stochastic nonnegative matrix factorization and leverage minimum-volume identifiability results under a sufficiently scattered condition [Fu et al., 2018, Huang et al., 2018]. In the continuous case, we derive an analogous result based on minimizing the Gram determinant of the latent transition functions. We further show that if the transition map varies continuously over a connected observation space, then the state-wise permutation ambiguity cannot vary across observations and must therefore be global. Finally, a small amount of labeled action data is enough to fix this remaining symmetry completely. More broadly, our results suggest a route toward scaling RL from passive sequential data: rather than treating heterogeneous demonstrators as nuisance variation, we can use their differences as a source of information. Demonstrator diversity makes it possible to distinguish what is truly random in the world from what is driven by latent decisions, and thereby to recover action semantics and dynamics from action-free offline data. 
+
+# 2 Related Work 
+
+A large body of work studies how to learn from demonstrations that do not contain action labels. Early 
+
+imitation from observation methods such as Behavioral Cloning from Observation (BCO) and Generative Adversarial Imitation from Observation (GAIfO) learn directly from state-only demonstrations, typically by fitting an inverse dynamics model or by matching state-transition occupancy measures [Torabi et al., 2018, 2019]. Closer to our setting, ILPO learns a discrete latent action space from observations alone and then aligns the learned latent actions with real environment actions using a small amount of interaction [Edwards et al., 2019]. LAPO, which learns latent action policies and world models from videos and shows that meaningful action structure can often be recovered from dynamics alone [Schmidt and Jiang, 2024]. Our work is complementary to these approaches: rather than proposing a new empirical objective for latent action discovery, we ask when latent actions and action-conditioned dynamics are identifiable in principle from ( ot, o t+1 , e ). Several recent works aim to leverage the abundance of action-free trajectories while using only a small amount of labeled data. APV studies representation learning from action-free videos for downstream RL [Seo et al., 2022], while VPT uses a small amount of labeled gameplay to train an inverse dynamics model that labels large-scale internet videos for policy pretraining [Baker et al., 2022]. Semi-supervised offline RL formalizes datasets that mix action-labeled and action-free trajectories and studies practical pipelines that infer missing actions before applying standard offline RL algorithms [Zheng et al., 2023]. Our setting is more restrictive in one sense and more ambitious in another: we do not assume access to an external action labeler for the main identification argument, and instead exploit demonstrator identity as a source of structure that can render the latent action model identifiable. 2Ot Ot+1 
+
+AtE
+
+Figure 1: Graphical model. Demonstrator identity E affects the next observation Ot+1 only through the latent action At, while the current observation Ot affects both action choice and the next observation. Our use of demonstrator identity is related to recent work showing that heterogeneous datasets can make otherwise impossible action-free learning problems tractable. Most relevant is CRAFT, which studies action-free offline learning from multiple agents with differing policies in Ex-BMDPs and shows that differences across datasets can enable recovery of controllable latent structure [Levine et al., 2025]. While that work focuses on representation learning of controllable state features, our goal is different: we aim to identify a discrete latent action alphabet together with the corresponding action-conditioned transition kernels. In this sense, we use demonstrator diversity not only to learn useful representations, but to identify the semantics of the hidden decisions that generated the data. Our perspective is also closely related to ideas from causality. At a high level, demonstrator identity acts as a source of exogenous policy variation: it changes the distribution over actions while, under our exclusion assumption, affecting the next observation only through the chosen action. This is reminiscent of instrumental-variable reasoning and of invariant prediction across environments [Hartford et al., 2017, Arjovsky et al., 2019]. Recent work has begun to import such ideas into offline RL, for example to identify confounded transition dynamics when a valid instrument is available [Chen et al., 2022, Liao et al., 2024]. Our setting differs in that the treatment itself—the action—is latent, and identification proceeds through a structured mixture decomposition rather than a standard regression problem. Technically, our results build on the literature on identifiable nonnegative matrix factorization. In par-ticular, minimum-volume criteria together with sufficiently scattered conditions can identify stochastic fac-torizations up to permutation [Fu et al., 2018]. Related factorization ideas have also been used to establish identifiability in latent-variable models such as hidden Markov models [Huang et al., 2018]. We adapt these tools to the RL setting by interpreting the observable next-observation distributions as mixtures over latent action-conditioned transitions, indexed by demonstrator identity. This connection yields a clean identifiabil-ity theory for latent actions and dynamics from offline, action-free trajectories. 
+
+# 3 Problem Setting 
+
+We study a Markovian environment with latent discrete actions. Let Ot ∈ O denote the observation at time 
+
+t, where O is a measurable space, and let At ∈ A := [ k] = {1, . . . , k } denote an unobserved action, where the number of latent actions k is assumed known. Each trajectory is generated by one of m demonstrators, indexed by a random variable E ∈ [m]. Given the current observation Ot = o and demonstrator identity 
+
+E = e, the demonstrator chooses a latent action according to a policy At ∼ π∗ 
+
+> e
+
+(· | o), and the environment evolves according to an action-conditioned transition kernel Ot+1 ∼ p∗(· | o, A t). Actions are never observed. The offline data therefore consist only of tuples ( ot, o t+1 , e ), drawn from trajectories generated by multiple demonstrators. We visualize this setting in Figure 1. 
+
+Observable and latent objects. At the population level, the observable object is the family of conditional distributions {p∗(· | o, e ) : o ∈ O , e ∈ [m]}. The latent objects are the action-conditioned transition kernels and the demonstrator-specific policies {p∗(· | o, a ) : o ∈ O , a ∈ [k]} and {π∗ 
+
+> e
+
+(a | o) : e ∈ [m], a ∈ [k], o ∈ O} .
+
+3By marginalizing over the latent action, for every o ∈ O and e ∈ [m], 
+
+p∗(· | o, e ) = 
+
+> k
+
+X
+
+> a=1
+
+p∗(· | o, a ) π∗ 
+
+> e
+
+(a | o). (1) Thus, for each fixed observation o, the demonstrator-conditioned next-observation law is a mixture of latent action-conditioned transition kernels, with mixing weights given by the demonstrator-specific policy. 
+
+Goal. Our goal is to recover the latent transition kernel and the demonstrator-specific policies 
+
+p∗(· | o, a ), π∗ 
+
+> e
+
+(a | o)from the observable family {p∗(· | o, e )}. Since the labels of the latent actions are arbitrary, recovery can at best hold up to a permutation of the action indices. We now state the assumptions used throughout. 
+
+Assumption 1 (Structural assumptions) . Assume the following. (i) Sufficiency / Markov property: Ot+1 ⊥⊥ (Ot−1, A t−1, O t−2, A t−2, . . . ) | (Ot, A t).
+
+(ii) Exclusion restriction: E ⊥⊥ Ot+1 | (Ot, A t), that is, demonstrator identity affects the next observa-tion only through the latent action. (iii) Well-defined latent transitions: For every o ∈ O and every a ∈ [k] such that π∗ 
+
+> e
+
+(a | o) >
+
+0 for some e ∈ [m], the conditional distribution p∗(· | o, a ) is well-defined. 
+
+# 4 Theoretical Guarantees 
+
+Our analysis proceeds in four steps. First, we show that without demonstrator diversity the problem is non-identifiable in general. Second, we establish statewise identifiability in finite observation spaces using identifiable stochastic (non-negative matrix factorization) NMF. Third, we give a extension to continuous observation spaces. Fourth, we show that continuity and a no-collision condition upgrade statewise permu-tations to a single global permutation , which can then be fixed by a small amount of labeled action data. We begin by formalizing the fact that observation-only data from a single behavior policy are not sufficient to identify latent actions and dynamics. 
+
+Proposition 4.1 (Non-identifiability with a single demonstrator) . Fix o ∈ O . Suppose only the marginal next-observation law p∗(· | o) is observed, without demonstrator identity. Then in general the decomposition 
+
+p∗(· | o) = 
+
+> k
+
+X
+
+> a=1
+
+p∗(· | o, a ) π∗(a | o)
+
+is not identifiable: there exist distinct pairs of latent transitions and action probabilities, not related by permutation, that induce the same observable distribution. 
+
+Proposition 4.1 shows that additional structure is necessary. In our setting, demonstrator identity pro-vides this structure by inducing observable variation in action probabilities while keeping the transition kernel fixed. 
+
+## 4.1 Statewise identifiability in finite observation spaces 
+
+We first consider the case where O is finite. Fix o ∈ O . For each demonstrator e ∈ [m], define poe := p∗(· | 
+
+o, e ) ∈ R|O| , and toa := p∗(· | o, a ) ∈ R|O| , and collect these into the matrices P ∗ 
+
+> o
+
+:= po 
+
+> 1
+
+· · · pom
+
+ ∈ R|O|× m,,
+
+T ∗ 
+
+> o
+
+:= to 
+
+> 1
+
+· · · tok
+
+ ∈ R|O|× k, and Π ∗ 
+
+> o
+
+:= π∗ 
+
+> 1
+
+(· | o) · · · π∗
+
+> m
+
+(· | o) ∈ Rk×m. By (1), 
+
+P ∗ 
+
+> o
+
+= T ∗ 
+
+> o
+
+Π∗
+
+> o
+
+. (2) 4Each column of P ∗ 
+
+> o
+
+, T ∗ 
+
+> o
+
+, and Π ∗ 
+
+> o
+
+is a probability vector. Define the set of column-stochastic matrices 
+
+Mr×c := M ∈ [0 , 1] r×c 1⊤M = 1⊤ .
+
+Then P ∗ 
+
+> o
+
+∈ M |O|× m, T ∗ 
+
+> o
+
+∈ M |O|× k, and Π ∗ 
+
+> o
+
+∈ M k×m. The finite-state identification problem is therefore: from the observable matrix P ∗ 
+
+> o
+
+, recover the latent factors ( T ∗ 
+
+> o
+
+, Π∗
+
+> o
+
+) up to permutation. The factorization (2) is not unique in general: if S ∈ GL( k) is invertible, then 
+
+P ∗ 
+
+> o
+
+= T ∗ 
+
+> o
+
+Π∗ 
+
+> o
+
+= ( T ∗ 
+
+> o
+
+S)( S−1Π∗
+
+> o
+
+).
+
+Thus additional structure is needed to identify the latent factors. We use the sufficiently scattered condition of Fu et al. [2018], which ensures that among all feasible stochastic factorizations, the true one is the unique minimum-volume solution up to permutation. 
+
+Definition 4.1 (Sufficiently scattered) . Let M ∈ Ru×v be nonnegative. Define cone( M ) := {M θ : θ ≥ 0}
+
+and C∗ := {y : y⊤x ≥ 0 for all x ∈ C} for any cone C. For v ≥ 2, define the second-order cones Cv := x ∈ Rv : 1⊤x ≥ √v − 1 ∥x∥2 and C∗ 
+
+> v
+
+:= x ∈ Rv : 1⊤x ≥ ∥ x∥2 . A matrix H ∈ M u×v is called sufficiently scattered if 
+
+Cv ⊆ cone( H⊤) and cone( H⊤)∗ ∩ bd( C∗ 
+
+> v
+
+) = {λe j : j ∈ [v], λ ≥ 0}.
+
+Assumption 2 (Finite-state identifiability conditions) . For all o ∈ O we have |O| ≥ k and m ≥ k and (i) rank( P ∗ 
+
+> o
+
+) = k;(ii) Π∗ 
+
+> o
+
+is sufficiently scattered. 
+
+Intuitively, the sufficiently scattered condition means that the demonstrator policy vectors are not all small perturbations of one another or concentrated near a low-dimensional subset of the simplex; rather, they point in sufficiently many different action-mixture directions that their conic hull spreads broadly through the positive orthant, making the latent actions geometrically separable. In this sense it formalizes policy diversity : different demonstrators must place meaningfully different relative masses on the latent actions, so that each latent action leaves a distinct signature in the observed mixtures instead of being confounded with the others. We can now state the finite-state identifiability result. 
+
+Theorem 4.1 (Statewise identifiability in finite observation spaces) . Assume Assumption 2. Then for every 
+
+o ∈ O , the optimization problem 
+
+min   
+
+> To∈M |O|× k,Πo∈M k×m
+
+det( T ⊤ 
+
+> o
+
+To)
+
+s.t. P ∗ 
+
+> o
+
+= ToΠo
+
+(3) 
+
+recovers the latent factors up to a permutation of the action labels. More precisely, there exists a permutation matrix Σo ∈ { 0, 1}k×k such that 
+
+To = T ∗ 
+
+> o
+
+Σo, Πo = Σ ⊤ 
+
+> o
+
+Π∗
+
+> o
+
+.
+
+The minimum-determinant objective admits a simple geometric interpretation. Since det( T ⊤ 
+
+> o
+
+To)is the squared k-dimensional volume spanned by the columns of To, minimizing it selects, among all stochas-tic factorizations of P ∗ 
+
+> o
+
+, the latent transition kernels that are least spread out while still explaining the demonstrator-conditioned transition laws. Intuitively, this is a conservative principle: we attribute to the latent actions only the variation that is forced by the observed diversity across demonstrators, and do not introduce more extreme latent action effects than necessary. If the demonstrators are sufficiently diverse, this still forces recovery of all action effects that are genuinely distinguishable from the data. On the other hand, if two latent actions induce the same transition law at state o, then they are observationally equivalent there and cannot be identified separately; in that case the true factorization becomes rank-deficient (rank( P ∗ 
+
+> o
+
+) < k )5and det(( T ∗ 
+
+> o
+
+)⊤T ∗ 
+
+> o
+
+) = 0. Nevertheless, if one reduces the problem to the effective dimension ro := rank( P ∗ 
+
+> o
+
+),
+
+which under sufficient policy diversity coincides with the number of distinct transition effects at o, then the same minimum-volume argument identifies the remaining distinct latent transitions (and the corresponding aggregated policy masses) up to permutation. Theorem 4.1 is a statewise result: the permutation Σ o may still depend on o. The next subsections address both continuous observation spaces and alignment of these statewise permutations across o.
+
+## 4.2 Continuous-space identifiability via embedded Gram-determinant 
+
+We now give a continuous-state analogue of the finite-state minimum-volume result that applies to general transition measures , including deterministic transitions represented by Dirac masses. Let ( O, B) be a measurable space, let P(O) denote the set of probability measures on ( O, B), and let 
+
+M(O) denote the vector space of finite signed measures on ( O, B). Fix a real Hilbert space H and a linear injective map Φ : M(O) → H . A canonical example is a kernel mean embedding into an RKHS associated with a bounded characteristic kernel. Injectivity ensures that equality in embedding space implies equality of the underlying measures. Fix o ∈ O . Define the latent transition measures toa := p∗(· | o, a ) ∈ P (O), a ∈ [k],
+
+and the observable demonstrator-conditioned transition measures poe := p∗(· | o, e ) ∈ P (O), e ∈ [m]. By the mixture identity, poe = Pka=1 π∗ 
+
+> e
+
+(a) toa, e ∈ [m]. Applying the linear map Φ yields Φ( poe) = 
+
+> k
+
+X
+
+> a=1
+
+π∗ 
+
+> e
+
+(a) Φ( toa).
+
+For any k-tuple of measures ( t1, . . . , t k), define the embedded Gram matrix 
+
+GΦ(t1, . . . , t k) := ⟨Φ( ti), Φ( tj )⟩H
+
+ki,j =1 .
+
+Its determinant measures the squared volume spanned by the embedded latent transition measures in H. We also define the rank of a family of embedded observables by rank( P ∗) := dim span {Φ( po
+
+> 1
+
+), . . . , Φ( pom)}. Note that Π ∗ 
+
+> o
+
+= π∗ 
+
+> 1
+
+(· | o) · · · π∗
+
+> m
+
+(· | o) ∈ Rk×m remains a real-valued matrix and therefore the sufficiently scattered condition does not change. 
+
+Assumption 3 (Continuous-state identifiability conditions) . For all o ∈ O we have |O| ≥ k and m ≥ k and (i) rank ( GΦ(to
+
+> 1
+
+, . . . , t ok)) = k;(ii) Π∗ 
+
+> o
+
+is sufficiently scattered. 
+
+We now state the continuous-state identifiability result. 
+
+Theorem 4.2 (State-wise identifiability in continuous observation spaces) . Fix o ∈ O and suppress the dependence on o in the notation. Assume Assumption 3 and that the optimization problem 
+
+min   
+
+> ¯t1,..., ¯tk,Π
+
+det  GΦ(¯ t1, . . . , ¯tk)
+
+s.t. poe =
+
+> k
+
+X
+
+> a=1
+
+πe(a)¯ ta, e ∈ [m],
+
+Πo ∈ M k×m,
+
+¯ta ∈ P (O), a ∈ [k],
+
+(4) 
+
+admits an optimizer. Then every optimizer of (4) is equal to the ground-truth factorization up to permutation: there exists a permutation matrix Σo ∈ { 0, 1}k×k such that ¯ta = to
+
+> Σ( a)
+
+, a ∈ [k], and 
+
+Πo = Σ ⊤ 
+
+> o
+
+Π∗
+
+> o
+
+.
+
+6In finite-dimensional stochastic NMF, optimizer existence is often automatic by compactness. In contrast, (4) is an optimization problem over an infinite-dimensional space of measures, so minimizing sequences need not converge without additional compactness assumptions. A standard sufficient route is to work on a compact Polish observation space and choose Φ to be weakly continuous (for example, a kernel mean embedding associated with a bounded continuous kernel). Then P(O) is weakly compact, Mk×m is compact, the feasibility constraints are closed, and the objective ( t1, . . . , t k) 7 → det  GΦ(t1, . . . , t k) is continuous, so an optimizer exists by the direct method. 
+
+4.2.1 From state-wise to global identifiability 
+
+The state-wise identifiability results identify the latent action model separately at each observation o, but only up to an observation-dependent permutation. We now show that, under continuity and connectedness, these local permutations must agree globally. Throughout this subsection, let Φ : M(O) → H be the fixed injective linear embedding used in the continuous-space theorem, where H is a real Hilbert space. For each o ∈ O and a ∈ [k], define the embedded true latent transitions ϕ∗
+
+> a
+
+(o) := Φ  p∗(· | o, a ) ∈ H , and, for any candidate latent model, define the embedded recovered latent transitions ϕa(o) := Φ  p(· | o, a ) ∈ H . We collect these into the operator-valued maps 
+
+T ∗(o) := ϕ∗
+
+> 1
+
+(o) · · · ϕ∗
+
+> k
+
+(o) , T (o) := ϕ1(o) · · · ϕk(o) .
+
+Assumption 4. Assume that: (i) for each a ∈ [k], the maps o 7 → ϕa(o) and o 7 → ϕ∗
+
+> a
+
+(o) are continuous from O into H;(ii) for every o ∈ O and every i̸ = j, ϕ∗ 
+
+> i
+
+(o)̸ = ϕ∗ 
+
+> j
+
+(o).
+
+Theorem 4.3 (From local to global permutations) . Assume that O is a connected metric space. Assume Assumption 4. Assume that for each o ∈ O there exists a permutation matrix Σ( o) such that 
+
+T (o) = T ∗(o)Σ( o), Π( o) = Σ( o)⊤Π∗(o).
+
+Then Σ( o) is constant on O. That is, there exists a single permutation matrix Σ such that 
+
+T (o) = T ∗(o)Σ , Π( o) = Σ ⊤Π∗(o) for all o ∈ O .
+
+Theorem 4.3 shows that once the latent model is identified at each observation up to permutation, continuity and connectedness reduce the ambiguity to a single global permutation of the latent action labels. We now combine the state-wise identifiability theorem with Theorem 4.3 to obtain global identifiability. 
+
+Assumption 5 (Global identifiability conditions) . Assume the following. (i) O is a connected metric space. (ii) For every o ∈ O , the policy matrix Π∗(o) ∈ M k×m is sufficiently scattered. (iii) For every o ∈ O , rank ( GΦ(to
+
+> 1
+
+, . . . , t ok)) = k.(iv) For each a ∈ [k], the map o 7 → Φ p∗(· | o, a ) is continuous from O into H.(v) There exists a nonempty subset S ⊆ O on which the global permutation is known. 
+
+We give some intuition about the Assumption 5: Connectedness rules out choosing different action labelings on disconnected regions of the observation space and continuity prevents the local permutation ambiguity from changing abruptly across nearby observations (see Theorem 4.3). The sufficient-scattering condition guarantees state-wise identifiability by making the demonstrator policies diverse enough to separate the latent action-conditioned transition kernels and the positive-definiteness of the embedded Gram matrix ensures that the latent action effects are linearly independent, and hence distinguishable, at each observation (see Theorem 4.2). 7Corollary 4.1 (Global identifiability) . Assume Assumption 5(i)-(iv) hold. Let o 7 →  p(· | o, 1) , . . . , p (· | 
+
+o, k ), Π( o) be any continuous family such that for every o ∈ O :(a) the tuple  p(· | o, 1) , . . . , p (· | o, k ), Π( o) is feasible for (4) , and (b) it attains the minimum in (4) .Then there exists a single permutation matrix Σ such that 
+
+p(· | o, a ) = p∗(· | o, Σ( a)) , Π( o) = Σ ⊤Π∗(o) for all o ∈ O .
+
+If, in addition, Assumption 5(v) holds, then Σ = Ik, and therefore 
+
+p(· | o, a ) = p∗(· | o, a ), Π( o) = Π ∗(o) for all o ∈ O , a ∈ [k].
+
+In particular, the latent action-conditioned transition kernels and the demonstrator-specific policies are glob-ally identifiable. 
+
+Although the assumptions in Assumption 5 are natural, one may object that in applications they need not hold uniformly over all o ∈ O . In particular, some assumptions may fail on a small subset of the observation space or only at isolated observations. The key point is that the identifiability result is often robust to such localized violations: even when global identifiability fails on all of O, one can typically still recover identifiability on the subset where the assumptions remain valid. More concretely, the consequences of violating the assumptions can be summarized as follows. 
+
+• If Assumption 5(i) fails, then O has multiple connected components. In that case, the argument of Theorem 4.3 applies separately on each connected component, so the latent actions remain identifi-able up to a component-wise permutation. If Assumption 5(v) holds on each component, then these permutations are fixed and one still obtains full identifiability on all of O.
+
+• If Assumption 5(ii) fails at some observations o ∈ A ⊊ O, then the geometric condition needed for the state-wise minimum-volume argument may break down on A. At such observations, state-wise identifiability is no longer guaranteed. Nevertheless, if O \ A remains connected and Assumption 5(ii) holds there, then the global permutation is still uniquely determined on O \ A.
+
+• If Assumption 5(iii) fails at some o ∈ O , then the embedded latent transitions become linearly depen-dent at that observation. In particular, the action-conditioned effects are no longer fully distinguishable there, so one cannot expect unique recovery of all latent actions at that state. This is an intrinsic non-identifiability phenomenon rather than a limitation of our results. 
+
+• If Assumption 5(iv) fails, then the local permutation need no longer vary continuously with o. As a result, different permutations may be selected in different regions of the observation space. However, if the recovered and true embedded transitions are continuous on each element of a partition of O, then the conclusion of Theorem 4.3 still applies piecewise, yielding one permutation per region. 
+
+• If Assumption 5(v) fails, then the latent actions remain identifiable only up to a single global permu-tation. This is the unavoidable label-swapping ambiguity familiar from latent-variable models. 
+
+# 5 Estimation 
+
+The identifiability results above are stated at the population level and characterize the latent model as the minimum-volume factorization of the observable conditional laws subject to exact mixture constraints and sufficient policy diversity. In practice, however, we only observe finitely many triples ( ot, o t+1 , e t), and in continuous observation spaces it is not tractable to optimize directly over arbitrary transition measures and 8state-dependent policy matrices. We therefore consider a parametric estimation procedure that is motivated by the identification theory but replaces the exact constrained problem by a relaxed empirical objective. We parameterize the latent action-conditioned transition model and the demonstrator-specific latent policy by neural networks 
+
+pθ (· | o, a ), πψ (a | o, e ),
+
+where θ and ψ denote trainable parameters. The policy network outputs a probability vector over the k
+
+latent actions, for example via a softmax layer, and the transition model outputs a conditional distribution over next observations. In continuous spaces, pθ (· | o, a ) may be instantiated as a Gaussian head, a mixture density model, or a conditional latent-state model. The observable next-observation law induced by the model is 
+
+pθ,ψ (o′ | o, e ) = 
+
+> k
+
+X
+
+> a=1
+
+πψ (a | o, e ) pθ (o′ | o, a ), (5) which mirrors the population mixture representation in (1). A natural estimation principle is maximum likelihood under the observable mixture model (5). Given a dataset D = {(oi, o ′
+
+> i
+
+, e i)}ni=1 , we define the empirical negative log-likelihood 
+
+Lfit (θ, ψ ) = − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+log 
+
+ kX
+
+> a=1
+
+πψ (a | oi, e i) pθ (o′ 
+
+> i
+
+| oi, a )
+
+
+
+.
+
+Minimizing Lfit alone is generally insufficient: the model can explain the data with collapsed latent actions or nearly identical demonstrator policies, even when the true latent structure is identifiable. 
+
+A minimum-volume regularizer for latent transitions. The continuous-space identifiability result suggests selecting, among all factorizations that explain the data well, the one with minimum embedded volume. Let Φ : M(O) → H be the injective linear embedding used in Theorem 4.2. For a candidate transition model, define the embedded latent transitions 
+
+μθ,a (o) := Φ  pθ (· | o, a ) ∈ H , a ∈ [k].
+
+Their embedded Gram matrix is 
+
+Gθ (o) := ⟨μθ,a (o), μ θ,b (o)⟩H
+
+ka,b =1 .
+
+A practical surrogate for the population minimum-volume principle is then 
+
+Rvol (θ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+log det  Gθ (oi) + εI k
+
+,
+
+where ε > 0 is a small numerical regularization constant. Minimizing Rvol encourages the latent transition family to be as simple and compact as possible while still explaining the observed data. 
+
+Preventing policy collapse. In the identifiability theory, demonstrator diversity is not an objective to be maximized, but a condition on the feasible factorizations: the true policy matrix must be sufficiently scattered. A direct practical analogue is therefore not to reward arbitrarily large diversity, but to penalize 
+
+degenerate policy geometries in which the learned policy matrix becomes nearly low-rank or some latent actions become unused. For a fixed observation o, define the learned policy matrix Πψ (o) := πψ (· | o, 1) · · · πψ (· | o, m ) ∈ Rk×m.
+
+To discourage collapse, we introduce a diversity barrier based on the log-determinant of the policy Gram matrix: 
+
+Rpol (ψ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+h
+
+τ − log det  Πψ (oi)Π ψ (oi)⊤ + εI k
+
+i
+
+> +
+
+,
+
+9where [ x]+ = max {x, 0} and τ is a user-specified threshold. This term vanishes whenever the policy matrix is sufficiently well-conditioned, and becomes active only when demonstrator policies begin to collapse toward a low-dimensional or poorly separated configuration. In this way, it acts as a soft feasibility constraint rather than a competing objective. 
+
+Optional label anchoring. As in the theoretical development, the latent action labels are only identifiable up to permutation unless a small amount of side information is available. If a small labeled dataset Dlab =
+
+{(oj , e j , a ⋆j )}rj=1 is available, then the residual global permutation ambiguity can be fixed by adding the supervision term 
+
+Lanchor (ψ) = − 1
+
+r
+
+> r
+
+X
+
+> j=1
+
+log πψ (a⋆j | oj , e j ).
+
+Final objective. Combining the terms above yields the estimator min  
+
+> θ,ψ
+
+Lfit (θ, ψ ) + λvol Rvol (θ) + λpol Rpol (ψ) + λanchor Lanchor (ψ), (6) where λvol , λ pol , λ anchor ≥ 0 are tuning parameters. The roles of the terms are complementary: Lfit enforces agreement with the observed demonstrator-conditioned transitions, Rvol selects a simple latent action rep-resentation, Rpol keeps the learned policies in a sufficiently diverse regime, and Lanchor resolves the final global label symmetry when labeled actions are available. The objective (6) should be viewed as a practical surrogate for the population identification problem rather than as an exact finite-sample analogue of the theory. In particular, the minimum-volume principle in Theorem 4.2 is applied there over exactly feasible factorizations, whereas (6) trades off data fit and regularization in finite samples. The policy regularizer is therefore important in practice: without it, the model may reduce the transition volume by collapsing distinct latent actions or by learning nearly identical demonstrator policies, even when the ground-truth factorization is identifiable. The estimator above is designed to preserve the geometric intuition of the theory: learn the simplest latent action-conditioned transition model that explains the data, while requiring the demonstrator policies to remain sufficiently diverse to reveal that latent structure. 
+
+Computing the embedded Gram matrix. The form of Gθ (o) depends on how the transition model 
+
+pθ (· | o, a ) is represented. If pθ is an explicit density model on O, such as a Gaussian or mixture-density head, and the embedding Φ is induced by a kernel k, then the Gram entries can be written as 
+
+Gθ (o)ab = ⟨Φ( pθ (· | o, a )) , Φ( pθ (· | o, b )) ⟩H = Ex∼pθ (·| o,a ), y ∼pθ (·| o,b )[k(x, y )] ,
+
+which may be available in closed form for simple choices of pθ and k, or else approximated by Monte Carlo samples. If the transition model is deterministic, say pθ (· | o, a ) = δfθ (o,a ), then Gθ (o)ab = k(fθ (o, a ), f θ (o, b )) ,
+
+so the Gram matrix reduces to pairwise kernel evaluations between the predicted next observations. Finally, if the transition model is defined in a learned latent state space, for example by encoding observations as z = hω (o) and modeling pθ (z′ | z, a ), then the same construction may be applied in latent space by replacing O with the latent space and computing the Gram matrix from the corresponding latent transition distributions. In all cases, the role of Gθ (o) is the same: it quantifies how distinct the action-conditioned transitions are at observation o, and its determinant serves as a measure of the effective volume of the learned latent action simplex. 
+
+# 6 Conclusion 
+
+We studied when latent actions and action-conditioned dynamics can be identified from offline trajecto-ries in which actions are never observed but demonstrator identity is available. Our main insight is that demonstrator diversity can make the latent structure recoverable: when demonstrators induce sufficiently 10 rich variation in latent action usage and the transition dynamics are shared, the observable next-observation laws admit an identifiable factorization up to permutation of the latent actions. We established this first in finite observation spaces via identifiable stochastic nonnegative matrix factorization, and then extended the result to continuous observation spaces through an embedded minimum-volume criterion. Under continuity and connectedness assumptions, the remaining statewise permutation ambiguity reduces to a single global permutation, which can be fixed with a small amount of labeled action data. Beyond the identifiability re-sults, our analysis suggests a practical principle for learning from action-free offline data: learn the simplest latent action-conditioned transition model consistent with the data while requiring demonstrator policies to remain sufficiently diverse to reveal that latent structure. We hope these results provide a useful theoretical foundation for future algorithms that leverage heterogeneous passive data for representation learning, model learning, and offline reinforcement learning without action annotations. 
+
+# References 
+
+M. Arjovsky, L. Bottou, I. Gulrajani, and D. Lopez-Paz. Invariant risk minimization. arXiv:1907.02893 ,2019. B. Baker, I. Akkaya, P. Zhokhov, J. Huizinga, J. Tang, A. Ecoffet, B. Houghton, R. Sampedro, and J. Clune. Video pretraining (vpt): Learning to act by watching unlabeled online videos. In Advances in Neural Information Processing Systems , 2022. Y. Chen, L. Xu, C. Gulcehre, T. Le Paine, A. Gretton, N. De Freitas, and A. Doucet. On instrumental variable regression for deep offline policy evaluation. Journal of Machine Learning Research , 23(302):1–40, 2022. A. D. Edwards, L. Hasenclever, A. Storkey, and Y. W. Teh. Imitating latent policies from observation. In Proceedings of the 36th International Conference on Machine Learning , volume 97 of Proceedings of Machine Learning Research , pages 1755–1763. PMLR, 2019. X. Fu, K. Huang, N. D. Sidiropoulos, and W. Ma. On identifiability of nonnegative matrix factorization. 
+
+IEEE Signal Processing Letters , 25(3):328–332, 2018. doi: 10.1109/LSP.2018.2794181. J. Hartford, G. Lewis, K. Leyton-Brown, and M. Taddy. Deep iv: A flexible approach for counterfac-tual prediction. In Proceedings of the 34th International Conference on Machine Learning , volume 70 of 
+
+Proceedings of Machine Learning Research , pages 1414–1423. PMLR, 2017. K. Huang, X. Fu, and N. D. Sidiropoulos. Learning hidden markov models from pairwise co-occurrences with application to topic modeling. In Proceedings of the 35th International Conference on Machine Learning ,volume 80 of Proceedings of Machine Learning Research , pages 2068–2077. PMLR, 2018. A. Levine, P. Stone, and A. Zhang. Offline action-free learning of ex-bmdps by comparing diverse datasets. 
+
+arXiv preprint arXiv:2503.21018 , 2025. L. Liao, Z. Fu, Z. Yang, Y. Wang, D. Ma, M. Kolar, and Z. Wang. Instrumental variable value iteration for causal offline reinforcement learning. Journal of Machine Learning Research , 25(303):1–56, 2024. D. Schmidt and M. Jiang. Learning to act without actions. In International Conference on Learning Representations , 2024. Y. Seo, T. Yu, S. K. S. Ghasemipour, D. Schuurmans, S. Levine, O. Nachum, and K. Lee. Reinforcement learning with action-free pre-training from videos. In Proceedings of the 39th International Conference on Machine Learning , volume 162 of Proceedings of Machine Learning Research , pages 19561–19584. PMLR, 2022. 11 F. Torabi, G. Warnell, and P. Stone. Behavioral cloning from observation. In Proceedings of the Twenty-Seventh International Joint Conference on Artificial Intelligence , pages 4950–4957. IJCAI, 2018. doi: 10.24963/ijcai.2018/687. F. Torabi, G. Warnell, and P. Stone. Generative adversarial imitation from observation. In ICML Workshop on Imitation, Intent, and Interaction (I3) , 2019. PMLR Workshop Proceedings. Q. Zheng, M. Henaff, B. Amos, and A. Grover. Semi-supervised offline reinforcement learning with action-free trajectories. In Proceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pages 42339–42362. PMLR, 2023. 12 A Proofs 
+
+## A.1 Proof of Proposition 4.1 
+
+It suffices to give one example. Let O = {1, 2} and k = 2, and consider the observable distribution 
+
+p∗(· | o) = 
+
+1/21/2
+
+
+
+.
+
+One feasible decomposition is 
+
+t1 =
+
+10
+
+
+
+, t2 =
+
+01
+
+
+
+, π∗(· | o) = 
+
+1/21/2
+
+
+
+,
+
+for which 
+
+p∗(· | o) = 12 t1 + 12 t2.
+
+A different feasible decomposition is ˜t1 =
+
+3/41/4
+
+
+
+, ˜t2 =
+
+1/43/4
+
+
+
+, ˜π∗(· | o) = 
+
+1/21/2
+
+
+
+,
+
+for which 
+
+p∗(· | o) = 12 ˜t1 + 12 ˜t2.
+
+These two decompositions are not related by permutation. Hence the latent transitions and latent actions are not identifiable from a single observation-only conditional distribution in general. 
+
+## A.2 Proof of Theorem 4.1 
+
+Theorem A.1 (Theorem 1 of Fu et al. [2018]) . Let u, v, z ∈ N with u, z ≥ v. Suppose 
+
+X∗ ∈ Ru×z , W ∗ ∈ Ru×v , H∗ ∈ Rv×z
+
+satisfy 
+
+X∗ = W ∗H∗, rank( X∗) = rank( H∗) = v, 
+
+and assume that H∗ is sufficiently scattered. Then the optimization problem 
+
+min    
+
+> W∈Ru×v,H ∈Rv×z
+
+det( W ⊤W )
+
+s.t. X∗ = W H H1⊤ = 1, H ≥ 0(7) 
+
+has a unique solution up to permutation: there exists a permutation matrix Σ ∈ { 0, 1}v×v and a full-rank permutation matrix D ∈ Rv×v such that 
+
+W = W ∗ΣD, H = D−1Σ⊤H∗.
+
+Lemma A.1 (Column-stochasticity removes diagonal scaling) . Let T, T ′ ∈ M u×k and Π, Π′ ∈ M k×m satisfy 
+
+T ′ = T D, Π′ = D−1Π
+
+for some invertible diagonal matrix D ∈ Rk×k. Then D = Ik.Proof. Write D = diag( d1, . . . , d k). Since T and T ′ are column-stochastic, 
+
+1⊤T ′ = 1⊤T D = 1⊤D = 1⊤.
+
+Hence da = 1 for every a ∈ [k], so D = Ik.13 Under Assumption 2, Theorem A.1 implies that any feasible factorization of P ∗ 
+
+> o
+
+is unique up to per-mutation and diagonal scaling. Concretely, there exist a permutation matrix Σ o and an invertible diagonal matrix Do such that 
+
+To = T ∗ 
+
+> o
+
+ΣoDo, Πo = D−1 
+
+> o
+
+Σ⊤ 
+
+> o
+
+Π∗
+
+> o
+
+.
+
+By Lemma A.1, column-stochasticity forces Do = Ik. Therefore 
+
+To = T ∗ 
+
+> o
+
+Σo, Πo = Σ ⊤ 
+
+> o
+
+Π∗
+
+> o
+
+,
+
+as claimed. 
+
+## A.3 Proof of Theorem 4.2 
+
+Lemma A.2 (Correct determinant bound) . Let Π∗ ∈ Rk×m 
+
+> +
+
+have rank k, and define 
+
+K := cone(Π ∗) ⊂ Rk.
+
+Assume 
+
+Ck ⊆ K, K∗ ∩ bd( C∗ 
+
+> k
+
+) = {λe j : j ∈ [k], λ ≥ 0}.
+
+Let A ∈ GL( k) satisfy 
+
+AΠ∗ ≥ 0, A⊤1 = 1.
+
+Then 
+
+| det( A)| ≤ 1.
+
+Moreover, equality holds if and only if A is a permutation matrix. Proof. Let r⊤ 
+
+> 1
+
+, . . . , r ⊤ 
+
+> k
+
+denote the rows of A.Since AΠ∗ ≥ 0, for each i we have 
+
+r⊤ 
+
+> i
+
+Π∗ ≥ 0.
+
+Equivalently, for every column π∗ 
+
+> j
+
+of Π ∗,
+
+r⊤ 
+
+> i
+
+π∗ 
+
+> j
+
+≥ 0.
+
+Hence each row vector ri lies in the dual cone K∗.Because Ck ⊆ K, duality of cones gives 
+
+K∗ ⊆ C ∗ 
+
+> k
+
+= {x ∈ Rk : 1⊤x ≥ ∥ x∥2}.
+
+Therefore each row satisfies 
+
+∥ri∥2 ≤ 1⊤ri.
+
+By Hadamard’s inequality applied to the rows of A,
+
+| det( A)| ≤ 
+
+> k
+
+Y
+
+> i=1
+
+∥ri∥2 ≤
+
+> k
+
+Y
+
+> i=1
+
+1⊤ri.
+
+Now 
+
+1⊤ri = ( A1)i,
+
+so kY
+
+> i=1
+
+1⊤ri =
+
+> k
+
+Y
+
+> i=1
+
+(A1)i.
+
+Also, kX
+
+> i=1
+
+(A1)i = 1⊤A1 = ( A⊤1)⊤1 = 1⊤1 = k. 
+
+14 Since each ( A1)i ≥ ∥ ri∥2 ≥ 0, AM–GM yields 
+
+> k
+
+Y
+
+> i=1
+
+(A1)i ≤ 1.
+
+Hence 
+
+| det( A)| ≤ 1.
+
+Now suppose equality holds. Then equality must hold in: (i) Hadamard’s inequality, so the rows r1, . . . , r k are pairwise orthogonal; (ii) the bound ∥ri∥2 ≤ 1⊤ri, so each ri ∈ bd( C∗ 
+
+> k
+
+); (iii) AM–GM, so each ( A1)i = 1, i.e. each row sum equals 1. Thus each row ri lies in 
+
+K∗ ∩ bd( C∗ 
+
+> k
+
+),
+
+so by assumption, 
+
+ri = λieℓi
+
+for some λi ≥ 0 and ℓi ∈ [k]. Since the row sum is 1, we get λi = 1. Thus every row is a standard basis vector. Because A is invertible, these basis vectors must be distinct, so A is a permutation matrix. Conversely, any permutation matrix satisfies the assumptions and has determinant of absolute value 1. 
+
+Proof of Theorem 4.2. Fix o ∈ O and suppress the dependence on o in the notation. Write 
+
+ta := toa, pe := poe, Π∗ := Π ∗
+
+> o
+
+.
+
+Let (¯ t1, . . . , ¯tk, Π) be any feasible solution of (4). Define the embedded latent and observable elements 
+
+ua := Φ( ta) ∈ H , ¯ua := Φ(¯ ta) ∈ H , ve := Φ( pe) ∈ H ,
+
+and collect them into linear maps 
+
+T ∗ = u1 · · · uk
+
+ , ¯T = ¯u1 · · · ¯uk
+
+ , P = v1 · · · vm
+
+ .
+
+By the ground-truth mixture identity, feasibility, and linearity of Φ, 
+
+P = ¯T Π = T ∗Π∗.
+
+By Assumption 3(i), rank( GΦ(t1, . . . , t k)) = k, 
+
+so the Gram matrix GΦ(t1, . . . , t k) is positive definite. Hence u1, . . . , u k are linearly independent, and therefore dim span {u1, . . . , u k} = k. 
+
+Moreover, since Π ∗ is sufficiently scattered, the cone 
+
+K := cone(Π ∗)contains Ck, which is full-dimensional in Rk. Hence K is full-dimensional, so rank(Π ∗) = k.Therefore the columns of Π ∗ span Rk, and thus span {v1, . . . , v m} = T ∗(Rk) = span {u1, . . . , u k}.
+
+15 In particular, dim span {v1, . . . , v m} = k. 
+
+On the other hand, since P = ¯T Π, we have span {v1, . . . , v m} ⊆ span {¯u1, . . . , ¯uk}.
+
+The left-hand side has dimension k, while the right-hand side is spanned by at most k vectors, so in fact span {¯u1, . . . , ¯uk} = span {u1, . . . , u k}.
+
+Therefore there exists a unique invertible matrix S ∈ GL( k) such that ¯T = T ∗S. 
+
+Substituting into P = ¯T Π = T ∗Π∗ gives 
+
+T ∗SΠ = T ∗Π∗.
+
+Since the columns of T ∗ are linearly independent, T ∗ is injective on Rk, and hence 
+
+SΠ = Π ∗, so Π = S−1Π∗.
+
+Let 
+
+A := S−1.
+
+Then 
+
+AΠ∗ = Π ≥ 0.
+
+Next, because Φ is linear and injective, the identity ¯T = T ∗S implies that for each a ∈ [k], ¯ta =
+
+> k
+
+X
+
+> b=1
+
+Sba tb
+
+as finite signed measures in M(O). Since both ¯ ta and each tb are probability measures, taking total mass yields 1 = ¯ ta(O) = 
+
+> k
+
+X
+
+> b=1
+
+Sba tb(O) = 
+
+> k
+
+X
+
+> b=1
+
+Sba .
+
+Thus every column of S sums to one, i.e. 
+
+1⊤S = 1⊤.
+
+Equivalently, 
+
+A⊤1 = 1.
+
+We may therefore apply Lemma A.2 to conclude that 
+
+| det( A)| ≤ 1, hence | det( S)| ≥ 1,
+
+with equality if and only if S is a permutation matrix. Finally, the embedded Gram matrix transforms as 
+
+GΦ(¯ t1, . . . , ¯tk) = S⊤GΦ(t1, . . . , t k)S, 
+
+and therefore det  GΦ(¯ t1, . . . , ¯tk) = det  GΦ(t1, . . . , t k) det( S)2.
+
+Since | det( S)| ≥ 1, we obtain det  GΦ(¯ t1, . . . , ¯tk) ≥ det  GΦ(t1, . . . , t k).
+
+16 The ground-truth factorization ( t1, . . . , t k, Π∗) is feasible, so it achieves the value det  GΦ(t1, . . . , t k).
+
+Hence every optimizer must satisfy | det( S)| = 1. By Lemma A.2, this happens if and only if S is a permutation matrix. Therefore there exists a permutation matrix Σ such that ¯T = T ∗Σ, Π = Σ ⊤Π∗.
+
+Because Φ is injective, ¯T = T ∗Σ implies ¯ta = tΣ( a), a ∈ [k].
+
+Restoring the dependence on o gives exactly the claimed conclusion: ¯ta = to
+
+> Σ( a)
+
+, a ∈ [k], and Πo = Σ ⊤ 
+
+> o
+
+Π∗
+
+> o
+
+.
+
+## A.4 Proof of Theorem 4.3 
+
+Fix o0 ∈ O , and let Σ 0 := Σ( o0). Write σ0 for the corresponding permutation of [ k], so that 
+
+ϕa(o0) = ϕ∗
+
+> σ0(a)
+
+(o0) for all a ∈ [k].
+
+Because the true embedded latent transitions at o0 are pairwise distinct, the quantity 
+
+δ0 := min  
+
+> i̸=j
+
+ϕ∗ 
+
+> i
+
+(o0) − ϕ∗ 
+
+> j
+
+(o0) H
+
+is strictly positive. By continuity of o 7 → ϕa(o) and o 7 → ϕ∗
+
+> a
+
+(o), there exists a neighborhood U of o0 such that for all o ∈ U
+
+and all a ∈ [k], 
+
+∥ϕa(o) − ϕa(o0)∥H < δ 0/4, ∥ϕ∗
+
+> a
+
+(o) − ϕ∗
+
+> a
+
+(o0)∥H < δ 0/4.
+
+Fix o ∈ U . For each a ∈ [k], we then have 
+
+∥ϕa(o) − ϕ∗
+
+> σ0(a)
+
+(o)∥H ≤ ∥ ϕa(o) − ϕa(o0)∥H + ∥ϕ∗
+
+> σ0(a)
+
+(o0) − ϕ∗
+
+> σ0(a)
+
+(o)∥H < δ 0/2.
+
+On the other hand, for any b̸ = σ0(a), 
+
+∥ϕa(o) − ϕ∗ 
+
+> b
+
+(o)∥H ≥ ∥ ϕ∗
+
+> σ0(a)
+
+(o0) − ϕ∗ 
+
+> b
+
+(o0)∥H − ∥ ϕa(o) − ϕa(o0)∥H − ∥ ϕ∗ 
+
+> b
+
+(o) − ϕ∗ 
+
+> b
+
+(o0)∥H
+
+> δ 0 − δ0/4 − δ0/4 = δ0/2.
+
+Thus, for every a ∈ [k], the vector ϕa(o) is strictly closer than δ0/2 to ϕ∗
+
+> σ0(a)
+
+(o) and strictly farther than 
+
+δ0/2 from every other true component ϕ∗ 
+
+> b
+
+(o). Therefore the only permutation relating T (o) and T ∗(o) is Σ 0.Hence Σ( o) = Σ 0 for all o ∈ U. 
+
+So Σ( ·) is locally constant. Since Σ( o) takes values in the finite discrete set of k × k permutation matrices, any locally constant map is constant on each connected component of O. Because O is connected, Σ( o) must be constant on all of O.17 A.5 Proof of Corollary 4.1 
+
+Fix any o ∈ O . By Assumption 5 (ii)–(iii), Theorem 4.2 applies at that observation. Hence there exists a permutation matrix Σ( o) such that 
+
+p(· | o, a ) = p∗(· | o, Σ( o)( a)) , Π( o) = Σ( o)⊤Π∗(o).
+
+Because Φ is injective, this is equivalent to 
+
+T (o) = T ∗(o)Σ( o), Π( o) = Σ( o)⊤Π∗(o),
+
+where 
+
+T (o) = Φ( p(· | o, 1)) · · · Φ( p(· | o, k ))  , T ∗(o) = Φ( p∗(· | o, 1)) · · · Φ( p∗(· | o, k ))  .
+
+By Assumption 5 (iv) and the continuity assumed for the candidate family, the maps o 7 → T (o) and o 7 → T ∗(o)are continuous. Moreover, Assumption 5 (iii) implies that the embedded true latent transitions are linearly independent at every o, and in particular pairwise distinct. Therefore the hypotheses of Theorem 4.3 are satisfied, so there exists a single permutation matrix Σ such that 
+
+p(· | o, a ) = p∗(· | o, Σ( a)) , Π( o) = Σ ⊤Π∗(o) for all o ∈ O .
+
+Finally, by Assumption 5 (v), the permutation is known on the anchor subset S. Since the same permu-tation Σ applies globally, it is uniquely determined there and hence uniquely determined everywhere. If the anchor identifies the true labeling, then Σ = Ik, yielding 
+
+p(· | o, a ) = p∗(· | o, a ), Π( o) = Π ∗(o) for all o ∈ O , a ∈ [k].
+
+This proves the claim. 18

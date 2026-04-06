@@ -1,0 +1,383 @@
+Title: Laya: A LeJEPA Approach to EEG via Latent Prediction over Reconstruction
+
+URL Source: https://arxiv.org/pdf/2603.16281v1
+
+Published Time: Wed, 18 Mar 2026 01:01:54 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Laya: A LeJEPA Approach to EEG via Latent Prediction over Reconstruction 
+
+Saarang Panchavati 1 Uddhav Panchavati 2 Corey Arnold 1 William Speier 1
+
+# Abstract 
+
+Electroencephalography (EEG) is a widely used tool for studying brain function, with applications in clinical neuroscience, diagnosis, and brain-computer interfaces (BCIs). Recent EEG foun-dation models trained on large unlabeled corpora aim to learn transferable representations, but their effectiveness remains unclear; reported improve-ments over smaller task-specific models are often modest, sensitive to downstream adaptation and fine-tuning strategies, and limited under linear probing. We hypothesize that one contributing factor is the reliance on signal reconstruction as the primary self-supervised learning (SSL) objec-tive, which biases representations toward high-variance artifacts rather than task-relevant neu-ral structure. To address this limitation, we ex-plore an SSL paradigm based on Joint Embedding Predictive Architectures (JEPA), which learn by predicting latent representations instead of recon-structing raw signals. While earlier JEPA-style methods often rely on additional heuristics to en-sure training stability, recent advances such as LeJEPA provide a more principled and stable for-mulation. We introduce Laya , the first EEG foun-dation model based on LeJEPA. Across a range of EEG benchmarks, Laya demonstrates improved performance under linear probing compared to reconstruction-based baselines, suggesting that latent predictive objectives offer a promising di-rection for learning transferable, high-level EEG representations. 
+
+# 1. Introduction 
+
+Electroencephalography (EEG) is a non-invasive method of recording electrical activity in the brain with good temporal resolution. Due to its low cost and ease of accessibility, it is a critical tool for both clinical neurology and brain-computer   
+
+> 1Department of Medical Informatics, UCLA, Los Angeles, USA 2Department of Cognitive Science, UCSD, San Diego, USA. Correspondence to: Saarang Panchavati <saarang@ucla.edu >.
+> Preprint. March 18, 2026.
+
+interfaces (BCIs). EEG analysis remains challenging due to low signal-to-noise ratio and significant inter-subject vari-ability which hinder generalization and limit the discovery of robust, interpretable biomarkers. Recently, deep learning has emerged as an exciting alternative to manual visualiza-tion or hand-crafted pipelines (Roy et al., 2019; Craik et al., 2019). Supervised approaches have achieved strong perfor-mance on task-specific datasets, but still fail to generalize to new subjects or recording setups. Recent years have seen growing interest in EEG founda-tion models — large neural networks pretrained on large EEG corpora to learn transferable representations across tasks and datasets (Kuruppu et al., 2025). Motivated by successes in vision and language foundation models, these approaches leverage large scale pretraining to learn transfer-able representations that can be used across datasets, tasks, and subjects. Models such as LaBraM (Jiang et al., 2024), LUNA (Doner et al., 2025), CBraMod (Wang et al., 2025a), and REVE (El Ouahidi et al., 2025) have demonstrated state-of-the-art capabilities in both clinical applications and BCI tasks like motor imagery decoding. By leveraging large, cross-subject EEG corpora, these approaches highlight the potential of EEG foundation models to learn reusable neural representa-tions that generalize across both long-duration, state-level clinical tasks, and short-horizon, event-driven BCI tasks. Despite these successes, however, recent benchmarking stud-ies such as EEG-Bench (Kastrati et al., 2025) indicate that EEG foundation models do not consistently outperform simpler baselines. Reported gains are often modest and highly task-dependent. Frozen linear probing often yields near-chance performance, indicating weak intrinsic repre-sentations that require extensive adaptation and finetuning to be competitive. This raises questions about the useful-ness of these models in the real world, particularly given the substantial computational cost of pretraining (Yang et al., 2026; Kastrati et al., 2025; Zhang et al., 2024). Several recurring limitations help explain these mixed re-sults. Generalization across tasks and datasets remains lim-ited, with pretrained representations often failing to transfer beyond the pretraining distribution. Moreover, scaling laws in EEG are not yet well-established; larger models do not consistently yield better transfer performance, especially 1
+
+> arXiv:2603.16281v1 [cs.LG] 17 Mar 2026 Laya, a LeJEPA-based EEG Foundation Model
+
+under frozen evaluation protocols (Yang et al., 2026; Ku-ruppu et al., 2025). Almost all existing approaches rely on reconstruction-based pretraining objectives applied directly to raw EEG signals. Because EEG is inherently noisy and dominated by non-task-relevant variability, optimizing for signal-space reconstruction may encourage models to learn nuisance variables rather than semantic structure (Littwin et al., 2024), resulting in weak linear-probe performance and heavy reliance on downstream fine-tuning. These observations suggest that while EEG foundation mod-els are a promising direction, current approaches leave sig-nificant room for improvement. In particular, there is a need for representation learning objectives that better align with downstream discriminative tasks, improve data efficiency, and generalize across heterogeneous EEG domains without extensive task-specific adaptation. 
+
+1.1. JEPA and LeJEPA 
+
+Joint Embedding Predictive Architectures (JEPAs) (LeCun, 2022) are a class of self-supervised learning models that learn representations by predicting latent embeddings across views (augmentations, masks, etc.), rather than reconstruct-ing raw inputs. This objective aims to force the model to encode only the information necessary for prediction, capturing useful semantic structure, while discarding unpre-dictable, noisy and task-irrelevant variation in the raw input space. Theoretical results (Assel et al., 2025; Balestriero & LeCun, 2024; Littwin et al., 2024) and empirical results in vision (Bardes et al., 2024; Assran et al., 2025; Chen et al., 2025) support this approach, indicating that latent prediction encourages the learning of more semantically rich features than reconstruction-based objectives. Despite these successes, latent prediction alone cannot guar-antee non-degenerate representations, representation col-lapse, or anisotropy. In practice, existing implementations address these issues using architectural heuristics such as stop-gradient operations and momentum-updated target en-coders, which complicate optimization and obscure repre-sentation geometry. LeJEPA (Balestriero & LeCun, 2025) addresses these lim-itations by explicitly regularizing the geometry of the la-tent space. By constraining representations to be well-conditioned and isotropic, LeJEPA both reduces empirical risk across downstream tasks and removes the need for ar-chitectural heuristics yielding a simpler and more principled predictive framework. Prioritizing predictable structures over signal reconstruc-tion is particularly relevant for EEG, where high-variance artifacts often dominate the signal. We hypothesize that latent prediction objectives are better for learning EEG rep-resentations, naturally filtering out irrelevant noise. While emerging works have begun to explore JEPA-style objec-tives for EEG (Hojjati et al., 2025; Guetschel et al., 2024b), they typically rely on standard architectural heuristics to pre-vent collapse, and have not yet demonstrated their findings at foundation model scale. By adapting LeJEPA, we use explicit geometric regulariza-tion to prevent representation collapse, eliminating the need for asymmetric encoders or student/teacher frameworks. We extend this framework to a masked modeling paradigm (analogous to V-JEPA2) where the model learns by predict-ing temporally masked representations (Bardes et al., 2024; Assran et al., 2025). Our results suggest that latent predic-tion objectives are a promising direction for large-scale EEG representation learning. 
+
+1.2. Our Contributions 
+
+• We introduce Laya , the first application of LeJEPA to EEG representation learning. • We demonstrate that latent prediction outperforms reconstruction-based pretraining on clinical tasks, achieving the best mean accuracy with only 10% of the pretraining data on EEG-Bench. • We extend EEG-Bench with noise robustness evalua-tion, linear probing protocols, and LUNA as an addi-tional baseline. • We show that Laya learns representations that are resilient to noise—maintaining performance at SNR levels where reconstruction-based models degrade sub-stantially. • We provide qualitative evidence that Laya captures clinically meaningful temporal structure, with embed-dings that align with seizure onset. 
+
+# 2. Related Works 
+
+2.1. JEPAs I-JEPA applies the JEPA architecture to images by train-ing a predictor to infer the latent embeddings of masked image blocks from a visible context block using an en-coder–predictor architecture with an EMA target network, enabling semantic prediction without pixel-level reconstruc-tion (Assran et al., 2023). 
+
+V-JEPA extends JEPA to video by tokenizing clips into spatiotemporal blocks and training a predictor to infer masked block embeddings from visible ones using an en-coder–predictor with an EMA target, operating entirely in representation space rather than reconstructing pix-els (Bardes et al., 2024). 
+
+LeJEPA augments the JEPA latent-prediction objective with Sketched Isotropic Gaussian Regularization (SIGReg), 2Laya, a LeJEPA-based EEG Foundation Model 
+
+which encourages encoder embeddings to match an isotropic Gaussian — a distribution shown to minimize expected downstream risk. SIGReg uses random 1D projections to enforce this distribution with linear complexity, removing reliance on heuristics like stop-gradients or teacher–student networks. The combined objective yields stable, collapse-free pretraining with a single trade-off hyperparame-ter and robust performance across architectures and do-mains (Balestriero & LeCun, 2025). 
+
+2.2. EEG Foundation Models LaBraM was among the first large-scale EEG foundation models, pretraining a transformer on over 2,500 hours of data using masked token prediction. The model discretizes EEG patches via a neural tokenizer trained to reconstruct Fourier spectra, then predicts masked tokens over a flattened channel–time sequence (Jiang et al., 2024). 
+
+LUNA introduces an efficient, topology-agnostic EEG foundation model that handles variable electrode configu-rations by compressing channel-wise patch features into a fixed-size latent space via learned queries and cross-attention, enabling linear scaling with channel count. Pre-trained on over 21,000 hours of EEG using masked patch reconstruction, LUNA achieves strong transfer performance while reducing computational cost by orders of magni-tude (Doner et al., 2025). 
+
+2.3. JEPA-inspired EEG Foundation models 
+
+Recent work has explored JEPA-style training at scale and across modalities. 
+
+S-JEPA employs spatial block masking over EEG channels, masking contiguous scalp regions to encourage learning of spatial dependencies and dynamic channel attention. Experi-ments across multiple BCI paradigms demonstrate improved cross-dataset transfer relative to reconstruction-based SSL (Guetschel et al., 2024a). 
+
+Brain-JEPA is an fMRI foundation model that predicts latent representations of masked spatiotemporal regions. The model introduces functional gradient–based positional encodings and structured spatiotemporal masking to address the lack of a natural spatial ordering in brain data (Dong et al., 2024). 
+
+EEG-VJEPA adapts Video-JEPA to EEG by treating multi-channel recordings as video-like spatiotemporal sequences and performing large contiguous spatiotemporal block mask-ing with latent-space prediction. The model employs a ViT backbone with EMA-stabilized target encoders to learn long-range temporal and cross-channel dependencies (Yang et al., 2025). 
+
+EEG-DINO is a large-scale EEG foundation model based on hierarchical self-distillation rather than masking-based prediction. The method aligns representations across multiple channel- and time-augmented views using a teacher–student framework with decoupled spatial and tem-poral positional embeddings (Wang et al., 2025b). 
+
+# 3. Methods 
+
+3.1. LeJEPA 
+
+Joint-Embedding Predictive Architectures (JEPA) are self-supervised objectives that learn representations by predict-ing latent embeddings of related views, rather than recon-structing raw inputs. By operating entirely in representa-tion space, JEPA aims to capture predictable, task-relevant structure while avoiding the need to model high-variance or nuisance signal components. Formally, let x be an input split into a context xC and a target 
+
+xT (e.g., masked or different views/augmentations of the input). Let fθ : X → Rd be an encoder and gϕ : Rd → Rd
+
+a latent predictor. The JEPA objective minimizes a latent prediction loss, 
+
+LJEPA = Ex ∥gϕ(fθ (xC )) − fθ (xT )∥22. (1) Preventing degenerate solutions such as representation col-lapse is a key challenge in training these models. Prior ap-proaches rely on stop-gradient operations with momentum-updated target encoders, which complicate optimization and muddle how pretraining translates to downstream perfor-mance. LeJEPA addresses this limitation by introducing Sketched Isotropic Gaussian Regularization (SIGReg). SIGReg stabi-lizes latent prediction without asymmetric encoders (EMA teachers) by encouraging embeddings within a batch to be diverse and approximately isotropic by averaging a univari-ate Gaussianity test over random projections, promoting well-spread representations that utilize the full embedding dimension. LeJEPA considers multiple views {v1, . . . , v N } of the same input, embeds each view using fθ , and applies a lightweight projector pϕ to compute an invariance loss across views, while SIGReg regularizes the batch-level embedding geom-etry. The resulting objective combines latent prediction with explicit regularization: 
+
+LLeJEPA = LJEPA + λ LSIGReg , (2) where LSIGReg operates directly on batches of latent rep-resentations to prevent collapse and enable stable repre-sentation learning that translates directly to downstream performance. 3Laya, a LeJEPA-based EEG Foundation Model 
+
+Figure 1. Laya architecture overview. (Top) Raw EEG ( C × T ) is processed through a convolutional patch embedder and channel mixer to produce latent brain states S ∈ RB×N ×D , which are then encoded to produce representations Z. (Bottom) During pretraining, the encoder processes both the full sequence and a masked version (contiguous temporal mask m). Solid arrows indicate the prediction path: masked context representations Zctx are projected to Pctx and passed through the predictor. Dotted arrows indicate the target path: full representations Z are projected with stop-gradient to produce targets T. The predictor output is trained to match masked targets via LMSE . Dashed arrows indicate the regularization path: Z is mean-pooled to zcls , projected to pcls , and regularized via LSIGReg to prevent representation collapse. The channel mixer detail (middle left) shows how patches are added to electrode positions and combined with learned queries via cross-attention. 
+
+3.2. Laya 
+
+3.2.1. P RETRAINING OBJECTIVE 
+
+Building on LeJEPA, we adapt the framework to a masked temporal prediction setting for EEG foundation model pre-training. Rather than the original LeJEPA approach through augmented views, we break up each sequence into observed context and masked target segments, and train the model to predict latent representations of masked temporal regions from surrounding context. To our knowledge, this formula-tion is the first to adapt JEPA-style temporal models, such as V-JEPA (Bardes et al., 2024) and S-JEPA (Guetschel et al., 2024b), within the LeJEPA framework. Given EEG input x ∈ RB×C×T , we extract and embed non-overlapping temporal patches to obtain ˜x ∈ RB×C×N ×E ,where N is the number of patches, and E is the latent dimen-sion of the patch embedder. We then apply a learned channel mixer to produce a sequence S ∈ RB×N ×D of latent brain states which we interpret as mixed-channel representations at each temporal position. We mask contiguous blocks of time and task the model with predicting these masked re-
+
+Algorithm 1 Laya Pretraining Step 
+
+Require: Latent brain states S ∈ RB×N ×D
+
+1: Sample contiguous temporal mask m ⊂ { 1, . . . , N }
+
+2: Z ← Encoder (S)
+
+3: zcls ← Mean (Z, dim = 1) 
+
+4: T ← Projector (StopGrad (Z)) 
+
+5: pcls ← Projector (zcls )
+
+6: Zctx ← Encoder (S, m)
+
+7: Pctx ← Projector (Zctx )
+
+8: ˆT ← Predictor (Pctx , m)
+
+9: L ← MSE ( ˆT, T[m]) + λ · SIGReg (pcls )
+
+gions in latent space. Algorithm 1 summarizes the masked latent prediction objective and regularization used during pretraining. 3.2.2. P ATCH EMBEDDER 
+
+We use a 1D convolution to convert raw EEG time series x ∈
+
+RB×C×T into patch-level embeddings p ∈ RB×C×N ×E .A depthwise 1D convolution is applied independently to 4Laya, a LeJEPA-based EEG Foundation Model 
+
+each channel, with kernel size and stride equal to the patch length P , producing non-overlapping temporal patches. Each convolutional kernel maps P contiguous time sam-ples directly to an E-dimensional embedding. By treating channels independently at this stage, the patch embedder avoids imposing inductive biases tied to specific electrode montages. 3.2.3. D YNAMIC CHANNEL MIXER 
+
+To aggregate information across EEG channels, we adopt the channel-mixing mechanism introduced in LUNA(Doner et al., 2025), which uses learned queries and cross-attention to compress multi-channel EEG into a compact latent rep-resentation. At each temporal position, learned query vec-tors attend across channels, enabling the model to summa-rize spatially distributed activity into a fixed-dimensional embedding. To make this operation spatially aware yet montage-agnostic, electrode coordinates are encoded and incorporated into the channel representations prior to at-tention, allowing the mixer to exploit spatial relationships without assuming a fixed electrode layout. Given patch embeddings p ∈ RB×C×N ×E and electrode coordinates P ∈ RC×3, we incorporate spatial information by encoding electrode coordinates with fixed Fourier fea-tures and adding the resulting embeddings to the channel representations. Learned query vectors then attend over these spatially augmented channel embeddings at each tem-poral patch, producing 
+
+A ∈ RB×N ×Nq×E ,
+
+where Nq is the number of queries. We flatten the final two dimensions of A and apply a linear projection to obtain a channel-mixed latent brain-state sequence 
+
+S ∈ RB×N ×D .
+
+By explicitly encoding spatial information and using mul-tiple learned query outputs per patch, the channel mixer produces a rich, montage-agnostic representation that de-couples spatial aggregation from temporal modeling. 
+
+Query Specialization Loss. Following LUNA, we reg-ularize the query–channel affinity induced by the channel mixer to encourage specialization across learned queries. Let A ∈ RB×Nq×C denote the query–channel affinity ma-trix obtained by averaging attention weights across heads. We penalize pairwise similarity between different query affinity vectors by minimizing the off-diagonal entries of 
+
+AA T . This loss discourages redundant queries while pre-serving soft spatial aggregation. 3.2.4. P RETRAINING 
+
+From the montage-agnostic sequence of latent brain states, we employ masked pretraining to learn rich semantic rep-resentations of the EEG signal. Below we outline the main components of the pretraining setup; hyperparameters and implementation details are provided in Appendix B. 
+
+Masking Strategy. Consistent with previous EEG foun-dation model approaches, and other video modeling (Jiang et al., 2024; Tong et al., 2022), we employ a block masking strategy that masks contiguous spans of time rather than random patch masking. Block masking forces the model to bridge longer temporal gaps, learning structural depen-dencies rather than autocorrelation. We mask 60% of the sequence using randomly sampled blocks spanning 500ms to 1s. 
+
+Encoder. The encoder is a standard transformer encoder implemented using the x-transformers library. We use rotary positional embeddings (RoPE) (Su et al., 2023) and do not introduce additional absolute positional embeddings to avoid overfitting to fixed temporal locations under masking. The encoder is applied in two passes. In the first pass, the full latent sequence is processed to produce embeddings Z
+
+and a global summary representation zcls obtained via tem-poral average pooling; importantly we then apply StopGrad 
+
+to Z. The use of StopGrad follows established JEPA/MAE training setups, where it helps stabilize latent prediction by decoupling target representations from the predictor, and is further motivated by recent work demonstrating that stop-gradient alone can suffice for stable representation learning (Xu et al., 2025) without requiring momentum-updated tar-get encoders. In the second pass, attention is masked at the target tempo-ral locations, and we obtain context embeddings Zctx that encode only the observed portions of the sequence. 
+
+Projector. Following Balestriero & LeCun (2025), the pro-jector is a 3-layer MLP with batch normalization that ex-pands the representation dimension ( Dup ≫ D) before com-pressing them down to the projector dimension Dproj < D .The projector is applied to the full embeddings Z, the global summary zcls , and the context embeddings Zctx , giving tar-get representations T, projected summary embedding pcls ,and bottlenecked context embeddings Pctx .
+
+Predictor. Following MAE and V-JEPA design principles, the predictor is a lightweight Transformer encoder operating at dimension Dproj . Given the bottlenecked context embed-dings Pctx , it predicts latent representations ˆT at masked temporal positions. As in the encoder, RoPE is used to encode relative temporal structure. 
+
+Objective. To compute the LeJEPA loss, we minimize the mean-squared error between predicted masked embed-dings ˆT and the corresponding stopped-gradient targets T
+
+at masked positions, and apply SIGReg to the projected global summary pcls .5Laya, a LeJEPA-based EEG Foundation Model 
+
+# 4. Experiments 
+
+Pretraining datasets. Laya is pretrained on a diverse cor-pus of EEG recordings drawn from multiple large-scale and task-specific sources: the entire Temple University Hospital EEG Corpus (Obeid & Picone, 2016), NMT (Khan et al., 2022), , EEGDash (a filtered aggregation of OpenNeuro EEG datasets), the Healthy Brain Network (HBN) (Shirazi et al., 2024), and several MOABB BCI datasets (Chevallier et al., 2024). All datasets are converted into fixed-length chunks using a consistent preprocessing pipeline. After filtering and quality control, the final pretraining corpus contains 913,314 samples totaling 29,109 hours of EEG, spanning 20,940 subjects (summed across datasets) and 17 distinct channel topologies. This mixture spans a wide range of tasks, montages, and acquisition settings. Further details regarding preprocessing etc. are provided in Appendix Sec-tion C. To enable a realistic evaluation of out-of-distribution generalization, we make sure to exclude datasets commonly used in downstream EEG benchmarks. 
+
+Implementation Details. We train the model for 100,000 steps with an effective sample batch size of 512, distributed across two NVIDIA L40S GPUs. Input sequences are generated by random sampling 16-second crops from the available 120-second recording segments. Comprehensive hyperparameters and optimization details are provided in Section B. We present two variants of Laya : Laya-S ,and Laya-full . Laya-S was only trained on 10% (3K hours) of the total training dataset for 10K steps (sampled equally from all the datasets in the mix). Laya-full was trained on all 30K hours for 100K steps. 
+
+4.1. Downstream Evaluation with EEG-Bench Benchmark Framework and Baselines. We evaluate downstream performance using EEG-Bench (Kastrati et al., 2025), a standardized benchmarking framework spanning 14 diverse brain–computer interface (BCI) and clinical EEG tasks. We compare Laya against a comprehensive suite of baselines, ranging from classical pipelines (e.g., CSP-LDA/SVM) to established EEG foundation models such as LaBraM (Jiang et al., 2024). To ensure a comparison against the state-of-the-art, we further extend the benchmark to in-clude recent architectures like LUNA (Doner et al., 2025). Dataset details are provided in Section D.1. 
+
+Fine-tuning protocols. We primarily assess representation quality under a linear probing protocol. The pretrained encoder parameters are frozen, and a task-specific linear classification head is trained on the embeddings. 
+
+Metrics. We report Balanced Accuracy from linear probing as the primary task-level metric to account for the significant class imbalance common in clinical EEG datasets. For multi-label tasks, metrics are computed on flattened predictions                                                                             
+
+> Table 1. Linear probe performance on motor imagery tasks (bal-anced accuracy). Bold : best, underline: second best.
+> Task LaBraM LUNA Laya-S Laya-full
+> 5-Finger MI 0.213 0.196 0.205 0.213 LH vs RH MI 0.518 0.512 0.506 0.506 4-Class MI 0.297 0.259 0.266 0.278 RH vs Feet MI 0.573 0.570 0.585 0.577 Mean 0.400 0.384 0.390 0.393
+> Table 2. Linear probe performance on clinical tasks (balanced accuracy). Bold : best, underline: second best.
+> Task LaBraM LUNA Laya-S Laya-full
+> Abnormal 0.800 0.759 0.779 0.755 Artifact (Binary) 0.697 0.739 0.690 0.604 Epilepsy 0.645 0.561 0.623 0.594 mTBI 0.561 0.500 0.602 0.532 Artifact (Multiclass) 0.307 0.312 0.368 0.241 OCD 0.817 0.800 0.833 0.800 Parkinson’s 0.546 0.683 0.667 0.605 Schizophrenia 0.500 0.500 0.452 0.500 Seizure 0.675 0.565 0.783 0.726 Sleep Stages 0.183 0.184 0.175 0.172 Mean 0.573 0.560 0.597 0.553
+
+across temporal segments. Comprehensive results including Macro-F1, ROC-AUC, and Cohen’s κ are provided in the Appendix Section D.3. 
+
+4.2. Downstream Results on EEG-Bench 
+
+On motor imagery tasks, Laya performs comparably to reconstruction-based baselines. All models achieve similar performance on binary classification tasks (LH vs RH, RH vs Feet), suggesting that some sensorimotor rhythm features are captured by both approaches. On clinical tasks, Laya-S achieves the highest mean ac-curacy (0.597) despite using only 10% of pretraining data, outperforming LaBraM (0.573) and LUNA (0.560). The largest gains appear on seizure detection (+10.8%), mTBI classification (+4.1%), and multiclass artifact classification (+5.6%), tasks where the relevant neural patterns are subtle and may be obscured by high-variance artifacts. Reconstruction-based models outperform Laya on binary artifact detection (-4.9%), but Laya-S excels at multiclass artifact classification (+6.0%). This supports our theoretical motivation: detecting artifact presence benefits from sen-sitivity to high-variance components, while distinguishing artifact types requires more semantic understanding. 
+
+4.3. Laya pretraining is sample efficient 
+
+Training Laya on only 10% of the pretraining data (Laya-S ) yields the highest mean balanced accuracy on 6Laya, a LeJEPA-based EEG Foundation Model 
+
+clinical tasks (0.597), outperforming LaBraM (0.573) and LUNA (0.560), both trained on larger corpora. This re-sult highlights the strong sample efficiency of latent predic-tion–based pretraining. By focusing on predictable struc-ture in representation space rather than reconstructing high-variance input signals, Laya extracts transferable features more efficiently from limited data, which is a significant ad-vantage given the cost of curating large-scale clinical EEG corpora.   
+
+> Figure 2. Laya is resilient to noise across clinical tasks. Perfor-mance shown under combined noise (Gaussian, 1/f, EMG, channel dropout) at varying SNR levels.
+
+4.4. Laya learns robust representations 
+
+To evaluate robustness to noise, we injected additive noise into the input EEG at inference time, keeping the trained linear probes fixed. Noise was generated channel-wise and scaled to the target SNR (e.g. 30, 20, 10, 0 dB) relative to the channel’s RMS amplitude. We tested Gaussian noise, 1/f band-limited noise, EMG-like high-frequency noise, and channel dropout, applied both individually and as a com-bined mixture. All other preprocessing steps and model parameters remained unchanged. Figure 2 shows degra-dation curves for four clinical tasks. Across tasks, Laya 
+
+is more stable than LaBraM as noise increases. On ab-normal detection, Laya retains 91% of its clean accuracy at 10 dB SNR while LaBraM drops to 68%. This pattern aligns with our theoretical motivation that reconstruction-based models learn features correlated with high-variance input components, making them vulnerable when noise is introduced. Though Laya-full shows lower clean ac-curacy than Laya-S , it maintains similar stability under noise. Detailed robustness results can be found in Appendix Section D.4. 
+
+4.5. Laya learns meaningful temporal structure 
+
+To qualitatively assess learned representations, we visualize patch embeddings from a seizure recording using PCA, fol-lowing Oquab et al. (2024). We project patch embeddings to three principal components and map them to RGB channels, overlaying the result on the raw EEG (Figure 12). 
+
+Laya ’s embeddings show clear temporal structure aligned with seizure onset and termination: at a state change, the col-ors shift distinctly. In contrast, LaBraM’s embeddings fluc-tuate throughout the recording without clear correspondence to the clinical event. This suggests Laya learns features that capture meaningful state changes, while reconstruction-based models may encode higher-frequency variations tied to instantaneous signal characteristics rather than the un-derlying brain state. Further examples can be found in Appendix D.5. 
+
+4.6. Ablations SIGReg is essential to prevent collapse. We found that SIGReg regularization is essential for stable training. With 
+
+λ < 0.02 the model collapses to a constant embedding across the batch, resulting in chance-level downstream per-formance. Similarly, removing the projector severely de-graded downstream performance, yielding a mean accuracy of 0.476. 
+
+# 5. Discussion 
+
+We introduce Laya , the first application of LeJEPA to EEG representation learning, and show that stable la-tent prediction enabled by LeJEPA and SIGReg provides a strong alternative to reconstruction-based pretraining. Across downstream benchmarks, Laya matches or exceeds reconstruction-based baselines. On BCI motor imagery tasks, Laya performs comparably, with only minor gaps; however, both self-supervised approaches remain below su-pervised performance, highlighting the challenge of subject variability in fine-grained BCI settings. In contrast, Laya achieves substantial gains on clinical tasks. Laya-S trained on only 10% of the pretraining data attains the highest mean balanced accuracy. Notably, Laya 
+
+exhibits strong sample efficiency and learns noise-resilient representations. Ablation results show that vanilla JEPA without SIGReg is unstable, underscoring the necessity of explicit geometric regularization. While the pretraining objective plays a central role, these 7Laya, a LeJEPA-based EEG Foundation Model  
+
+> Figure 3. PCA visualization of patch embeddings on two seizure recordings. We map three principal components to RGB. Top:
+> Laya . Bottom: LaBraM. Red bar indicates seizure. Laya shows a clear representational shift at seizure onset, while LaBraM does not.
+
+results also emphasize the importance of architectural induc-tive biases for EEG, particularly channel mixing. Structured channel interactions are critical for enabling JEPA-style objectives to learn stable and transferable representations, suggesting that objective and architecture must be designed jointly. 
+
+Conclusion. These results indicate that reconstruction is not a necessary (and may be a suboptimal) objective for EEG foundation models. By predicting in latent space, Laya 
+
+achieves greater sample efficiency, robustness, and semantic organization, particularly in noisy clinical settings. Latent prediction therefore offers a principled path toward scalable and clinically relevant EEG representation learning beyond signal reconstruction. 
+
+5.1. Limitations 
+
+Laya-S was only trained on 10% of the overall curated data, and while this yielded strong results, scaling dynamics remain unclear. Notably, Laya-full was trained on the full dataset for much longer, but achieved slightly worse performance than Laya-S . We hypothesize that training time may not scale linearly with dataset size. This suggests that small diverse pretraining data trained with a good ob-jective and regularization can lead to strong results, though we hope to fully explore scaling in future work. EEG-Bench focuses on classification tasks and does not extend to retrieval-style tasks like cognitive decoding, emo-tion recognition, or forecasting (e.g., seizure prediction rather than detection). Evaluating on other benchmarks like AdaBrain-Bench (Zhang et al., 2024) or EEG-FM-Bench (Xiong et al., 2025) is necessary to fully characterize repre-sentation quality. Additionally, linear probing may under-estimate the utility of learned representations for tasks re-quiring nonlinear adaptation or subject-specific calibration. BCI performance remains limited across all self-supervised methods, suggesting that subject-level adaptation may be essential for fine-grained motor decoding. Finally, although our model is channel-agnostic, Laya does not explicitly support bipolar montages (we take the mean between channels as the ”channel coordinate”). Extend-ing support to bipolar montages and intracranial electrodes could broaden practical applicability. 
+
+5.2. Future Work 
+
+Our work suggests that latent prediction can yield semanti-cally meaningful EEG representations, but they also raise several open questions. A key direction is developing a clearer understanding of what structure these representa-tions encode. Further analysis is needed to characterize how temporal, spectral, and spatial information are organized in LeJEPA embeddings, and how this organization differs from that induced by reconstruction-based objectives. Laya 
+
+quantitative and qualitative results on seizure-related tasks suggest promising applications of JEPA-style architectures for seizure forecasting and interpretable clinical decision support, where robustness and semantic organization are critical. This naturally connects to the need for a stronger theoretical understanding of self-supervised learning for EEG. Our find-ings indicate that the choice of objective and regularization can already lead to good results, suggesting that future work should focus on principled regularization and stability rather than architectural complexity alone. From a practical perspective, scaling LeJEPA pretraining to the full dataset is an important next step. Although strong performance is achieved using only a subset of the data, the non-linear improvements point to unclear scaling laws for latent prediction objectives in EEG. Related questions around context length and long-range temporal modeling also remain open. Progress in EEG foundation models also depends on more 8Laya, a LeJEPA-based EEG Foundation Model 
+
+extensive and standardized benchmarks, alongside improved data curation and shared pretraining pipelines. Greater agreement on task definitions, evaluation protocols, and preprocessing would enable more meaningful comparisons and faster iteration across the field. 
+
+# Impact Statement 
+
+This work aims to advance machine learning research for electroencephalography (EEG) by developing scalable self-supervised representation learning methods evaluated ex-clusively on publicly available datasets and standardized public benchmarks. By grounding our study in open data and reproducible evaluation protocols, we aim to support transparent comparison, cumulative progress, and broader community engagement. The primary intended impact of this work is to enable more reliable and transferable EEG representations that can fa-cilitate scientific investigation into neural biomarkers, with potential downstream relevance for clinical neuroscience and BCI research. Our contributions are methodological and do not constitute a clinical system or diagnostic tool; any real-world application would require extensive validation, regulatory oversight, and domain-specific expertise. Overall, we believe that advancing open, benchmark-driven EEG modeling infrastructure is a necessary step toward more robust and equitable progress in biomarker discovery and neural interface research. 
+
+# References 
+
+Albrecht, M. A., Waltz, J. A., Cavanagh, J. F., Frank, M. J., and Gold, J. M. Increased conflict-induced slowing but no differences in prediction error learning in schizophrenia. 
+
+Neuropsychologia , 123:131–140, 2019. Araya, C. V., Mendez-Orellana, C., and Rodriguez-Fernandez, M. Large spanish eeg. URL https:// openneuro.org/datasets/ds004279 . Funding: Doctoral scholarship N 21211883 (2021)383 by Agencia Nacional de Investigacion y Desarrollo (ANID Chile). Assel, H. V., Ibrahim, M., Biancalani, T., Regev, A., and Balestriero, R. Joint Embedding vs Reconstruction: Prov-able Benefits of Latent Space Prediction for Self Super-vised Learning, October 2025. URL http://arxiv. org/abs/2505.12477 . arXiv:2505.12477 [cs]. Assran, M., Duval, Q., Misra, I., Bojanowski, P., Vincent, P., Rabbat, M., LeCun, Y., and Ballas, N. Self-supervised learning from images with a joint-embedding predictive architecture. arXiv preprint arXiv:2301.08243 , 2023. URL https://arxiv.org/abs/2301.08243 .Assran, M., Bardes, A., Fan, D., et al. V-jepa 2: Self-supervised video models enable understanding, predic-tion and planning. arXiv preprint arXiv:2506.09985 ,2025. Balestriero, R. and LeCun, Y. Learning by Reconstruction Produces Uninformative Features For Perception, Febru-ary 2024. URL http://arxiv.org/abs/2402. 11337 . arXiv:2402.11337 [cs]. Balestriero, R. and LeCun, Y. Lejepa: Provable and scalable self-supervised learning without heuristics. arXiv preprint arXiv:2511.08544 , 2025. Barachant, A., Bonnet, S., Congedo, M., and Jutten, C. Multiclass brain–computer interface classification by rie-mannian geometry. IEEE Transactions on Biomedical Engineering , 59(4):920–928, 2011. Bardes, A., Garrido, Q., Assran, M., et al. V-jepa: Self-supervised learning of video representations by predict-ing latent embeddings. In International Conference on Learning Representations (ICLR) , 2024. Bialas, O. and Schoewiesner, M. Evoked responses to elevated sounds. URL https://openneuro.org/ datasets/ds005131 .Bialas, O., Schoenwiesner, M., and Maess, B. Encoding of sound source elevation in human cortex. URL https: //openneuro.org/datasets/ds004256 .Brown, D. R., Richardson, S. P., and Cavanagh, J. F. An eeg marker of reward processing is diminished in parkinson’s disease. Brain Research , 1727, 2020. Brunner, C. et al. Bci competition iv dataset 2b: Two-class motor imagery eeg data. In BCI Competition IV , 2014. Campbell, E. and Cavanagh, J. F. Eeg: Rl task (3-armed bandit) with alcohol cues in hazardous drinkers and ctls. URL https://openneuro.org/datasets/ ds004595 .Cavanagh, J. F. Eeg: Probabilistic selection and depression, a. URL https://openneuro.org/datasets/ ds003474 .Cavanagh, J. F. Eeg: Depression rest, b. URL https: //openneuro.org/datasets/ds003478 .Cavanagh, J. F. Eeg: Visual working memory in acute tbi, c. URL https://openneuro.org/datasets/ ds003523 .Cavanagh, J. F. Eeg: Dpx cog ctl task in acute mild tbi, d. URL https://openneuro.org/datasets/ ds005114 .9Laya, a LeJEPA-based EEG Foundation Model 
+
+Cavanagh, J. F. and Brown, D. Eeg: Reinforcement learning in parkinson’s. URL https://openneuro.org/ datasets/ds003506 .Cavanagh, J. F. and Frank, M. J. Eeg: Simon conflict w/ reinforcement + cabergoline challenge, a. URL https: //openneuro.org/datasets/ds003518 .Cavanagh, J. F. and Frank, M. J. Eeg: Probabilistic selection task (pst) + pst with cabergoline challenge, b. URL https://openneuro.org/datasets/ ds004532 .Cavanagh, J. F. and Quinn, D. Eeg: Three-stim auditory oddball and rest in acute and chronic tbi. URL https: //openneuro.org/datasets/ds003522 .Cavanagh, J. F., Light, G., Swerdlow, N., Brigman, J., and Young, J. Eeg: Electrophysiological biomarkers of behavioral dimensions from cross-species paradigms, a. URL https://openneuro.org/datasets/ ds003638 .Cavanagh, J. F., Singh, A., and Narayanan, K. Eeg: Simon conflict in parkinson’s, b. URL https:// openneuro.org/datasets/ds003509 .Cavanagh, J. F., Kumar, P., Mueller, A. A., Richardson, S. P., and Mueen, A. Diminished eeg habituation to novel events effectively classifies parkinson’s patients. Clinical Neurophysiology , 129(2):409–418, 2018. Cavanagh, J. F., Wilson, J. K., Rieger, R. E., et al. Erps pre-dict symptomatic distress and recovery in sub-acute mild traumatic brain injury. Neuropsychologia , 132, 2019. Chen, D., Shukor, M., Moutakanni, T., Chung, W., Yu, J., Kasarla, T., Bolourchi, A., LeCun, Y., and Fung, P. Vl-jepa: Joint embedding predictive architecture for vision– language. arXiv preprint arXiv:2512.10942 , 2025. Chevallier, S., Carrara, I., Aristimunha, B., Guetschel, P., Sedlar, S., Lopes, B., Velut, S., Khazem, S., and Moreau, T. The largest EEG-based BCI reproducibil-ity study for open science: the MOABB benchmark, April 2024. URL http://arxiv.org/abs/2404. 15319 . arXiv:2404.15319 [eess]. Cho, H., Ahn, M., Ahn, S.-W., Kwon, M., and Jun, S. C. Eeg datasets for motor imagery brain–computer interface. 
+
+GigaScience , 6(7):1–8, 2017. doi: 10.1093/gigascience/ gix034. Clayson, P. E. and Larson, M. J. Registered replica-tion report of ern/pe psychometrics, a. URL https: //openneuro.org/datasets/ds004602 .Clayson, P. E. and Larson, M. J. Registerd report of ern during three versions of a flanker task, b. URL https: //openneuro.org/datasets/ds004883 .Craik, A., He, Y., and Contreras-Vidal, J. L. Deep learning for electroencephalogram (EEG) classification tasks: a review. J. Neural Eng. , 16(3):031001, June 2019. ISSN 1741-2560. doi: 10.1088/1741-2552/ ab0ab5. URL http://dx.doi.org/10.1088/ 1741-2552/ab0ab5 .D ´efossez, A. et al. Hybrid transformers for music source separation. arXiv preprint arXiv:2204.07143 , 2022. Doner, O. et al. Luna: Learning universal neural repre-sentations from eeg. arXiv preprint arXiv:2510.22257 ,2025. Dong, Z., Cheng, H., Liu, A., et al. Brain-jepa: Brain dy-namics foundation model for clinical applications. arXiv preprint arXiv:2409.19407 , 2024. El Ouahidi, Y., Lys, J., Th ¨olke, P., Farrugia, N., Pasde-loup, B., Gripon, V., Jerbi, K., and Lioi, G. Reve: A foundation model for eeg – adapting to any setup with large-scale pretraining on 25,000 subjects. arXiv preprint arXiv:2510.21585 , 2025. Faller, J., B ¨ocherer, M., Klaproth, F., et al. A dataset for motor imagery decoding in brain–computer interfaces. In 
+
+Proceedings of the International Brain-Computer Inter-face Meeting , 2012. Goldberger, A. L., Amaral, L. A. N., Glass, L., Haus-dorff, J. M., Ivanov, P. C., Mark, R. G., Mietus, J. E., Moody, G. B., Peng, C.-K., and Stanley, H. E. Phys-ioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals. Circulation , 101(23):e215–e220, 2000. doi: 10.1161/01.CIR.101.23.e215. Grosse-Wentrup, M. et al. Motor imagery eeg dataset from munich. Journal of Neural Engineering , 2009. Gr ¨undler, T. O., Cavanagh, J. F., Figueroa, C. M., Frank, M. J., and Allen, J. J. Task-related dissociation in ern am-plitude as a function of obsessive-compulsive symptoms. 
+
+Neuropsychologia , 47(8–9):1978–1987, 2009. Guetschel, P., Moreau, T., and Tangermann, M. S-JEPA: Towards Seamless Cross-Dataset Transfer Through Dynamic Spatial Attention. arXiv preprint arXiv:2403.11772 , 2024a. URL https://arxiv. org/abs/2403.11772 .Guetschel, P., Moreau, T., and Tangermann, M. S-JEPA: towards seamless cross-dataset transfer through dynamic spatial attention. 2024b. doi: 10.3217/ 10 Laya, a LeJEPA-based EEG Foundation Model 
+
+978-3-99161-014-4-003. URL http://arxiv.org/ abs/2403.11772 . arXiv:2403.11772 [cs]. Hamid, A., Gagliano, K., Rahman, S., Tulin, N., Tchiong, V., Obeid, I., and Picone, J. The temple university artifact corpus: An annotated corpus of eeg artifacts. In IEEE Signal Processing in Medicine and Biology Symposium ,2020. Hojjati, A., Li, L., Hameed, I., Yazidi, A., Lind, P. G., and Khadka, R. From video to eeg: Adapting joint embedding predictive architecture to uncover visual concepts in brain signal analysis, 2025. URL https://arxiv.org/ abs/2507.03633 .Isbell, E., Peters, A. N., Richardson, D. M., and Le ´on, N. E. R. D. Cognitive electrophysiology in socioeconomic context in adulthood. URL https://openneuro. org/datasets/ds005863 . Funding: research start-up funds awarded to Elif Isbell by University of California Merced. Iwama, S., Morishige, M., Takahashi, Y., Hirose, R., Kodama, M., and Ushiba, J. The bmi-hdeeg dataset 4. URL https://openneuro.org/datasets/ ds004448 .Jiang, W.-B., Zhao, L.-M., and Lu, B.-L. Large brain model for learning generic representations with tremendous eeg data in bci. arXiv preprint arXiv:2405.18765 , 2024. Kastrati, A. et al. Eeg-bench: A benchmark for evaluating eeg foundation models. arXiv preprint arXiv:2512.08959 ,2025. Kaya, M., Binli, M. K., Ozbay, E., Yanar, H., and Mishchenko, Y. A large electroencephalographic motor imagery dataset for electroencephalographic brain com-puter interfaces. Scientific Data , 5:180211, 2018. doi: 10.1038/sdata.2018.211. Kekecs, Z., Gir ´an, K., Vizkievicz, V., Lutoskin, A., and Farahzadi, Y. The effects of sham hypno-sis techniques. URL https://openneuro.org/ datasets/ds004572 . Funding: Hungarian National Research, Development and Innovation Office (NKFIH, Grant No.: FK 132248). Khan, H. A., Ul Ain, R., Kamboh, A. M., Butt, H. T., Shafait, S., Alamgir, W., Stricker, D., and Shafait, F. The NMT Scalp EEG Dataset: An Open-Source Annotated Dataset of Healthy and Pathological EEG Recordings for Predictive Modeling. Fron-tiers in Neuroscience , 15, January 2022. ISSN 1662-453X. doi: 10.3389/fnins.2021.755817. URL 
+
+https://www.frontiersin.org/journals/ neuroscience/articles/10.3389/fnins. 2021.755817/full .Kieffaber, P. and McGill, M. Spatialmemory. URL https: //openneuro.org/datasets/ds004942 .Kuo, C.-H. and Prat, C. S. Eeg/erp data from a python reading task. URL https://openneuro.org/ datasets/ds004771 . Funding: Office of Naval Re-search, Cognitive Science of Learning program (N00014-20-1-2393). Kuruppu, G., Wagh, N., Kremen, V., Pati, S., Worrell, G., and Varatharajah, Y. EEG Foundation Models: A Crit-ical Review of Current Progress and Future Directions, December 2025. URL http://arxiv.org/abs/ 2507.11783 . arXiv:2507.11783 [eess]. LeCun, Y. A path towards autonomous machine intelligence. 
+
+arXiv preprint arXiv:2207.05375 , 2022. Lee, M. H. et al. Eeg dataset and openbmi toolbox for three bci paradigms. GigaScience , 8(5):giz002, 2019. Littwin, E., Saremi, O., Advani, M., Thilak, V., Nakkiran, P., Huang, C., and Susskind, J. How JEPA Avoids Noisy Features: The Implicit Bias of Deep Linear Self Dis-tillation Networks, July 2024. URL http://arxiv. org/abs/2407.03475 . arXiv:2407.03475 [cs]. Liu, H., Wei, P., Wang, H., Lv, X., Duan, W., Li, M., et al. An EEG motor imagery dataset for brain computer inter-face in acute stroke patients. Scientific Data , 11(1):131, 2024. doi: 10.1038/s41597-023-02787-8. Maka, S., Chrustowicz, M., and Okruszek, L. Can we dissociate hypervigilance to social threats from altered perceptual decision-making processes in lonely individ-uals? an exploration with drift diffusion modelling and event-related potentials. URL https://openneuro. org/datasets/ds004626 .Momenian, M., Ma, Z., Wu, S., Wang, C., and Li, J. Le petit prince hong kong: Naturalistic fmri and eeg dataset from older cantonese speakers. URL https: //openneuro.org/datasets/ds004718 .Mourtazaev, M. S., Kemp, B., Zwinderman, A. H., and Kamphuisen, H. A. Age and gender affect different char-acteristics of slow waves in the sleep eeg. Sleep , 18: 557–564, 1995. Obeid, I. and Picone, J. The temple university hospital eeg data corpus. Frontiers in Neuroscience , 10, 2016. Ofner, P. et al. Eeg dataset of imagined and executed move-ments from ofner et al. arXiv preprint arXiv:170x.xxxxx ,2017. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., 11 Laya, a LeJEPA-based EEG Foundation Model 
+
+El-Nouby, A., Assran, M., Ballas, N., Galuba, W., Howes, R., Huang, P.-Y., Li, S.-W., Misra, I., Rabbat, M., Sharma, V., Synnaeve, G., Xu, H., Jegou, H., Mairal, J., Labatut, P., Joulin, A., and Bojanowski, P. DINOv2: Learn-ing Robust Visual Features without Supervision, Febru-ary 2024. URL http://arxiv.org/abs/2304. 07193 . arXiv:2304.07193 [cs]. Pavlov, Y. G. Verbalworkingmemory. URL https:// openneuro.org/datasets/ds003655 .Quentin, C., Caroline, H., Moritz, T., Xavier, D. B., Nicolas, L., and S ´ebastien, S. Eeg resting-state mi-crostates correlates of executive functions. URL https: //openneuro.org/datasets/ds005305 .Roy, Y., Banville, H., Albuquerque, I., Gramfort, A., Falk, T. H., and Faubert, J. Deep learning-based electroen-cephalography analysis: a systematic review. Journal of neural engineering , 16(5):051001, 2019. Salisbury, D., Seebold, D., and Coffman, B. Eeg: First episode psychosis vs. control resting task 1, a. URL https://openneuro.org/datasets/ ds003944 .Salisbury, D., Seebold, D., and Coffman, B. Eeg: First episode psychosis vs. control resting task 2, b. URL https://openneuro.org/datasets/ ds003947 .Schalk, G., McFarland, D. J., Hinterberger, T., Birbaumer, N., and Wolpaw, J. R. BCI2000: A general-purpose brain-computer interface (BCI) system. IEEE Transactions on Biomedical Engineering , 51(6):1034–1043, 2004. doi: 10.1109/TBME.2004.827072. Scherer, R. et al. Individually adapted imagery improves brain–computer interface performance in end-users with disability. PLoS ONE , 2015. Schirrmeister, R. T., Springenberg, J. T., Fiederer, L. D. J., Glasstetter, M., Eggensperger, K., Tangermann, M., Hut-ter, F., Burgard, W., and Ball, T. Deep learning with convolutional neural networks for EEG decoding and vi-sualization. Human Brain Mapping , 38(11):5391–5420, 2017. doi: 10.1002/hbm.23730. Shin, H. et al. Eeg and nirs dataset for motor imagery brain–computer interface research. Data in Brief , 15: 670–674, 2017. Shirazi, S. et al. The healthy brain network eeg dataset. 
+
+Scientific Data , 2024. Shoeb, A. H. Application of Machine Learning to Epilep-tic Seizure Onset Detection and Treatment . PhD thesis, Massachusetts Institute of Technology, 2009. Singh, A., Cole, R., Espinoza, A., Cavanagh, J., and Narayanan, N. Rest eyes open, a. URL https: //openneuro.org/datasets/ds004584 .Singh, A., Cole, R., Espinoza, A., Wessel, J. R., Ca-vanagh, J., and Narayanan, N. Interval timing task, b. URL https://openneuro.org/datasets/ ds004579 .Singh, A., Cole, R., Espinoza, A., Wessel, J. R., Ca-vanagh, J., and Narayanan, N. Simon-conflict task., c. URL https://openneuro.org/datasets/ ds004580 . Funding: This dataset was supported by NIH P20NS123151 and R01NS100849 to NSN, and NRSA F32 AG069445-01 to RC. All research protocols were approved by the University of Iowa Human Subjects Review Board (IRB# 201707828). Singh, A., Richardson, S. P., Narayanan, N. S., and Ca-vanagh, J. F. Mid-frontal theta activity is diminished during cognitive control in parkinson’s disease. Neu-ropsychologia , 117:113–122, 2018. Singh, A., Cole, R. C., Espinoza, A. I., Brown, D., Ca-vanagh, J. F., and Narayanan, N. S. Frontal theta and beta oscillations during lower-limb movement in parkin-son’s disease. Clinical Neurophysiology , 131(3):694–702, 2020. Singh, A., Cole, R. C., Espinoza, A. I., Evans, A., Cao, S., Cavanagh, J. F., and Narayanan, N. S. Timing variability and midfrontal ∼4 hz rhythms correlate with cognition in parkinson’s disease. NPJ Parkinson’s Disease , 7(1):14, 2021. Singh, G. and Cavanagh, J. F. Eeg: Alcohol im-agery reinforcement learning task with light and heavy drinker participants. URL https://openneuro. org/datasets/ds004515 .Stieger, J. et al. Motor imagery eeg dataset from stieger et al. Scientific Data , 2021. Su, J., Lu, Y., Pan, S., Murtadha, A., Wen, B., and Liu, Y. RoFormer: Enhanced Transformer with Rotary Position Embedding, November 2023. URL http://arxiv. org/abs/2104.09864 . arXiv:2104.09864 [cs]. Tangermann, M., M ¨uller, K.-R., Aertsen, A., Birbaumer, N., Braun, C., Brunner, C., Leeb, R., Mehring, C., Miller, K. J., Mueller-Putz, G., Nolte, G., Pfurtscheller, G., Preissl, H., Schalk, G., Schl ¨ogl, A., Vidaurre, C., Waldert, S., and Blankertz, B. Review of the BCI com-petition IV. Frontiers in Neuroscience , 6, 2012. doi: 10.3389/fnins.2012.00055. 12 Laya, a LeJEPA-based EEG Foundation Model 
+
+Tong, Z., Song, Y., Wang, J., and Wang, L. Video-MAE: Masked Autoencoders are Data-Efficient Learn-ers for Self-Supervised Video Pre-Training, Octo-ber 2022. URL http://arxiv.org/abs/2203. 12602 . arXiv:2203.12602 [cs]. Wang, J., Zhao, S., Luo, Z., Zhou, Y., Jiang, H., Li, S., Li, T., and Pan, G. Cbramod: A criss-cross brain foundation model for eeg decoding. In International Conference on Learning Representations (ICLR) , 2025a. URL https: //openreview.net/forum?id=NPNUHgHF2w .Wang, X., Liu, X., Liu, X., Si, Q., Xu, Z., Li, Y., and Zhen, X. Eeg-dino: Learning eeg foundation models via hierar-chical self-distillation. In Medical Image Computing and Computer Assisted Intervention (MICCAI) , pp. 196–205, 2025b. Wascher, E., Schneider, D., Gajewski, P. D., and Getz-mann, S. Resting-state eeg data before and after cognitive activity across the adult lifespan and a 5-year follow-up. URL https://openneuro.org/datasets/ ds005385 . Funding: The Dortmund Vital Study is funded by the institute’s budget (no grant number). Thus, the study design, collection, management, analysis, inter-pretation of data, writing of the report, and the decision to submit the report for publication is not influenced or biased by any sponsor. Xiang, C., Fan, X., Bai, D., Lv, K., and Lei, X. A resting-state eeg dataset for sleep deprivation. URL https: //openneuro.org/datasets/ds004902 .Xiong, W., Li, J., Li, J., and Zhu, K. EEG-FM-Bench: A Comprehensive Benchmark for the Sys-tematic Evaluation of EEG Foundation Models, Au-gust 2025. URL http://arxiv.org/abs/2508. 17742 . arXiv:2508.17742 [eess]. Xu, S., Ma, Z., Chai, W., Chen, X., Jin, W., Chai, J., Xie, S., and Yu, S. X. Next-Embedding Prediction Makes Strong Vision Learners, December 2025. URL http:// arxiv.org/abs/2512.16922 . arXiv:2512.16922 [cs] version: 1. XU, X., SHEN, X., CHEN, X., ZHANG, Q., WANG, S., LI, Y., LI, Z., ZHANG, D., ZHANG, M., and LIU, Q. Emoeeg-mc: A multi-context emo-tional eeg dataset for cross-context emotion decod-ing. URL https://openneuro.org/datasets/ ds005540 . Funding: the National Key R&D Pro-gram of China (2021YFF1200804), Shenzhen Excel-lent Youth Project (RCYX20231211090405003), Shen-zhen Science and Technology Innovation Committee (RCBS20231211090748082, KJZD20230923115221044, 2022410129, KCXFZ20201221173400001), SUSTech Undergraduate Innovation and Entrepreneurship Training Program(2024S07). Yang, L., Sun, Q., Li, A., and Hulle, M. M. V. ARE EEG FOUNDATION MODELS WORTH IT? COM-PARATIVE EVALUATION WITH TRADITIONAL DE-CODERS IN DIVERSE BCI TASKS. 2026. Yang, S., Tao, W., Bonito, G., Lo, L., Yu, J., Li, S., Bri-atore, M., Bian, J., Yuille, A. L., Schwing, A. G., and Lin, H. From video to eeg: Adapting joint embedding predictive architecture for self-supervised learning in elec-troencephalography. arXiv preprint arXiv:2507.03633 ,2025. Yi, W., Qiu, S., Wang, K., Qi, H., He, F., Zhou, P., and Zhang, D. Evaluation of EEG oscillatory patterns and cognitive process during simple and compound limb mo-tor imagery. PLOS ONE , 9(12):e114853, 2014a. doi: 10.1371/journal.pone.0114853. Yi, W., Qiu, S., Wang, K., Qi, H., Zhang, L., Zhou, P., He, F., and Ming, D. Evaluation of eeg oscillatory patterns and cognitive process during simple and compound limb motor imagery. volume 9, pp. e114853. Public Library of Science San Francisco, USA, 2014b. Zhang, Y. et al. Adabrain: Evaluating adaptation and gener-alization in eeg models. arXiv preprint arXiv:2507.09882 ,2024. Zhou, Z., Yin, E., Liu, Y., Jiang, J., and Hu, D. Towards accurate and high-speed spelling with a noninvasive brain-computer interface. IEEE Transactions on Neural Sys-tems and Rehabilitation Engineering , 24(8):805–813, 2016. doi: 10.1109/TNSRE.2015.2469272. 13 Laya, a LeJEPA-based EEG Foundation Model 
+
+# A. Appendix B. Pretraining Details                                                               
+
+> Table 3. Pretraining details for Laya-S (10% data) and Laya-full (full data).
+> Laya-S Laya-full
+> Data
+> Training data fraction 10% 100% Max input duration 30 s (500 timesteps) 30 s (500 timesteps) Batch size 256 256
+> Model
+> Encoder dim 384 384 Encoder depth / heads 12 / 6 12 / 6 Predictor depth / heads 4 / 4 4 / 4 Projection/Predictor dim 128 128 Patch size 25 samples 25 samples Channel Queries 16 16 Channel Mixer Dim 32 32
+> Masking and Objective
+> Mask ratio 0.6 0.6 Mask block sizes 5–10 patches 5–10 patches Global crops 1×16 s 1×16 s
+> Regularization
+> SigReg weight 0.05 0.05 Query loss weight 1.0 1.0
+> Optimization
+> Learning rate 1×10 −41×10 −4
+> Weight decay 0.05 0.05 LR schedule Warmup + cosine Warmup + cosine Warmup 1K steps 1k steps Min LR 1×10 −61×10 −6
+> Training
+> Max steps 10k 100k Precision bf16-mixed bf16-mixed
+
+# C. Pretraining Datasets 
+
+TUH EEG. We use the Temple University Hospital EEG corpus, a large-scale clinical dataset consisting of long-duration, multi-channel EEG recordings with substantial inter-subject and inter-session variability. We ensured that no subjects appearing in the TUH-based downstream validation or test sets were included during pretraining. (Obeid & Picone, 2016) 
+
+HBN EEG. We use EEG recordings from the Healthy Brain Network (HBN), a large-scale pediatric neurodevelopmental dataset comprising multimodal data collected from typically developing children and individuals with psychiatric or learning disorders under standardized experimental protocols (Shirazi et al., 2024). 
+
+NMT. We use the NMT Scalp EEG Dataset, a large-scale open-source corpus of clinically acquired EEG recordings labeled as normal or abnormal. The dataset comprises long-duration, multi-channel scalp EEG. (Khan et al., 2022) 
+
+MOABB. We use the following MOABB datasets for downstream evaluation: Shin2017A (Shin et al., 2017), BNCI2014 002 (Brunner et al., 2014), Ofner2017 (Ofner et al., 2017), GrosseWentrup2009 (Grosse-Wentrup et al., 2009), Stieger2021 (Stieger et al., 2021), and Lee2019 MI (Lee et al., 2019). 
+
+EEGDash. We query EEGDash and use a diverse selection of available datasets ds003474 ds003478 ds003506 ds003509 ds003518 ds003522 ds003523 ds003638 ds003655 ds003690 ds003838 ds003944 ds003947 ds004256 ds004279 ds004448 14 Laya, a LeJEPA-based EEG Foundation Model 
+
+ds004504 ds004515 ds004532 ds004572 ds004579 ds004580 ds004584 ds004595 ds004602 ds004626 ds004718 ds004771 ds004883 ds004902 ds004942 ds005114 ds005131 ds005305 ds005385 ds005410 ds005540 ds005863 . 
+
+Preprocessing. All recordings are resampled to a sampling rate of 250 Hz, band-pass filtered between 0.5–100 Hz, and notch filtered at both 50 Hz and 60 Hz. Channel layouts are preserved in their native montages (10–20, BioSemi128, or 10–05), with reference channels removed where applicable. To exclude non-informative segments, we apply leading-edge trimming based on signal statistics, discarding windows with near-zero variance or excessive clipping. Signals are robust scaled as in D ´efossez et al. (2022). Preprocessed recordings are then segmented into non-overlapping 120-second chunks and stored as WebDataset shards containing both signals and metadata. 
+
+# D. Further Description of Benchmarks 
+
+To ensure comparability, each model follows a preprocessing pipeline aligned with its original design, as implemented in EEG-Bench. Across models, channels are harmonized to standard 10–20 montages where required; missing channels are handled via zero-padding or interpolation according to the model implementation. Signals are segmented into fixed-length windows, with window duration determined by each model architecture and task configuration. 
+
+D.1. Downstream Datasets 
+
+D.1.1. BCI T ASKS .BCI tasks operate on short, trial-based recordings (typically 2–10 s) collected under controlled experimental paradigms, primarily motor imagery and event-related potential decoding. 
+
+Left Hand vs Right Hand Motor Imagery (LH/RH MI). Binary classification of imagined left- versus right-hand movements. Evaluated on BCI Competition IV-2a and IV-2b (Tangermann et al., 2012), PhysioNet Motor Imagery (Schalk et al., 2004; Goldberger et al., 2000), and multiple motor imagery datasets including Weibo2014 (Yi et al., 2014a), Cho2017 (Cho et al., 2017), Liu2022(Liu et al., 2024), Schirrmeister2017(Schirrmeister et al., 2017), Zhou2016(Zhou et al., 2016), and Kaya2018 (Kaya et al., 2018). 
+
+Right Hand vs Feet Motor Imagery (RH/Feet MI). Right-hand vs feet motor imagery (RH/Feet MI) is evaluated on Weibo2014 (Yi et al., 2014b), PhysioNet Motor Movement/Imagery (Goldberger et al., 2000), BCI Competition IV-2a (Tangermann et al., 2012), Barachant2012 (Barachant et al., 2011), Faller2012 (Faller et al., 2012), Scherer2015 (Scherer et al., 2015), Schirrmeister2017 (Schirrmeister et al., 2017), Zhou2016 (Zhou et al., 2016), and Kaya2018 (Kaya et al., 2018). 
+
+Four-Class Motor Imagery (4-Class MI). Multi-class motor imagery classification across left hand, right hand, feet, and tongue. Evaluated on BCI Competition IV-2a and Kaya2018. 
+
+Five Fingers Motor Imagery. Fine-grained motor imagery classification of individual finger movements, evaluated on Kaya2018 (Kaya et al., 2018). D.1.2. C LINICAL TASKS .Clinical tasks operate on long-duration EEG recordings (minutes to hours) collected in diagnostic or monitoring settings. Tasks include both recording-level classification and segment-level event detection. 
+
+Abnormal EEG Detection. Binary classification of EEG recordings as normal or abnormal. Evaluated on the Temple University Hospital Abnormal EEG Corpus (TUAB) (Obeid & Picone, 2016). 
+
+Epilepsy Detection. Binary classification of epileptic versus non-epileptic recordings. Evaluated on the Temple University Hospital Epilepsy Corpus (TUEP) (Obeid & Picone, 2016). 
+
+Seizure Detection. Per-segment seizure event detection in continuous EEG recordings. Evaluated on the CHB-MIT dataset (Shoeb, 2009). 
+
+Sleep Staging. Per-epoch sleep stage classification (W, N1, N2, N3/4, REM). Evaluated on Sleep-Telemetry (Sleep-EDF) (Mourtazaev et al., 1995). 
+
+Artifact Detection. Binary and multi-class artifact classification tasks identifying EEG contamination (e.g., eye movement, 15 Laya, a LeJEPA-based EEG Foundation Model 
+
+muscle, electrode artifacts). Evaluated on the Temple University Artifact Corpus (TUAR) (Hamid et al., 2020). 
+
+Neurological and Psychiatric Disorder Classification. Recording-level classification tasks distinguishing patients from healthy controls, including Parkinson’s disease (Cavanagh et al., 2018; Brown et al., 2020; Singh et al., 2018; 2020; 2021), schizophrenia (Albrecht et al., 2019), mild traumatic brain injury (Cavanagh et al., 2019), and obsessive–compulsive disorder (Gr ¨undler et al., 2009). These tasks are evaluated on EEG datasets released via OpenNeuro and related repositories. 
+
+Segment-Based and Multi-Label Tasks. For seizure detection, sleep staging, and artifact detection, recordings are divided into 16-second windows. For each window, models predict 16 class labels (one per second), and F1 score is computed across all per-second predictions. 
+
+D.2. Additional Experiments 
+
+D.2.1. LA Y A DYNAMIC CHANNEL MIXER 
+
+As in LUNA, Laya learns to attend to different channels, each query attending to, and learning a rich latent brain state at each time step. In Figure 5 we show 8 queries and the channel weights they learn for one sample in the TUH dataset. In Figure 4 we show 8 queries and channel weights they learn for one sample in the HBN dataset during a movie watching task.   
+
+> Figure 4. Topoplot of the channel weights for eight queries on the HBN dataset during movie watching task (DiaryOfAWimpyKid).
+> Figure 5. Topoplot of the channel weights for eight queries on the TUH dataset.
+
+D.3. Detailed EEG-Bench Results 
+
+We also report weighted and macro F1, accuracy, and Cohen’s κ across tasks in EEG-Bench. 16 Laya, a LeJEPA-based EEG Foundation Model  
+
+> Table 4. Linear probe performance on EEG-Bench (accuracy).
+
+LaBraM LUNA Laya-S Laya 
+
+5-Finger MI 0.205 0.194 0.202 0.210 LH vs RH MI 0.518 0.511 0.506 0.506 4-Class MI 0.299 0.265 0.266 0.279 RH vs Feet MI 0.582 0.536 0.584 0.573 Abnormal 0.804 0.764 0.783 0.764 Artifact (Binary) 0.688 0.735 0.693 0.608 Epilepsy 0.702 0.712 0.715 0.681 mTBI 0.643 0.679 0.500 0.643 Artifact (Multiclass) 0.460 0.500 0.486 0.234 OCD 0.818 0.818 0.818 0.818 Parkinson’s 0.536 0.706 0.686 0.647 Schizophrenia 0.462 0.538 0.462 0.462 Seizure 0.945 0.960 0.865 0.793 Sleep Stages 0.232 0.243 0.238 0.236 Mean 0.564 0.583 0.557 0.532  
+
+> Table 5. Linear probe performance on EEG-Bench (F1 weighted ).
+
+LaBraM LUNA Laya-S Laya 
+
+5-Finger MI 0.176 0.146 0.199 0.198 LH vs RH MI 0.518 0.426 0.495 0.505 4-Class MI 0.292 0.143 0.266 0.269 RH vs Feet MI 0.581 0.505 0.586 0.575 Abnormal 0.803 0.763 0.782 0.761 Artifact (Binary) 0.693 0.738 0.697 0.613 Epilepsy 0.699 0.643 0.696 0.666 mTBI 0.629 0.549 0.485 0.609 Artifact (Multiclass) 0.516 0.553 0.539 0.294 OCD 0.818 0.808 0.815 0.808 Parkinson’s 0.545 0.706 0.689 0.642 Schizophrenia 0.291 0.377 0.455 0.291 Seizure 0.969 0.977 0.925 0.882 Sleep Stages 0.249 0.258 0.254 0.254 Mean 0.556 0.542 0.563 0.526 17 Laya, a LeJEPA-based EEG Foundation Model  
+
+> Table 6. Linear probe performance on EEG-Bench (F1 macro ).
+
+LaBraM LUNA Laya-S Laya 
+
+5-Finger MI 0.179 0.148 0.200 0.200 LH vs RH MI 0.518 0.427 0.495 0.505 4-Class MI 0.291 0.140 0.265 0.268 RH vs Feet MI 0.574 0.517 0.582 0.573 Abnormal 0.801 0.761 0.780 0.757 Artifact (Binary) 0.682 0.727 0.682 0.597 Epilepsy 0.647 0.537 0.630 0.598 mTBI 0.562 0.404 0.497 0.524 Artifact (Multiclass) 0.271 0.282 0.309 0.158 OCD 0.817 0.804 0.817 0.804 Parkinson’s 0.529 0.682 0.664 0.607 Schizophrenia 0.316 0.350 0.448 0.316 Seizure 0.508 0.503 0.479 0.452 Sleep Stages 0.171 0.172 0.165 0.162 Mean 0.490 0.461 0.501 0.466   
+
+> Table 7. Linear probe performance on EEG-Bench (Cohen’s κ).
+
+LaBraM LUNA Laya-S Laya 
+
+5-Finger MI 0.015 -0.005 0.007 0.015 LH vs RH MI 0.036 0.025 0.013 0.011 4-Class MI 0.063 0.012 0.022 0.037 RH vs Feet MI 0.147 0.128 0.167 0.152 Abnormal 0.603 0.522 0.560 0.518 Artifact (Binary) 0.372 0.459 0.367 0.200 Epilepsy 0.295 0.154 0.271 0.203 mTBI 0.130 0.000 0.152 0.073 Artifact (Multiclass) 0.235 0.263 0.280 0.051 OCD 0.633 0.621 0.645 0.621 Parkinson’s 0.084 0.364 0.329 0.215 Schizophrenia 0.000 0.000 -0.096 0.000 Seizure 0.038 0.020 0.025 0.013 Sleep Stages 0.013 0.023 0.013 0.009 Mean 0.190 0.185 0.197 0.151 18 Laya, a LeJEPA-based EEG Foundation Model 
+
+D.4. Detailed Noise Robustness Results 
+
+Figure 6. Noise robustness on Abnormal EEG detection. 
+
+Figure 7. Noise robustness on Epilepsy detection. 
+
+19 Laya, a LeJEPA-based EEG Foundation Model 
+
+Figure 8. Noise robustness on Multiclass Artifact classification. 
+
+Figure 9. Noise robustness on Parkinson’s disease detection. 
+
+20 Laya, a LeJEPA-based EEG Foundation Model   
+
+> Figure 10. Noise robustness on Schizophrenia detection.
+> Figure 11. Noise robustness on Sleep Staging.
+
+D.5. Further Examples of Laya Rich Temporal Embeddings on Seizure Recordings 
+
+Further examples of Laya ability to distinguish semantic meaning from noisy EEG signals can be found in Figure 12. 21 Laya, a LeJEPA-based EEG Foundation Model 
+
+Figure 12. PCA visualization of patch embeddings on several seizure recordings. We map three principal components to RGB. Top: 
+
+Laya . Bottom: LaBraM. Red bar indicates seizure. 
+
+22

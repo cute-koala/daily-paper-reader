@@ -1,0 +1,2800 @@
+Title: Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture -- Bridging Predictive and Generative Self-Supervised Learning
+
+URL Source: https://arxiv.org/pdf/2603.20111v1
+
+Published Time: Mon, 23 Mar 2026 01:08:15 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture – Bridging Predictive and Generative Self-Supervised Learning 
+
+Moritz G¨ ogl 1 Christopher Yau 1 2 
+
+Abstract 
+
+The Joint-Embedding Predictive Architecture (JEPA) is often seen as a non-generative alterna-tive to likelihood-based self-supervised learning, emphasizing prediction in representation space rather than reconstruction in observation space. We argue that the resulting separation from prob-abilistic generative modeling is largely rhetori-cal rather than structural: the canonical JEPA de-sign–coupled encoders with a context-to-target predictor–mirrors the variational posteriors and learned conditional priors obtained when varia-tional inference is applied to a particular class of coupled latent-variable models, and standard JEPA can be viewed as a deterministic specializa-tion in which regularization is imposed via archi-tectural and training heuristics rather than an ex-plicit likelihood. Building on this view, we derive the Variational JEPA (Var-JEPA), which makes the latent generative structure explicit by optimiz-ing a single Evidence Lower Bound (ELBO). This yields meaningful representations without ad-hoc anti-collapse regularizers and allows principled uncertainty quantification in the latent space. We instantiate the framework for tabular data (Var-T-JEPA) and achieve strong representation learning and downstream performance, consistently im-proving over T-JEPA while remaining competitive with strong raw-feature baselines. 
+
+1. Introduction 
+
+A main goal in machine learning (ML) is to build mod-els that truly understand and predict the world from data. Self-supervised learning approaches address this challenge by training models to predict one part of an input from another, thereby allowing to learn rich representations with-out requiring human labels. In this context, the Joint-Embedding Predictive Architecture (JEPA) was introduced by LeCun (2022) as a step toward creating a “world model”, 
+
+> 1
+
+University of Oxford, UK. 2Health Data Research UK. Corre-spondence to: Moritz G¨ ogl <moritz.gogl@keble.ox.ac.uk >.
+
+Preprint. March 23, 2026. 
+
+aiming to learn abstract representations of the world for in-telligent decision-making. Unlike regular generative models that predict raw inputs such as pixels (van den Oord et al., 2016b;a; Parmar et al., 2018), the idea behind JEPA is to work entirely in the latent space by predicting the embed-ding of a target view y from the embedding of a related context signal x.This is implemented using a context encoder f ctx , a target encoder f trg , and a predictor g. The model creates a target representation ˆsy from a context representation sx and an optional auxiliary variable z, formulated as: 
+
+sx = fctx (x), sy = ftrg (y), ˆsy = g(sx, z ). (1) The training objective minimizes the distance between the predicted and actual target representations, LJEPA =
+
+E ∥ˆsy − sg (sy )∥22
+
+, where sg (·) is a stop-gradient opera-tion (Grill et al., 2020). This intentional blocking of gradi-ents into the target encoder is crucial in order to prevent the model from learning trivial predictive features. While powerful, this design has two consequences. First, it is susceptible to representational collapse, where the en-coders learn to output constant vectors, trivially minimizing the loss. This necessitates ad-hoc solutions, such as auxil-iary costs C(ˆ sy ) (Drozdov et al., 2024; Balestriero & LeCun, 2025) or other custom regularization mechanisms such as Exponential Moving Average (EMA) (Assran et al., 2023; Bardes et al., 2024; Thimonier et al., 2025) to enforce rep-resentational diversity. Second, JEPA is typically framed as a fundamentally non-generative alternative to likelihood-based self-supervised learning, which suggests a separation from probabilistic latent-variable modeling (LeCun, 2022). This paper provides a novel perspective on this separation. We argue that it is mostly rhetorical rather than structural: the general JEPA design which includes coupled encoders and a predictor from context to target aligns closely with the variational posteriors and a learned conditional prior in a coupled variational autoencoder (VAE) (Kingma & Welling, 2013; Hao & Shafto, 2023). Concretely, we reverse-engineer a probabilistic model whose ELBO yields the JEPA predictor as a learned latent-space conditional prior, and ar-gue that standard JEPA is naturally interpreted as a determin-istic specialization in which regularization is enforced by 1
+
+> arXiv:2603.20111v1 [cs.LG] 20 Mar 2026 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture
+
+architectural and training heuristics rather than an explicit likelihood. While the original motivation for JEPA’s non-generative framing was to avoid modeling observation noise, our view makes precise when reconstruction is a useful reg-ularizer: it forces latents to encode predictive information while retaining a principled uncertainty semantics. This new framing not only connects predictive and generative self-supervision, but also suggests an inherent route to avoiding collapse and enables latent-space uncertainty quantification. Specifically, our contributions are: (1) We establish a novel formal link between JEPA and variational inference, re-framing it as a deterministic latent variable model. (2) We introduce Var-JEPA, a generative JEPA derived from this link, with a corresponding ELBO objective. (3) We show how this ELBO naturally prevents representational collapse without needing the surrogate losses common in JEPA and provide a connection to the recently proposed SIGReg reg-ularization in LeJEPA (Balestriero & LeCun, 2025). (4) We develop a practical Var-T-JEPA implementation for het-erogeneous tabular data. (5) We empirically validate our approach in a controlled simulation study and across mul-tiple downstream datasets, showing consistent gains over standard JEPA and strong baselines trained on raw features. 
+
+2. Related Work 
+
+JEPA-style predictive representation learning. JEPA was proposed as a general framework for learning predic-tive world models by matching representations (LeCun, 2022). Notable implementations include I-JEPA (Assran et al., 2023), which demonstrates that this approach allows to learn strong image representations without handcrafted data augmentations by predicting embeddings of masked re-gions from context regions. V-JEPA extends the approach to video, learning spatiotemporal representations that support understanding and prediction (Bardes et al., 2024). T-JEPA (Thimonier et al., 2025) adapts JEPA to feature-level mask-ing and transformer tokenization for heterogeneous tabular data, showing competitive tabular representation learning without the heavy reliance on typical data augmentations. 
+
+Avoiding collapse via distributional regularization. 
+
+Common JEPA implementations use EMA to stabilize train-ing by slowly updating the target encoder (Assran et al., 2023; Bardes et al., 2024), but this heuristic approach does not directly control the distributional properties of the learned embeddings. In contrast, Drozdov et al. (2024) prevent collapse by explicitly regularizing embedding dis-tributions via variance–covariance penalties that encourage feature-wise variance and discourage correlated dimensions. LeJEPA (Balestriero & LeCun, 2025) provides a comple-mentary view: it argues that an (approximately) isotropic Gaussian embedding distribution is minimax-favorable for downstream probing under broad probe families, and it pro-poses Sketched Isotropic Gaussian Regularization (SIGReg) as a scalable way to match the aggregated embedding distri-bution to N (0 , I ) via random one-dimensional projections. Formally, SIGReg applies a univariate statistical test T (typ-ically the Epps-Pulley test (Epps & Pulley, 1983)) to pro-jections of embeddings along random unit-norm directions 
+
+A = {a1, . . . , a M }:SIGReg (A, {en}Nn=1 ) = 1
+
+|A|
+
+X
+
+> a∈A
+
+T ({a⊤en}Nn=1 ), (2) where {en}Nn=1 denotes a batch of embeddings and T mea-sures the discrepancy between the empirical distribution of projected embeddings and the standard normal distribution. In our work, the ELBO provides per-sample regularization toward fixed priors for sx and z, while we study SIGReg as an explicit aggregated-distribution regularizer (especially for sy ) in the simulation study. 
+
+Generative world models and latent-space modeling. 
+
+World-model research has emphasized learning latent dy-namics for prediction and planning (Ha & Schmidhuber, 2018). Compared to generative latent models and VAEs (Kingma & Welling, 2013; Bowman et al., 2016), JEPA em-phasizes prediction in representation space and often avoids explicit likelihood modeling. Our main contribution is to show that a JEPA-like architecture arises naturally from a variational latent-variable model with a learned conditional prior. While concurrent work by Huang (2026) also explores a probabilistic formulation of JEPA for uncertainty-aware la-tent prediction, Var-JEPA instead formulates JEPA as a cou-pled latent-variable generative model with a unified ELBO, thereby bridging predictive joint-embedding learning and generative modeling in a single objective. This shows that Var-JEPA is not an incremental regularizer over JEPA, but a rigorous variational formulation that exposes the latent generative structure implicit in the predictor-encoder pattern. 
+
+3. The Variational Perspective on JEPA 
+
+3.1. Problem Formulation 
+
+We began by asking a simple structural question: if the predictive embedding steps in JEPA were interpreted as variational posteriors of a coupled VAE, what generative model would give rise to those posteriors? 
+
+This viewpoint naturally leads us to a novel reinterpretation of JEPA within a probabilistic latent-variable framework. Concretely, we replace JEPA’s deterministic encoders and predictor with conditional distributions and interpret the pre-dictive pathway as a learned latent-space conditional prior. This creates a clear generative process over context, target, and auxiliary latent variables, from which a single varia-tional objective (ELBO) emerges. Our formulation unifies JEPA-style predictive learning with reconstruction and con-ditional generation, while providing a rigorous mechanism for avoiding collapse through latent regularization. 2Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Structure. Like JEPA, our model operates on context ob-servations x ∈ RD and target observations y ∈ RD , learn-ing latent representations sx ∈ Rd (context), sy ∈ Rd (tar-get), and z ∈ Rdz (auxiliary predictive variable to capture variability in sy that sx cannot explain). The directed acyclic graph (DAG) follows the underlying generative process: 
+
+x sx sy y
+
+z
+
+> inference (JEPA)
+> inference (JEPA)
+
+While a standard JEPA primarily operates with unidirec-tional mappings from observations to representations ( x →
+
+sx, y → sy ), our variational framework requires bidirec-tional relationships to model both the generative and infer-ence processes. For both the context and target, we learn two directions: encoding (from observations to latents) and reconstruction (from latents back to observations). A single ELBO objective ties these directions together and trains encoders and decoders jointly. 
+
+Objective and Factorization. Our main objective is to learn a generative model that maximizes the marginal log-likelihood of observed data pairs (x, y ):
+
+max  
+
+> θ
+
+E(x,y )∼data [log pθ (x, y )] = (3) 
+
+max  
+
+> θ
+
+E(x,y )∼data 
+
+h
+
+log 
+
+Z Z Z 
+
+pθ (x, y, s x, z, s y )ds x dz ds y
+
+i
+
+.
+
+The log-likelihood log pθ (x, y ) measures how well our pa-rameterized model (with parameters θ) explains the ob-served data. Following the DAG, the joint distribution 
+
+pθ (x, y, s x, z, s y ) factorizes as 
+
+pθ (x, y, s x, z, s y ) = p(sx) · p(z) · pθ (x | sx) (4) 
+
+· pθ (sy | sx, z ) · pθ (y | sy ).
+
+Generative Model Parameterization. We implement dis-tributions in the generative model as Gaussians. The priors over latent variables are standard Gaussians, while the con-ditional distributions are parameterized by neural networks: 
+
+p(sx) = N (sx; 0 , I ), (5a) 
+
+p(z) = N (z; 0 , I ), (5b) 
+
+pθ (x | sx) = N  x; U xθ (sx), σ 2
+
+> x
+
+I, (5c) 
+
+pθ (sy | sx, z ) = N  sy ; μsy 
+
+> θ
+
+(sx, z ), Σsy 
+
+> θ
+
+(sx, z ), (5d) 
+
+pθ (y | sy ) = N  y; U yθ (sy ), σ 2 
+
+> y
+
+I. (5e) The decoder networks U xθ : RDhid → RDobs and U yθ : RDhid →
+
+RDobs reconstruct observations from their latent representa-tions, where Dobs represents the observation dimension. The predictive network outputs μsy 
+
+> θ
+
+(sx, z ) and Σsy 
+
+> θ
+
+(sx, z ) are computed by neural networks with parameters θ, generating distributional parameters for the target latent sy conditioned on context sx and auxiliary variable z. The reconstruction noise parameters σ2 
+
+> x
+
+and σ2 
+
+> y
+
+may be set to 1 or learned globally to model observation uncertainty. 
+
+3.2. Variational Posterior 
+
+Since the integral in Eq. 4 is intractable under the given factorization and parameterization, due to complex neural network functions and high-dimensional latent spaces, we cannot optimize log pθ (x, y ) directly. Instead, we employ a variational inference approach by introducing a tractable variational posterior qϕ(sx, z, s y | x, y ) as an approximation of the true posterior p(sx, z, s y | x, y ), and parameterized by neural networks with parameters ϕ. We factorize the variational posterior as: 
+
+qϕ(sx, z, s y | x, y ) = qϕ(sx | x) · qϕ(z | sx)
+
+· qϕ(sy | sx, z, y ). (6) We adopt this factorization for the following reasons: • The context latent qϕ(sx | x) depends only on the context observation x, ensuring that context representa-tions are learned independently of target information. • The auxiliary latent z depends only on the context representation sx to prevent information leakage from targets during training. • The target posterior qϕ(sy |sx, z, y ) depends on both sx
+
+and z as well as the target observation y, as we will use a reconstruction term to regularize the learning of sy
+
+to encode meaningful target information, ensuring that the dependence on context is learned through proper predictive relationships rather than trivial shortcuts. 
+
+Variational Posterior Parameterization. Each compo-nent of the variational posterior is parameterized as a Gaus-sian distribution with learnable mean and covariance: 
+
+qϕ(sx | x) = N  sx; μsx 
+
+> ϕ
+
+(x), Σsx 
+
+> ϕ
+
+(x), (7a) 
+
+qϕ(z | sx) = N  z; μzϕ(sx), Σzϕ(sx), (7b) 
+
+qϕ(sy | sx, z, y ) = N  sy ; μsy 
+
+> ϕ
+
+(sx, z, y ), Σsy 
+
+> ϕ
+
+(sx, z, y ). (7c) The inference networks μsx 
+
+> ϕ
+
+, Σsx 
+
+> ϕ
+
+, μzϕ, Σzϕ, μsy 
+
+> ϕ
+
+, and Σsy
+
+> ϕ
+
+are implemented as neural networks that output the distribu-tional parameters given their respective inputs. 
+
+3.3. Var-JEPA: Evidence Lower Bound 
+
+Having established the variational posterior, we derive the ELBO, a computable variational lower bound on the marginal log-likelihood via Jensen’s inequality: 
+
+log pθ (x, y ) ≥ Eqϕ
+
+h
+
+log pθ (x, y, s x, z, s y )−
+
+log qϕ(sx, z, s y | x, y )
+
+i
+
+≡ ELBO (x, y ; θ, ϕ ). (8) 3Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+More specifically, we achieve our goal of maximizing 
+
+log pθ (x, y ) by maximizing its tractable lower bound. Sub-stituting the factorizations of pθ and qϕ, we derive: ELBO (x, y ; θ, ϕ ) = = Eqϕ
+
+log p(sx)+log p(z)+log pθ (x | sx)+log pθ (sy|sx, z )+ log pθ (y|sy)−log qϕ(sx|x)−log qϕ(z|sx)−log qϕ(sy|sx,z,y )
+
+= Eqϕ(sx|x)
+
+log pθ (x|sx)+Eqϕ(sx,z,s y |x,y )
+
+log pθ (y | sy )+
+
+Eqϕ(sx|x)
+
+log p(sx)− log qϕ(sx|x)+Eqϕ(sx,z |x)
+
+log p(z)−
+
+log qϕ(z | sx)+Eqϕ(sx,z,s y |x,y )
+
+log pθ (sy | sx, z )
+
+> (a)
+> +
+
+Eqϕ(sx,z,s y |x,y )
+
+− log qϕ(sy | sx, z, y )| {z }
+
+> (b)
+
+.
+
+We recognize that Eqϕ [log p(·) − log qϕ(·)] = −KL( qϕ∥p)
+
+and that the last two terms (a) and (b) can be combined into a single KL divergence term: −KL  qϕ(sy|sx, z, y )∥pθ (sy|
+
+sx, z ). This gives us the final expression for the ELBO: ELBO (x, y ; θ, ϕ ) = Eqϕ(sx|x)
+
+log pθ (x | sx)+ (9) 
+
+Eqϕ(sx,z,s y |x,y )
+
+log pθ (y | sy )−KL  qϕ(sx | x)∥p(sx)−
+
+KL  qϕ(z|sx)∥p(z)−KL  qϕ(sy|sx, z, y )∥pθ (sy | sx, z )
+
+This objective can be viewed as a coupled VAE: qϕ(sx |
+
+x), qϕ(z | sx), and qϕ(sy | sx, z, y ) are the amortized posteriors; pθ (x | sx) and pθ (y | sy ) are the decoders; and 
+
+pθ (sy | sx, z ) acts as a conditional prior that couples the two latent spaces, recovering the JEPA predictor as a generative component. Our objective is to maximize the ELBO: 
+
+max ϕ,θ E(x, y ) ∼ data ELBO (x, y ; θ, ϕ ). In prac-tice, we convert this to a minimization problem by defining a loss function as a weighted combination of the negative ELBO terms. Specifically, we minimize LELBO (x, y ; θ, ϕ ),which decomposes the ELBO into 5 interpretable terms, each with its own scalar weight: 
+
+LELBO (x, y ; θ, ϕ ) = αrec   −Eqϕ(sx|x)
+
+log pθ (x | sx)| {z }
+
+> Lrec
+
+
+
++ αgen   −Eqϕ(sx,z,s y |x,y )
+
+log pθ (y | sy )| {z }
+
+> Lgen
+
+
+
++ αKL  
+
+> sx
+
+KL  qϕ(sx | x)∥p(sx)| {z }
+
+> LKL
+> sx
+
++αKL  
+
+> z
+
+KL  qϕ(z | sx)∥p(z)| {z }
+
+> LKL
+> z
+
++ αKL  
+
+> sy
+
+KL  qϕ(sy | sx, z, y )∥pθ (sy | sx, z )| {z }   
+
+> LKL
+> sy ≡ − [(a) +(b) ]
+
+(10) The loss terms have the following practical interpretation: 
+
+Lrec (Context Reconstruction) : Measures the reconstruc-tion quality–how accurately we can recover the original context observation x from its latent representation sx.
+
+Lgen (Target Generation) : Measures the generation qual-ity–how accurately the target latent sy can reconstruct the actual target observation y.
+
+LKL  
+
+> sx
+
+(KL on sx): Regularizes the context latent distribu-tion sx toward the prior N (0 , I ), maintaining a well-behaved latent space for sx.
+
+LKL  
+
+> z
+
+(KL on z): Regularizes the auxiliary latent distribution 
+
+z toward the prior N (0 , I ), ensuring z doesn’t become overly complex or specialized. 
+
+LKL  
+
+> sy
+
+(KL on sy ): Regularizes the target latent posterior toward the generative model prediction. (a) (Prediction) : Measures the predictive accu-racy–how well sx and auxiliary variable z can jointly forecast the target latent representation sy .(b) (Entropy) : Maintains distributional diversity of the target posterior qϕ(sy | sx, z, y ) by encourag-ing it to remain sufficiently uncertain, therefore preventing collapse. 
+
+3.4. JEPA vs. Var-JEPA Architectures 
+
+Fig. 1 illustrates the relationship between standard JEPA and our Var-JEPA. Both approaches share the same core pre-diction structure with context ( x) and target ( y) observations, their latent representations sx, s y , and auxiliary latent vari-able z. JEPA relies on inference and prediction networks, which requires surrogate costs C(·) to prevent the collapse of representations. Var - JEPA adds generative networks (i.e., decoders) so the model can be trained with a variational objective which naturally prevents collapse. 
+
+3.5. Reparameterization Trick and Sampling Implementation 
+
+To backpropagate through stochastic latents, we apply the reparameterization trick (Kingma & Welling, 2013), express-ing samples as deterministic functions of noise so gradients are well-defined. The latent variables are sampled using the following reparameterized forms: 
+
+sx = μsx 
+
+> ϕ
+
+(x) + Σsx 
+
+> ϕ
+
+(x)1/2 ϵsx ,z = μzϕ(sx) + Σzϕ(sx)1/2 ϵz ,sy = μsy 
+
+> ϕ
+
+(sx, z, y ) + Σsy 
+
+> ϕ
+
+(sx, z, y )1/2 ϵsy ,
+
+where ϵsx , ϵ z , ϵ sy ∼ N (0 , I ) are independent standard Gaussian noise vectors, and [Σ (·) 
+
+> ϕ
+
+(·)] 1/2 denotes the ma-trix square root of the covariance. In practice, we estimate the gradients by sampling a single realization of each latent variable per forward pass. The gradient estimator becomes: 
+
+∇θ,ϕ L ≈ ∇ θ,ϕ 
+
+log pθ (x,y,s x,z,s y ) − log qϕ(sx,z,s y|x, y ),
+
+where each training step uses new samples sx, z, s y drawn from the reparameterized distributions. 4Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 𝑥                    
+
+> 𝑦
+> 𝑓 !(𝑥 )𝑔 "(𝑠 #,𝑧 )𝑠 !
+> 𝑧
+> 𝑠 "
+> 𝑠 ̂"
+> 𝑓 !$ (y)ℒ%&'(
+> 𝐶 (𝑠 ̂))
+> Variational JEPA
+> 𝑥
+> 𝑦
+> 𝑞 !(𝑠 #|𝑥 )𝑝 "(𝑠 )|𝑠 #,𝑧 )𝑠 !
+> 𝑧
+> 𝑠 "
+> 𝑠 ̂"
+> 𝑞 !(𝑠 "|𝑠 #,𝑦 ,𝑧 )
+> 𝑞 !(𝑧 |𝑠 #)
+> 𝑝 "(𝑦 |𝑠 ))
+> 𝑝 "(𝑥 |𝑠 #)ℒ&'+
+> ℒ,'-
+> ℒ.
+> /0 ℒ1!
+> /0
+> ℒ1"
+> /0
+> JEPA
+> context 𝑥 target 𝑦 context representation 𝑠 !target representation 𝑠 "latent variable 𝑧
+> surrogate cost 𝐶 ())□#(&)inference network (encoder)
+> ℒloss terms
+> 𝑔 $(&)prediction network 𝑝 $(&)generative network
+> 𝑝 (𝑠 #)𝑝 (𝑧 )
+
+Figure 1. Comparison between JEPA (left) and Var-JEPA (right). Var-JEPA extends JEPA by replacing deterministic encoders and predictor with probabilistic distributions, and adding generative networks (decoders) to enable variational learning under a unified ELBO. 
+
+3.6. Theoretical Generative Inference 
+
+When Var-JEPA is interpreted as a truly generative model, it can generate target observations from context by sampling through the generative pathway. The generative inference procedure, applicable when targets are unavailable, is: 
+
+sx ∼ qϕ(sx | x) = N  sx; μsx 
+
+> ϕ
+
+(x), Σsx 
+
+> ϕ
+
+(x),z ∼ p(z) = N (z; 0 , I ),sy ∼ pθ (sy | sx, z ) = N  sy ; μsy 
+
+> θ
+
+(sx, z ), Σsy 
+
+> θ
+
+(sx, z ),y ∼ pθ (y | sy ) = N  y; Dyθ (sy ), σ 2 
+
+> y
+
+I.
+
+This differs from training, where z is inferred via qϕ(z | sx)
+
+and the target posterior qϕ(sy | sx, z, y ) has access to ground truth targets. For downstream representation learn-ing tasks, where the goal is predictive rather than generative, we use deterministic embeddings by reporting posterior means rather than sampling (see Appendix D.5). 
+
+3.7. Relationship to LeJEPA 
+
+LeJEPA (Balestriero & LeCun, 2025) motivates isotropic Gaussian embeddings as minimax-optimal for downstream prediction under a broad class of probes. It enforces this distributional structure using SIGReg, which matches the 
+
+aggregated embedding distribution to an isotropic Gaussian via random one-dimensional projections. Var-JEPA relates to this picture through its variational regu-larization terms. For latent variables with a fixed standard-normal prior ( sx and z), the ELBO contains per-sample KL terms E KL( qϕ(·) ∥ N (0 , I )) . These admit the standard “ELBO surgery” decomposition (Hoffman & Johnson, 2016) into an aggregated posterior mismatch and an information-bottleneck term: 
+
+ExKL  qϕ(sx | x) ∥ N (0 , I ) =KL  qϕ(sx) ∥ N (0 , I ) + Iqϕ (x; sx), (11) with an analogous identity for z. In contrast, the target-latent term in Var-JEPA is KL( qϕ(sy | sx, z, y ) ∥ pθ (sy |
+
+sx, z )) , i.e., regularization toward a learned conditional prior rather than N (0 , I ), and therefore does not decompose into an aggregated KL to a fixed reference distribution in the same way. This motivates studying SIGReg as an explicit aggregated-distribution regularizer, particularly for sy , and reporting LeJEPA-link diagnostics in the simulation study. 
+
+4. Experiments 
+
+4.1. Simulation Study 
+
+We evaluate Var-JEPA in a controlled synthetic setting designed to isolate the effects of latent regularisation, isotropy, and information bottlenecks while retaining a known ground-truth generative process. This setting al-lows us to analyse how the variational objective shapes the aggregated latent distribution and how this, in turn, affects downstream probe performance. 
+
+Data generation. We generate observations (xi, y i) from a latent process with a mixture-structured context latent sxi ,a target latent syi that is correlated with sxi , and an auxiliary factor zi that influences syi and therefore yi. Observations are obtained by passing these latents through nonlinear maps 
+
+hx and hy and adding independent Gaussian noise: 
+
+zi ∼ N (0 , Σz ), sxi ∼ 12 N (0 , Σx) + 12 N (δ, Σx),syi | sxi , z i ∼ N (sxi + Az i, Σy ),xi = hx(sxi ) + ϵx, ϵ x ∼ N (0 , τ 2 
+
+> x
+
+),yi = hy (syi ) + ϵy , ϵ y ∼ N (0 , τ 2 
+
+> y
+
+).
+
+ELBO decomposition and interpretation. Although Var-JEPA does not explicitly optimize aggregated-posterior KL terms, the expected KL terms for latents with fixed pri-ors (here sx and z) admit the standard decomposition in Eq. 11. For the target latent, the ELBO instead contains a conditional-prior term that does not decompose into an aggregated KL to a fixed reference distribution in the same 5Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+way. This highlights that Var-JEPA couples distributional regularization of latent spaces with fixed priors with in-formation bottlenecks that penalize excessive dependence between inputs and latents. 
+
+Experimental variants. To study the relationship be-tween Var-JEPA and LeJEPA, we perform a systematic ab-lation study comparing ten variants (labeled A–J in Table 1). Unless explicitly set to zero, all loss weight parameters use default values: αrec = αgen = αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 1 for ELBO terms, and λsx = λsy = 10 for SIGReg regularization. We compare the following variants: (A) the full ELBO objective (standard Var-JEPA); (B–D) ELBO augmented with SIGReg, where SIGReg is applied to sx only (B, λsy =0), sy only (C, λsx = 0 ), or both (D). The general form of ELBO+SIGReg is: 
+
+LELBO+SIGReg = LELBO +λsxSIGReg( {sx,i }Bi=1 ,N (0 , I )) + λsy SIGReg( {sy,i }Bi=1 , N (0 , I )) .
+
+We also consider (E–F) ELBO with some KL terms removed (αKL  
+
+> sx
+
+= 0 and αKL  
+
+> sy
+
+= 0 , respectively); (G) ELBO with re-construction and generation terms removed ( αrec = αgen =0), leaving only KL regularization; (H) the same as (G) but with SIGReg added; (I) ELBO with all KL terms removed (αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 0 ), leaving only reconstruction and generation; and (J) the same as (I) but with SIGReg added, which corresponds to setting all KL terms to zero in 
+
+LELBO+SIGReg , resulting in a surrogate objective where per-sample KL terms are replaced by distribution-level SIGReg regularization. These variants allow us to disentangle the effects of per-sample variational regularization from direct control of the aggregated latent distributions. 
+
+Simulation study results. We evaluate a controlled com-parison with identical architecture and training schedule, varying only the presence/scope of SIGReg and whether KL terms are included. Results are shown in Table 1, which reports distribution diagnostics: aggregated KL divergence to N (0 , I ), SIGReg-MSE (discrepancy via SIGReg ), Frobe-nius norm of covariance deviation from identity ∥Cov( s) −
+
+I∥F , and mean norm ∥E[s]∥2. Figure 2 shows how these diagnostics evolve during training for selected ablations. The key finding is that the KL divergence terms in the ELBO achieve distributional properties for sx that are comparable to those obtained with explicit aggregated-distribution regu-larization via SIGReg. This demonstrates that per-sample KL regularization toward fixed priors naturally enforces aggregated-distribution isotropy, without requiring addi-tional regularization mechanisms. For sy , the ELBO regular-izes toward a learned conditional prior rather than N (0 , I ),which is the theoretically correct objective for the target latent; consequently, the aggregated distribution deviates from isotropic Gaussian, as expected. Removing reconstruction terms (variant G) causes represen-tational collapse, evidenced by probe accuracy dropping to near chance-level. Removing KL terms on sx (variant E) leads to severe distributional collapse, with aggregated KL divergences and SIGReg-MSE values increasing dramati-cally. Removing all KL terms (variant I) causes even more severe collapse across all distributional metrics, demon-strating that KL regularization is essential for maintaining well-behaved latent distributions. When SIGReg is added to the no-KL variant (variant J), it partially compensates for the missing KL terms, but the full ELBO remains optimal. The training dynamics in Figure 2 reveal that these distribu-tional properties emerge gradually during training, with KL terms providing stable regularization throughout. 
+
+4.2. Downstream Evaluation on Tabular Data 
+
+4.2.1. E XPERIMENTAL DETAILS 
+
+Var-T-JEPA. We evaluate our tabular implementation, Var-T-JEPA, which combines feature-level masking with the unified variational objective from Eq. 10. The model is inspired by the deterministic T-JEPA (Thimonier et al., 2025), but instantiates the Var-JEPA framework for tabular data by learning Gaussian latent embeddings and training the prediction and reconstruction pathways jointly under the ELBO. Var-T-JEPA tokenizes heterogeneous numerical and categorical features into a transformer sequence, infers Gaussian latent embeddings sx and sy , and trains a latent-space predictor via a coupled reconstruction–prediction ob-jective that directly instantiates the Var-JEPA framework for heterogeneous tabular data. This yields both deterministic embeddings (via posterior means) and per-sample uncer-tainty estimates from the learned latent distributions. We defer a full conceptual description to Appendix A. 
+
+Datasets. We evaluate learned representations on five real-world tabular datasets: Adult (AD), Covertype (CO), Elec-tricity (EL), Credit Card (CC), and Bank Marketing (BM), as well as MNIST (treated as tabular features with con-trollable input corruption) and a fully-synthetic simulation dataset (SIM); more details are provided in Appendix C.1.1. 
+
+Downstream and baseline predictors. For each dataset, we compare strong raw-feature baselines to the same pre-dictor architectures trained on embeddings produced by Var-T-JEPA and T-JEPA (details in Appendix D.5). Fol-lowing Thimonier et al. (2025), we consider a range of strong and widely-used tabular predictors: MLP, DCNv2 (Wang et al., 2021), ResNet (He et al., 2016), AutoInt (Song et al., 2019), FT-Transformer (Gorishniy et al., 2021), and XGBoost (Chen & Guestrin, 2016). 
+
+Selective evaluation via uncertainty. Var-T-JEPA pro-vides a per-sample uncertainty estimate; we report selective-evaluation where the most uncertain 10% , 20% , or 50% of 6Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Table 1. Simulation study: Var-JEPA and SIGReg ablations (mean ± std over 5 runs). We report linear-probe accuracy (predicting the mixture component) and LeJEPA-link diagnostics for the aggregated latent distributions of sx and sy . For sy we additionally report the mean conditional-prior coupling term E KL( qϕ(sy | sx, z, y ) ∥ pθ (sy | sx, z )) .
+
+Exp. Objective Acc (s) KL agg (q(s)∥N (0 , I )) SIGReg -MSE( s) ∥Cov( s) − I∥F ∥E[s]∥2
+
+Context latent diagnostics (sx)(A) ELBO (Var-JEPA) 0.996 ± 0.002 0.113 ± 0.037 4.0e-4 ± 1.0e-4 0.649 ± 0.127 0.082 ± 0.009 (B) ELBO+SIGReg ( λsx = 10 , λ sy = 0 ) 0.996 ± 0.002 0.108 ± 0.032 4.0e-4 ± 1.0e-4 0.639 ± 0.113 0.077 ± 0.018 (C) ELBO+SIGReg ( λsx = 0 , λ sy = 10 ) 0.996 ± 0.002 0.110 ± 0.033 4.0e-4 ± 1.0e-4 0.647 ± 0.118 0.077 ± 0.018 (D) ELBO+SIGReg 0.996 ± 0.002 0.107 ± 0.030 3.9e-4 ± 1.0e-4 0.634 ± 0.108 0.078 ± 0.018 (E) ELBO ( αKL  
+
+> sx
+
+= 0 ) 0.996 ± 0.002 8.374 ± 1.944 5.1e-2 ± 1.9e-2 7.197 ± 1.522 2.550 ± 0.607 (F) ELBO ( αKL  
+
+> sy
+
+= 0 ) 0.996 ± 0.002 0.098 ± 0.038 3.0e-4 ± 1.0e-4 0.597 ± 0.124 0.083 ± 0.010 (G) ELBO ( αrec = αgen = 0 ) 0.571 ± 0.010 0.015 ± 0.002 1.6e-4 ± 1.1e-5 0.229 ± 0.016 0.055 ± 0.005 (H) ELBO ( αrec = αgen = 0 )+SIGReg 0.834 ± 0.044 0.015 ± 0.001 1.7e-4 ± 1.4e-5 0.225 ± 0.008 0.065 ± 0.006 (I) ELBO ( αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 0 ) 0.995 ± 0.002 10.465 ± 2.207 5.7e-2 ± 1.9e-2 8.807 ± 1.208 3.100 ± 0.594 (J) ELBO ( αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 0 ) + SIGReg 0.996 ± 0.002 2.115 ± 0.093 3.3e-3 ± 5.4e-4 2.594 ± 0.077 0.205 ± 0.032 
+
+Target latent diagnostics (sy )(A) ELBO (Var-JEPA) 0.993 ± 0.001 3.530 ± 0.377 1.7e-2 ± 1.7e-3 4.727 ± 0.528 1.320 ± 0.180 (B) ELBO+SIGReg ( λsx = 10 , λ sy = 0 ) 0.992 ± 0.002 3.511 ± 0.449 1.4e-2 ± 3.0e-3 4.748 ± 0.651 1.272 ± 0.198 (C) ELBO+SIGReg ( λsx = 0 , λ sy = 10 ) 0.993 ± 0.002 1.999 ± 0.058 4.6e-3 ± 4.0e-4 3.423 ± 0.215 0.189 ± 0.030 (D) ELBO+SIGReg 0.992 ± 0.002 1.998 ± 0.057 4.6e-3 ± 4.0e-4 3.423 ± 0.216 0.189 ± 0.030 (E) ELBO ( αKL  
+
+> sx
+
+= 0 ) 0.993 ± 0.001 4.051 ± 0.517 2.1e-2 ± 3.4e-3 4.985 ± 0.591 1.589 ± 0.201 (F) ELBO ( αKL  
+
+> sy
+
+= 0 ) 0.983 ± 0.003 6.201 ± 1.319 2.8e-2 ± 5.5e-3 6.288 ± 1.636 1.924 ± 0.348 (G) ELBO ( αrec = αgen = 0 ) 0.543 ± 0.033 0.055 ± 0.006 4.2e-4 ± 3.2e-5 0.428 ± 0.021 0.164 ± 0.019 (H) ELBO ( αrec = αgen = 0 )+SIGReg 0.821 ± 0.067 0.017 ± 0.001 1.6e-4 ± 1.4e-5 0.239 ± 0.018 0.067 ± 0.014 (I) ELBO ( αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 0 ) 0.984 ± 0.004 20.276 ± 11.331 8.4e-2 ± 4.3e-2 11.342 ± 5.062 4.871 ± 2.150 (J) ELBO ( αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 0 )+SIGReg 0.983 ± 0.001 2.215 ± 0.249 3.4e-3 ± 7.8e-4 2.825 ± 0.271 0.248 ± 0.068 0 20 40                                      
+
+> epoch
+> 0
+> 5
+> 10
+> 15
+> 20
+> KL agg (q(sx)(0, I))
+> 020 40
+> epoch
+> 5
+> 10
+> 15
+> 20
+> 25
+> KL agg (q(sy)(0, I))
+> 020 40
+> epoch
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> SIGReg-MSE( sy)
+> 020 40
+> epoch
+> 4
+> 6
+> 8
+> 10
+> 12
+> Cov( sy)IF
+> 020 40
+> epoch
+> 0
+> 2
+> 4
+> 6
+> [sy]2
+> 020 40
+> epoch
+> 0
+> 50
+> 100
+> 150
+> KL( q(sy|sx,z,y)p(sy|sx,z))
+> (A) ELBO
+> (D) ELBO+SIGReg
+> (E) ELBO ( KL
+> sx= 0)
+> (F) ELBO ( KL
+> sy= 0)
+> (I) ELBO ( KL
+> sx=KL
+> z=KL
+> sy= 0)
+> (J) ELBO ( KL
+> sx=KL
+> z=KL
+> sy= 0)+SIGReg
+
+Figure 2. Epoch-wise distribution diagnostics for selected experiments. We show how aggregated KL divergences, SIGReg-MSE, isotropy metrics, and conditional-prior coupling evolve during training. 
+
+samples are discarded before computing accuracy (“Var-T-JEPA (10%)”, etc.), illustrating the coverage–accuracy trade-off when abstaining on low-confidence samples. 4.2.2. R ESULTS 
+
+Table 2 summarizes downstream test accuracy across datasets and predictor families. Across the real-world tab-ular datasets (AD, CO, EL, CC, BM), Var-T-JEPA yields competitive embeddings for downstream classifiers, and se-lective evaluation exhibits a clear coverage–accuracy trade-off: discarding the most uncertain test samples improves performance on the retained subset across model families. In contrast, the deterministic T-JEPA baseline can suffer from representation collapse on some datasets, leading to poor downstream performance and reduced robustness. For the (semi-)synthetic MNIST and SIM datasets, Var-T-JEPA additionally produces uncertainty signals that are consistent with the underlying simulated corruption/ambigu-ity structure: Figure 3 visualizes (left) risk–coverage curves induced by abstaining on samples with highest latent uncer-tainty, (middle) a positive association between standardized latent uncertainty and the simulated uncertainty score, and (right) ROC curves showing that latent uncertainty can iden-tify high-ambiguity samples (defined by a high-quantile threshold on the simulated uncertainty score). These di-agnostics complement the selective-evaluation results in Table 2 by showing that the learned latent uncertainty is not only useful for abstention, but also aligned with the known uncertainty signal in these controlled settings. Addi-tional experimental results, including sensitivity analyses, are provided in Appendix B. 
+
+5. Discussion 
+
+We provide a novel reinterpretation of the JEPA design pat-tern as variational inference in a coupled latent-variable model: the predictor is a learned conditional prior pθ (sy |
+
+sx, z ), and ad hoc costs are indirect forms of distributional 7Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Table 2. Downstream performance comparison across tabular datasets. Results (mean ± std over 5 downstream model runs; XGBoost single deterministic run) show test accuracy. AD=Adult, CO=Covertype, EL=Electricity, CC=Credit Card Default, BM=Bank Marketing. Light blue rows indicate selective evaluation (reduced coverage). 
+
+Method AD ↑ CO ↑ EL ↑ CC ↑ BM ↑ MNIST ↑ SIM ↑
+
+MLP 0.849 ±1.4e −3 0.750 ±3.7e −3 0.781 ±3.6e −3 0.816 ±2.5e −3 0.898 ±1.4e −3 0.822 ±1.1e −2 0.823 ±7.5e −3
+
++T-JEPA 0.849 ±4.4e −3 0.408 ±2.3e −1 0.627 ±4.1e −2 0.774 ±0e −0 0.616 ±3.7e −1 0.113 ±6.2e −3 0.692 ±3.5e −2
+
++Var-T-JEPA 0.852 ±2.1e −3 0.679 ±2.9e −2 0.790 ±3.3e −3 0.818 ±1.5e −3 0.900 ±2.0e −3 0.822 ±1.8e −2 0.695 ±1.4e −2
+
++Var-T-JEPA (10%) 0.865 ±2.0e −3 0.696 ±2.8e −2 0.793 ±2.9e −3 0.827 ±1.4e −3 0.905 ±2.2e −3 0.838 ±1.6e −2 0.705 ±1.3e −2
+
++Var-T-JEPA (20%) 0.883 ±1.7e −3 0.697 ±2.7e −2 0.795 ±2.8e −3 0.835 ±1.2e −3 0.908 ±2.5e −3 0.856 ±1.9e −2 0.706 ±1.5e −2
+
++Var-T-JEPA (50%) 0.921 ±2.1e −3 0.706 ±1.4e −2 0.804 ±3.9e −3 0.841 ±7.0e −4 0.921 ±1.4e −3 0.901 ±2.1e −2 0.729 ±1.5e −2
+
+DCNv2 0.762 ±6.2e −4 0.757 ±6.2e −3 0.825 ±7.3e −4 0.814 ±1.1e −3 0.896 ±1.1e −3 0.875 ±4.5e −3 0.714 ±1.8e −3
+
++T-JEPA 0.851 ±1.5e −3 0.546 ±8.9e −3 0.769 ±2.3e −3 0.792 ±1.7e −2 0.895 ±3.1e −4 0.841 ±4.6e −2 0.772 ±3.7e −3
+
++Var-T-JEPA 0.851 ±1.8e −3 0.778 ±6.1e −3 0.830 ±1.9e −3 0.814 ±2.4e −3 0.896 ±6.9e −4 0.885 ±4.8e −3 0.720 ±7.8e −3
+
++Var-T-JEPA (10%) 0.864 ±1.7e −3 0.785 ±6.8e −3 0.831 ±2.6e −3 0.823 ±2.7e −3 0.903 ±7.9e −4 0.898 ±5.2e −3 0.728 ±7.2e −3
+
++Var-T-JEPA (20%) 0.882 ±1.6e −3 0.783 ±6.8e −3 0.831 ±2.1e −3 0.833 ±2.5e −3 0.907 ±1.2e −3 0.909 ±5.0e −3 0.726 ±7.5e −3
+
++Var-T-JEPA (50%) 0.920 ±1.3e −3 0.782 ±5.8e −3 0.831 ±2.7e −3 0.840 ±1.5e −3 0.918 ±1.6e −3 0.936 ±3.0e −3 0.757 ±5.4e −3
+
+ResNet 0.849 ±1.9e −3 0.776 ±7.0e −3 0.823 ±2.5e −3 0.813 ±2.0e −3 0.897 ±2.3e −3 0.860 ±7.0e −3 0.878 ±5.9e −3
+
++T-JEPA 0.852 ±2.5e −3 0.540 ±6.3e −2 0.808 ±7.4e −3 0.817 ±3.7e −3 0.897 ±4.7e −3 0.854 ±3.0e −2 0.693 ±6.6e −2
+
++Var-T-JEPA 0.854 ±1.4e −3 0.779 ±1.1e −2 0.820 ±7.6e −3 0.813 ±5.0e −3 0.900 ±1.2e −3 0.871 ±1.3e −2 0.564 ±1.1e −1
+
++Var-T-JEPA (10%) 0.868 ±9.2e −4 0.785 ±1.1e −2 0.822 ±7.0e −3 0.824 ±2.9e −3 0.906 ±1.1e −3 0.887 ±9.7e −3 0.573 ±1.1e −1
+
++Var-T-JEPA (20%) 0.886 ±8.2e −4 0.782 ±1.3e −2 0.823 ±6.8e −3 0.833 ±2.5e −3 0.910 ±9.2e −4 0.900 ±8.7e −3 0.583 ±1.1e −1
+
++Var-T-JEPA (50%) 0.924 ±6.6e −4 0.787 ±1.4e −2 0.826 ±7.0e −3 0.841 ±2.2e −3 0.920 ±2.0e −3 0.936 ±5.2e −3 0.612 ±1.2e −1
+
+AutoInt 0.761 ±7.8e −4 0.753 ±1.6e −2 0.754 ±1.1e −2 0.817 ±1.4e −3 0.901 ±1.5e −3 0.809 ±1.6e −2 0.897 ±1.9e −2
+
++T-JEPA 0.854 ±2.6e −3 0.448 ±1.3e −1 0.756 ±2.0e −2 0.804 ±3.2e −4 0.893 ±3.7e −3 0.817 ±7.4e −3 0.775 ±7.9e −3
+
++Var-T-JEPA 0.854 ±2.5e −3 0.752 ±4.5e −3 0.822 ±2.7e −3 0.816 ±1.3e −3 0.900 ±1.5e −3 0.810 ±4.9e −3 0.723 ±7.4e −3
+
++Var-T-JEPA (10%) 0.868 ±3.0e −3 0.756 ±4.2e −3 0.823 ±3.6e −3 0.824 ±1.5e −3 0.906 ±1.5e −3 0.825 ±2.0e −3 0.730 ±6.7e −3
+
++Var-T-JEPA (20%) 0.885 ±2.2e −3 0.754 ±4.7e −3 0.822 ±3.9e −3 0.834 ±1.1e −3 0.909 ±1.1e −3 0.841 ±1.9e −3 0.732 ±6.2e −3
+
++Var-T-JEPA (50%) 0.923 ±1.5e −3 0.749 ±6.2e −3 0.823 ±4.3e −3 0.840 ±9.6e −4 0.920 ±1.2e −3 0.880 ±4.2e −3 0.757 ±7.0e −3
+
+FT-Trans 0.761 ±4.1e −4 0.747 ±9.1e −3 0.814 ±3.9e −3 0.820 ±1.0e −3 0.901 ±6.7e −4 0.877 ±2.4e −2 0.962 ±1.4e −3
+
++T-JEPA 0.854 ±1.0e −3 0.522 ±1.3e −2 0.705 ±4.7e −2 0.802 ±2.1e −3 0.886 ±3.7e −4 0.317 ±2.2e −1 0.723 ±1.2e −2
+
++Var-T-JEPA 0.852 ±1.2e −3 0.748 ±5.6e −3 0.798 ±4.2e −3 0.818 ±3.6e −4 0.900 ±4.1e −4 0.864 ±9.3e −3 0.716 ±7.7e −3
+
++Var-T-JEPA (10%) 0.867 ±1.4e −3 0.756 ±5.6e −3 0.800 ±3.7e −3 0.827 ±4.7e −4 0.905 ±6.3e −4 0.879 ±9.4e −3 0.726 ±8.2e −3
+
++Var-T-JEPA (20%) 0.885 ±1.4e −3 0.753 ±5.8e −3 0.802 ±3.5e −3 0.836 ±7.0e −4 0.909 ±6.6e −4 0.891 ±9.8e −3 0.727 ±6.5e −3
+
++Var-T-JEPA (50%) 0.923 ±1.2e −3 0.746 ±7.9e −3 0.809 ±2.1e −3 0.842 ±6.3e −4 0.922 ±8.8e −4 0.918 ±6.5e −3 0.748 ±2.5e −3
+
+XGBoost 0.864 0.807 0.917 0.811 0.900 0.881 0.949 +T-JEPA 0.854 0.807 0.860 0.801 0.898 0.871 0.851 +Var-T-JEPA 0.855 0.809 0.888 0.806 0.904 0.872 0.945 +Var-T-JEPA (10%) 0.874 0.818 0.890 0.817 0.910 0.883 0.948 +Var-T-JEPA (20%) 0.893 0.818 0.891 0.823 0.912 0.889 0.951 +Var-T-JEPA (50%) 0.928 0.816 0.891 0.832 0.921 0.913 0.955 
+
+control that the ELBO regularizes. This clarifies that the common “JEPA vs. generative modeling” dichotomy is largely a matter of framing: JEPA occupies a particular (im-0.12 
+
+> 0.14
+> 0.16
+> 0.18
+> Risk (error)
+> AURC=0.123
+
+A    
+
+> Risk Coverage
+> 2
+> 1
+> 0
+> 1
+> Latent uncertainty
+> Spearman=0.949
+> Latent vs simulated uncertainty
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> True Positive Rate
+> AUC=0.986
+> Detecting samples with uq75
+> 0.0 0.5 1.0
+> Coverage
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Risk (error)
+> AURC=0.209
+
+B     
+
+> 0.0 0.5 1.0
+> Simulated uncertainty u
+> 3
+> 2
+> 1
+> 0
+> 1
+> Latent uncertainty
+> Spearman=0.640
+> 0.0 0.5 1.0
+> False Positive Rate
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> True Positive Rate
+> AUC=0.805
+
+Figure 3. Uncertainty quantification on the MNIST (A) and SIM (B) datasets. Left: risk–coverage curve induced by abstaining on samples with highest latent uncertainty. Middle: standardized latent uncertainty versus simulated uncertainty. Right: ROC curve for detecting high-ambiguity samples from latent uncertainty. 
+
+plicit, often deterministic) point in the design space of latent-variable generative models. By making this latent generative structure explicit, we unify predictive and generative self-supervised learning within a single principled framework. Empirically, ELBO training yields usable representations without heuristic anti-collapse objectives (e.g., auxiliary reg-ularizers such as EMA or distribution-matching penalties) and enables rigorous uncertainty estimates from posterior covariances. We introduce Var-T-JEPA as a concrete im-plementation for tabular data, and in downstream tabular evaluation it produces competitive embeddings across var-ious datasets and supports selective prediction based on estimated latent uncertainty. More broadly, we observe that per-sample KL terms to fixed priors drive aggregated dis-tributional behavior comparable to explicit distributional regularizers such as SIGReg, while leaving the target latent governed by its learned conditional prior. Future work in-cludes scaling to vision and video, and extending to settings where target observations are absent at test time, making conditional generation central. 8Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Acknowledgements 
+
+MG is supported by the EPSRC Centre for Doctoral Train-ing in Health Data Science (EP/S02428X/1). CY is sup-ported by a UKRI Turing AI Acceleration Fellowship (EP/V023233/2). 
+
+References 
+
+Assran, M., Duval, Q., Misra, I., Bojanowski, P., Vincent, P., Rabbat, M., LeCun, Y., and Ballas, N. Self-supervised learning from images with a joint-embedding predictive architecture, 2023. Balestriero, R. and LeCun, Y. Lejepa: Provable and scalable self-supervised learning without the heuristics, 2025. Bardes, A., Garrido, Q., Ponce, J., Chen, X., Rabbat, M., LeCun, Y., Assran, M., and Ballas, N. Revisiting feature prediction for learning visual representations from video, 2024. Blackard, J. Covertype. UCI Machine Learning Repository, 1998. doi: 10.24432/C50K5N. Bowman, S. R., Vilnis, L., Vinyals, O., Dai, A. M., Joze-fowicz, R., and Bengio, S. Generating sentences from a continuous space. In 20th SIGNLL Conference on Com-putational Natural Language Learning, CoNLL 2016 , pp. 10–21. Association for Computational Linguistics (ACL), 2016. Chen, T. and Guestrin, C. Xgboost: A scalable tree boosting system. In Proceedings of the 22nd ACM SIGKDD Inter-national Conference on Knowledge Discovery and Data Mining , KDD ’16, pp. 785–794. ACM, August 2016. doi: 10.1145/2939672.2939785. Drozdov, K., Shwartz-Ziv, R., and LeCun, Y. Video repre-sentation learning with joint-embedding predictive archi-tectures, 2024. Epps, T. W. and Pulley, L. B. A test for normality based on the empirical characteristic function. Biometrika , 70(3): 723–726, 1983. ISSN 1464-3510. doi: 10.1093/biomet/ 70.3.723. Gorishniy, Y., Rubachev, I., Khrulkov, V., and Babenko, A. Revisiting deep learning models for tabular data. In Ranzato, M., Beygelzimer, A., Dauphin, Y., Liang, P., and Vaughan, J. W. (eds.), Advances in Neural Informa-tion Processing Systems , volume 34, pp. 18932–18943. Curran Associates, Inc., 2021. Grill, J.-B., Strub, F., Altch ´e, F., Tallec, C., Richemond, P., Buchatskaya, E., Doersch, C., Avila Pires, B., Guo, Z., Gheshlaghi Azar, M., Piot, B., kavukcuoglu, k., Munos, R., and Valko, M. Bootstrap your own latent - a new approach to self-supervised learning. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M., and Lin, H. (eds.), 
+
+Advances in Neural Information Processing Systems , vol-ume 33, pp. 21271–21284. Curran Associates, Inc., 2020. Ha, D. and Schmidhuber, J. World models. 2018. doi: 10.48550/ARXIV.1803.10122. Hao, X. and Shafto, P. Coupled variational autoencoder. In Krause, A., Brunskill, E., Cho, K., Engelhardt, B., Sabato, S., and Scarlett, J. (eds.), Proceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pp. 12546–12555. PMLR, 23–29 Jul 2023. Harries, M. Splice-2 comparative evaluation: Electricity pricing. Technical report, The University of New South Wales, 1999. He, K., Zhang, X., Ren, S., and Sun, J. Deep residual learning for image recognition. In 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 770–778. IEEE, June 2016. doi: 10.1109/cvpr.2016.90. Hoffman, M. D. and Johnson, M. J. Elbo surgery: yet another way to carve up the variational evidence lower bound. In Advances in Approximate Bayesian Inference ,2016. NIPS 2016 Workshop. Huang, Y. Vjepa: Variational joint embedding predictive architectures as probabilistic world models, 2026. Kingma, D. P. and Welling, M. Auto-encoding variational bayes, 2013. Kohavi, R. Scaling up the accuracy of naive-bayes classi-fiers: A decision-tree hybrid. AAAI Press, Menlo Park, CA (United States), 12 1996. LeCun, Y. A path towards autonomous machine intelligence, 2022. White paper. LeCun, Y., Bottou, L., Bengio, Y., and Haffner, P. Gradient-based learning applied to document recognition. Pro-ceedings of the IEEE , 86(11):2278–2324, 1998. ISSN 0018-9219. doi: 10.1109/5.726791. Moro, S., Rita, P., and Cortez, P. Bank Marketing. UCI Ma-chine Learning Repository, 2014. doi: 10.24432/C5K306. Murphy, K. P. Probabilistic Machine Learning: An intro-duction . MIT Press, 2022. Parmar, N., Vaswani, A., Uszkoreit, J., Kaiser, L., Shazeer, N., Ku, A., and Tran, D. Image Transformer. In Proceed-ings of the 35th International Conference on Machine Learning , pp. 4052–4061. PMLR, 2018. 9Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., and Tang, J. Autoint: Automatic feature interaction learning via self-attentive neural networks. In Proceedings of the 28th ACM International Conference on Information and Knowledge Management , CIKM ’19, pp. 1161–1170. ACM, November 2019. doi: 10.1145/3357384.3357925. Thimonier, H., Costa, J. L. D. M., Popineau, F., Rimmel, A., and DOAN, B.-L. T-JEPA: Augmentation-free self-supervised learning for tabular data. In The Thirteenth International Conference on Learning Representations ,2025. van den Oord, A., Kalchbrenner, N., Espeholt, L., kavukcuoglu, k., Vinyals, O., and Graves, A. Condi-tional image generation with pixelcnn decoders. In Lee, D., Sugiyama, M., Luxburg, U., Guyon, I., and Garnett, R. (eds.), Advances in Neural Information Processing Systems , volume 29. Curran Associates, Inc., 2016a. van den Oord, A., Kalchbrenner, N., and Kavukcuoglu, K. Pixel recurrent neural networks. In Balcan, M. F. and Weinberger, K. Q. (eds.), Proceedings of The 33rd Inter-national Conference on Machine Learning , volume 48 of Proceedings of Machine Learning Research , pp. 1747– 1756, New York, New York, USA, 20–22 Jun 2016b. PMLR. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L. u., and Polosukhin, I. At-tention is all you need. In Guyon, I., Luxburg, U. V., Bengio, S., Wallach, H., Fergus, R., Vishwanathan, S., and Garnett, R. (eds.), Advances in Neural Information Processing Systems , volume 30. Curran Associates, Inc., 2017. Wang, R., Shivanna, R., Cheng, D., Jain, S., Lin, D., Hong, L., and Chi, E. Dcn v2: Improved deep & cross net-work and practical lessons for web-scale learning to rank systems. In Proceedings of the Web Conference 2021 ,WWW ’21, pp. 1785–1797. ACM, April 2021. doi: 10.1145/3442381.3450078. Yeh, I.-C. Default of Credit Card Clients. UCI Machine Learning Repository, 2009. doi: 10.24432/C55S3H. 10 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+A. Var-T-JEPA: Variational Joint Embedding Predictive Architecture for Tabular Data 
+
+A.1. Overview: Neural Architecture and Modeling Strategies 
+
+The following provides a full conceptual overview of Var-T-JEPA. Detailed implementation specifications are deferred to Appendix D.2. Tabular data differs fundamentally from image or text modalities often encountered in JEPA applications in several aspects: (1) features are inherently heterogeneous, mixing numerical and categorical variables with different scales and distributions; (2) the notion of spatial or temporal locality is absent, requiring alternative masking strategies; (3) feature interactions are often complex and non-obvious, making the predictive task particularly suitable for representation learning approaches like JEPA. Our tabular Var-T-JEPA pipeline broadly builds on modeling strategies established by Thimonier et al. (2025), who introduced T-JEPA as a standard (non-variational) JEPA implementation for tabular data. The model architecture of our tabular Var-T-JEPA model is depicted in Fig. 4, which translates the theoretical framework from Section 3 into a practical neural architecture tailored for tabular data. Original 
+
+> Sample
+
+𝑤 
+
+ℝ!!"#$      
+
+> 𝑠 %=𝜇 &
+> '!+Σ!
+> "!⨀𝜀 !
+> #
+> Auxiliary Encoder
+
+𝑞 "(𝑧 |𝑠 #)             
+
+> Small MLP
+> ℝ!$%&
+> Auxiliary Rep.
+> Target Posterior
+> ℝ"'()
+> Context Mask Context
+> 𝑥 =𝑚 #$% ⊙𝑤
+> 𝑚 #$%
+> Target Rep.
+> Predictor
+> 𝑝 !(𝑠 "!
+> ($)|𝑠 &,𝑧 ;𝑚 '()
+> (*))
+> Transformer
+> Mask -Aware
+> 𝑧 =𝜇 &
+> (+Σ!
+> *⨀𝜀 !
+> *
+> Context Decoder
+> MLP
+> 𝑝 &(𝑥 (|𝑠 )
+> (())
+> Target Decoder
+
+𝑝 $ (𝑤 (')|𝑠 ) 
+
+> '
+
+)       
+
+> 𝑠 +=𝜇 !
+> ""+Σ!
+> ""⨀𝜀 !
+> ""
+> 𝜀 !
+> "~𝒩 (0,𝑰 )
+
+𝜇 "
+
+> *
+
+Σ"   
+
+> *𝜀 !
+> "~
+> 𝒩 (0,𝑰 )
+
+Σ"                                 
+
+> +)
+> 𝜀 !
+> #!~𝒩 (0,𝑰 )
+> ℒ'"
+> *+ =,
+> -/#$%
+> Σ01,
+> -Σ2∈4#$%
+> &KL (𝑞 &(𝑠 5'
+> 2|𝑠 %,𝑧 ,𝑤 ;𝑚 678
+> (0))∥
+> 𝑝 ;(𝑠 5'
+> 2|𝑠 %,𝑧 ;𝑚 678
+> (0)))
+> ℒ(
+> *+ =
+> KL (𝑞 &(𝑧 |𝑠 %)∥𝒩 (0,𝐼 ))
+> ℒ'!
+> *+ =,
+> /(#)
+> Σ2∈4(#)
+> KL (𝑞 &(𝑠 %
+> 2|𝑥 )∥𝒩 (0,𝐼 ))
+> ℒ7<= =1
+> 𝑀 =6>
+> Σ2∈4(#) [−log (p;(𝑥 (2)|𝑠 %
+> (2))]
+> 𝑠 2∈ℝ!-./( ×!$%&
+> 𝐷 #
+> 0(𝑠 #)𝜎 #
+> MLP 𝐷 0
+> 1(𝑠 +)𝜎 1
+> Target Masks
+> 𝑦 ,
+> 𝑚 234
+> (6)𝑚 234
+> (8)𝑚 234
+> (9)
+> 𝑦 :=𝑚 234
+> (:)⊙𝑤 ∈ℝ;#$%
+> 𝑦 ?
+> 𝑦 -
+> Positional Encoding
+> Transformer
+> Context Encoder
+> Tokenization & Feat. Emb.
+> ℝ(;&#' <6)×>()*
+> +
+> CLS 1.0
+> Positional Encoding
+> Transformer
+
+𝑞 "(𝑠 #
+
+> (')
+
+|𝑥 )
+
+> Downstream
+> Model
+> Testing
+> Context Rep.
+> ℝ"'() ×!$%&
+
+𝜇 "
+
+> +@A
+
+Σ"    
+
+> +@A
+> ℒ8<B =1
+> 𝐷 C<D6
+> Σ21,
+> E*+,# [−log (p;(𝑤 (2)|𝑠 F
+> 2]
+
+𝜇 "       
+
+> +)
+> CLS
+> Tokenization & Feat. Emb.
+> +
+> 1
+> 𝑞 !(𝑠 "!
+> ($)|𝑠 &,𝑧 ,𝑤 ;𝑚 '()
+> (*))
+> ℳ={,,}
+> 𝑗 =1
+> 𝑗 =2…
+
+𝜇 "
+
+> +G
+
+Σ"
+
+> +G
+> 𝜇 +
+> ,̂"!
+> Σ+
+> ,̂"!
+> 𝑠 2
+
+Figure 4. Architectural overview of Var-T-JEPA for tabular data. The model implements the theoretical framework through specialized components: (1) the context encoder processes masked tabular features to produce variational context representations qϕ(s(j)
+
+x |x); (2) the auxiliary encoder infers predictive latents qϕ(z|sx); (3) the target posterior prepends context and auxiliary latents as special tokens before feature processing qϕ(s(j)
+
+yk |sx, z, w ; m(k)
+
+trg ); (4) the predictor generates target representations pθ (s(j)
+
+yk |sx, z ; m(k)
+
+trg ), and (5) the decoders reconstruct original tabular features from latent representations. 
+
+A.2. Tabular Feature Masking Strategy 
+
+Following the T-JEPA masking framework, we partition the complete feature vector w ∈ RDfeat into context and target subsets at the feature level; in this formulation w is the full (unmasked) target view, while yk are masked target sub-views and x the context view derived from w. Given Dfeat features, we create context masks mctx ∈ { 0, 1}Dfeat and target masks 
+
+m(i)
+
+trg ∈ { 0, 1}Dfeat where: 
+
+x = mctx ⊙ w, ∥mctx ∥0 = Mctx (12) 
+
+yk = m(k)
+
+trg ⊙ w, ∥m(k)
+
+trg ∥0 = Mtrg , k = 1 , . . . , K (13) The mask sizes are sampled uniformly for each batch-optimization step: Mctx ∼ Uniform [⌊Dfeat · rmin 
+
+ctx ⌋, ⌊Dfeat · rmax 
+
+ctx ⌋] and 
+
+Mtrg ∼ Uniform [⌊Dfeat · rmin 
+
+trg ⌋, ⌊Dfeat · rmax 
+
+trg ⌋], where the ratio parameters define the minimum and maximum shares of features to mask. During training, we typically generate one context view and K target predictions per sample, ensuring that 
+
+Mctx + Mtrg ≤ Dfeat to maintain non-overlapping masks. 11 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+A.3. Variational Network Components 
+
+Our tabular Var-T-JEPA architecture consists of six key variational network components that implement the theoretical framework for heterogeneous tabular data. Each feature is indexed by j ∈ { 1, 2, . . . , D feat } where Dfeat denotes the total number of features in the dataset. Features are categorized as either numerical ( j ∈ I num ) or categorical ( j ∈ I cat ). More detailed implementation specifications are provided in Appendix D.2. 
+
+(I) Context Encoder. Following Thimonier et al. (2025), qϕ(s(j) 
+
+> x
+
+|x) processes masked tabular features through feature tokenization, transformer encoding, and variational output heads. Each feature is embedded with type and positional information, then processed by a transformer with prepended CLS tokens, yielding contextualized representations that parameterize the context latent distribution 
+
+hctx = f ctx  
+
+> ϕ
+
+(x), (14) 
+
+qϕ(s(j) 
+
+> x
+
+|x) = N (s(j) 
+
+> x
+
+; μsx 
+
+> ϕ
+
+(hctx )(j), Σsx 
+
+> ϕ
+
+(hctx )(j)). (15) Here, f ctx  
+
+> ϕ
+
+(x) is the transformer-based encoder and μsx 
+
+> ϕ
+
+and Σsx 
+
+> ϕ
+
+are linear projections applied to the encoder output. 
+
+(II) Auxiliary Encoder. qϕ(z|sx) infers auxiliary predictive latents from (pooled) context representations sx through a compact MLP, maintaining the JEPA principle of preventing target information leakage: 
+
+qϕ(z|sx) = N (z; μzϕ(sx), Σzϕ(sx)) (16) 
+
+(III) Target Posterior. qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+) conditions on context latents, auxiliary latents, and complete raw features using a similar encoder design as the context encoder, but extended to incorporate latent tokens to condition on sx and z.
+
+htrg = f trg  
+
+> ϕ
+
+(sx, z, w ), (17) 
+
+qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+) = N (s(j) 
+
+> w
+
+; μsw 
+
+> ϕ
+
+(htrg )(j), Σsw 
+
+> ϕ
+
+(htrg )(j)) for j ∈ m(k) 
+
+> trg
+
+. (18) Here, f trg  
+
+> ϕ
+
+(sx, z, w ) is the transformer-based encoder, and μsw 
+
+> ϕ
+
+and Σsw 
+
+> ϕ
+
+are linear projections applied to the encoder output. 
+
+s(j) 
+
+> yk
+
+= s(j) 
+
+> w
+
+: j ∈ m(k) 
+
+> trg
+
+are the masked target representations. 
+
+(IV) Predictive Model. pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) generates target latent distributions without access to target observations: 
+
+hpred = gθ (sx, z, m (k) 
+
+> trg
+
+), (19) 
+
+pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) = N (s(j) 
+
+> yk
+
+; μsy 
+
+> θ
+
+(hpred )(j), Σsy 
+
+> θ
+
+(hpred )(j)). (20) Here, gθ (sx, z, m (k) 
+
+> trg
+
+) involves another transformer architecture which is conditioned on the target mask m(k) 
+
+> trg
+
+through positional embeddings and learnable mask tokens. Its output is used to generate distributional parameters for the target latent sy via linear projections. 
+
+(V) Context and (VI) Target Decoders. The decoders reconstruct masked features using feature-specific MLPs, u(j) 
+
+> θ
+
+.Let π ∈ { x, w } denote any observation (context or full target) with corresponding latent representation sπ . Each decoder reconstructs a masked feature independently according to the unified formulation: 
+
+pθ (π(j)|s(j) 
+
+> π
+
+) = 
+
+(
+
+N (π(j); u(j) 
+
+> θ
+
+(s(j) 
+
+> π
+
+), σ 2 
+
+> π
+
+) if j ∈ I num 
+
+Categorical (π(j); softmax (u(j) 
+
+> θ
+
+(s(j) 
+
+> π
+
+))) if j ∈ I cat 
+
+(21) The full reconstruction distribution factorizes as pθ (π|sπ ) = Q 
+
+> j∈mπ
+
+pθ (π(j)|s(j) 
+
+> π
+
+), where mπ denotes the feature index set for observation π (i.e., mctx for context x, and all feature indices for w under full-target reconstruction). For numerical features, the reconstruction noise σ2 
+
+> π
+
+is one of two globally learned parameters: σ2 
+
+> x
+
+for the context path ( π = x), and a shared σ2 
+
+> y
+
+for the target path ( π = w). 12 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+A.3.1. L OSS COMPUTATION 
+
+Adapting Var-JEPA’s general loss function 10 to feature-level masking strategies introduced by Thimonier et al. (2025), we obtain the following sample-level loss terms for Var-T-JEPA: 
+
+Lrec = 1
+
+Mctx 
+
+X
+
+> j∈mctx
+
+− log pθ (x(j)|s(j) 
+
+> x
+
+) (22) 
+
+Lgen = 1
+
+Dfeat 
+
+> Dfeat
+
+X
+
+> j=1
+
+− log pθ (w(j) | s(j) 
+
+> w
+
+) (23) 
+
+LKL  
+
+> sx
+
+= 1
+
+Mctx 
+
+X
+
+> j∈mctx
+
+KL  qϕ(s(j) 
+
+> x
+
+|x)∥N (0 , I ) (24) 
+
+LKL  
+
+> z
+
+= KL  qϕ(z|sx)∥N (0 , I ) (25) 
+
+LKL  
+
+> sy
+
+= 1
+
+K · Mtrg 
+
+> K
+
+X
+
+> k=1
+
+X
+
+> j∈m(k)
+> trg
+
+KL  qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+)∥pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) (26) 
+
+A.4. Outlook: Extension to Vision and Video 
+
+We implemented Var-JEPA as Var-T-JEPA to provide a compute-efficient proof-of-concept in a setting where careful ablations and uncertainty analyses are tractable. However, the formulation is not specific to tabular data and can be transferred directly to visual modalities in close analogy to I-JEPA (Assran et al., 2023). Concretely, one can (i) tokenize images/videos into patch or tubelet sequences, (ii) define a masked context view x and masked target view y, (iii) parameterize qϕ(sx | x)
+
+and qϕ(sy | sx, z, y ) with ViT-based encoders and pθ (sy | sx, z ) with a lightweight predictor (as in I-JEPA), and (iv) add a decoder pθ (y | sy ) (e.g., Gaussian pixels or discrete token likelihoods) to obtain the ELBO objective. This yields a generative, uncertainty-aware analogue of JEPA-style representation prediction for vision/video, while retaining the same conditional-prior interpretation of the predictor. 
+
+B. Additional Experimental Results 
+
+Our experimental evaluation intentionally focuses on validating our conceptual contribution (bridging JEPA and variational inference) within the JEPA framework–emphasizing collapse prevention, uncertainty quantification, and the relationship between per-sample and aggregated regularization–rather than comprehensive benchmarking against the broader self-supervised learning landscape. To complement the accuracy results reported in the main text, we provide F1-score evaluations and sensitivity analyses below. 
+
+B.1. Additional Downstream Metrics: F1 Score 
+
+Table 3 reports downstream macro F1-scores (mean ± std over 5 downstream model runs) for the same set of tabular datasets and predictor families as Table 2. As in the main table, we report results on raw features, on T-JEPA embeddings, and on Var-T-JEPA embeddings (including selective evaluation where the most uncertain fraction of test samples is discarded). 
+
+B.2. Sensitivity Analysis 
+
+B.2.1. S ENSITIVITY ANALYSIS ON α
+
+We perform a sensitivity study on Adult by varying the end weights of the KL terms for sx and sy (i.e., αKL  
+
+> sx
+
+and αKL  
+
+> sy
+
+)and the reconstruction/generation weights (i.e., αrec and αgen ) around the baseline setting. Table 4 shows that downstream performance is broadly robust across these ablations (i.e., not strongly sensitive to precise tuning), and that selective evaluation consistently improves accuracy across all settings as more uncertain samples are filtered out. B.2.2. S ENSITIVITY ANALYSIS ON OTHER MODEL PARAMETERS 
+
+We additionally study sensitivity to model capacity and optimization hyperparameters by varying the transformer hidden dimension d (token/embedding width), number of layers L, predictor feedforward dimension ff p (i.e., the MLP width in the predictor block), learning rate η, and batch size B. Table 5 shows that downstream accuracy remains broadly stable for most settings, while some changes (e.g., substantially deeper encoders or smaller batch size) can reduce performance. As in the α
+
+sensitivity study, selective evaluation improves accuracy consistently across all ablations as more uncertain samples are filtered out. 13 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Table 3. Downstream performance comparison across tabular datasets using macro F1-score. Results (mean ± std over 5 downstream model runs; XGBoost single deterministic run) show test macro F1-score. AD=Adult, CO=Covertype, EL=Electricity, CC=Credit Card, BM=Bank Marketing. Light blue rows indicate selective evaluation (reduced coverage). 
+
+Method AD ↑ CO ↑ EL ↑ CC ↑ BM ↑ MNIST ↑ SIM ↑
+
+MLP 0.845 ±3.7e −3 0.747 ±5.0e −3 0.780 ±3.5e −3 0.792 ±6.9e −3 0.887 ±4.8e −3 0.822 ±1.1e −2 0.821 ±9.0e −3
+
++T-JEPA 0.842 ±9.0e −3 0.274 ±1.5e −1 0.545 ±7.4e −2 0.675 ±0e −0 0.583 ±3.9e −1 0.023 ±2.3e −3 0.662 ±3.3e −2
+
++Var-T-JEPA 0.845 ±3.3e −3 0.657 ±3.8e −2 0.789 ±2.2e −3 0.797 ±4.1e −3 0.889 ±3.1e −3 0.823 ±1.7e −2 0.659 ±3.3e −2
+
++Var-T-JEPA (10%) 0.859 ±3.0e −3 0.678 ±3.4e −2 0.792 ±2.0e −3 0.792 ±5.6e −3 0.893 ±3.5e −3 0.840 ±1.5e −2 0.671 ±3.1e −2
+
++Var-T-JEPA (20%) 0.877 ±2.4e −3 0.680 ±3.0e −2 0.794 ±2.3e −3 0.792 ±4.3e −3 0.895 ±4.0e −3 0.857 ±1.8e −2 0.671 ±3.2e −2
+
++Var-T-JEPA (50%) 0.915 ±2.6e −3 0.692 ±1.7e −2 0.803 ±3.4e −3 0.780 ±1.9e −3 0.907 ±3.9e −3 0.901 ±2.0e −2 0.691 ±3.7e −2
+
+DCNv2 0.684 ±4.5e −3 0.749 ±6.2e −3 0.824 ±7.3e −4 0.794 ±3.0e −3 0.890 ±2.1e −3 0.875 ±4.3e −3 0.673 ±5.0e −3
+
++T-JEPA 0.846 ±1.7e −3 0.443 ±5.3e −2 0.764 ±1.9e −3 0.737 ±5.7e −2 0.878 ±1.4e −3 0.840 ±4.7e −2 0.759 ±4.2e −3
+
++Var-T-JEPA 0.848 ±1.5e −3 0.775 ±6.9e −3 0.830 ±1.9e −3 0.794 ±1.3e −3 0.891 ±5.9e −4 0.884 ±4.8e −3 0.703 ±8.8e −3
+
++Var-T-JEPA (10%) 0.861 ±1.2e −3 0.783 ±7.0e −3 0.831 ±2.6e −3 0.790 ±1.4e −3 0.896 ±6.6e −4 0.897 ±5.2e −3 0.711 ±8.3e −3
+
++Var-T-JEPA (20%) 0.878 ±1.3e −3 0.780 ±7.1e −3 0.831 ±2.1e −3 0.791 ±1.9e −3 0.900 ±1.1e −3 0.908 ±5.0e −3 0.707 ±8.6e −3
+
++Var-T-JEPA (50%) 0.916 ±7.9e −4 0.778 ±5.7e −3 0.831 ±2.6e −3 0.780 ±1.6e −3 0.909 ±1.8e −3 0.936 ±3.0e −3 0.735 ±6.1e −3
+
+ResNet 0.844 ±1.8e −3 0.776 ±7.3e −3 0.823 ±2.6e −3 0.794 ±1.5e −3 0.890 ±4.0e −3 0.860 ±7.1e −3 0.877 ±5.9e −3
+
++T-JEPA 0.845 ±4.8e −3 0.499 ±8.7e −2 0.807 ±8.8e −3 0.794 ±7.9e −3 0.893 ±3.8e −3 0.856 ±2.9e −2 0.689 ±5.8e −2
+
++Var-T-JEPA 0.849 ±2.4e −3 0.778 ±1.2e −2 0.820 ±7.2e −3 0.791 ±1.0e −2 0.894 ±2.6e −3 0.872 ±1.2e −2 0.549 ±1.2e −1
+
++Var-T-JEPA (10%) 0.864 ±1.6e −3 0.784 ±1.2e −2 0.822 ±6.8e −3 0.789 ±7.0e −3 0.899 ±2.0e −3 0.888 ±9.2e −3 0.560 ±1.1e −1
+
++Var-T-JEPA (20%) 0.881 ±1.2e −3 0.781 ±1.3e −2 0.823 ±6.7e −3 0.789 ±5.1e −3 0.903 ±1.9e −3 0.900 ±8.5e −3 0.570 ±1.1e −1
+
++Var-T-JEPA (50%) 0.920 ±8.5e −4 0.784 ±1.3e −2 0.826 ±7.5e −3 0.780 ±2.1e −3 0.912 ±1.0e −3 0.936 ±5.3e −3 0.602 ±1.1e −1
+
+AutoInt 0.687 ±6.3e −3 0.752 ±1.7e −2 0.755 ±1.1e −2 0.798 ±1.2e −3 0.896 ±2.5e −3 0.809 ±1.6e −2 0.897 ±1.9e −2
+
++T-JEPA 0.849 ±2.9e −3 0.399 ±1.6e −1 0.745 ±3.1e −2 0.777 ±7.8e −4 0.871 ±1.2e −2 0.816 ±7.9e −3 0.768 ±8.4e −3
+
++Var-T-JEPA 0.848 ±3.1e −3 0.750 ±4.4e −3 0.821 ±2.8e −3 0.796 ±2.9e −3 0.894 ±1.3e −3 0.810 ±5.5e −3 0.711 ±9.3e −3
+
++Var-T-JEPA (10%) 0.863 ±3.6e −3 0.755 ±4.2e −3 0.822 ±3.8e −3 0.791 ±3.1e −3 0.898 ±1.4e −3 0.824 ±2.0e −3 0.719 ±8.3e −3
+
++Var-T-JEPA (20%) 0.880 ±2.8e −3 0.752 ±4.3e −3 0.822 ±4.1e −3 0.793 ±2.0e −3 0.902 ±1.4e −3 0.840 ±1.7e −3 0.720 ±7.9e −3
+
++Var-T-JEPA (50%) 0.918 ±2.2e −3 0.745 ±6.3e −3 0.823 ±4.5e −3 0.781 ±1.6e −3 0.912 ±1.1e −3 0.879 ±3.8e −3 0.741 ±1.0e −2
+
+FT-Trans 0.687 ±4.9e −3 0.741 ±1.0e −2 0.813 ±4.0e −3 0.799 ±1.0e −3 0.894 ±1.3e −3 0.877 ±2.3e −2 0.962 ±1.4e −3
+
++T-JEPA 0.847 ±1.1e −3 0.417 ±8.5e −2 0.700 ±4.7e −2 0.777 ±2.0e −3 0.851 ±1.0e −3 0.269 ±2.7e −1 0.696 ±2.0e −2
+
++Var-T-JEPA 0.847 ±2.2e −3 0.743 ±6.5e −3 0.797 ±4.6e −3 0.798 ±1.3e −3 0.893 ±9.2e −4 0.864 ±9.4e −3 0.701 ±8.0e −3
+
++Var-T-JEPA (10%) 0.862 ±2.3e −3 0.752 ±5.6e −3 0.799 ±4.0e −3 0.793 ±9.1e −4 0.897 ±9.1e −4 0.879 ±9.6e −3 0.712 ±8.5e −3
+
++Var-T-JEPA (20%) 0.879 ±2.0e −3 0.750 ±5.7e −3 0.801 ±3.8e −3 0.794 ±1.6e −3 0.900 ±1.3e −3 0.891 ±9.9e −3 0.712 ±6.8e −3
+
++Var-T-JEPA (50%) 0.917 ±2.0e −3 0.743 ±7.9e −3 0.809 ±2.2e −3 0.782 ±1.9e −3 0.912 ±1.3e −3 0.918 ±6.7e −3 0.732 ±3.6e −3
+
+XGBoost 0.860 0.805 0.917 0.791 0.894 0.881 0.948 +T-JEPA 0.850 0.804 0.860 0.783 0.889 0.870 0.849 +Var-T-JEPA 0.850 0.807 0.888 0.787 0.897 0.871 0.945 +Var-T-JEPA (10%) 0.870 0.816 0.890 0.788 0.901 0.883 0.948 +Var-T-JEPA (20%) 0.888 0.815 0.891 0.788 0.903 0.889 0.951 +Var-T-JEPA (50%) 0.923 0.813 0.891 0.784 0.911 0.913 0.955 
+
+Table 4. Adult sensitivity analysis for Var-T-JEPA end-weight settings. Columns correspond to ablations varying (αKL  
+
+> sx
+
+, α KL  
+
+> sy
+
+, α rec , α gen );we report downstream test accuracy (mean ± std over 5 downstream runs) for MLP and ResNet probes, including selective evaluation. 
+
+Base Low KL High KL Low recon. High recon. High KL + low recon. Low KL + high recon. 
+
+αKL  
+
+> sx
+
+10 −4 10 −5 10 −3 10 −4 10 −4 10 −3 10 −5
+
+αKL  
+
+> sy
+
+10 −5 10 −6 10 −4 10 −5 10 −5 10 −4 10 −6
+
+αrec 10 −1 10 −1 10 −1 10 −2 1 10 −2 1
+
+αgen 1 1 1 10 −1 10 10 −1 10 
+
+MLP + Var-T-JEPA 0.852 ±2.1e −3 0.850 ±1.2e −3 0.826 ±2.7e −3 0.834 ±2.7e −3 0.852 ±2.3e −3 0.849 ±1.1e −3 0.851 ±1.2e −3
+
+MLP + Var-T-JEPA (10%) 0.865 ±2.0e −3 0.864 ±9.6e −4 0.839 ±2.6e −3 0.850 ±2.0e −3 0.868 ±1.7e −3 0.863 ±1.3e −3 0.860 ±1.1e −3
+
+MLP + Var-T-JEPA (20%) 0.883 ±1.7e −3 0.880 ±1.4e −3 0.852 ±2.4e −3 0.868 ±2.2e −3 0.879 ±1.9e −3 0.873 ±1.2e −3 0.878 ±8.5e −4
+
+MLP + Var-T-JEPA (50%) 0.921 ±2.1e −3 0.920 ±8.7e −4 0.890 ±2.8e −3 0.888 ±3.0e −3 0.906 ±2.5e −3 0.888 ±1.4e −3 0.928 ±7.9e −4
+
+ResNet + Var-T-JEPA 0.854 ±1.4e −3 0.852 ±1.8e −3 0.827 ±8.5e −4 0.836 ±3.1e −3 0.852 ±1.1e −3 0.853 ±1.6e −3 0.853 ±1.4e −3
+
+ResNet + Var-T-JEPA (10%) 0.868 ±9.2e −4 0.867 ±1.4e −3 0.839 ±1.3e −3 0.851 ±3.1e −3 0.868 ±1.1e −3 0.867 ±1.8e −3 0.863 ±1.6e −3
+
+ResNet + Var-T-JEPA (20%) 0.886 ±8.2e −4 0.883 ±1.9e −3 0.852 ±1.5e −3 0.869 ±3.2e −3 0.878 ±1.3e −3 0.876 ±1.1e −3 0.881 ±1.1e −3
+
+ResNet + Var-T-JEPA (50%) 0.924 ±6.6e −4 0.921 ±8.6e −4 0.890 ±2.5e −3 0.888 ±4.3e −3 0.906 ±1.3e −3 0.891 ±1.4e −3 0.929 ±1.4e −3
+
+14 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Table 5. Adult sensitivity analysis for Var-T-JEPA architecture and optimization settings. Columns correspond to model/optimizer ablations varying (d, L, ff p, η, B ). We report downstream test accuracy (mean ± std over 5 downstream runs) for MLP and ResNet probes, including selective evaluation (light blue rows).                                                                                                         
+
+> Shallow Low pred.-FF Narrow High pred.-FF Deep Low LR Batch size 256
+> d(hidden dim.) 64 64 32 64 64 64 64
+> L(layers) 488816 88
+> ff p(pred.) 256 128 128 512 256 256 256
+> η(LR) 10 −310 −310 −310 −310 −35×10 −410 −3
+> B(batch) 512 512 512 512 512 512 256 MLP + Var-T-JEPA 0.850 ±2.1e −30.852 ±2.1e −30.850 ±1.6e −30.852 ±2.1e −30.832 ±1.7e −30.849 ±3.2e −30.851 ±2.7e −3
+> MLP + Var-T-JEPA (10%) 0.864 ±1.1e −30.865 ±2.0e −30.867 ±1.6e −30.865 ±2.0e −30.843 ±1.7e −30.866 ±3.6e −30.854 ±2.9e −3
+> MLP + Var-T-JEPA (20%) 0.877 ±8.3e −40.883 ±1.7e −30.883 ±1.4e −30.883 ±1.7e −30.864 ±1.5e −30.881 ±3.7e −30.856 ±2.9e −3
+> MLP + Var-T-JEPA (50%) 0.905 ±1.1e −30.921 ±2.1e −30.902 ±9.6e −40.921 ±2.1e −30.908 ±1.5e −30.907 ±3.7e −30.871 ±3.0e −3
+> ResNet + Var-T-JEPA 0.852 ±1.2e −30.854 ±1.4e −30.851 ±6.5e −40.854 ±1.4e −30.833 ±1.5e −30.853 ±8.7e −40.852 ±2.0e −3
+> ResNet + Var-T-JEPA (10%) 0.864 ±1.1e −30.868 ±9.2e −40.870 ±9.4e −40.868 ±9.2e −40.845 ±1.1e −30.869 ±1.1e −30.856 ±1.9e −3
+> ResNet + Var-T-JEPA (20%) 0.877 ±1.4e −30.886 ±8.2e −40.885 ±9.9e −40.886 ±8.2e −40.865 ±1.2e −30.884 ±2.0e −30.858 ±1.6e −3
+> ResNet + Var-T-JEPA (50%) 0.904 ±1.6e −30.924 ±6.6e −40.900 ±1.7e −30.924 ±6.6e −40.909 ±1.9e −30.907 ±2.4e −30.873 ±1.5e −3
+
+C. Dataset Descriptions 
+
+C.1. Dataset Descriptions for Downstream Experiments with Var-T-JEPA 
+
+C.1.1. D ATASET SUMMARY 
+
+Our experimental evaluation of Var-T-JEPA uses five real-world tabular datasets (Adult, Covertype, Electricity, Credit Card Default, Bank Marketing), a vision dataset (MNIST), where we treat every pixel as an individual feature column, and a fully synthetic dataset (SIM). The latter two datasets were adapted to exhibit controllable uncertainty (noise) in the original feature space. Table 6 summarizes their basic characteristics. For Covertype, we randomly subsample 10,000 examples for our experiments. For supervised downstream model training and evaluation we create train/validation/test splits (70/10/20) from the embeddings learned on the full feature dataset. For baseline models trained on raw features, we apply the same splits to the original datasets. 
+
+Table 6. Dataset characteristics used in experimental evaluation. 
+
+Dataset Samples Features (num/cat) Classes Task Domain 
+
+Adult (AD) (Kohavi, 1996) 48,842 14 (6/8) 2 Classification Census Covertype (CO) (Blackard, 1998) 10,000 54 (54/0) 7 Classification Forestry Electricity (EL) (Harries, 1999) 45,312 8 (8/0) 2 Classification Time series Credit Card Default (CC) (Yeh, 2009) 30,000 23 (23/0) 2 Classification Finance Bank Marketing (BM) (Moro et al., 2014) 45,211 16 (16/0) 2 Classification Marketing MNIST (LeCun et al., 1998) 10,000 784 (784/0) 10 Classification Vision Simulated (SIM) 10,000 32 (28/4) 3 Classification Synthetic C.1.2. (S EMI -)S YNTHETIC DATA GENERATION 
+
+Fully synthetic dataset (SIM). Our simulated dataset is designed to produce well-separated class structure for most samples, while inducing controlled uncertainty in the original feature space for a subset of samples through prototype mixing. Concretely, we generate three class-conditional Gaussian clusters in a 28-dimensional numeric space with shared isotropic variance. We then draw a per-sample ambiguity score (ui ∼ Uniform(0 , 1)) and map it to an amplified uncertainty/ambiguity strength (u(amb)  
+
+> i
+
+= uγi ) with (γ = 2) . In doing so, most samples are easy and only a fraction become highly ambiguous. For each sample (i) with true class (c), we select an alternative class (c′) and blend the numeric features toward the alternative class prototype with strength (αi ∝ u(amb)  
+
+> i
+
+). We further (i) mix a random subset of numeric features toward the alternative prototype, and (ii) inject additional ambiguity-driven noise in a small set of informative dimensions. Finally, we derive four categorical variables by quantile-binning selected numeric dimensions and flip categorical values with probability increasing in u(amb)  
+
+> i
+
+. The output includes 28 numeric features, 4 categorical features, and 3 classes. 
+
+MNIST. We represent MNIST as a tabular dataset by flattening each 28 × 28 grayscale image to a 784-dimensional feature vector and using the digit label as class to be predicted. To create a controllable uncertainty signal, we incorporate 15 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+a per-sample score (ui ∼ Uniform(0 , 1)) and corrupt the input by interpolating between the original image (xi) and an independent random image (ri ∼ Uniform(0 , 1) 784 ):
+
+αi = clip( λu i, 0, 1) , x′ 
+
+> i
+
+= (1 − αi)xi + αiri,
+
+with a fixed noise scale (λ = 0 .75) . As illustrated in Figure 5, different values of ui produce varying levels of corruption, from clean images (ui = 0) to almost random noise (ui = 0 .99) . We use a random subset of 10,000 samples for the MNIST experiments. u = 0.00 u = 0.25 u = 0.50 u = 0.75 u = 0.99 
+
+Figure 5. Visualization of MNIST image corruption under different values of the uncertainty score ui.
+
+C.2. Data Generation for Simulation Study 
+
+We generate paired observations (xi, y i) ∈ RDobs × RDobs from latent variables sxi , s yi ∈ Rds and zi ∈ Rdz . In all simulation experiments we use Dobs = 32 , ds = 16 , dz = 8 , diagonal covariances Σx = σ2
+
+> x
+
+Ids , Σy = σ2 
+
+> y
+
+Ids , Σz = σ2 
+
+> z
+
+Idz
+
+with (σx, σ y , σ z ) = (1 .0, 0.5, 1.0) , a mean-shift δ = δscale 1 with δscale = 2 .0, and observation noise (τx, τ y ) = (0 .3, 0.3) .
+
+zi ∼ N (0 , Σz ), sxi ∼ 12 N (0 , Σx) + 12 N (δ, Σx), syi | sxi , z i ∼ N (sxi + Az i, Σy ),xi = hx(sxi ) + ϵxi , ϵ xi ∼ N (0 , τ 2 
+
+> x
+
+IDobs ), yi = hy (syi ) + ϵyi , ϵ yi ∼ N (0 , τ 2 
+
+> y
+
+IDobs ).
+
+Equivalently, we introduce a binary mixture label ci ∼ Bernoulli(1 /2) and sample sxi | ci ∼ N (ci δ, Σx). For each run, we draw A ∈ Rds×dz once with entries Ajk ∼ N (0 , 1/d z ) and keep it fixed. The nonlinear maps hx, h y are also drawn once per run as independent two-layer MLPs with tanh activation (hidden width 64) and then frozen. Different runs use different draws of (A, h x, h y ) and therefore different simulated datasets. 
+
+D. Implementation Details 
+
+D.1. Var-JEPA Implementation for Simulation Study 
+
+The simulation study implements a minimal Var-JEPA variant to isolate the effects of per-sample KL regularization and aggregated-distribution regularization (SIGReg) under a ground-truth latent-variable data generator. We implement an MLP-based Var-JEPA with amortized Gaussian posteriors qϕ(sx | x), qϕ(z | sx), qϕ(sy | sx, z, y ) and Gaussian decoders/conditional priors. 
+
+D.2. Var-T-JEPA Implementation for Tabular Data 
+
+We provide implementation details for each module of Var-T-JEPA below, adopting standard components from T-JEPA (Thimonier et al., 2025) where appropriate. D.2.1. C ONTEXT ENCODER IMPLEMENTATION 
+
+The context encoder qϕ(s(j) 
+
+> x
+
+|x) processes masked tabular input through three main stages: 
+
+Feature tokenization. Each feature x(j) from the masked input is embedded into a Dhid -dimensional token representation (in Var-T-JEPA we set d = dz = Dhid ). For numerical features, we use a shared linear projection with feature-specific bias terms b(j) ∈ RDhid that account for different feature scales and distributions: 
+
+t(j) 
+
+> ctx
+
+=
+
+(
+
+Wnum · x(j) + b(j) + enum type + e(j) 
+
+> pos
+
+if j ∈ I num 
+
+Embed Lj (x(j)) + ecat type + e(j) 
+
+> pos
+
+if j ∈ I cat 
+
+(27) where Wnum ∈ RDhid ×1 is a shared linear projection for numerical features, Embed Lj : {0, 1, . . . , L j − 1} → RDhid are learned embedding tables for categorical features with Lj categories, etype denotes feature type embeddings distinguishing numerical from categorical features, and e(j) 
+
+> pos
+
+denotes positional embeddings encoding feature position. 16 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Transformer processing. The tokenized features are processed by a standard transformer encoder architecture (Vaswani et al., 2017) with multi-head self-attention and feed-forward layers. Following T-JEPA conventions, we prepend NCLS 
+
+learnable classification tokens to the sequence, yielding contextualized representations: 
+
+hctx = Transformer ([ {t(i)
+
+> CLS
+
+}NCLS  
+
+> i=1
+
+, {t(j) 
+
+> ctx
+
+}j∈mctx ]) ∈ R(NCLS +Mctx )×Dhid (28) 
+
+Variational output. The context encoder outputs distributional parameters for the variational posterior: 
+
+μsx 
+
+> ϕ
+
+(hctx ) = Linear (hctx ) (29) 
+
+log Σ sx 
+
+> ϕ
+
+(hctx ) = Linear (hctx ) (30) 
+
+qϕ(s(j) 
+
+> x
+
+|x) = N (s(j) 
+
+> x
+
+; μsx 
+
+> ϕ
+
+(hctx )(j), Σsx 
+
+> ϕ
+
+(hctx )(j)) (31) D.2.2. A UXILIARY ENCODER IMPLEMENTATION 
+
+Both the auxiliary encoder and the target posterior use attention-based pooling to map the variable-length context sequence 
+
+sx to a fixed set of pooled context tokens ¯sx = {¯s(i) 
+
+> x
+
+}Lpool  
+
+> i=1
+
+. This mechanism is order-invariant and yields a fixed number of pooled tokens regardless of Mctx .The auxiliary encoder qϕ(z|sx) takes the pooled context representation ¯sx and processes it through a compact MLP. Consistent with the JEPA constraint, the auxiliary encoder conditions only on the context representation sx, not on target information: 
+
+h(l) 
+
+> aux
+
+= GELU (LayerNorm (Linear (h(l−1)  
+
+> aux
+
+))) (32) 
+
+μzϕ, log σzϕ = MLP ϕ(¯ sx) (33) 
+
+qϕ(z|sx) = N (z; μzϕ, diag (σzϕ)2) (34) The auxiliary encoder uses fewer layers than the main encoders to maintain z as a lightweight predictive hint rather than a complex feature representation. D.2.3. T ARGET POSTERIOR IMPLEMENTATION 
+
+Within the target posterior qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+), we apply attention-based pooling to the variable-length context sequence 
+
+sx to obtain Lpool pooled context tokens before concatenating with z and all feature tokens. This approach maintains proper conditioning on context latents sx and auxiliary latent z while processing complete raw data w.
+
+Pooled token preparation. The pooled context and auxiliary latent are projected into the token embedding space with type embeddings: 
+
+t(i)¯sx = Wsx · ¯s(i) 
+
+> x
+
++ epooled-ctx type for i = 1 , . . . , L pool (35) 
+
+tz = Wz · z + eaux-latent type (36) where Wsx , W z ∈ RDhid ×Dhid are learned projection matrices, and epooled-ctx type , e aux-latent type ∈ RDhid are learnable type embeddings. 
+
+Feature tokenization. Each feature w(j) from the complete data is embedded using the same tokenization scheme as the context encoder: 
+
+t(j) 
+
+> feat
+
+=
+
+(
+
+Wnum · w(j) + b(j) + enum type + e(j) 
+
+> pos
+
+if j ∈ I num 
+
+Embed Lj (w(j)) + ecat type + e(j) 
+
+> pos
+
+if j ∈ I cat 
+
+(37) 
+
+Fixed-size augmented sequence processing. The target posterior constructs a fixed-length augmented token sequence by concatenating CLS, pooled context, auxiliary, and feature tokens: seq aug = [ {t(i)
+
+> CLS
+
+}NCLS  
+
+> i=1
+
+, {t(i)¯sx }Lpool  
+
+> i=1
+
+, t z , {t(j)
+
+> feat
+
+}Dfeat  
+
+> j=1
+
+] (38) 
+
+haug = Transformer (seq aug ) (39) 
+
+μsw 
+
+> ϕ
+
+(haug ), log Σ sw 
+
+> ϕ
+
+(haug ) = Linear (haug ), Linear (haug ) (40) 17 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+The target latent distributions are extracted from the feature portion of the augmented sequence: 
+
+qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+) = N (s(j) 
+
+> yk
+
+; μsw 
+
+> ϕ
+
+(hfeat )(j), Σsw 
+
+> ϕ
+
+(hfeat )(j)) for j ∈ m(k) 
+
+> trg
+
+(41) where hfeat denotes the feature token representations extracted from haug .D.2.4. P REDICTIVE MODEL IMPLEMENTATION 
+
+The predictive model pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) operates entirely in latent space using learnable mask tokens. Unlike the target posterior, it has no access to raw target features and must predict latent representations from context and auxiliary information: 
+
+hctx = Linear (sx) + Linear (z) + ectx pos (42) 
+
+hmask = MaskToken + Linear (z) + etrg pos (43) 
+
+hpred = Transformer (concat (hctx , h mask )) (44) 
+
+μsy 
+
+> θ
+
+(hpred ), Σsy 
+
+> θ
+
+(hpred ) = Linear (hpred ), Linear (hpred ) (45) 
+
+pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) = N (s(j) 
+
+> yk
+
+; μsy 
+
+> θ
+
+(hpred )(j), Σsy 
+
+> θ
+
+(hpred )(j)) (46) The predictive model does not directly distinguish between categorical and numerical features since it works purely in the latent representation space. The predictor generates sequential target predictions for each target mask, enabling the model to handle multiple prediction tasks simultaneously during training. Crucially, this component has no access to target observations, maintaining the JEPA principle of predictive learning. D.2.5. C ONTEXT AND TARGET DECODER IMPLEMENTATION 
+
+The context and target decoders reconstruct original tabular features from their latent representations using feature-specific decoder heads. Both decoders share identical architectures but operate on different latent sequences. 
+
+Feature-specific decoder architecture. Each decoder maintains separate neural network heads for every original feature in the dataset: NumericDecoders = {u(j) 
+
+> θ
+
+: RDhid → R1 | j ∈ I num } (47) CategoricalDecoders = {u(j) 
+
+> θ
+
+: RDhid → RCj | j ∈ I cat } (48) where Cj denotes the cardinality of categorical feature j. Each decoder head is implemented as a linear layer specific to the feature type and index. 
+
+Context decoder processing. Given a context latent sequence sx ∈ RMctx .×Dhid and context feature indices mctx ∈ RMctx ,the context decoder processes each latent token: for t = 1 , . . . , M ctx : j = mctx [t], ˆx(j) = u(j) 
+
+> θ
+
+(s(t) 
+
+> x
+
+) (49) 
+
+Target decoder processing. The target decoder follows identical processing and operates directly on target latent sequences: 
+
+ˆw(j) = u(j) 
+
+> θ
+
+(s(j) 
+
+> w
+
+) (50) 
+
+Reconstruction distributions. The decoder outputs are interpreted as distributional parameters for any observation 
+
+π ∈ { x, w } with corresponding latent representation sπ :
+
+pθ (π(j)|s(j) 
+
+> π
+
+) = 
+
+(
+
+N (π(j); u(j) 
+
+> θ
+
+(s(j) 
+
+> π
+
+), σ 2) if j ∈ I num 
+
+Categorical (π(j); softmax (u(j) 
+
+> θ
+
+(s(j) 
+
+> π
+
+))) if j ∈ I cat 
+
+(51) where σ2 is a learnable global noise parameter for numerical reconstruction uncertainty. The full reconstruction distribution factorizes as pθ (π|sπ ) = Q 
+
+> j∈mπ
+
+pθ (π(j)|s(j) 
+
+> π
+
+), where mπ denotes the mask for observation π.18 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+D.2.6. KL D IVERGENCES 
+
+We compute the closed form KL divergences between Gaussians, which is given by (Murphy, 2022) 
+
+KL  N (μq , Σq ) N (μp, Σp) = 12
+
+h
+
++tr  Σ−1 
+
+> p
+
+Σq
+
+ + ( μp − μq )⊤Σ−1 
+
+> p
+
+(μp − μq ) + log det Σ p
+
+det Σ q
+
+− d
+
+i
+
+. (52) In our implementation, all latent variables use diagonal covariance matrices Σ = diag(Σ 1, . . . , ΣDhid ) where each Σd
+
+represents the variance of dimension d. As our priors have μp = 0 , Σp = I for sx and z, Eq. 52 simplifies to: 
+
+KL  qϕ(s(j) 
+
+> x
+
+|x) ∥ N (0 , I ) = 12
+
+> Dhid
+
+X
+
+> d=1
+
+h
+
+(Σ s(j,d ) 
+
+> x
+> ϕ
+
+) + ( μs(j,d ) 
+
+> x
+> ϕ
+
+)2 − log(Σ s(j,d ) 
+
+> x
+> ϕ
+
+) − 1
+
+i
+
+KL  qϕ(z|sx) ∥ N (0 , I ) = 12
+
+> Dhid
+
+X
+
+> d=1
+
+h
+
+(Σ z(d) 
+
+> ϕ
+
+) + ( μz(d) 
+
+> ϕ
+
+)2 − log(Σ z(d) 
+
+> ϕ
+
+) − 1
+
+i
+
+The third KL term between two diagonal Gaussians becomes: 
+
+KL  qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+) ∥ pθ (s(j) 
+
+> yk
+
+|sx, z ; m(k) 
+
+> trg
+
+) = 12
+
+> Dhid
+
+X
+
+> d=1
+
+h (Σ s(j,d ) 
+
+> yk
+> ϕ
+
+)(Σ s(j,d ) 
+
+> yk
+> θ
+
+)+ (μs(j,d ) 
+
+> yk
+> θ
+
+− μs(j,d ) 
+
+> yk
+> ϕ
+
+)2
+
+(Σ s(j,d ) 
+
+> yk
+> θ
+
+)+ log (Σ s(j,d ) 
+
+> yk
+> θ
+
+)(Σ s(j,d ) 
+
+> yk
+> ϕ
+
+)
+
+− 1
+
+i
+
+where μs(j,d ) 
+
+> yk
+> ϕ
+
+= μs(j,d ) 
+
+> w
+> ϕ
+
+: j ∈ m(k) 
+
+> trg
+
+and Σs(j,d ) 
+
+> yk
+> ϕ
+
+= Σ s(j,d ) 
+
+> w
+> ϕ
+
+: j ∈ m(k) 
+
+> trg
+
+are the masked means and covariances for target yk.
+
+D.3. Training and Testing Procedure 
+
+This section provides detailed implementation specifics for training the Var-T-JEPA model, including KL annealing schedules and the training algorithm. D.3.1. KL D IVERGENCE ANNEALING 
+
+The KL divergence terms in the ELBO are gradually introduced during training through separate annealing schedules for each latent variable type. This prevents posterior collapse and ensures stable training dynamics, a common technique in training variational autoencoders (Bowman et al., 2016). We implement linear annealing schedules with configurable start times and durations: 
+
+αKL  
+
+> sx
+
+(t) = min 
+
+ tT anneal 
+
+> sx
+
+, 1
+
+
+
+· αKL  
+
+> sx,final
+
+(53) 
+
+αKL  
+
+> z
+
+(t) = min 
+
+ tT anneal 
+
+> z
+
+, 1
+
+
+
+· αKL  
+
+> z, final
+
+(54) 
+
+αKL  
+
+> sy
+
+(t) = min tT anneal 
+
+> sy
+
+, 1
+
+!
+
+· αKL   
+
+> sy,final
+
+(55) where t denotes the current training step, T anneal  
+
+> ·
+
+specifies the annealing duration, and αKL  
+
+> ·,final
+
+sets the final weight values. D.3.2. T RAINING ALGORITHM 
+
+Algorithm 1 outlines the complete training procedure for our Var-T-JEPA for tabular data. Note that, while we used a per-sample notation in the main paper, the algorithm presents the batch-level implementation where loss terms represent averages over mini-batches and variables are indexed by sample position within the batch. 19 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+Algorithm 1: Var-T-JEPA Training Procedure 
+
+Input: Dataset D, mask parameters (rmin  
+
+> ctx
+
+, r max  
+
+> ctx
+
+, r min  
+
+> trg
+
+, r max  
+
+> trg
+
+), number of target views K (and typically 1 context view) 
+
+Input: KL annealing schedules over optimizer steps {αKL  
+
+> sx
+
+(t), α KL  
+
+> z
+
+(t), α KL  
+
+> sy
+
+(t)} 
+
+> 1
+
+while not converged and epoch < max epochs do  
+
+> 2
+
+for each batch in dataloader do  
+
+> 3
+
+Sample batch feature vectors {w(n)}Bn=1 ∼ D ; 
+
+> 4
+
+Generate masks (MaskCollator): ; 
+
+> 5
+
+Sample mask sizes Mctx , M trg uniformly from the configured ranges, then generate context masks 
+
+{m(n) 
+
+> ctx
+
+}Bn=1 and K target masks {m(k,n ) 
+
+> trg
+
+}Kk=1 per sample;  
+
+> 6
+
+Get current KL weights from schedules at global optimizer-step t: αKL  
+
+> sx
+
+(t), αKL  
+
+> z
+
+(t), αKL  
+
+> sy
+
+(t); 
+
+> 7
+
+Forward Pass (vectorized over target masks): ; 
+
+> 8
+
+Sample {s(n) 
+
+> x
+
+∼ qϕ(sx | w(n); m(n) 
+
+> ctx
+
+)}Bn=1 using reparameterization trick;  
+
+> 9
+
+Sample {z(n) ∼ qϕ(z | s(n) 
+
+> x
+
+)}Bn=1 using a pooled context representation;  
+
+> 10
+
+Concatenate target masks over k to form an effective target batch of size B ·K; repeat sx, z, and w to match this effective batch;  
+
+> 11
+
+Sample target posterior latents for masked target features: s(n) 
+
+> yk
+
+∼ qϕ(sy | s(n) 
+
+> x
+
+, z (n), w (n); m(k,n ) 
+
+> trg
+
+); 
+
+> 12
+
+Predict target latents for the same masked features: pθ (s(n) 
+
+> yk
+
+| s(n) 
+
+> x
+
+, z (n); m(k,n ) 
+
+> trg
+
+); 
+
+> 13
+
+Compute Losses: ; 
+
+> 14
+
+Lrec = 1
+
+> B
+
+PBn=1 1
+
+> Mctx
+
+P
+
+> j∈m(n)
+> ctx
+
+− log pθ (x(j,n )|s(j,n ) 
+
+> x
+
+); 
+
+> 15
+
+Lgen = 1
+
+> B·K
+
+PBn=1 
+
+PKk=1 1
+
+> Dfeat
+
+PDfeat  
+
+> j=1
+
+− log pθ (w(j,n ) | s(j,n ) 
+
+> w
+
+); 
+
+> 16
+
+LKL  
+
+> sx
+
+= 1
+
+> B
+
+PBn=1 1
+
+> Mctx
+
+P
+
+> j∈m(n)
+> ctx
+
+KL (qϕ(s(j,n ) 
+
+> x
+
+|x(n))∥N (0 , I )) ; 
+
+> 17
+
+LKL  
+
+> z
+
+= 1
+
+> B
+
+PBn=1 KL (qϕ(z(n)|s(n) 
+
+> x
+
+)∥N (0 , I )) ; 
+
+> 18
+
+LKL  
+
+> sy
+
+=
+
+> 1
+> B·K
+
+PBn=1 
+
+PKk=1 1
+
+> Mtrg
+
+P
+
+> j∈m(k,n )
+> trg
+
+KL (qϕ(s(j,n ) 
+
+> yk
+
+|s(n) 
+
+> x
+
+, z (n), w (n); m(k,n ) 
+
+> trg
+
+)∥pθ (s(j,n ) 
+
+> yk
+
+|s(n) 
+
+> x
+
+, z (n); m(k,n ) 
+
+> trg
+
+)) ; 
+
+> 19
+
+L = αrec Lrec + αgen Lgen + αKL  
+
+> sx
+
+(t)LKL  
+
+> sx
+
++ αKL  
+
+> z
+
+(t)LKL  
+
+> z
+
++ αKL  
+
+> sy
+
+(t)LKL  
+
+> sy
+
+; 
+
+> 20
+
+Compute gradients: ∇θ,ϕ L; 
+
+> 21
+
+Update parameters using optimizer (e.g., AdamW);  
+
+> 22
+
+Increment KL annealing step: t ← t + 1 ; 
+
+> 23
+
+Optionally run downstream probe every C epochs and update best checkpoint based on validation score;  
+
+> 24
+
+if no downstream improvement for P probe evaluations then  
+
+> 25
+
+Load best checkpoint and terminate training; 
+
+D.4. T-JEPA Implementation for Tabular Data 
+
+T-JEPA (Thimonier et al., 2025) employs a deterministic joint-embedding architecture with three main components: context encoder f ctx  
+
+> θ
+
+, target encoder f trg  
+
+> θ
+
+, and predictor gθ , as illustrated in Figure 6. 
+
+Context and target encoders. Both encoders f ctx  
+
+> θ
+
+and f trg  
+
+> θ
+
+share identical architectures but operate on different masked views of the input. T-JEPA uses the same tokenization scheme as described in Eq. 27 and Eq. 37, processing tabular features through feature-specific embeddings with type and positional encodings. The tokenized features are processed by a transformer encoder to produce deterministic representations sx = f ctx  
+
+> θ
+
+(x) and sy = f trg  
+
+> θ
+
+(w; mtrg ) for context and target views respectively. 
+
+Predictor. As shown in Figure 6, the predictor gθ learns to forecast target representations from context representations. The predictor is implemented using a similar transformer architecture as our Var-T-JEPA, including learnable mask tokens with positional embeddings, used to predict target features ˆsy = gθ (sx; mtrg ).20 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture Original 
+
+> Sample
+
+𝑤 
+
+ℝ!!"# 
+
+ℝ!!"#$  
+
+> Context Mask Context
+> Context Encoder
+> Context Rep.
+
+ℝ!!"# ×#$%& 
+
+> Predictor
+
+𝑔 "
+
+> Tokenization & Feat. Emb.
+> ℝ((!"# )*)×-$%&
+> +
+> CLS 1.0
+> Positional Encoding
+> Transformer
+> Target Encoder
+> ℝ(-'()" )*)×-$%&
+> CLS
+> 𝑓 %
+> &'(
+> Positional Encoding
+> Transformer
+> Target Masks
+> 𝑦 )
+
+𝑠 $ = 𝑓 %(𝑥 )          
+
+> 𝑚 ./0
+> (*)𝑚 ./0
+> (1)𝑚 ./0
+> (2)
+> 𝑦 3=𝑚 ./0
+> (3)⊙𝑤 ∈ℝ("*+
+> 𝑥 =𝑚 !"# ⊙𝑤
+
+𝑚 &'( 
+
+> Target Pred.
+
+𝑠 ̂)4 = 𝑔 *(𝑠 $;𝑚 '+, 
+
+> (.)
+
+)         
+
+> Target Rep.
+> Downstream
+> Model
+> EMA
+> ℒ=1
+> 𝐾 𝑀 &'(
+> Σ*+)
+> ,Σ-∈/!"#
+> $
+> ∥𝑠 ̂0$
+> -−𝑠 0$
+> -∥1
+> Feature and Target
+> Embeddings
+> Positional Encoding
+> Learnable Auxiliary
+> Tokens 𝑧
+> Transformer
+> 𝑦 1
+> 𝑦 ,
+> Tokenization & Feat. Emb.
+> +
+> 1
+> Testing
+
+𝑠 )5
+
+𝑠 )6
+
+𝑠 )7
+
+𝑠 )4 ∈ ℝ!"89" ×#$%& 
+
+𝑠 ̂)5
+
+𝑠 ̂)6
+
+𝑠 ̂)7
+
+𝑠 ̂)4 ∈ ℝ!"89" ×#$%&        
+
+> Unmasked
+> Target Rep.
+> ℝ(-'()" )*)×-$%&
+> 𝑠 $!=𝑓 %(𝑤 ;𝑚 "&'
+> ()))ℳ={,,}
+> 𝑗 =1
+> 𝑗 =2…
+> 𝑠 2
+> 𝑓 %
+> 3&4
+
+Figure 6. Architectural overview of the T-JEPA pipeline by Thimonier et al. (2025) extended by learnable auxiliary tokens. 
+
+Training objective. T-JEPA minimizes the averaged mean squared error between predicted and actual target representations over all target masks and features: 
+
+LT-JEPA = 1
+
+K · Mtrg 
+
+> K
+
+X
+
+> k=1
+
+X
+
+> j∈m(k)
+> trg
+
+∥ˆs(j) 
+
+> yk
+
+− s(j) 
+
+> yk
+
+∥2 (56) The target encoder parameters are updated via exponential moving average (EMA) of the context encoder parameters to ensure stable training, while the predictor is trained end-to-end with gradient descent. 
+
+Learnable auxiliary tokens. The original T-JEPA framework by Thimonier et al. (2025) does not incorporate the auxiliary variable z in its predictor architecture. To match our theoretical formulation where predictions depend on both context representations sx and auxiliary variables z, we introduce Naux learnable auxiliary tokens AuxToken ∈ RNaux ×Dhid as trainable parameters that serve as dedicated slots for auxiliary predictive information. These tokens are augmented with distinct positional embeddings eaux pos ∈ RNaux ×Dhid and concatenated with context and target tokens in the predictor input sequence: Concat (sx, AuxToken + eaux pos , MaskToken + etrg pos ) → Transformer → ˆsyk (57) where MaskToken + etrg pos denotes the masked target tokens with their positional embeddings, and ˆsyk represents the predicted target latent representation. The auxiliary tokens provide learnable parameters that can encode predictive hints analogous to sampling from qϕ(z|sx) in our variational framework, enabling the deterministic T-JEPA predictor to access auxiliary predictive capacity while maintaining end-to-end differentiability. 
+
+D.5. Embedding Generation and Uncertainty Estimates for Downstream Evaluation 
+
+For downstream evaluation, our tabular Var-T-JEPA deviates from the general test-time procedure described in Section 3.6 in two key aspects. First, the target posterior qϕ(s(j) 
+
+> yk
+
+|sx, z, w ; m(k) 
+
+> trg
+
+) conditions on the feature vector w since tabular features are accessible during embedding generation, unlike the general Var-JEPA framework where target observations may generally be unavailable. Second, the auxiliary latent is generated via the learned auxiliary encoder qϕ(z|sx) rather than sampling from the standard normal prior p(z) = N (0 , I ), maintaining consistency with the training regime where the auxiliary encoder learns meaningful context-to-auxiliary mappings for downstream representation quality. Following standard practice in representation learning, final embeddings for downstream analysis were generated using distributional means rather than sampling to ensure deterministic representations: sx = μsx 
+
+> ϕ
+
+, z = μzϕ, and sw = μsw 
+
+> ϕ
+
+. For our downstream 21 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+evaluation experiments of both our tabular Var-T-JEPA and T-JEPA, we use the target posterior representations sw as the final embeddings, which capture the joint information from context, auxiliary latents, and complete feature observations. Uncertainty estimates for selective evaluation are computed by aggregating the standard deviations of the target latent posterior distribution: for real-world datasets (AD, CO, EL, CC, BM) we use mean aggregation, while for (semi-)synthetic datasets (MNIST, SIM) with known ground-truth uncertainty we use the 90th percentile to better capture tail behavior. For embedding and uncertainty extraction, checkpoints are selected based on online linear-probe validation performance: for T-JEPA we use the best unfiltered validation accuracy, while for Var-T-JEPA we use the best filtered validation accuracy with the most-uncertain 20% of validation samples discarded. 
+
+D.6. Hyperparameter Settings 
+
+D.6.1. C OMPUTE RESOURCES 
+
+Var-T-JEPA and T-JEPA were trained on a computer cluster with one NVIDIA A100 GPU (40GB or 80GB VRAM), two CPU cores, and 20 GB system RAM per task. Var-T-JEPA training time varied by dataset and configuration, and was typically between under 2 hours and less than 24 hours per run across our experiments. D.6.2. V AR -T-JEPA H YPERPARAMETERS 
+
+Table 7 summarizes the hyperparameters used for the tabular Var-T-JEPA experiments. Notation: ‘batch‘: batch size; ‘lr‘: learning rate; ‘warm‘: warmup epochs; ‘ctx‘/‘ctxM‘: min/max context mask share; ‘trg‘/‘trgM‘: min/max target mask share; ‘K‘: number of target predictions; ‘d‘: hidden dimension; ‘L‘: number of layers; ‘H‘: number of heads; ‘ff‘: feedforward dimension; ‘drop‘: dropout probability; ‘Lp‘: predictor embedding dimension; ‘Hp‘: predictor number of heads; ‘ffp‘: predictor feedforward dimension; ‘dropp‘: predictor dropout probability; ‘ αKL  
+
+> sx
+
+‘, ‘ αKL  
+
+> z
+
+‘, ‘ αKL  
+
+> sy
+
+‘: final KL weights for sx, z,
+
+sy ; ‘ T anneal  
+
+> sx
+
+‘, ‘ T anneal  
+
+> z
+
+‘, ‘ T anneal  
+
+> sy
+
+‘: KL annealing epochs for sx, z, sy ; ‘ αrec ‘, ‘ αgen ‘: reconstruction weights for x, y.
+
+Table 7. Var-T-JEPA hyperparameters used for downstream experiments.                                                                                                                                                                                                            
+
+> Dataset batch lr warm ctx ctxM trg trgM KdLHff drop Lp Hp ffp dropp αKL
+> sx αKL
+> zαKL
+> sy Tanneal
+> sx Tanneal
+> zTanneal
+> sy αrec αgen
+> AD 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 1e-04 1e-06 1e-05 15 15 15 0.1 1CO 512 5e-04 12 0.15 0.35 0.15 0.6 464 8864 0.0015 16 4256 0.002 1e-06 1e-05 1e-06 60 60 20 0.001 0.5 EL 512 5e-04 10 0.15 0.6 0.15 0.9 464 6464 0.001 16 4128 0.002 1e-06 1e-05 1e-06 40 40 15 0.001 0.25 CC 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 1e-04 1e-06 1e-05 15 15 15 0.1 1BM 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 1e-04 1e-06 1e-05 15 15 15 0.1 1MNIST 256 0.001 10 0.15 0.5 0.15 0.8 464 84128 0.002 32 4256 0.002 1e-06 1e-06 1e-06 100 100 100 0.001 0.1 SIM 512 5e-04 10 0.15 0.5 0.15 0.8 464 16 264 0.002 16 4256 0.002 1e-06 1e-06 1e-05 50 50 50 0.001 0.1
+
+D.6.3. T-JEPA H YPERPARAMETERS 
+
+Table 8 summarizes the hyperparameters used for the tabular T-JEPA experiments. For any hyperparameter that has a direct counterpart in Var-T-JEPA same setting as in Var-T-JEPA. Notation matches Var-T-JEPA: ‘batch‘: batch size; ‘lr‘: learning rate; ‘warm‘: warmup epochs; ‘ctx‘/‘ctxM‘: min/max context mask share; ‘trg‘/‘trgM‘: min/max target mask share; ‘K‘: number of target predictions; ‘d‘: hidden dimension; ‘L‘: number of layers; ‘H‘: number of heads; ‘ff‘: feedforward dimension; ‘drop‘: dropout probability; ‘Lp‘: predictor embedding dimension; ‘Hp‘: predictor number of heads; ‘ffp‘: predictor feedforward dimension; ‘dropp‘: predictor dropout probability; ‘ema‘: EMA decay rate. 
+
+Table 8. T-JEPA hyperparameters used for downstream experiments.                                                                                                                                                 
+
+> Dataset batch lr warm ctx ctxM trg trgM KdLHff drop Lp Hp ffp dropp ema AD 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 0.996 CO 512 5e-04 12 0.15 0.35 0.15 0.6 464 8864 0.0015 16 4256 0.002 0.996 EL 512 5e-04 10 0.15 0.6 0.15 0.9 464 6464 0.001 16 4128 0.002 0.996 CC 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 0.996 BM 512 0.001 10 0.1 0.3 0.1 0.6 464 84256 0.001 16 4256 0.002 0.996 MNIST 256 0.001 10 0.15 0.5 0.15 0.8 464 84128 0.002 32 4256 0.002 0.996 SIM 512 5e-04 10 0.15 0.5 0.15 0.8 464 16 264 0.002 16 4256 0.002 0.996
+
+D.6.4. D OWNSTREAM AND BASELINE MODEL HYPERPARAMETERS 
+
+Downstream predictors were trained either on raw features or on learned embeddings. For embedding-based evaluation, embeddings are flattened for neural models. For raw-feature baselines, standard tabular encoders are used. All neural models (MLP, DCNv2, ResNet, AutoInt, FT-Transformer) share common hyperparameters: learning rate 0.001, weight 22 Var-JEPA: A Variational Formulation of the Joint-Embedding Predictive Architecture 
+
+decay 0.01, batch size 128, 50 training epochs with exponential patience of 16. Model-specific parameters include: MLP (2 hidden layers, hidden dimension 128, dropout 0.1); DCNv2 (2 cross layers); ResNet (3 blocks, output dimension 128, block dimension 128, hidden dimension 256, dropout 0.1); AutoInt (token dimension 128, 2 attention heads, 3 layers); FT-Transformer (standard transformer architecture). XGBoost uses a tree-based configuration with 100 estimators, max depth 3, learning rate 0.1, and does not use embedding flattening. We additionally use an online linear probe for downstream evaluation during Var-T-JEPA training and model selection, trained with learning rate 10 −3, weight decay 2 × 10 −5, batch size 128, and 50 epochs. For the risk–coverage curves in Figure 3, we train a linear probe on standardized embeddings for 20 epochs with learning rate 10 −2 and batch size 8192. D.6.5. S IMULATION STUDY (V AR -JEPA) H YPERPARAMETERS 
+
+We use batch size 512. Training runs for 40 epochs with learning rate 10 −3 and weight decay 10 −6. The Var-JEPA MLP uses hidden dimension 128 and depth 2. Default loss weights are αrec = αgen = αKL  
+
+> sx
+
+= αKL  
+
+> z
+
+= αKL  
+
+> sy
+
+= 1 . SIGReg uses 64 directions, 64 frequencies, maximum frequency 5.0, with strengths λsx = 10 and λsy = 10 . Linear probes are trained for 50 epochs with learning rate 3 × 10 −3, weight decay 10 −4, batch size 512, and hidden dimension 64. 23
