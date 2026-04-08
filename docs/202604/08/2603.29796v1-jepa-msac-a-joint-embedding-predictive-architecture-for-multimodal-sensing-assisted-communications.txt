@@ -1,0 +1,779 @@
+Title: JEPA-MSAC: A Joint-Embedding Predictive Architecture for Multimodal Sensing-Assisted Communications
+
+URL Source: https://arxiv.org/pdf/2603.29796v1
+
+Published Time: Wed, 01 Apr 2026 01:26:26 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> 1
+
+# JEPA-MSAC: A Joint-Embedding Predictive Architecture for Multimodal Sensing-Assisted Communications 
+
+Can Zheng, Jiguang He, Senior Member, IEEE, Guofa Cai, Senior Member, IEEE, Nannan Li, Mehdi Bennis, Fellow, IEEE, Henk Wymeersch, Fellow, IEEE, M´ erouane Debbah, Fellow, IEEE 
+
+Abstract —Future wireless systems increasingly require pre-dictive and transferable representations that can support mul-tiple physical-layer (PHY) tasks under dynamic environments. However, most existing supervised learning-based methods are designed for a single task, which leads to high adaptation cost. To address this issue, we propose a joint-embedding predictive archi-tecture for multimodal sensing-assisted communications (JEPA-MSAC), a self-supervised multimodal predictive representation learning framework for wireless environments. The proposed framework first maps multimodal sensing and communication measurements into a unified token space, and then pretrains a shared backbone using temporal block-masked JEPA to learn a predictive latent space that captures environment dynamics and cross-modal dependencies. After pretraining, the backbone is frozen and reused as a general future-feature generator, on top of which lightweight task heads are trained for localization, beam prediction, and received signal strength indicator (RSSI) prediction. Extensive experiments show the latent state supports accurate multi-task prediction with low adaptation cost. Ad-ditionally, ablation studies reveal its scaling behavior and the impact of key pretraining setups. 
+
+Index Terms —Joint-embedding predictive architecture, beam prediction, localization, multimodal fusion, self-supervised learn-ing. 
+
+I. I NTRODUCTION 
+
+# AS wireless systems evolve toward sixth-generation (6G), integrating artificial intelligence (AI) into physical-layer (PHY) communications has emerged as a crucial shift to overcome the limitations of traditional model-based signal processing. This trend is reflected in recent industrial and standardization efforts, including 3rd generation partnership 
+
+Can Zheng and Jiguang He are with the School of Computing and Informa-tion Technology, Great Bay University, Dongguan Key Laboratory for Intelli-gence and Information Technology, and Great Bay Institute for Advanced Study (GBIAS), Dongguan 523000, China (e-mail: zc331 @korea.ac.kr, jiguang.he@gbu.edu.cn). Guofa Cai is with the School of Information Engineering, Guang-dong University of Technology, Guangzhou 510006, China (e-mail: caiguofa2006@gdut.edu.cn). Nannan Li is with the School of Computer Science and Engineering, Macau University of Science and Technology, Macau 999078, China (e-mail: nnli@must.edu.mo). Mehdi Bennis is with the Faculty of Information Technology and Electrical Engineering, Centre for Wireless Communications, University of Oulu, 90570 Oulu, Finland (e-mail: mehdi.bennis@oulu.fi). Henk Wymeersch is with the Department of Electrical Engineering, Chalmers University of Technology, Gothenburg SE-412 96, Sweden. (emails: henkw@chalmers.se). M´ erouane Debbah is with the Research Institute for Digital Future, Khalifa University, 127788 Abu Dhabi, UAE (email: merouane.debbah@ku.ac.ae) 
+
+project (3GPP) studies on AI for the new radio (NR) air interface and the AI-radio access network (RAN) initiative [1]–[4]. Data-driven deep learning (DL) has already shown great success in PHY-tasks by learning directly from complex environments [5]–[8]. Building on this, the focus is rapidly shifting toward large AI models (LAMs) to achieve stronger generalization and flexible multimodal processing [9]–[13]. Recent advancements further push beyond adapting general-purpose LAMs, exploring wireless-native foundation models pretrained directly on wireless data [14]–[16]. Consequently, the PHY design paradigm is transitioning from isolated, single-task models toward unified, shared backbones capable of supporting multiple tasks [17], [18]. Meanwhile, sensing-assisted communications have become increasingly important. In dynamic environments, PHY be-haviors are shaped not only by radio frequency (RF) signals but also by external factors like user geometry, object motion, and blockage evolution [19]. These physical dynamics criti-cally impact tasks such as user localization, beam prediction, and link-quality forecasting. Consequently, out-of-band (OOB) modalities, including cameras, radar, LiDAR, and positioning signals, provide essential geometric and environmental context that in-band RF measurements struggle to capture [20]–[24]. Processing such diverse data makes DL particularly effective for discovering cross-modal correlations and enhancing com-munication performance [25], [26]. However, in many existing sensing-aided communication methods, multimodal fusion is primarily designed for a specific downstream objective, with multimodal inputs combined to improve a single target task. While effective for individual tasks, such designs often fail to capture the shared scene dynamics behind the observations. Recent LAM-based ap-proaches alleviate this limitation only partially, as their main advantage still lies in stronger representation learning and task adaptation rather than explicit modeling of how the physical environment evolves over time [27]–[29]. This suggests that instead of merely building a stronger task interface or a larger shared backbone, a more suitable direction is to learn a predictive latent representation of the underlying scene dynamics. To turn this intuition into a scalable framework, a world model-centric formulation provides a natural choice. By learning the latent state of the environment and its temporal evolution, future communication-relevant quantities, including location, beam decisions, and signal power, can be inferred from latent scene dynamics rather than direct observation-
+
+> arXiv:2603.29796v1 [eess.SP] 31 Mar 2026 2
+
+to-label mapping. This is particularly suitable for sensing-assisted wireless systems, where motion, geometry, blockage, and multimodal context jointly shape communication behavior [30], [31]. Based on joint embedding prediction architectures (JEPA) [32]–[34], we propose a JEPA for multimodal sensing-assisted communications (JEPA-MSAC) , which learns a shared predictive latent state from multimodal observations and reuses it for downstream PHY-tasks. Rather than recon-structing raw inputs, it models temporally consistent scene dynamics with a frozen backbone and lightweight task heads. The main contributions of this work are summarized as follows:  
+
+> •
+
+Communication-oriented predictive latent state. We propose JEPA-MSAC, a JEPA-based predictive repre-sentation learning framework for sensing-assisted wire-less communications. Our main novelty is to learn a shared predictive latent representation via temporal block-masked JEPA. Instead of task-specific fusion or raw data reconstruction, we map multimodal inputs into a unified token space.  
+
+> •
+
+Frozen backbone and efficient task-specific heads. On top of the pretrained backbone, we develop an efficient adaptation framework. We reuse a single frozen back-bone across multiple PHY-tasks. The same predictive latent state supports localization, beam prediction, and received signal strength indicator (RSSI) prediction using lightweight task heads.  
+
+> •
+
+Localization-guided cascading. We further intro-duce a geometry-guided cascaded design. To improve communication-related prediction, this design injects the predicted locations from the localization head into the beam and RSSI prediction heads.  
+
+> •
+
+Extensive experiments demonstrate that the learned pre-dictive latent state supports accurate and stable multi-task prediction with low adaptation cost. In addition, ablation studies reveal the scaling behavior of the latent representation and clarify the impact of key pretraining configurations, such as the masking ratio and pattern, on PHY-task performance. 
+
+Notations : Bold lowercase letters denote vectors (e.g., x), and bold uppercase letters denote matrices or tensors (e.g., 
+
+X). Calligraphic letters denote sets (e.g., X ). The symbols 
+
+(·)T and (·)H denote the transpose and Hermitian transpose, respectively. The sets of real and complex numbers are denoted by R and C, respectively. The notations ||·|| 1 and ||·|| 2 denote the ℓ1 norm and Euclidean ( ℓ2) norm, while | · | represents the absolute value or magnitude. The operator arg max returns the maximum of a function. The operators ⊖ and ⊘ denote element-wise subtraction and element-wise division, respec-tively. The notation [·; ·] denotes representation concatenation. 
+
+E[·] denotes the mathematical expectation, and P(·) represents probability. The indicator function is represented by 1{·} , and 
+
+⌊·⌋ denotes the floor operation. II. S YSTEM MODEL 
+
+In this section, we present the system model for the pro-posed sensing-assisted millimeter-wave (mmWave) vehicle-Base Sta �on Radar LiDAR Vision mmWave Beam Image Radar LiDAR GPS RF Beam Index RSRP Time RSSI Localiza �on Beam Predic �on RSSI Predic �on Mul �modal Sensing Data Task-Speci fi c Outputs JEPA-MSAC Applica �on Scenario System Architecture User Equipment GPS 
+
+> Fig. 1: System architecture of sensing-assisted mmWave V2I communications. The JEPA-MSAC processes multimodal sensing and communication data to perform specific PHY-tasks, including localization, beam prediction, and RSSI prediction.
+
+to-infrastructure (V2I) communication scenario, as shown in Fig. 1. The framework encompasses the directional beamform-ing architecture, the localization model, and the multi-modal sensory observation space. 
+
+A. mmWave V2I Communication and ULA Beamforming 
+
+Consider a typical V2I downlink communication system where a base station (BS) serves a mobile user equipment (UE) vehicle. The BS is equipped with a uniform linear array (ULA) consisting of NAnt antenna elements, while the UE is assumed to operate in an omnidirectional receive mode to focus on the BS’s transmit beamforming alignment. The BS employs an analog beamforming architec-ture relying on a predefined discrete codebook W =
+
+{w1, w2, . . . , wK }, where K denotes the total number of can-didate beams. For a ULA, the steering vector wk ∈ CNAnt ×1
+
+pointing towards the physical azimuth angle ϕk is defined as 
+
+wk = 1
+
+√NAnt 
+
+h
+
+1, e j 2πλ d sin( ϕk ), . . . , e j 2πλ (NAnt −1) d sin( ϕk )iT
+
+,
+
+(1) where λ is the carrier wavelength and d is the antenna inter-element spacing, typically set to d = λ/ 2.Due to the severe free-space path loss and high susceptibility to blockages at mmWave frequencies, the channel exhibits high spatial sparsity, meaning that only a limited number of propagation paths contribute significantly to the received signal. Although channel evolution is often approximated using simplified models [35]–[37], realistic mmWave prop-agation can be strongly affected by user mobility, sudden blockages, and environmental changes. Therefore, we adopt the following narrowband downlink geometric channel model 
+
+h[t] ∈ CNAnt ×1 to characterize the instantaneous propagation structure at time step t:
+
+h[t] = 
+
+s
+
+NAnt 
+
+L[t]
+
+> L[t]
+
+X
+
+> l=1
+
+αl[t]a(θl[t]) , (2) where L[t] is the number of effective multipath components, typically comprising a dominant line-of-sight (LoS) path and a few non-line-of-sight (NLoS) paths. For the l-th path, αl[t]
+
+denotes the complex channel gain capturing both attenuation 3
+
+and phase shift, θl[t] is the angle of departure (AoD) from the BS, and a(θl[t]) represents the array response vector. In this sense, the temporal variation is implicitly reflected by the time-dependent parameters L[t], αl[t], and θl[t].Assuming that the BS transmits the information symbol s[t]
+
+using the k-th beam with transmit power Ptx , the received signal at the UE is expressed as 
+
+yk[t] = pPtx h[t]Hwks[t] + n[t], (3) where n[t] ∼ CN (0 , σ 2) is the additive white Gaussian noise. The transmitted symbol s[t] satisfies the normalized power constraint E[|s[t]|2] = 1 . The optimal beam alignment task seeks the beam index k⋆[t] that maximizes the reference signal received power (RSRP), i.e., 
+
+k⋆[t] = arg max 
+
+> k∈{ 1,...,K }
+
+|h[t]Hwk|2. (4) 
+
+B. Multimodal Sensing Observation Space 
+
+To provide rich environmental and state priors and minimize the reliance on exhaustive beam training, we take advantage of readily available multimodal sensing data. Specifically, the BS collects time-synchronized OOB sensing data, including im-age, radar, and LiDAR measurements, while the UE acquires its GNSS position readings and feeds them back to the BS. Concurrently, the communication system captures in-band RF measurements to provide PHY context. At time step t, the raw multimodal observation is denoted by O[t] = {Xm[t]}m∈M ,where M = {Image , Radar , LiDAR , GPS , RF }. Specifi-cally, it includes: 1) XImage [t] ∈ R3×HImage ×WImage : an RGB image captured by a camera at the BS side, providing visual information about the surrounding environment. 2) XRadar [t] ∈ CNrx ×Nchirp ×Nadc : the raw complex intermediate-frequency (IF) radar measurements col-lected by the BS-side frequency-modulated continuous-wave (FMCW) radar, where Nrx , Nchirp , and Nadc 
+
+denote the numbers of receive antennas, chirps, and analog-to-digital converter (ADC) samples, respectively. 3) XLiDAR [t] ∈ R3×Npts : the three-dimensional (3D) point cloud collected by the BS-side LiDAR at time t, con-taining the Cartesian coordinates of Npts reflected points and describing the geometry of surrounding objects and potential blockages. 4) xGPS [t] = [ xlon [t], x lat [t]] T ∈ R2: the GNSS longitude and latitude readings acquired at the UE side and fed back to the BS, providing coarse location information of the UE in a noisy environment. 5) xRF [t] ∈ RK : the RF beam-level RSRP scan vector ob-tained from in-band measurements over previous trans-mission intervals, serving as historical communication feedback. 
+
+C. Problem Formulation 
+
+Let THist denote the number of observed historical frames and TPred denote the number of future prediction frames. We consider a discrete-time multimodal sequence of total length 
+
+T = THist + TPred , (5) sampled with a fixed time interval. The historical observa-tion window corresponds to time steps t ∈ { 1, . . . , T Hist },while the future prediction window corresponds to time steps 
+
+τ ∈ {THist + 1 , . . . , T }. At the current time step t, the available historical context is defined as O[t] = {O[t−THist +1] , . . . , O[t]}.The goal is to predict the future UE trajectory, the fu-ture optimal beam, and the future received signal strength over the next TPred steps. 1 Specifically, for each future step 
+
+τ ∈ { 1, . . . , T Pred }, YLoc [τ ] ∈ R2 denotes the UE location at time THist + τ , YBeam [τ, :] ∈ { 0, 1}K denotes the one-hot beam label at time THist + τ , whose nonzero entry indicates the optimal beam among the K candidate beams, and yRSSI [τ ] ∈ R denotes the received signal strength at time THist + τ . Accordingly, the stacked future targets are denoted by YLoc ∈ RTPred ×2, YBeam ∈ { 0, 1}TPred ×K , and 
+
+yRSSI ∈ RTPred .Accordingly, the predictive modeling objective can be writ-ten as 
+
+max  
+
+> Θ
+
+P YLoc , YBeam , yRSSI | O [t]; Θ , (6) where Θ denotes the collection of all trainable parameters of the predictive model. III. JEPA-MSAC A RCHITECTURE 
+
+As shown in Fig. 2, JEPA-MSAC first pretrains a JEPA backbone on multimodal inputs and then freezes it to generate future features for downstream PHY-tasks. 
+
+A. Multimodal Data Preprocessing 
+
+Since raw multimodal data vary in dimensionality and physical meaning, JEPA-MSAC applies modality-specific pre-processing to convert these inputs into structured formats suitable for tokenization. 
+
+1) Vision Preprocessing: For the raw high-resolution image 
+
+XImage [t], we first crop and resize it to a standard DL resolution of HV × WV using bilinear interpolation. Then, each RGB channel is normalized using predefined channel-wise mean and standard deviation values: 
+
+V[t] = (Resize( XImage [t]) ⊖ μV ) ⊘ σV , (7) where μV ∈ R3 and σV ∈ R3 denote the channel-wise mean and standard deviation vectors, respectively. The subtraction and division are applied channel-wise with broadcasting over the spatial dimensions reduces illumination bias unrelated to geometry and occlusion, generating a normalized visual tensor 
+
+V[t] ∈ R3×HV ×WV that captures semantic features. 
+
+> 1We include RSSI prediction as a compact link-strength prediction task. Prior vision-aided studies have used received power and RSSI as a meaningful communication target, since it is relevant to downstream functions such as power control, link budget estimation, and network planning [38], [39]. 4
+
+2) FMCW Radar Range-Angle Mapping: The raw radar signal is converted into a range-angle map via standard pro-cessing. Let X(c)Radar [t] ∈ CNrx ×Nadc denote the raw radar data slice corresponding to the c-th chirp at time t. First, we apply a discrete Fourier transform (DFT) along the fast-time dimension to extract range bins, and subtract the antenna mean to remove static clutter. A second DFT is then applied across the spatial dimension to resolve the angular bins. Averaging the magnitudes over Nchirp chirps yields the final map R[t] ∈ RARadar ×RRadar , where ARadar and RRadar are the angular and range bin counts, respectively. This mapping is mathematically expressed as: 
+
+R(i, j )[ t] = 1
+
+Nchirp 
+
+> Nchirp
+
+X
+
+> c=1
+
+wH 
+
+> i
+
+X(c)Radar [t]wj , (8) where wi and wj denote the DFT bases associated with the 
+
+i-th angular bin and the j-th range bin, respectively. 
+
+3) 3D LiDAR Point Cloud Depth Projection: The raw 3D LiDAR point cloud XLiDAR [t] is unordered and irreg-ular, making direct processing computationally inefficient. Therefore, we project it onto a structured 2D depth image. Specifically, each 3D point is first converted from Cartesian coordinates to spherical coordinates consisting of radial dis-tance rLiDAR , yaw angle ϕyaw , and pitch angle ϕpitch . Given the upward and downward viewing angles (fup , f down ) and the maximum sensing range dmax , the point is projected to a discrete image plane of size HLiDAR × WLiDAR as 
+
+uLiDAR =
+
+ ϕyaw + π
+
+2π × WLiDAR 
+
+
+
+, (9) 
+
+vLiDAR =
+
+ 
+
+1 − ϕpitch − fdown 
+
+fup − fdown 
+
+
+
+× HLiDAR 
+
+
+
+. (10) Through this depth projection, each pixel (uLiDAR , v LiDAR )
+
+retains the nearest normalized distance rLiDAR /d max , gener-ating a depth matrix L[t] ∈ R1×HLiDAR ×WLiDAR , perfectly preserving the physical occlusion contour of LoS propagation. 
+
+4) GPS Equirectangular Projection: For the raw GPS latitude-longitude observation xGPS [t], we transform GPS measurements into a local Cartesian coordinate system cen-tered at the BS reference position xBS = [ xBS lon , x BS lat ]T via equirectangular projection: 
+
+p[t] = πR E
+
+180 D(xGPS [t] − xBS ), (11) where D = diag(cos( xBS lat · π 
+
+> 180
+
+), 1) , and RE is the average Earth radius. This yields a local relative coordinate sequence 
+
+p[t] ∈ R2 suitable for downstream motion modeling. 
+
+B. Multimodal Tokenization 
+
+We use t′ to denote a generic time-step index within the input sequence of the tokenizer. The multimodal observation at time step t′ is defined as O[t′] =
+
+{V[t′], R[t′], L[t′], p[t′], xRF [t′]}. The valid range of t′ de-pends on the stage of the pipeline. During JEPA pretraining, tokenization is applied to the full multimodal sequence with 
+
+t′ ∈ { 1, . . . , T }. During downstream task-head training and inference, the frozen backbone only receives the observed history as input, and thus t′ ∈ { 1, . . . , T Hist }.Since the above modalities still exhibit significant hetero-geneity in spatial dimension, sampling structure, and informa-tion density, direct fusion in the original feature space would produce a high-dimensional and poorly organized representa-tion, making learning inefficient and disrupting spatiotemporal alignment. Therefore, JEPA-MSAC designs a set of modality-specific tokenizers to map high-dimensional observations into a common token embedding space with embedding dimension of D:1) Vision tokenizer: An EfficientNet pretrained on Ima-geNet extracts features from image V[t′] [40], [41], which are further reduced by adaptive average pooling and a 1 × 1 projection. These are then flattened into 
+
+PImage visual tokens, i.e., ZImage [t′] ∈ RPImage ×D .2) Radar/LiDAR tokenizer: For the range-angle map gen-erated by radar and the projected map generated by LiDAR, since both reflect spatial geometric features, we design a lightweight 2D convolutional neural net-work (CNN) architecture with a shared topology. After convolution, pooling, and feature mapping, the feature maps are flattened into PRadar radar tokens and PLiDAR 
+
+LiDAR tokens, respectively. The resulting representa-tions are ZRadar [t′] ∈ RPRadar ×D and ZLiDAR [t′] ∈
+
+RPLiDAR ×D .3) State tokenizer: For the low-dimensional coordinate se-quence p[t′] ∈ R2 and beam power vector xRF [t′] ∈
+
+RK , we apply a linear projection followed by layer normalization. This maps each modality at each frame into one global token, denoted as ZGPS [t′] ∈ RPGPS ×D
+
+and ZRF [t′] ∈ RPRF ×D , where PGPS and PRF denote the numbers of GPS and RF tokens, respectively. Through tokenization, each modality m at time step t′ is mapped to a token tensor Zm[t′] ∈ RPm×D , where token count Pm varies across modalities. We then concatenate these tensors across all modalities and time steps to form a unified sequence Z = {Zm[t′] | m ∈ M , t ′ = 1 , . . . , T }. This de-sign balances representation capacity and sequence efficiency. High-dimensional spatial modalities (such as vision, radar, and LiDAR) use multiple tokens to preserve structured scene information. On the contrary, low-dimensional state modalities (such as position and RF) use a single token per frame. Ultimately, despite having different token counts, all tokens are represented in a common D-dimensional token space, so that they can be concatenated and jointly processed by the shared transformer backbone. 
+
+C. Factorized Positional Embedding 
+
+Since the input sequence of JEPA-MSAC is a long se-quence composed of multiple modalities, time steps, and spatial patches, traditional absolute positional encoding cannot accurately locate the physical semantics of a particular token. Therefore, we propose a decompositional positional encoding mechanism. 5Vision Radar LiDAR GPS 
+
+RF Inputs Preprocessing and Tokeniza �on ... Backbone 
+
+> concat posi �onal encoding
+
+Tokenizer Preprocess Preprocess Preprocess Preprocess Task Heads ... 
+
+> pooling
+
+Tokenizer Tokenizer Tokenizer Tokenizer Backbone Pretraining ... ... 
+
+L1
+
+Context Encoder ... 
+
+> stop-grad
+
+Predictor 
+
+> mask
+
+Target Encoder ... Backbone Inference ... ... Context Encoder Predictor RSSI Pred. Beam Pred. Localiza �on Backbone ... ... ... 
+
+> concat only for masked parts
+> Fig. 2: Overall framework of the proposed JEPA-MSAC. JEPA-MSAC tokenizes multimodal observations, pretrains a JEPA backbone, and adapts frozen features to localization, beam prediction, and RSSI prediction. Modules marked with a spark icon are learnable.
+
+For a token Zm,p [t′] belonging to modality m, time step t,and intra-frame token index p, its final embedding is defined as 
+
+˜Zm,p [t′] = Zm,p [t′] + Et(t′) + Em(m) + Ep(p), (12) where Et ∈ RT ×D, Em ∈ R|M|× D , and Ep ∈ Rmax( Pm)×D
+
+are learnable temporal, modality, and intra-frame positional embedding tables, respectively. Specifically, Et encodes the absolute time step, Em identifies the modality type, and Ep
+
+captures the intra-frame token position within each modality. Through this decoupling, the model can accurately capture complex relationships such as cross-modal temporal synchro-nization and intra-frame spatial cross-modal fusion in the self-attention mechanism without additional computational over-head. 
+
+D. Temporal Block-Masked JEPA Pretraining 
+
+To equip JEPA-MSAC with predictive representations of environment dynamics, we pretrain the multimodal trans-former backbone. Following the standard JEPA paradigm, we utilize an online context encoder, a momentum-updated target encoder, and a predictor for latent representation matching. This pretraining design is driven by two key considerations: 
+
+Latent prediction over data reconstruction: Latent pre-diction is preferred to raw-signal reconstruction because down-stream PHY tasks depend mainly on geometric and structural information rather than low-level details. 
+
+Temporal block masking: Temporal block masking pre-vents trivial interpolation from adjacent frames and encour-ages the model to learn coherent temporal and cross-modal dynamics. Formally, let ˜Z = {˜zi}Ii=1 ∈ RI×D denote the multimodal token sequence after tokenization and factorized positional encoding, where I = T P 
+
+> m∈M
+
+Pm is the total number of tokens in the unified sequence and i indexes the token position. To construct the predictive task, we independently sample one contiguous temporal segment for each modality. For modality 
+
+m, a temporal segment of length TMask = ⌊ρT ⌋ is selected, where ρ ∈ (0 , 1) is the masking ratio. All tokens of modality 
+
+m within the selected frames are masked together. We use 
+
+IMask and IKeep to denote the index sets of masked and visible tokens, respectively, with IMask ∪ I Keep = {1, . . . , I } and 
+
+IMask ∩ I Keep = ∅. Accordingly, the masked-token subset and visible-token subset are denoted by ZMask = {˜zi | i ∈ I Mask }
+
+and ZKeep = {˜zi | i ∈ I Keep }, respectively. The JEPA pretraining consists of three components: acontext encoder fθ , a target encoder f¯θ , and a predictor gϕ.The target encoder has the same architecture as the context encoder, and is subsequently updated as an exponential moving average (EMA) of the context encoder. Given the visible token sequence ZKeep , the context encoder produces the contextual representation 
+
+C = fθ (ZKeep ) ∈ R|I Keep |× D . (13) To predict the masked region, we construct a full predictor input sequence CPred ∈ RI×D by placing the contextual representation at visible positions and a shared learnable mask token zmask at masked positions: 
+
+CPred [i] = 
+
+(
+
+C[i], i ∈ I Keep ,
+
+zmask , i ∈ I Mask . (14) The predictor then outputs the full latent sequence 
+
+ˆU = gϕ(CPred ) ∈ RI×D. (15) Intuitively, the predictor answers the following question: given what has been observed, what should the latent representation of the missing part look like? 6
+
+In parallel, the target encoder processes the complete se-quence and produces the target latent sequence 
+
+U⋆ = f¯θ ( ˜Z) ∈ RI×D. (16) The JEPA objective trains the context encoder fθ (·) and predictor gϕ(·) by aligning the masked predictions with the corresponding target latent representations: 
+
+LJEPA = X
+
+> i∈I Mask
+
+Smooth ℓ1
+
+ ˆU[i], U⋆[i]
+
+
+
+, (17) where Smooth ℓ1 (·) operates element-wise. For any scalar prediction ˆx and target x, it is defined as: 
+
+Smooth ℓ1 (ˆ x, x ) = 
+
+(
+
+0.5(ˆ x − x)2, if |ˆx − x| < 1,
+
+|ˆx − x| − 0.5, otherwise . (18) Meanwhile, the target encoder f¯θ is updated via EMA and serves as a slowly evolving teacher that provides stable latent prediction targets, i.e., 
+
+¯θ ← β ¯θ + (1 − β)θ. (19) where β is the momentum coefficient. This momentum teacher plays a dual role. First, it stabilizes the target representation, which is critical for learning a predictive latent space without collapse. Second, it encourages the online encoder to align with a temporally smoother and more stable representation trajectory, thereby improving training robustness. 
+
+E. Frozen-Backbone Prediction 
+
+After JEPA pretraining, the JEPA-MSAC backbone is frozen and reused for downstream PHY-tasks. Let ZHist denote the tokenized historical input sequence constructed from the observed multimodal context over the history window, corre-sponding to time steps t = 1 , . . . , T Hist . In the downstream stage, future prediction is formulated as a special case of the JEPA-style latent prediction process: the token positions asso-ciated with the observed history are treated as visible positions indexed by IKeep , while the token positions associated with the future target slots are treated as masked positions indexed by IMask . Following Sec. III-D, the observed history tokens 
+
+ZHist are first encoded into the contextual representation C
+
+according to (13). The full predictor input sequence CPred 
+
+is then constructed in the same manner as (14). The frozen predictor outputs the full latent sequence as in (15). By selecting the predicted latent representations at IMask and aggregating the modality-specific tokens within each future frame, we obtain 
+
+SPred = Pool 
+
+
+
+{ ˆU[i] | i ∈ I Mask }
+
+
+
+∈ RTPred ×D , (20) where Pool( ·) denotes average pooling over the target-modality tokens within each future frame. SPred serves as the predictive latent state for all downstream task-specific heads. To preserve the learned spatiotemporal structure and mini-mize adaptation cost, we do not finetune the backbone dur-ing downstream training. Instead, as illustrated in Fig. 3, lightweight task-specific heads are trained on top of SPred for three downstream PHY-tasks: localization, beam prediction, and RSSI prediction. In the standard setting, the frozen backbone receives all input modalities. We also evaluate a target-history-missing setting where historical data for the target task (e.g., location or RSSI) is unavailable. In this case, the backbone generates 
+
+SPred to bootstrap a virtual base, replacing the missing history. The task head then performs the prediction exactly as in the standard setting. 
+
+1) Localization/Tracking: For localization and tracking, the localization head predicts the future 2D trajectory ˆYLoc ∈
+
+RTPred ×2 from the predictive latent sequence SPred . We adopt a coarse-estimation-plus-residual formulation. When historical UE locations are available, the coarse estimate follows a constant-velocity extrapolation 
+
+˜YLoc [τ ] = p[THist ] + ( τ − THist ) p[THist ] − p[THist − 1] ,
+
+(21) for τ = THist + 1 , . . . , T . When historical UE locations are unavailable, the coarse estimate is bootstrapped directly from the predictive latent sequence 
+
+˜YLoc [τ ] = MLP( SPred [TPred ]) , (22) for τ = THist +1 , . . . , T , where MLP( ·) denotes the multilayer perceptron (MLP). Accordingly, the coarse trajectory estimate 
+
+˜YLoc is given by (21) when location history is available, and by (22) otherwise. The localization head then predicts a residual correction 
+
+∆YLoc = hRes Loc (SPred ) ∈ RTPred ×2, (23) where hRes Loc (·) represents the residual correction layer for the localization head, and the final trajectory prediction is 
+
+ˆYLoc = ˜YLoc + ∆ YLoc . (24) The localization head is trained with the ℓ1-loss 
+
+LLoc = 1
+
+TPred 
+
+> T
+
+X 
+
+> τ=THist +1
+
+ˆYLoc [τ ] − p[τ ] 1
+
+. (25) 
+
+2) Beam Prediction: For beam prediction, we aim to pre-dict the future best-beam labels. Since future beam behavior is closely related to user geometry, the predicted future coordi-nates from the localization branch are incorporated as auxiliary information. Specifically, the latent representation and the pre-dicted trajectory are concatenated as SFused = [ SPred ; ˆYLoc ].For best-beam selection, we use a lightweight classification head consisting of a projection layer, a single-layer GRU, and a decoder MLP. Given the fused representation SFused , the classification head hCls Beam (·) outputs beam-selection logits over the candidate codebook: 
+
+ˆYCls Beam = hCls Beam (SFused ) ∈ RTPred ×K , (26) where ˆYCls Beam [τ, :] denotes the predicted logits over the K
+
+candidate beams at the τ -th future step. The correspond-ing ground-truth label is represented as a one-hot vector 
+
+YBeam [τ, :] ∈ { 0, 1}K . The beam prediction head is trained as a multi-class classification task using cross-entropy loss: 
+
+LBeam = 1
+
+TPred 
+
+> TPred
+
+X 
+
+> τ=1
+
+CE 
+
+ ˆYCls Beam [τ, :] , YBeam [τ, :] 
+
+
+
+, (27) 7Localiza �on Head RSSI Predic �on Head Residual Correc �on OR Coarse Es �ma �on Residual Correc �on Boostrap MLP OR Boostrap MLP 
+
+> Σ
+
+Constant-velocity baseline +Beam Prec �on Head Concat Coarse Es �ma �on 
+
+> Fig. 3: Overview of task-specific prediction heads on top of the predictive latent representation learned by JEPA-MSAC. The framework supports localization, beam prediction, and RSSI prediction through lightweight heads with optional localization-guided feature fusion. Residual and direct prediction modes are employed depending on the availability of historical observations.
+
+where CE( ·, ·) denotes the standard multi-class cross-entropy between the predicted beam-selection logits and the corre-sponding one-hot ground-truth beam label. 
+
+3) RSSI Prediction: We use a dedicated RSSI prediction head built on the same predictive latent representation. Given the fused representation SFused , the head predicts the future beam-wise power profile over the entire codebook ˆYPow Beam ∈
+
+RTPred ×K . We also adopt a coarse-estimation-plus-residual formulation. The coarse beam-power estimate is defined as 
+
+˜YPow Beam [τ ] = 
+
+(
+
+xRF [THist ], if RF hist. exists ,
+
+MLP( SPred [TPred ]) , otherwise ,
+
+(28) for all τ = THist + 1 , . . . , T . The residual correction layer for the RSSI head hRes RSSI (·) then predicts a residual correction 
+
+∆YPow Beam = hRes RSSI (SFused ) ∈ RTPred ×K , (29) and the final beam-power prediction is given by 
+
+ˆYPow Beam = ˜YPow Beam + ∆ YPow Beam . (30) The RSSI at each future step is then obtained by averaging the predicted beam-wise power values over the codebook dimension 
+
+ˆyRSSI [τ ] = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+ˆYPow Beam [τ, k ]. (31) for τ = THist + 1 , . . . , T . The RSSI head is trained through beam-spectrum regression rather than direct scalar RSSI su-pervision 
+
+LRSSI = 1
+
+TPred 
+
+> T
+
+X 
+
+> τ=THist +1
+
+Smooth ℓ1 (ˆ yRSSI [τ ], xRF [τ ]) .
+
+(32) IV. S IMULATION RESULTS 
+
+In this section, we conduct a comprehensive evaluation of the proposed JEPA-MSAC architecture. Our experiments not only compare its predictive performance across multiple future frames but also analyze the quality of the learned latent space. Furthermore, we conduct ablation studies to verify the effectiveness of each model component. TABLE I: Default parameter configuration.                                             
+
+> Category Name Value Scenario Configura-tion
+> Codebook size K64 Total frames T13 Historical frames THist 8Predicted frames TPred 5
+> Data Pre-processing
+> Vision size HV, W V224,224 Vision norm mean μV[0.485, 0.456, 0.406] Vision norm std σV[0.229, 0.224, 0.225] Radar DFT size 64 LiDAR HLiDAR , W LiDAR 64, 256 LiDAR fup , f down 15 ◦, -15 ◦
+> LiDAR dmax 100 meters Earth’s radius RE6371 kilometers
+> PVision ,PRadar ,PLiDAR ,
+> PGPS ,PRF
+> 9, 16, 16, 1, 1
+> Stage 1: JEPA Pre-training
+> Masking ratio ρ0.5 Epochs 100 Optimizer AdamW Learning rate 3×10 −4
+> Weight decay 0.05 EMA momentum β[0.996, 1.0]
+> Stage 2: Task Head Training
+> Epochs 30 Learning rate 1×10 −4
+> Weight decay 1×10 −2
+
+A. Datasets and Platform 
+
+This work utilizes Scenario 32 of DeepSense 6G, which is a large-scale open-source dataset built upon real-world multimodal measurements [19]. The scene represents an urban street environment, where the BS is equipped with a 60 GHz mmWave phased array. We segment the continuous multi-modal observation sequences, sampled at approximately 9.95 Hz, into sliding time windows of 13 frames. These window-level samples are then randomly shuffled via a configurable seed, with 70% allocated to the training set and the remaining 30% to the testing set. The core architecture parameters of JEPA-MSAC and the hyperparameter configuration for the two-stage training are shown in Table I. In the pre-training 8
+
+TABLE II: Baseline architectures and default parameter settings.                                                                                                          
+
+> Task Baseline Input / Output Architecture & Parameters
+> Localization AR (THist ,2) →(TPred ,2) Linear AR rollout with lag order 8and learnable weights. GRU (THist ,2) →(TPred ,2) Encoder + decoder GRU (2 →64) + linear head (64 →2) .Transformer (THist ,2) →(TPred ,2) d= 64 ,nhead = 4 ,2layers, FFN = 128 .Kalman (THist ,2) →(TPred ,2) constant turn rate and velocity (CTRV) state model. Beam Prediction AR (THist )→(TPred ,64) AR beam token transition with lag order 8.GRU (THist )→(TPred ,64) Token embedding (64 →32) + GRU (32 →64) + linear (64 →64) .Transformer (THist )→(TPred ,64) Transformer decoder with embedding 64 ,nhead = 4 .M2BeamLLM multimodal →(TPred ,64) Refer to [13]. RSSI Prediction GRU (THist ,64) →(TPred ,64) Encoder GRU (64 →96) + decoder GRU (64 →96) + MLP head. Transformer (THist ,64) →(TPred ,64) Seq2Seq transformer: dmodel = 96 ,nhead = 4 .Baseline [38] image, position →RSSI MobileNetV3 visual encoder + position MLP + fusion regression head.
+
+stage, the model performs unsupervised temporal block mask JEPA training based on the full-sensory modality, and is combined with cosine annealing learning rate scheduling and momentum encoder smooth updates. In the PHY-task head training stage, we freeze the weights of the backbone and per-form supervised training only for the lightweight localization, beam, and RSSI prediction heads. 
+
+B. Baseline Schemes 
+
+Since each PHY-task is formulated as a sequence prediction problem, we compare our model against three common predic-tive baselines: an autoregressive (AR) model, a gated recurrent unit (GRU) network, and a transformer. These models capture simple step-by-step forecasting, lightweight temporal depen-dencies, and long-range self-attention, respectively. We also include task-specific methods for comprehensive evaluation, with all key configurations detailed in Table II. For task-specific comparisons, we evaluate the following representative methods:  
+
+> •
+
+Localization: A classical model-based Kalman filter.  
+
+> •
+
+Beam Prediction: M2BeamLLM [13], fine-tuned with a frozen multimodal encoder, unfrozen final LLM lay-ers, and low-rank adaptation (LoRA). We also include our RSSI prediction head, as it naturally produces D-dimensional outputs.  
+
+> •
+
+RSSI Prediction: A vision-position baseline from [38], adapted by removing bounding box inputs to align with our setting while preserving the original architecture scale. 
+
+C. Evaluation Metrics 1) Representation Quality Metrics: To evaluate the pre-trained representation quality, we adopt two label-free metrics: the effective rank metric ( RRankMe ) and the linear discriminant analysis rank metric ( RLDA ) [42], [43]. 2 Generally, higher values for both metrics indicate a superior and more diverse representation space. Let S = [ sT 
+
+> 1
+
+; . . . ; sT 
+
+> NTest
+
+] ∈ RNTest ×D be the representation matrix extracted from the frozen backbone, where NTest is 
+
+> 2To avoid confusion with the LiDAR sensor, we use the abbreviation “LDA” for this metric instead of the “LiDAR” notation found in some prior literature [43].
+
+the number of test samples and si ∈ RD is the pooled representation of sample i. To compute RRankMe , we extract the singular values {σi}ri=1 of S, where r = min( NTest , D ).We normalize them into a probability distribution: 
+
+pi = σi
+
+Prj=1 σj
+
+. (33) 
+
+RRankMe measures how evenly the representation energy distributes across latent directions. A larger value indicates a richer and less collapsed space. It is calculated as the exponential of the Shannon entropy: 
+
+RRankMe = exp −
+
+> r
+
+X
+
+> i=1
+
+pi log pi
+
+!
+
+. (34) Additionally, RLDA accounts for feature variations under data augmentations. Let si,a ∈ RD be the representation of the a-th augmented view of sample i. In this work, we use A = 4 augmentations. We compute the within-augmentation covariance Σw and the between-sample co-variance Σb. These matrices form the transformation matrix 
+
+M = Σ−1/2 
+
+> w
+
+ΣbΣ−1/2 
+
+> w
+
+. Letting {λi}Di=1 be the eigenvalues of 
+
+M, we similarly normalize them into a distribution: 
+
+qi = λi
+
+PDj=1 λj
+
+. (35) 
+
+RLDA measures how many discriminative latent directions remain after normalizing out augmentation-induced variation. A higher value means the representations are separable across samples and stable under perturbations. Similarly, it is defined as 
+
+RLDA = exp −
+
+> D
+
+X
+
+> i=1
+
+qi log qi
+
+!
+
+. (36) 
+
+2) Localization/Tracking Metrics: We evaluate localization performance using two standard metrics: average displacement error (ADE) and final displacement error (FDE). Both metrics rely on the displacement error at each future step τ ∈ { THist +1, . . . , T }, defined as: 
+
+dLoc [τ ] = ˆYLoc [τ ] − p[τ ] 2
+
+. (37) 9
+
+ADE measures the mean Euclidean error over the entire predicted trajectory: 
+
+ADE = 1
+
+TPred 
+
+> T
+
+X 
+
+> τ=THist +1
+
+dLoc [τ ]. (38) Meanwhile, FDE quantifies the displacement error exactly at the final predicted step: FDE = dLoc [T ].
+
+3) Beam Prediction Metrics: Let TN ( ˆYBeam [τ ]) denote the set of top-N beam indices ranked by the predicted scores at time step τ . The top-N accuracy is defined as 
+
+ACC N = 1
+
+TPred 
+
+> TPred
+
+X 
+
+> τ=1
+
+1{k⋆[τ ]∈T N ( ˆYBeam [τ ]) }, (39) where k⋆[τ ] is the ground-truth optimal beam. We report both 
+
+ACC 1 and ACC 3.To evaluate beam quality from a power perspective, we compute the Layer 1 RSRP (L1-RSRP) difference. Let 
+
+ˆk[τ ] = arg max 
+
+> k
+
+ˆYBeam [τ ]k (40) be the predicted best beam index, and let Pk[τ ] be the ground-truth RSRP for beam k at step τ . The L1-RSRP difference is defined as 
+
+∆P [τ ] = Pˆk[τ ][τ ] − Pk⋆[τ ][τ ] . (41) This metric quantifies the average power loss caused by beam selection errors. 
+
+4) RSSI Prediction Metrics: We evaluate RSSI prediction performance using root mean square error (RMSE) and mean absolute error (MAE). Both metrics depend on the absolute error at each future step τ ∈ { THist + 1 , . . . , T }, defined as: 
+
+dRSSI [τ ] = |ˆyRSSI [τ ] − yRSSI [τ ]| . (42) RMSE places greater emphasis on large prediction errors: 
+
+RMSE = 
+
+vuut 1
+
+TPred 
+
+> T
+
+X 
+
+> τ=THist +1
+
+dRSSI [τ ]2. (43) Meanwhile, MAE provides a direct measure of the average absolute deviation: 
+
+MAE = 1
+
+TPred 
+
+> T
+
+X 
+
+> τ=THist +1
+
+dRSSI [τ ]. (44) 
+
+D. Downstream PHY-Tasks Performance 
+
+Fig. 4 shows the cumulative distribution functions (CDFs) of ADE, where JEPA-MSAC’s steeper curve indicates superior accuracy across most test samples. Fig. 5 plots the average 
+
+dLoc versus the prediction horizon. While errors naturally increase over time for all methods, JEPA-MSAC consistently maintains centimeter-level accuracy and shows slower error growth than the baselines. This indicates that the learned latent representation is particularly effective for long-horizon trajectory prediction. Figs. 6(a) and (b) show ACC 1 and ACC 3 versus the prediction horizon. Overall, JEPA-MSAC consistently out-performs generic baselines. Specifically, its beam prediction 0 0.1 0.2 0.3 0.4 0.5 Localization Error (meters) 00.2 0.4 0.6 0.8 1Cumulative Probability              
+
+> Autoregressive Kalman GRU Transformer JEPA-MSAC
+> Fig. 4: CDFs of the localization displacement errors for all compared methods. 12345Horizon 00.05 0.1 0.15 0.2 0.25 Mean Localization Error (meters)
+> Autoregressive Kalman GRU Transformer JEPA-MSAC
+> Fig. 5: Mean displacement error versus prediction horizon for different prediction methods.
+
+head remains competitive with M 2BeamLLM and performs best among generic models, while the RSSI prediction head matches the generic baselines. Fig. 7 presents the mean 
+
+∆P performance. Surprisingly, despite its high accuracy, M2BeamLLM suffers from a relatively high ∆P . In contrast, the JEPA-MSAC beam prediction head achieves the lowest 
+
+∆P , meaning its selected beams yield power closer to the op-timal. Fig. 8 explains this via the beam-mismatch distribution: JEPA-MSAC concentrates predictions in the small-mismatch region (0-3), while M 2BeamLLM and other baselines have heavier tails for larger mismatches (4-15). Thus, even when missing the exact optimal beam, JEPA-MSAC predicts nearby beams in the codebook, which better preserves received power and explains its lower ∆P .Fig. 9(a) shows the RMSE and MAE of RSSI prediction versus the prediction horizon. As in previous tasks, errors naturally increase over time. The performance gap between methods is smaller here. In this simple task, baseline meth-ods also achieve good performance. However, JEPA-MSAC remains the most competitive and stable solution overall. 10 1 2 3 4 5Horizon 00.2 0.4 0.6 0.8 1Accuracy       
+
+> (a) Top-1 accuracy. 12345Horizon
+> Autoregressive GRU Transformer M2BeamLLM JEPA-MSAC (Cls head) JEPA-MSAC (RSSI head) (b) Top-3 accuracy.
+
+Fig. 6: Beam prediction accuracy versus prediction horizon under different methods. 1 2 3 4 5Horizon 00.1 0.2 0.3 0.4 0.5 0.6 L1-RSRP Diff (dB)  
+
+> Autoregressive GRU Transformer M2BeamLLM JEPA-MSAC (Cls head) JEPA-MSAC (RSSI head)
+
+Fig. 7: Mean L1-RSRP difference between the predicted and ground-truth beam power values versus prediction horizon. 
+
+E. Latent Space Quality Analysis 
+
+Following the overall performance comparison, we now examine how the embedding dimension affects the model. Table III summarizes both the latent space quality metrics and the downstream task results. The quality of the latent space shows a clear non-monotonic trend. When D increases from 64 to 128, both RRankMe and RLDA improve significantly. However, these metrics decrease when D further increases to 256 and 512. Relying only on these statistical metrics is not fully convincing. We use the downstream PHY-tasks as a linear probing test to verify our analysis. As shown in the same table, different tasks react differently to dimension changes. Beam prediction performs best at D = 128 , which closely matches the representation metrics. Localization benefits from larger dimensions, while RSSI prediction hardly changes. In conclusion, an intermediate embedding dimension provides the best balance between a high-quality latent space and strong task transferability. 0 1 2 3 4-7 8-15 16-31 32-63 
+
+> Beam mismatch range
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7
+> Fraction
+> Autoregressive GRU Transformer M2BeamLLM JEPA-MSAC (Cls head) JEPA-MSAC (RSSI head)
+
+Fig. 8: Distribution of the mismatch distance between the top-1 predicted beam and the ground-truth beam for different models. 1 2 3 4 5Horizon 00.2 0.4 0.6 0.8 1Error (dB)     
+
+> (a) RMSE versus prediction horizon for different prediction methods. 12345Horizon
+> Autoregressive GRU Transformer Baseline JEPA-MSAC
+> (b) MAE versus prediction horizon for dif-ferent prediction methods.
+
+Fig. 9: RSSI prediction performance versus prediction horizon for different prediction methods. 
+
+F. Comparison of Different Training Paradigms 
+
+We examine how different training paradigms affect down-stream PHY-tasks. Fig. 10 compares JEPA-based predic-tive training (proposed), reconstruction-based self-supervised learning (SSL), and multi-task supervised learning. Multi-task learning directly optimizes downstream objectives but often forces a trade-off among different tasks. Reconstruction-based SSL retains local geometric details, which helps con-tinuous regression tasks. In contrast, proposed JEPA-based method predicts missing latent content instead of reconstruct-ing raw observations. This specifically encourages the model to learn temporal dynamics and cross-modal dependencies. These different mechanisms clearly impact downstream re-sults. For localization, JEPA-MSAC and the reconstruction method achieve similar ADE. However, JEPA-MSAC shows a better FDE, demonstrating stronger long-horizon temporal modeling. For beam prediction, JEPA-MSAC shows the most significant advantage. This task relies on future propagation 11 ADE FDE 00.1 0.2 0.3 0.4 0.5      
+
+> Error (meters)
+> Superv. Recon. Proposed
+> (a) Localization performance. Top-1 Top-3 L1-RSRP diff. 00.2 0.4 0.6 0.8 1
+> Accuracy / Error (dB)
+> Superv. Recon. Proposed (b) Beam prediction performance. RMSE MAE 00.2 0.4 0.6 0.8 1
+> Error (dB)
+> Superv. Recon. Proposed (c) RSSI prediction performance.
+> Fig. 10: Performance comparison among reconstruction, supervised, and proposed methods across various metrics.
+
+TABLE III: Performance comparison of models with different ablation settings across three PHY-tasks. The best result for each task is highlighted in bold. 
+
+Setting Interpretability Localization Beam Prediction RSSI Prediction 
+
+RRankMe ↑ RLDA ↑ ADE ↓ FDE ↓ Top-1 ↑ Top-3 ↑ L1-Diff ↓ RMSE ↓ MAE ↓
+
+D = 64 7.7099 3.9747 0.0552 0.0927 0.4512 0.7968 0.1567 0.4703 0.2671 
+
+D = 128 28.0365 7.7813 0.0566 0.0795 0.4692 0.8181 0.1456 0.4707 0.2674 
+
+D = 256 13.3628 6.7065 0.0514 0.0800 0.4456 0.8023 0.1769 0.4720 0.2679 
+
+D = 512 7.9904 3.1104 0.0502 0.0922 0.4553 0.7964 0.1672 0.4720 0.2679 Untrained – – 0.0561 0.1060 0.2352 0.4707 0.9362 0.4695 0.2664 E2E – – 0.0548 0.1029 0.4643 0.8276 0.1520 0.4716 0.2734 w/o loc aux – – – – 0.4539 0.8018 0.1925 0.4715 0.2689 w/o Position – – 3.0416 3.3648 – – – – –w/o Power – – – – 0.4082 0.7365 0.1925 0.6077 0.3916 w/o Vision – – 0.0712 0.1215 0.3941 0.7542 0.1787 0.4718 0.2677 w/o Radar – – 0.0790 0.0961 0.4535 0.8102 0.1699 0.4716 0.2679 w/o LiDAR – – 0.0750 0.0910 0.4651 0.8133 0.1447 0.4707 0.2672 w/o V+R – – 0.0827 0.1322 0.3735 0.7406 0.2085 0.4695 0.2669 w/o V+L – – 0.0859 0.1290 0.3814 0.7500 0.1797 0.4690 0.2662 
+
+w/o R+L – – 0.2771 0.2641 0.3885 0.7463 0.2544 0.4718 0.2677 
+
+ρ = 0 .25 25.2351 8.3193 0.0601 0.0832 0.4664 0.8144 0.1469 0.4692 0.2681 
+
+ρ = 0 .75 25.6966 7.7024 0.0520 0.0737 0.4699 0.8140 0.1434 0.4716 0.2671 random mask 14.2474 7.2604 0.0601 0.0860 0.4562 0.8119 0.1548 0.4666 0.2665 checkerboard 18.1985 6.0647 0.0650 0.0911 0.4597 0.8045 0.1472 0.4696 0.2673 
+
+geometry and blockage evolution, making our predictive latent state highly suitable. Finally, reconstruction-based SSL meth-ods achieve slightly better performance for RSSI prediction, since RSSI is a more averaged indicator of link strength. 
+
+G. Ablation Studies 
+
+To better understand our design choices and the effect of some parameters, we conduct a series of ablation studies. Returning to Table. III, we further analyze the detailed settings. 
+
+1) Effect of Pretraining: We compare our unsupervised pretraining with an untrained backbone and supervised end-to-end (E2E) training. For the E2E baseline, we train a separate model for each specific task. The untrained setting performs the worst, suffering severe accuracy drops and a sharp increase in ∆P for beam prediction. Meanwhile, the task-specific E2E models achieve no significant gain over our method. While performance gaps are smaller for localization and RSSI prediction, our pretrained backbone remains the most robust overall. Furthermore, training a separate E2E model for every new task results in a much higher computational cost. In conclusion, our unsupervised approach learns strong and reusable representations. It achieves high effectiveness and efficiency across all tasks using only lightweight task-specific heads. 
+
+2) Effect of Localization-Guided Cascading: We compare the beam prediction and RSSI prediction heads with and without localization auxiliary input. Results shows that using 12 
+
+localization input improves beam prediction, giving higher 
+
+ACC 1 and ACC 3 and lower ∆P . The effect on RSSI pre-diction is much smaller. Overall, localization auxiliary input is mainly helpful for beam prediction. 
+
+3) Effect of Modality Removal: We conduct ablation studies by removing specific input modalities. The results show that each PHY-task relies on different sensors. For localization, position data is the most critical. Removing spatial sensors like radar and LiDAR also degrades performance. For beam and RSSI prediction, RF power is the most essential input. However, beam prediction also relies on vision and other sensors, while RSSI prediction remains mostly unaffected by their removal. Overall, primary modalities dominate their specific tasks, and auxiliary sensors provide complementary information to improve robustness. 
+
+4) Effect of Masking: We evaluate mask ratios ρ ∈{0.25 , 0.5, 0.75 }. The results show that representation metrics and PHY-task performance are not always aligned. A lower mask ratio slightly improves RLiDAR but fails to benefit downstream tasks. Conversely, a higher mask ratio improves both localization and beam prediction. It provides lower errors, higher ACC 1, and lower ∆P . Its effect on RSSI prediction remains marginal. Overall, a higher mask ratio is more favorable for practical downstream performance. Fixing 
+
+ρ = 0 .5, we also compare random, checkerboard, and temporal block masking patterns. The proposed temporal block masking achieves the highest RRankMe and RLDA , indicating a richer and more discriminative latent space, which directly yields the best localization and beam prediction results. Random masking performs slightly better on RSSI prediction, while the checkerboard strategy shows no clear advantage. Overall, temporally contiguous masking is effective for learning pre-dictive representations, especially for geometry-sensitive tasks. 
+
+H. Complexity and Efficiency Analysis 
+
+Table IV summarizes the model complexity and inference latency measured on an NVIDIA L4 GPU. For JEPA-MSAC, the computational cost is concentrated in the shared back-bone, while the downstream task heads remain extremely lightweight. This design offers a clear advantage over single-task baselines like M 2BeamLLM, which require dedicated models for each task. Furthermore, JEPA-MSAC generates future predictions in a one-shot manner. This makes its infer-ence faster than the AR decoding used by baselines. During training, JEPA-MSAC also avoids the heavy decoders required by reconstruction-based SSL and the high complexity of multitask supervised learning. Overall, JEPA-MSAC provides an highly efficient balance between reusable representation learning and low-cost task adaptation. V. C ONCLUSION 
+
+In this paper, we proposed JEPA-MSAC, a multimodal predictive latent learning framework for sensing-assisted PHY-tasks. The framework learns a shared predictive backbone from multimodal sensing and communication observations, and supports localization, beam prediction, and RSSI prediction through low-cost task adaptation. By learning cross-modal TABLE IV: Model complexity and inference latency of all compared methods, with tokenizer-only, backbone-only, and task-head-only timings reported separately.                                                                                                                                     
+
+> Tasks Method Params FLOPS Latency (ms) Tokenizer (per frame)
+> Vision tokenizer 4.17 M 0.83 G 0.78 Radar tokenizer 9.34 K 7.62 M 0.06 LiDAR tokenizer 9.34 K 7.62 M 0.06 GPS tokenizer 640 1.54 K 0.03 RF tokenizer 8.58 K 17.41 K 0.03
+> Backbone
+> D= 64 0.40 M 37.60 M 0.66
+> D= 128 1.59 M 0.14 G 0.74
+> D= 256 6.32 M 0.56 G 1.22
+> D= 512 25.22 M 2.19 G 3.10 Tar. Enc. ( D= 128 )0.79 M ––
+> Loc.
+> AR 18 –0.07 GRU 26.24 K 0.35 M 0.13 Transformer 234.24 K 3.10 M 1.08 Kalman 1–0.03 Proposed ( D= 64 )0.46 M 4.51 M 0.11 Proposed ( D= 128 )0.50 M 4.71 M 0.11 Proposed ( D= 256 )0.56 M 5.10 M 0.11 Proposed ( D= 512 )0.69 M 5.89 M 0.11
+> Beam Prediction
+> AR 4.45 K 20.48 K 0.09 GRU 134.75 K 1.72 M 0.18 Transformer 242.05 K 3.17 M 1.08 M2BeamLLM 50.58 M 29.90 G 3.00 Proposed ( D= 64 )1.76 M 17.64 M 0.09 Proposed ( D= 128 )1.79 M 17.97 M 0.08 Proposed ( D= 256 )1.86 M 18.62 M 0.08 Proposed ( D= 512 )1.99 M 19.93 M 0.09
+> RSSI Prediction
+> AR 9–0.09 GRU 25.79 K 0.35 M 0.16 Transformer 234.05 K 3.09 M 1.10 Baseline [38] 1.01 M 121.90 M 0.62 Proposed ( D= 64 )1.83 M 17.64 M 0.11 Proposed ( D= 128 )1.89 M 17.97 M 0.11 Proposed ( D= 256 )2.02 M 18.62 M 0.11 Proposed ( D= 512 )2.29 M 19.93 M 0.12
+> Training Paradigm
+> Recon. backbone 5.00 M 5.68 G 12.00 Recon. decoder 24.71 M ––Multitask supervised 10.77 M 47.85 G 24.52
+
+temporal dynamics in a unified latent space, the proposed method provides a reusable representation for multiple future PHY-tasks. Extensive experiments demonstrated strong per-formance across all three tasks, with the proposed method outperforming most baselines in most settings. Comprehensive ablation studies further confirmed the effectiveness of the proposed design. In particular, the comparisons with multi-task supervised learning and reconstruction-based SSL showed that the main advantage comes from predictive latent state learning itself, rather than from model scale or multimodal fusion alone. Overall, this work shows that predictive latent state learning is an effective unified approach for sensing-assisted PHY-tasks. Future work will extend JEPA-MSAC from predictive repre-sentation learning to a broader communication-oriented physi-cal AI framework. A key direction is to incorporate structured causal reasoning and closed-loop decision support on top of the learned world state, enabling the model not only to predict 13 
+
+future PHY variables but also to support proactive communi-cation control [44]. Another important direction is to develop scalable wireless world foundation models with stronger cross-scenario transfer and simulation-to-real generalization, while covering more general settings such as different frequency bands and different numbers of users. REFERENCES [1] 3GPP, “Study on artificial intelligence (AI)/machine learning (ML) for NR air interface (Release 19),” 3rd Generation Partnership Project (3GPP), Technical Report (TR) 38.843, Sep. 2025, v19.0.0. [2] N. A. Khan and S. Schmid, “AI-RAN in 6G networks: State-of-the-art and challenges,” IEEE Open J. Commun. Soc. , vol. 5, pp. 294–311, 2024. [3] L. Kundu, X. Lin, R. Gadiyar, J.-F. Lacasse, and S. Chowdhury, “AI-RAN: Transforming RAN with AI-driven computing infrastructure,” 
+
+IEEE Commun. Mag. , vol. 64, no. 1, pp. 168–174, 2026. [4] X. Lin, L. Kundu, S. Cammerer, Y. Huang, C. Dick, C. Santhosam, R. Gadiyar, R. Wiesmayr, and C. Studer, “AI-Native 6G: Empowering intelligent RAN with accelerated compute,” IEEE Wireless Commun. ,vol. 32, no. 6, pp. 11–14, 2025. [5] T. O’Shea and J. Hoydis, “An introduction to deep learning for the physical layer,” IEEE Trans. Cogn. Commun. Netw. , vol. 3, no. 4, pp. 563–575, 2017. [6] C.-K. Wen, W.-T. Shih, and S. Jin, “Deep learning for massive MIMO CSI feedback,” IEEE Wireless Commun. Lett. , vol. 7, no. 5, pp. 748–751, 2018. [7] X. Gao, S. Jin, C.-K. Wen, and G. Y. Li, “ComNet: Combination of deep learning and expert knowledge in OFDM receivers,” IEEE Commun. Lett. , vol. 22, no. 12, pp. 2627–2630, 2018. [8] M. Soltani, V. Pourahmadi, A. Mirzaei, and H. Sheikhzadeh, “Deep learning-based channel estimation,” IEEE Commun. Lett. , vol. 23, no. 4, pp. 652–655, 2019. [9] J. Guo, Y. Cui, S. Jin, and J. Zhang, “Large AI models for wireless physical layer,” IEEE Commun. Mag. , pp. 1–8, 2026. [10] B. Liu, X. Liu, S. Gao, X. Cheng, and L. Yang, “LLM4CP: Adapting large language models for channel prediction,” J. Commun. Inf. Netw. ,vol. 9, no. 2, pp. 113–125, 2024. [11] Y. Sheng, K. Huang, L. Liang, P. Liu, S. Jin, and G. Y. Li, “Beam prediction based on large language models,” IEEE Wireless Commun. Lett. , pp. 1–5, 2025. [12] C. Zheng, J. He, G. Cai, Z. Yu, and C. G. Kang, “BeamLLM: Vision-empowered mmWave beam prediction with large language models,” in 
+
+Proc. IEEE 102nd Vehicular Technology Conf. (VTC2025-Fall) , 2025, pp. 1–6. [13] C. Zheng, J. He, C. G. Kang, G. Cai, Z. Yu, and M. Debbah, “M2BeamLLM: Multimodal sensing-empowered mmWave beam pre-diction with large language models,” arXiv preprint arXiv:2506.14532 ,2025. [14] T. Yang, P. Zhang, M. Zheng, Y. Shi, L. Jing, J. Huang, and N. Li, “WirelessGPT: A generative pre-trained multi-task learning framework for wireless communication,” IEEE Network , vol. 39, no. 5, pp. 58–65, 2025. [15] S. Alikhani, G. Charan, and A. Alkhateeb, “Large wireless model (LWM): A foundation model for wireless channels,” arXiv preprint arXiv:2411.08872 , 2024. [16] G. Pan, K. Huang, H. Chen, S. Zhang, C. H¨ ager, and H. Wymeersch, “Large wireless localization model (LWLM): A foundation model for positioning in 6G networks,” arXiv preprint arXiv:2505.10134 , 2025. [17] X. Liu, S. Gao, B. Liu, X. Cheng, and L. Yang, “LLM4WM: Adapting LLM for wireless multi-tasking,” IEEE Trans. Mach. Learn. Commun. Netw. , vol. 3, pp. 835–847, 2025. [18] T. Zheng and L. Dai, “Large language model enabled multi-task physical layer network,” IEEE Trans. Commun. , vol. 74, pp. 307–321, 2026. [19] A. Alkhateeb, G. Charan, T. Osman, A. Hredzak, J. Morais, U. Demirhan, and N. Srinivas, “DeepSense 6G: A large-scale real-world multi-modal sensing and communication dataset,” IEEE Commun. Mag. ,vol. 61, no. 9, pp. 122–128, 2023. [20] G. Charan, T. Osman, A. Hredzak, N. Thawdar, and A. Alkhateeb, “Vision-position multi-modal beam prediction using real millimeter wave datasets,” in Proc. IEEE Wireless Commun. Netw. Conf. (WCNC) ,2022, pp. 2727–2731. [21] U. Demirhan and A. Alkhateeb, “Radar aided proactive blockage pre-diction in real-world millimeter wave systems,” in Proc. IEEE Int. Conf. Commun. (ICC) , 2022, pp. 4547–4552. [22] S. Wu, C. Chakrabarti, and A. Alkhateeb, “LiDAR-aided mobile block-age prediction in real-world millimeter wave systems,” in Proc. IEEE Wireless Commun. Netw. Conf. (WCNC) , 2022, pp. 2631–2636. [23] J. Morais, A. Behboodi, H. Pezeshki, and A. Alkhateeb, “Position aided beam prediction in the real world: How useful GPS locations actually are?” in Proc. IEEE Int. Conf. Commun. (ICC) , 2023, pp. 1824–1829. [24] M. Alrabeiah and A. Alkhateeb, “Deep learning for mmWave beam and blockage prediction using Sub-6 GHz channels,” IEEE Trans. Commun. ,vol. 68, no. 9, pp. 5504–5518, 2020. [25] Y. Cui, J. Nie, X. Cao, T. Yu, J. Zou, J. Mu, and X. Jing, “Sensing-assisted high reliable communication: A transformer-based beamforming approach,” IEEE J. Sel. Top. Signal Process. , vol. 18, no. 5, pp. 782–795, 2024. [26] K. Zhang, W. Yu, H. He, S. Song, J. Zhang, and K. B. Letaief, “Multimodal deep learning-empowered beam prediction in future THz ISAC systems,” in Proc. IEEE 36th Int. Symp. Pers. Indoor Mobile Radio Commun. (PIMRC) , 2025, pp. 1–6. [27] J. Xiang, T. Tao, Y. Gu, T. Shu, Z. Wang, Z. Yang, and Z. Hu, “Language models meet world models: Embodied experiences enhance language models,” in Proc. 37th Int. Conf. Neural Inf. Process. Syst. (NeurIPS) .Curran Associates Inc., 2023, pp. 73 752–73 772. [28] L. Wang, F. Yang, C. Zhang, J. Lu, J. Qian, S. He, P. Zhao, B. Qiao, R. Huang, S. Qin et al. , “Large action models: From inception to implementation,” arXiv preprint arXiv:2412.10047 , 2024. [29] T. Feng, X. Wang, Y.-G. Jiang, and W. Zhu, “Embodied AI: From LLMs to world models,” arXiv preprint arXiv:2509.20021 , 2025. [30] D. Ha and J. Schmidhuber, “World models,” CoRR , vol. abs/1803.10122, 2018. [31] ——, “Recurrent world models facilitate policy evolution,” in Proc. 32nd Int. Conf. Neural Inf. Process. Syst. Red Hook, NY, USA: Curran Associates Inc., 2018, pp. 2455–2467. [32] M. Assran, Q. Duval, I. Misra, P. Bojanowski, P. Vincent, M. Rabbat, Y. LeCun, and N. Ballas, “Self-supervised learning from images with a joint-embedding predictive architecture,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2023, pp. 15 619–15 629. [33] A. Bardes, Q. Garrido, J. Ponce, X. Chen, M. Rabbat, Y. LeCun, M. Assran, and N. Ballas, “Revisiting feature prediction for learning visual representations from video,” arXiv preprint arXiv:2404.08471 ,2024. [34] M. Assran, A. Bardes, D. Fan, Q. Garrido, R. Howes, M. Muckley, A. Rizvi, C. Roberts, K. Sinha, A. Zholus et al. , “V-JEPA 2: Self-supervised video models enable understanding, prediction and planning,” 
+
+arXiv preprint arXiv:2506.09985 , 2025. [35] P. Bello, “Characterization of randomly time-variant linear channels,” 
+
+IEEE Trans. Commun. Syst. , vol. 11, no. 4, pp. 360–393, 1963. [36] W. C. Jakes, Microwave Mobile Communications . New York: Wiley-IEEE Press, 1974. [37] H. S. Wang and N. Moayeri, “Finite-state Markov channel-a useful model for radio communication channels,” IEEE Trans. Veh. Technol. ,vol. 44, no. 1, pp. 163–171, 1995. [38] S. Yan, T. Hu, B. Mefgouda, S. Lasaulce, and M. Debbah, “Reading radio from camera: Visually-grounded, lightweight, and interpretable RSSI prediction,” arXiv preprint arXiv:2510.25936 , 2025. [39] X. Zhang, R. He, M. Yang, Z. Zhang, Z. Qi, and B. Ai, “Vision aided channel prediction for vehicular communications: A case study of received power prediction using RGB images,” IEEE Trans. Veh. Technol. , vol. 74, no. 11, pp. 17 531–17 544, 2025. [40] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein, A. C. Berg, and L. Fei-Fei, “ImageNet large scale visual recognition challenge,” Int. J. Comput. Vis. , vol. 115, no. 3, pp. 211–252, 2015. [41] M. Tan and Q. V. Le, “EfficientNet: Rethinking model scaling for convolutional neural networks,” in Proc. 36th Int. Conf. Mach. Learn. (ICML) , 2019, pp. 6105–6114. [42] Q. Garrido, R. Balestriero, L. Najman, and Y. Lecun, “RankMe: Assessing the downstream performance of pretrained self-supervised representations by their rank,” in Proc. 40th Int. Conf. Mach. Learn. (ICML) , 2023, pp. 10 929–10 974. [43] V. Thilak, O. Saremi, P. Nakkiran, J. Susskind, C. Huang, H. Goh, L. Dinh, and E. Littwin, “LiDAR: Sensing linear probing performance in joint embedding SSL architectures,” in Proc. ICLR/NeurIPS Workshop on SSL , 2023. [44] Y. Wang, W. Luo, J. Bai, Y. Cao, T. Che, K. Chen, Y. Chen, J. Diamond, Y. Ding, W. Ding et al. , “Alpamayo-r1: Bridging reasoning and action prediction for generalizable autonomous driving in the long tail,” arXiv preprint arXiv:2511.00088 , 2025.

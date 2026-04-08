@@ -1,0 +1,939 @@
+Title: HyperKKL: Learning KKL Observers for Non-Autonomous Nonlinear Systems via Hypernetwork-Based Input Conditioning
+
+URL Source: https://arxiv.org/pdf/2603.29744v1
+
+Published Time: Wed, 01 Apr 2026 01:16:24 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# HyperKKL: Learning KKL Observers for Non-Autonomous Nonlinear Systems via Hypernetwork-Based Input Conditioning 
+
+Yahia Salaheldin Shaaban 1, Abdelrahman Sayed Sayed 2, M. Umar B. Niazi 3, and Karl Henrik Johansson 3
+
+Abstract — Kazantzis–Kravaris/Luenberger (KKL) observers are a class of state observers for nonlinear systems that rely on an injective map to transform the nonlinear dynamics into a stable quasi-linear latent space, from where the state estimate is obtained in the original coordinates via a left inverse of the transformation map. Current learning-based methods for these maps are designed exclusively for autonomous systems and do not generalize well to controlled or non-autonomous systems. In this paper, we propose two learning-based designs of neural KKL observers for non-autonomous systems whose dynamics are influenced by exogenous inputs. To this end, a hypernetwork-based framework (HyperKKL) is proposed with two input-conditioning strategies. First, an augmented observer approach (HyperKKL obs ) adds input-dependent cor-rections to the latent observer dynamics while retaining static transformation maps. Second, a dynamic observer approach (HyperKKL dyn ) employs a hypernetwork to generate encoder and decoder weights that are input-dependent, yielding time-varying transformation maps. We derive a theoretical worst-case bound on the state estimation error. Numerical evaluations on four nonlinear benchmark systems show that input condi-tioning yields consistent improvements in estimation accuracy over static autonomous maps, with an average symmetric mean absolute percentage error (SMAPE) reduction of 29% across all non-zero input regimes. 
+
+I. I NTRODUCTION 
+
+Reconstructing the full state of a dynamical system from partial measurements is a foundational problem in control theory. In most applications, only a subset of the state vari-ables is directly measurable, and the remaining states must be estimated by an observer. However, designing observers for nonlinear systems is particularly challenging. Kazantzis–Kravaris/Luenberger (KKL) observers [1], [2] offer a principled approach by constructing an injective transformation that lifts the nonlinear system into a higher-dimensional space where the observer dynamics are quasi-linear and globally stable. Under mild observability con-ditions, this transformation is theoretically guaranteed to exist, and the state estimate, obtained by inverting the transformation at the latent observer state, globally asymp-totically converges to the true state [2]–[4]. In practice, however, synthesizing a KKL observer requires finding a transformation that satisfies a certain PDE, which turns out to be analytically intractable for general nonlinear systems. Computing a left inverse of this transformation is strictly  
+
+> 1Mohamed bin Zayed University of Artificial Intelligence (MBZUAI), Abu Dhabi, UAE. Email:
+
+yahia.shaaban@mbzuai.ac.ae        
+
+> 2Univ Gustave Eiffel, COSYS-ESTAS, F-59657 Villeneuve d’Ascq, France. Email:
+
+abdelrahman.ibrahim@univ-eiffel.fr 
+
+> 3Department of Decision and Control Systems and Digital Futures, KTH Royal Institute of Technology, SE-100 44 Stockholm, Sweden. Email:
+
+{mubniazi, kallej }@kth.se 
+
+harder, as it entails inverting a nonlinear map for which no closed-form expression is typically available [5]. Furthermore, real-world systems are typically controlled with time-varying signals. Robotic platforms receive motor commands, traffic networks experience a time-varying de-mand, and industrial processes are subject to time-varying parameters [6]. These time-varying elements fundamen-tally alter the state evolution and render the system non-autonomous. The theoretical extension of KKL observers to non-autonomous settings is established in [7]–[9], where it is shown that the transformation map must be time-varying to accommodate system inputs. Yet, existing learning-based methods for KKL observer design remain limited to the autonomous case, and extending them to handle inputs remains an open problem [10], [11]. 
+
+A. Literature Gap 
+
+The practical bottleneck of KKL observers is the numeri-cal approximation of the transformation map and its left in-verse. For autonomous systems, [12] and [13] propose super-vised neural network approaches using simulated trajectory data, while [10] introduces an unsupervised autoencoder ar-chitecture with PDE regularization. Subsequently, [11], [14] develop a supervised physics-informed learning method that embeds the PDE constraint directly into the training, yielding improved generalization and robustness guarantees. Recently, [15] proposes a neural ODE method and [16] proposes an approach based on contraction analysis. The non-autonomous KKL problem was analyzed from a theoretical perspective in [7]–[9]. However, existing numerical synthesis methods for KKL observers for non-autonomous systems rely on static transformation mappings [17]–[21]. These approaches extend the autonomous framework but do not incorporate time-varying transformation maps, which limits their scope to systems that satisfy the restrictive instantaneous observability condition [8]. To our knowledge, no systematic study exists that compares input conditioning strategies for learning-based KKL observers under mild observability conditions [7]–[9], nor has dynamic conditioning of the transformation maps been explored. 
+
+B. Our Contributions 
+
+To address the gap above, we propose HyperKKL, a hypernetwork-based framework [22], [23] for conditioning KKL observers on exogenous inputs. We investigate two complementary strategies: (i) HyperKKL obs : an augmented observer that uses a hypernetwork to inject input-dependent corrections into the latent observer dynamics while retaining 
+
+> arXiv:2603.29744v1 [eess.SY] 31 Mar 2026
+
+static transformation maps, and (ii) HyperKKL dyn : a dy-namic approach that uses a hypernetwork to generate input-dependent encoder and decoder weights, producing time-varying transformation and inverse maps. Through this investigation, we address two fundamental questions: Q1) Is input conditioning necessary for designing KKL observers for controlled systems, and if so, which conditioning strategy is more effective: augmenting the latent dynamics or dynamically adapting the transformation maps? Q2) Why are hypernetworks the appropriate architectural mechanism for implementing input conditioning in KKL observers? Our contributions are threefold. First, we implement and systematically compare two complementary input-conditioning strategies for learning-based neural KKL ob-servers for non-autonomous systems: latent-dynamics aug-mentation and dynamic transformation conditioning. Second, we introduce a hypernetwork-based realization of time-dependent transformation maps that enables KKL observer design under mild observability conditions, without relying on the restrictive instantaneous observability assumption. Third, we derive theoretical guarantees in the form of worst-case estimation error bounds that characterize how the net-work’s approximation capacity, the residual violations of the governing PDE, and the sensitivity of the decoder jointly shape the resulting state estimation accuracy. II. P ROBLEM FORMULATION 
+
+Consider a controlled (non-autonomous) nonlinear system in continuous time t ∈ R+
+
+˙x(t) = f (x(t), u (t)) (1a) 
+
+y(t) = h(x(t)) (1b) where x(t) ∈ X ⊆ Rnx is the state, u(t) ∈ U ⊂ Rnu is a known exogenous input, and y(t) ∈ Rny is the measured output. The input trajectory u : R+ → U belongs to a set of admissible inputs U ⊂ L ∞
+
+> loc
+
+(R+), where L∞
+
+> loc
+
+(R+) denotes the Lebesgue space of locally essentially bounded measurable functions defined on the non-negative real line R+. That is, the mapping t 7 → u(t) is Lebesgue measurable and, for every compact interval T ⊂ R+, the function is bounded almost everywhere, i.e., ess sup t∈T ∥u(t)∥∞ < ∞.Let X(t, u ; ϑ, t 0) denote the solution of (1a) at time t ∈
+
+R+, driven by the input trajectory u ∈ U and initialized from the state x(t0) = ϑ ∈ X at time t0 ∈ R+. Similarly, 
+
+Y (t, u ; ϑ, t 0) denote the output trajectory corresponding to the solution X(t, u ; ϑ, t 0). From [8], the following assump-tion ensures the theoretical existence of a KKL observer. 
+
+Assumption 1: System (1) satisfies the following: 1) f is continuously differentiable and h is continuous. 2) System (1a) is forward complete on X from X0 ⊆ X.That is, ∀u ∈ U and ∀ϑ ∈ X0, the maximal interval of existence includes [0 , +∞), and the unique, absolutely continuous solution X(t, u ; ϑ, 0) ∈ X, ∀t ∈ R+.3) Solutions to (1a) initiated from X at any time t ∈ R+
+
+do not exhibit finite-time escape in backward time over the interval [0 , t ]. That is, for all u ∈ U, for all t ∈ R+,and for all ϑ ∈ X, the unique, absolutely continuous solution X(s, u ; ϑ, t )̸ → ∞ , ∀s ∈ [0 , t ].4) The system is backward-distinguishable . That is, for any given input u ∈ U, there exists a finite time tu ≥ 0
+
+such that ∀t ≥ tu and ∀(ϑ1, ϑ 2) ∈ X2, the following implication holds: if Y (s, u ; ϑ1, t ) = Y (s, u ; ϑ2, t ),
+
+∀s ∈ [t − tu, t ], then it must be that ϑ1 = ϑ2. ⋄
+
+From [8], designing a KKL observer requires a state transformation map T : Rnx ×R+ → Rnz that transforms the nonlinear dynamics (1a) into a globally stable, quasi-linear latent system 
+
+˙z(t) = Az (t) + Bh (x(t)) (2) where z(t) = T (x(t), t ) ∈ Rnz with nz = ny (2 nx + 1) ,
+
+A ∈ Rnz ×nz is a Hurwitz matrix, and B ∈ Rnz ×ny is such that (A, B ) is a controllable pair. Because of (2), the transformation map T must be continuously differentiable and satisfy the following PDE 
+
+∂T
+
+∂x (x, t )f (x, u (t)) + ∂T
+
+∂t (x, t ) = AT (x, t ) + Bh (x) (3) for all x ∈ X, t ∈ R+, and u ∈ U. In addition, T must be injective, i.e., there exists a left inverse T ∗ such that 
+
+T ∗(T (x, t ), t ) = x for all x ∈ X and t ∈ R+.Unlike the autonomous case [2], [3], where the trans-formation map is time-invariant, the presence of input u
+
+necessitates that T (x, t ) is time-varying and satisfies PDE (3) with temporal drift ∂T /∂t , which captures the non-stationary geometry of the system’s attractor induced by the input u(t).Note that solving (3) analytically for every input trajectory 
+
+u ∈ U and obtaining the inverse of its solution at every time 
+
+t ∈ R+ are intractable tasks. Therefore, we aim to learn the time-varying maps T (x, t ), T ∗(z, t ) using neural networks and synthetic data generated by simulating (1). Let ˆT (x, t ) and ˆT ∗(z, t ) denote the learned transformation and left inverse maps. A general form of the neural KKL observer is 
+
+˙ˆz(t) = Aˆz(t) + By (t) + Φ(ˆ z(t), u (t)) (4a) 
+
+ˆx(t) = ˆT ∗(ˆ z(t), t ) (4b) where ˆx(t) is the state estimate and Φ : Rnz × Rnu → Rnz
+
+is an optional input injection term. When the transformation maps are time-varying, the injection term may be set to 
+
+Φ ≡ 0, since the input dependence is absorbed into ˆT and 
+
+ˆT ∗. Conversely, when ˆT and ˆT ∗ are static (time-invariant), the term Φ must compensate for the model mismatch in-duced by the input. This formulation naturally leads to two complementary conditioning strategies, which we develop in Section III: HyperKKL obs , which retains static maps and learns a nonzero Φ, and HyperKKL dyn , which learns time-varying maps and sets Φ ≡ 0.Our objective is to develop a learning-based method for obtaining the approximations ˆT and ˆT ∗ for the transforma-tion T and its left inverse T ∗, respectively, alongside the injection term Φ when applicable, and provide a bound on the estimation error ξ(t) = x(t) − ˆx(t) of the learned neural KKL observer. Algorithm 1 Autonomous KKL training (Phase 1)  
+
+> 1:
+
+Stage A : Train base encoder Tθ : x 7 → z 
+
+> 2:
+
+Collect dataset Dtrain-aut = {(xik, z ik, y ik)} 
+
+> 3:
+
+for epoch = 1 , . . . , E 1 do  
+
+> 4:
+
+for each mini-batch (x, z, y ) from Dtrain-aut do  
+
+> 5:
+
+ˆz ← T θ (x) 
+
+> 6:
+
+Lmse ← ∥ ˆz − z∥2 
+
+> 7:
+
+Lpde ← ∂Tθ 
+
+> ∂x
+
+f (x) − A ˆz − B y 2 ▷ auto-diff  
+
+> 8:
+
+ν ← νmax · min(1 , epoch /5) ▷ linear warmup  
+
+> 9:
+
+L ← L mse + νLpde  
+
+> 10:
+
+Update θ on ∇θ L ▷ grad clipped to ∥∇∥ ≤ 1 
+
+> 11:
+
+end for  
+
+> 12:
+
+Scheduler step (ReduceLROnPlateau)  
+
+> 13:
+
+end for  
+
+> 14:
+
+Stage B : Train base decoder T ∗ 
+
+> η
+
+: z 7 → x 
+
+> 15:
+
+Generate dataset D∗ 
+
+> train-aut
+
+= {(xik, Tθ (xik)) } 
+
+> 16:
+
+for epoch = 1 , . . . , E 2 do  
+
+> 17:
+
+for each mini-batch (x, z) from D∗ 
+
+> train-aut
+
+do  
+
+> 18:
+
+ˆx ← T ∗ 
+
+> η
+
+(z) 
+
+> 19:
+
+L ← ∥ ˆx − x∥2 
+
+> 20:
+
+Update η on ∇η L ▷ grad clipped to ∥∇∥ ≤ 1 
+
+> 21:
+
+end for  
+
+> 22:
+
+Scheduler step (ReduceLROnPlateau)  
+
+> 23:
+
+end for 
+
+III. H YPER KKL F RAMEWORK 
+
+Let the transformation map T and its left inverse T ∗ be approximated using neural networks with weights θ(t) and 
+
+η(t), i.e., 
+
+ˆT (x, t ) ≜ Nenc (x; θ(t)) , ˆT ∗(z, t ) ≜ Ndec (z; η(t)) . (5) We investigate two strategies for conditioning KKL observers on exogenous inputs u(t): (i) HyperKKL obs , an augmented observer that employs input injection into the latent dynamics (4a) while keeping the learned transformation maps and its inverse static ( θ(t) = θ, η(t) = η), and (ii) HyperKKL dyn , a dynamic transformation approach that uses a hypernetwork to generate input-dependent encoder and decoder weights 
+
+eθ(t) and eη(t), producing time-varying encoder and decoder networks with weights θ(t) = θ + eθ(t) and η(t) = η +
+
+eη(t). Both strategies share a common first phase in which base encoder and decoder networks are pretrained on the autonomous dynamics ( u ≡ 0) to learn the base weights 
+
+θ and η, using the method proposed by [14]. The Phase 1 pretraining procedure is provided in Algorithm 1. 
+
+A. Data Generation and the Operating Domain 
+
+Both HyperKKL obs and HyperKKL dyn share the same offline dataset. Let X0 ⊂ X be a set of initial conditions and Utrain ⊂ U be a representative set of input signals. We sample Ntraj initial conditions {x(i)0 }Ntraj  
+
+> i=1
+
+⊂ X0 and a distinct set of Ninp input signals {u(j)(·)}Ninp  
+
+> j=1
+
+⊂ Utrain . We simulate the system dynamics in (1a) for every pair of initial condition and input signal over a horizon T > 0 with a constant sampling period ∆t. Let the discrete time instances be defined as tk = k∆t, yielding a total of Nstep = T / ∆t
+
+steps per trajectory. To accommodate the historical input window of length 
+
+ω and the forward finite difference step at tk+1 , we define the valid starting index Nwind = ⌈ω/ ∆t⌉. This yields the following empirical dataset 
+
+Dtrain =
+
+> Ntraj
+
+[
+
+> i=1
+> Ninp
+
+[
+
+> j=1
+> Nstep −1
+
+[
+
+> k=Nwind
+
+n
+
+x(i,j ) 
+
+> k
+
+, u (j)[tk −ω,t k ], u (j)[tk+1 −ω,t k+1 ]
+
+o
+
+(6) where x(i,j ) 
+
+> k
+
+∈ X is the sampled state at time tk originating from the i-th initial condition and driven by the j-th input signal, and the adjacent input windows are stored to approx-imate the temporal derivative. 
+
+B. HyperKKL obs : Augmented Observer 
+
+The first strategy, HyperKKL obs , retains the static base encoder ˆT (x) = Nenc (x; θ) and decoder ˆT ∗(z) = Ndec (z; η)
+
+pretrained in Phase 1 and compensates for the input depen-dence by augmenting the latent observer dynamics with an input injection term. Specifically, the observer takes the form 
+
+˙ˆz(t) = Aˆz(t) + By (t) + Φ ϖ (ˆ z(t), u [t−ω,t ]) (7a) 
+
+ˆx(t) = Ndec (ˆ z(t); η) (7b) where Φϖ : Rnz ×Rω×nu → Rnz is the input injection map, and ω ∈ N is the length of the input history window. The injection map Φϖ is constructed in two stages. First, a shared gated recurrent unit (GRU) [24] processes the input window u[t−ω,t ] and produces a temporal context embedding 
+
+ht, which is projected to a latent vector ℓ = Wproj ht via a linear layer without bias. Second, a multi-layer perceptron (MLP) ϕϖ takes the concatenation [ˆ z; ℓ] as input and outputs the injection signal Φϖ (ˆ z, u [t−ω,t ]) ∈ Rnz . The absence of bias in the projection layer guarantees that when u ≡ 0, the context embedding vanishes and Φϖ ≡ 0, thereby exactly recovering the autonomous KKL observer. The learnable parameters in HyperKKL obs are the GRU weights γ and the injection network weights ϖ. The base encoder and decoder remain frozen. Training minimizes the dynamics matching loss 
+
+Laug (γ, ϖ ) = ∥ ˙zobs − ˙ztrue ∥2 (8) over the dataset Dtrain , where ˙ztrue = ∂Nenc  
+
+> ∂x
+
+(θ) f (xk, u (tk)) is obtained via the Jacobian-vector product through the frozen encoder, and ˙zobs = Az k + By k + Φ ϖ (zk, u [tk −ω,t k ]) with 
+
+zk = Nenc (xk; θ). The procedure is provided in Algorithm 2. 
+
+C. HyperKKL dyn : Dynamic Transformation Maps 
+
+The second strategy, HyperKKL dyn , directly addresses the time-varying nature of the transformation map by condi-tioning the encoder and decoder weights on the input. The parameters of the networks in (5) are decomposed into the static base weights θ, η (pretrained in Phase 1) and dynamic perturbations eθ(t), eη(t) as 
+
+θ(t) = θ + eθ(t), η(t) = η + eη(t). (9) Algorithm 2 HyperKKL obs training (Phase 2)  
+
+> 1:
+
+Freeze T¯θ , T ∗ 
+
+> ¯η
+
+▷ no grad  
+
+> 2:
+
+ϕϖ , Eγ ← Init injection network and GRU encoder  
+
+> 3:
+
+for epoch = 1 , . . . , E do  
+
+> 4:
+
+for each mini-batch (x, y, uw, u, ˙x) do  
+
+> 5:
+
+z ← T ¯θ (x) ▷ frozen encoder  
+
+> 6:
+
+hN ← GRU (uw) 
+
+> 7:
+
+ℓ ← Wproj hN ▷ latent embedding (no bias)  
+
+> 8:
+
+Φ ← ϕϖ ([ z; ℓ]) ▷ Φ ∈ Rnz 
+
+> 9:
+
+˙ztrue ← JVP (T¯θ , x, ˙x) ▷ ∂T 
+
+> ∂x
+
+f (x, u ) 
+
+> 10:
+
+˙zobs ← Az + By + Φ 
+
+> 11:
+
+L ← ∥ ˙zobs − ˙ztrue ∥2 
+
+> 12:
+
+Update (γ, ϖ ) on ∇(γ,ϖ )L ▷ grad clip ∥∇∥ ≤ 1 
+
+> 13:
+
+end for  
+
+> 14:
+
+Scheduler step (cosine annealing)  
+
+> 15:
+
+end for Algorithm 3 HyperKKL dyn training (Phase 2)  
+
+> 1:
+
+Freeze Tθ , T ∗ 
+
+> η
+
+▷ no grad  
+
+> 2:
+
+ψ ← Init all hyper-network parameters  
+
+> 3:
+
+for epoch = 1 , . . . , E do  
+
+> 4:
+
+for each mini-batch (x, y, uw, u− 
+
+> w
+
+, ˙x) do  
+
+> 5:
+
+h ← GRU (uw) ▷ encode input history  
+
+> 6:
+
+for l = 1 , . . . , L do  
+
+> 7:
+
+fl ← MLP bb ([ h ; el])  
+
+> 8:
+
+[al ∥ bl] ← Head l(fl) 
+
+> 9:
+
+∆Wl ← s · al
+
+|{z} 
+
+> din ×r
+
+bl
+
+|{z} 
+
+> r×dout
+
+▷ low-rank delta  
+
+> 10:
+
+end for  
+
+> 11:
+
+W ′ 
+
+> l
+
+← Wl + ∆ Wl for weights; keep biases fixed  
+
+> 12:
+
+z ← eT (x), ˆx ← eT ∗(z) ▷ modulated maps  
+
+> 13:
+
+// PDE loss  
+
+> 14:
+
+∂t eT ← JVP ( eT (x; uw), uw, ˙uw) 
+
+> 15:
+
+∂xT · f ← JVP ( eT , x, ˙x) ▷ notation: ∂x ≜ ∂∂x  
+
+> 16:
+
+Lpde ← ∥ ∂tT + ∂xT · f − Az − By ∥2 
+
+> 17:
+
+Lrecon ← ∥ ˆx − x∥2 
+
+> 18:
+
+L ← L recon + λ · L pde  
+
+> 19:
+
+Update ψ on ∇ψ L ▷ grad clipped to ∥∇∥ ≤ 1 
+
+> 20:
+
+end for  
+
+> 21:
+
+Scheduler step (cosine annealing)  
+
+> 22:
+
+end for 
+
+We impose a hypernetwork ansatz where the perturbations are functions of the input history over a window ω ∈ N, i.e., 
+
+[eθ(t), eη(t)] = Hψ (u[t−ω,t ]) (10) where the hypernetwork Hψ is parameterized by ψ, which is learnable. Here, the hypernetwork Hψ consists of a shared GRU to extract a temporal context embedding, followed by separate MLPs to predict the parameter shifts for the encoder 
+
+Nenc (x; θ(t)) and decoder Ndec (z; η(t)) .Since the transformation maps are now time-varying by construction, the latent observer dynamics do not require an 
+
+Fig. 1: HyperKKL dyn training architecture. The shared GRU processes the input window u[tk −ω,t k ] to produce a context embedding ht, from which separate MLP heads predict weight perturbations eθ(tk) and eη(tk). These are added to the frozen base weights θ and η, yielding an input-conditioned encoder and decoder. The losses Lpde and Lrec are backprop-agated only through the hypernetwork parameters ψ.explicit injection term. The observer takes the form 
+
+˙ˆz(t) = Aˆz(t) + By (t) (11a) 
+
+ˆx(t) = Ndec (ˆ z(t); η(t)) (11b) where η(t) = η + eη(t) is generated by the hypernetwork at each time step. The architecture is illustrated in Fig. 1. We define two loss components evaluated over Dtrain for HyperKKL dyn . First, the reconstruction loss is given by 
+
+Lrec (ψ) = xk − N dec 
+
+
+
+Nenc (xk; θ(tk; ψ)); η(tk; ψ)
+
+ 2
+
+.
+
+(12) Second, the dynamic PDE residual is given by 
+
+Lpde (ψ) = ∂Nenc 
+
+∂x (xk; θ(tk; ψ)) f (xk, u (tk)) + ∂ ˆT
+
+∂t (xk, t k; ψ)−
+
+
+
+ANenc (xk; θ(tk; ψ))+ Bh (xk)
+
+ 2
+
+.
+
+(13) The learning problem is then formulated as empirical risk minimization over the dataset Dtrain as 
+
+min 
+
+> ψ
+
+1
+
+|Dtrain |
+
+X
+
+> Dtrain
+
+
+
+Lrec (ψ) + νLpde (ψ)
+
+
+
+(14) where ν > 0 is a hyperparameter that balances the topo-logical consistency of the latent space against the algebraic accuracy of the state reconstruction. The procedure is pro-vided in Algorithm 3. 
+
+D. Comparison of HyperKKL obs and HyperKKL dyn 
+
+HyperKKL obs and HyperKKL dyn represent fundamentally different approaches to input conditioning. HyperKKL obs 
+
+keeps the static transformation maps fixed after learning and compensates for the input in the latent dynamics via the injection term Φϖ . This is computationally lighter, as only the injection network and GRU encoder are trained, and the observer retains the standard quasi-linear structure in the latent space. However, because the encoder and decoder are static, this strategy implicitly assumes that the autonomous transformation provides a sufficiently accurate embedding for the input-driven regime, with the injection term correcting only the residual dynamics mismatch. HyperKKL dyn , by contrast, directly modulates the param-eters of the learned encoder and decoder to track the time-varying geometry of the system’s attractor, as prescribed by the theory in [8]. The hypernetwork generates input-dependent perturbations to both the encoder and decoder weights, which enables the observer to adapt the transforma-tion and its inverse to each input trajectory realization. This is more expressive but also more computationally demanding, as it requires backpropagation through the generated weights. IV. T HEORETICAL ANALYSIS AND DESIGN TRADE -OFFS 
+
+In this section, we provide a theoretical bound on the estimation error of a HyperKKL observer. For x ∈ X and 
+
+u ∈ U, define the PDE residual as 
+
+Rpde (x, u, t ) = ∂ ˆT
+
+∂x f (x, u ) + ∂ ˆT
+
+∂t − (A ˆT (x, t ) + Bh (x)) .
+
+(15) Define ζ(t) ≜ ˆT (x(t), t ), where x(t) is the true state and ˆT
+
+is the learned transformation. Then, it holds that 
+
+˙ζ(t) = Aζ (t) + Bh (x(t)) + Rpde (x(t), u (t), t ) (16) where Rpde (x(t), u (t), t ) is the PDE residual in (15). Let 
+
+ξz (t) = ζ(t)− ˆz(t) be the latent space estimation error. From (4a) and (16), it holds that 
+
+˙ξz (t) = Aξ z (t) + Rpde (x(t), u (t), t ).
+
+Since A is a Hurwitz matrix, there exist positive constants 
+
+κ, λ such that (see [25, Appendix C.5]) 
+
+∥ξz (t)∥ ≤ κe −λt ∥ξz (0) ∥
+
++
+
+Z t
+
+> 0
+
+κe −λ(t−τ )∥R pde (x(τ ), u (τ ), τ )∥dτ. (17) Here, λ > 0 is proportional to the eigenvalue of A that is closest to the imaginary axis in the complex plane, and κ ≥ 1
+
+is the condition number of the eigenvector matrix of A.
+
+Lemma 1: Let the state space X and the set of admissible inputs U be compact. Assume the neural network architec-tures Nenc , Ndec , and Hψ utilize continuously differentiable activation functions. Then, the following statements hold: 1) There exists ϵpde ≥ 0 such that the PDE residual 
+
+Rpde (x, u, t ) in (15) is uniformly bounded across all states x ∈ X, inputs u ∈ U, and times t ∈ R+, i.e., 
+
+sup 
+
+> x∈X,u ∈U,t ≥0
+
+∥R pde (x, u, t )∥ ≤ ϵpde . (18) 2) There exist ϵenc ≥ 0 and ϵdec ≥ 0 such that 
+
+sup 
+
+> x∈X,t ≥0
+
+∥T (x, t ) − ˆT (x, t )∥ ≤ ϵenc (19) 
+
+sup 
+
+> z∈Z,t ≥0
+
+∥T ∗(z, t ) − ˆT ∗(z, t )∥ ≤ ϵdec (20) where Z ⊇ T (X) is a compact subset of Rnz and 
+
+ˆT , ˆT ∗ are defined in (5). 
+
+Proof: The proof follows directly from the extreme value theorem (e.g., [26, ch. 9, p. 200]) and the universal approximation theorem for neural networks [27], [28]. Assuming the activation functions are continuously differ-entiable, the learned maps are uniformly Lipschitz continu-ous on their domains for all t ∈ R+. The Lipschitz constant of the learned left inverse ˆT ∗(z, t ), denoted by ℓdec > 0, is particularly relevant here. That is, for all t ∈ R+,
+
+∥ ˆT ∗(z, t ) − ˆT ∗(ˆ z, t )∥ ≤ ℓdec ∥z − ˆz∥, ∀z, ˆz ∈ Z. (21) 
+
+Proposition 1: Let Assumption 1 and the conditions of Lemma 1 hold. Then, given the system state x(t) from (1a) and its estimate ˆx(t) from (4b), the estimation error ξ(t) = 
+
+x(t) − ˆx(t) is bounded for all t ∈ R+ by 
+
+∥ξ(t)∥ ≤ ϵdec + ℓdec 
+
+
+
+κe −λt ∥ξz (0) ∥ + ϵpde 
+
+κλ + ϵenc 
+
+
+
+(22) where all the scalars above are from (17)–(21). 
+
+Proof: By using (18) to bound the right hand side of (17) and evaluating the integral, we obtain 
+
+∥ξz (t)∥ ≤ κe −λt ∥ξz (0) ∥ + ϵpde 
+
+κλ . (23) Recall the variables z(t) = T (x(t), t ) and ζ(t) = ˆT (x(t), t ).Then, x(t) = T ∗(z(t), t ). We can write the estimation error ξ(t) = T ∗(z(t), t ) − ˆT ∗(ˆ z(t), t ). Then, by adding and subtracting ˆT ∗(z(t), t ) and ˆT ∗(ζ(t), t ), taking norm, and using the triangle inequality, we obtain 
+
+∥ξ(t)∥ ≤ ∥T ∗(z(t), t ) − ˆT ∗(z(t), t )∥
+
++ ∥ ˆT ∗(z(t), t ) − ˆT ∗(ζ(t), t )∥
+
++ ∥ ˆT ∗(ζ(t), t ) − ˆT ∗(ˆ z(t), t )∥.
+
+From (20), the first term is bounded by ϵdec . From (21) and (19), the second term is bounded as 
+
+∥ ˆT ∗(z(t), t ) − ˆT ∗(ζ(t), t )∥ ≤ ℓdec ϵenc .
+
+Finally, the third term is bounded as 
+
+∥ ˆT ∗(ζ(t), t ) − ˆT ∗(ˆ z(t), t )∥ ≤ ℓdec ∥ξz (t)∥.
+
+By using (23) above, we arrive at (22). The exponential term decays to zero, so the asymptotic bound is 
+
+lim sup 
+
+> t→∞
+
+∥ξ(t)∥ ≤ ϵdec + ℓdec 
+
+
+
+ϵpde 
+
+κλ + ϵenc 
+
+
+
+. (24) This bound applies to both variants but they affect its terms differently. HyperKKL obs freezes the decoder, preserving 
+
+ℓdec at its pretrained value, but ϵpde may be larger since static maps cannot exactly satisfy the time-varying PDE (3). HyperKKL dyn can reduce ϵpde by adapting the encoder, but the weight perturbations eη(t) may inflate ℓdec . Since 
+
+ℓdec multiplies both ϵpde and ϵenc , even moderate increases can offset gains from a smaller PDE residual. This bias– variance trade-off explains why HyperKKL obs often outper-forms HyperKKL dyn empirically (Section V). The bound suggests several practical guidelines. The con-stants ϵenc , ϵdec are reduced by increasing network expressiv-ity and ensuring dense sampling of X0. The PDE residual 
+
+ϵpde is controlled by the weight ν in (14) and reduced by decreasing ∆t. The Lipschitz constant ℓdec plays the most significant role as it amplifies both error sources; we apply spectral normalization [29] to the decoder to bound it. Finally, κ and λ are set by A: we choose A diagonal to ensure κ = 1 and place eigenvalues to balance convergence rate against numerical stiffness. 
+
+Remark 1: In practical applications, system (1) could be influenced by process noise w and measurement noise v, i.e., 
+
+˙x(t) = f (x(t), u (t)) + w(t), y(t) = h(x(t)) + v(t).
+
+Assume that for every compact interval T ⊂ R+
+
+ess sup 
+
+> t∈T
+
+∥w(t)∥∞ ≤ ¯w, ess sup 
+
+> t∈T
+
+∥v(t)∥∞ ≤ ¯v
+
+for some known ¯w ≥ 0 and ¯v ≥ 0. Furthermore, assuming the activation functions are continuously differentiable, im-plying sup x∈X,t ≥0 ∂ ˆT 
+
+> ∂x
+
+(x, t ) ≤ ℓenc for some ℓenc > 0.Then, a straightforward corollary to Proposition 1 is the following asymptotic bound on the estimation error 
+
+lim sup 
+
+> t→∞
+
+∥ξ(t)∥ ≤ ϵdec +ℓdec 
+
+
+
+ϵpde 
+
+κλ +ϵenc + κλ ℓenc ¯w+ κ∥B∥
+
+λ ¯v
+
+
+
+.
+
+One arrives at the above bound by following similar lines of argument as in the proof of Proposition 1. ⋄
+
+V. N UMERICAL VALIDATION 
+
+We evaluate both HyperKKL variants on four benchmark systems. We use RK45 ODE solver with ∆t = 0.05 sover T = 50 s. Process and measurement noise (Gaussian, 
+
+σ2 = 0 .01 ) are added at evaluation. Results are averaged over 100 trials with random initial conditions, and we report the Symmetric Mean Absolute Percentage Error (SMAPE) for its scale-invariance. Code is available at https://github. com/yehias21/HyperKKL .
+
+A. Nonlinear Systems 
+
+We consider the following systems for evaluation:  
+
+> •
+
+Duffing: ˙x1 = x2, ˙x2 = −x1 − x31 + u, y = x1. 
+
+> •
+
+Van der Pol: ˙x1 = x2, ˙x2 = (1 − x21)x2 − x1 + u,
+
+y = x1. 
+
+> •
+
+R¨ ossler: ˙x1 = −(x2 + x3), ˙x2 = x1 + 0 .1x2 + u, ˙x3 =0.1 + x3(x1 − 14) , y = x2. 
+
+> •
+
+FitzHugh–Nagumo: ˙x1 = 10( x1 − x31 − x2) + u, ˙x2 =1.5x1 − x2 + 0 .8, y = x1.Each system is tested under four input regimes: zero ( u ≡ 0), constant ( u ∼ U [−1, 1] ), sinusoidal, and square wave. 
+
+B. Baselines and Implementation 
+
+We compare the proposed HyperKKL obs and HyperKKL dyn against: (i) the autonomous observer ,which is trained on unforced dynamics using [14], and (ii) 
+
+the curriculum learning baseline [30], which fine-tunes the pretrained maps on non-autonomous data in stages of increasing complexity, without modifying the network architecture, thereby isolating the effect of data diversity from that of architectural changes. The base encoder and decoder are 3-layer MLPs (150 hidden units for Duffing and Van der Pol oscillators, 350 for R¨ ossler and FitzHugh-Nagumo systems). For HyperKKL obs ,the injection network ϕϖ is a 2-layer MLP (64 units) mapping the GRU context to Φϖ ∈ Rnz ×nu , whereas the base maps remain frozen. For HyperKKL dyn , a per-layer LoRA hypernetwork uses a shared GRU (64 units, ω = 100 
+
+steps) producing a context vector concatenated with per-layer embeddings (dim. 16), passed through a backbone MLP. Separate heads predict low-rank factors Fℓ ∈ Rdin ×r ,
+
+Eℓ ∈ Rr×dout with r = 4 , so ∆Wℓ = αF ℓEℓ (α initialized at 0.01 ); biases are frozen, guaranteeing exact collapse to the autonomous observer when u ≡ 0. Training uses Adam (lr = 10 −4) with gradient clipping. The observer matrices are A = −diag (1 , 2, . . . , n z ), B = 1nz , nz = ny (2 nx + 1) .HyperKKL obs adds ∼10 K parameters; HyperKKL dyn adds 
+
+∼45 K; all base parameters remain frozen. 
+
+C. Results and Discussion 
+
+TABLE I: State estimation SMAPE averaged over 100 trials. Lower is better. Bold : best per column. ↓: improvement over Autonomous.                                                                                   
+
+> Duffing Van der Pol Method Zero Const Sin Sqr Zero Const Sin Sqr Autonomous 19.3 74.6 37.1 40.7 17.7 32.6 20.2 22.2 Curriculum 33.0 80.5 67.3 71.9 51.4 76.3 81.2 81.4 HyperKKL obs 5.6 ↓21.1 ↓22.7 ↓21.3 ↓5.3 ↓26.0 ↓15.5 ↓17.9 ↓
+> HyperKKL dyn 8.2 ↓57.3 ↓29.7 ↓30.7 ↓5.0 ↓32.7 18.8 ↓20.8 ↓
+> R¨ ossler FitzHugh–Nagumo Method Zero Const Sin Sqr Zero Const Sin Sqr Autonomous 64.9 66.9 64.8 64.9 9.8 61.4 41.3 45.0 Curriculum 98 103.1 103.0 103.3 59.6 67.0 55.6 54.9 HyperKKL obs 64.4 ↓68.0 66.5 68.8 9.9 42.1 ↓30.9 ↓32.5 ↓
+> HyperKKL dyn 52.7 ↓55.4 ↓53.5 ↓54.0 ↓17.0 54.6 ↓40.8 ↓44.5 ↓
+
+We report the SMAPE in Table I and discuss the results in light of the two motivating questions posed in the intro-duction. 
+
+Q1: Is input conditioning necessary, and which strategy is more effective? 
+
+Both HyperKKL obs and HyperKKL dyn consistently reduce SMAPE relative to the autonomous baseline under non-zero forcing. Under zero input, both variants recover the au-tonomous performance. The boxplots for 100 trials (Fig. 2b– 2e) confirm that these gains are statistically consistent. HyperKKL obs achieves the best or tied-best SMAPE in 13 out of 16 system/input combinations, while HyperKKL dyn 
+
+is best in only 2. On the Duffing oscillator under constant forcing, HyperKKL obs reduces SMAPE from 0.569 to 0.079 3                
+
+> 2
+> 1
+> >< 0
+> -1
+> .0 .5 .0 - .5
+> -2_ .0 - .5
+> 3
+> 2
+> 1
+> 0
+> -1
+> -2 -3
+> /'Ii
+> I I'
+> ,,, ....
+> ,, \
+> ..,, \
+> ?/ \
+> 0
+> I
+> .,
+> I
+> I
+> I
+> ,'\
+> , ' l''\'\
+> ... III
+> .. t'
+> III
+> II
+> II\
+> I
+> I
+> .,,.,,
+> I/, \,t
+> I
+> ,.
+> 10
+> ,, t'
+> II
+> II
+> ,, ,, I
+> ,,, ... \t
+> I
+> I
+> I
+> I
+> I
+> I
+> I
+> I
+> II
+> I
+> I /.. ,I
+> ,'
+> I \
+> II'II
+> 'I
+> I
+> I
+> 20
+> I'
+> III
+> ..
+> '\
+> \
+> I\
+
+- 
+
+> \I
+
+.. \ I._   
+
+> 1
+> 0
+> 30
+> Time
+> \
+> I
+> IIIII
+> \I
+> \I
+> 2.
+> I
+
+-            
+
+> ,, ,\I\
+> II'I'I
+> I
+> I
+> I
+> II
+> I
+> I
+> \.
+> 27I
+> II.. ,
+> ' , ..
+> 40
+> Ground Truth Autonomous Curriculum
+> 1
+> I
+> I
+> I
+> I
+> 'I
+> I
+> I
+> I
+> I
+> I
+> I
+> I
+> I
+> I
+> \'\,
+> 28
+> •
+> ''II
+> I
+> I
+> I
+> 29
+> II
+> I/
+> l/
+> ,, I
+> Hype rKK Lobs
+> Hype rKK Ldyn
+> I
+> I
+> I
+> I
+> I
+> '
+> I
+> Ir' r
+> ,,
+> IIII
+> 'I
+> I''
+> 30
+> (
+> I/
+> f,,/
+> I\..
+> 50
+
+(a) State estimation under square wave input for the Duffing oscillator. (b) SMAPE: Duffing oscillator. 
+
+(c) SMAPE: Van der Pol. (d) SMAPE: R¨ ossler system. (e) SMAPE: FitzHugh–Nagumo. 
+
+Fig. 2: Estimation results across all benchmark systems over 100 trials with random initial conditions. (a) HyperKKL obs 
+
+tracks the ground truth across input transitions, while the Autonomous baseline accumulates persistent phase drift. (b)– (e) SMAPE distributions confirm statistically robust improvements. (86% reduction), compared to 0.387 for HyperKKL dyn . On the R¨ ossler system under sinusoidal forcing, neither variant improves over the autonomous baseline. The chaotic attrac-tor’s sensitivity, combined with the higher latent dimension, makes input conditioning harder and may require longer input windows or richer architectures. We attribute the better performance of HyperKKL obs over HyperKKL dyn to the optimization process rather than a repre-sentational advantage. HyperKKL obs decouples the injection of the input signal from the modulation of the neural KKL observer. That is, the GRU processes the input history into a compact embedding ℓ, and the injection network ϕω maps 
+
+ℓ to a correction in the latent dynamics without interfering with the pretrained maps ˆT and ˆT ∗. Input processing and observer conditioning are thus learned independently in HyperKKL obs , which yields a simpler optimization land-scape. In HyperKKL dyn , these two tasks are entangled, as the hypernetwork must simultaneously interpret the input and reshape all network weights, leading to a harder joint optimization. The curriculum-learning baseline, i.e., the data-only paradigm, consistently degrades estimation performance. This demonstrates that the limitation of autonomous KKL observers under forcing is not a data problem but an ar-chitectural one. Exposing the static maps ˆT (x), ˆT ∗(z) to richer training data harms performance by corrupting the autonomous embedding, because the architecture itself can-not represent the time-varying solution of PDE (3). Dynamic weights via input conditioning are a necessary architectural ingredient. It is important to discuss why the autonomous observer still provides reasonable estimates under moderate inputs. From [8], an input u(t) applied to a neural KKL observer, which was learned under u ≡ 0, can be interpreted as an unmodeled disturbance. The Hurwitz stability of the latent dynamics provides inherent robustness. Thus, a simple input induces a bounded, persistent estimation error rather than divergence. This explains the degraded but stable behavior of the autonomous baseline. While the autonomous observer tolerates the input as noise, the HyperKKL variants actively incorporate it, converting an unmodeled disturbance into structured information that reduces the estimation error. 
+
+Q2: Why are hypernetworks the appropriate mechanism? 
+
+Input conditioning in neural KKL observers enables gen-eralization across a continuous family of input signals (con-stants, sinusoids, square waves) using a single trained model, without retraining for each new realization. As analyzed in [23], data-conditioned hypernetworks generate weights based on input characteristics. This enables the target network to dynamically adjust its behavior with better generalization to unseen data. In parametric dynamical systems, [31] demon-strated that hypernetworks can interpolate in the space of models rather than observations. This captures diverse system behaviors across parameter regimes without per-instance re-training. In our setting, each input realization induces distinct effective dynamics and an associated optimal transformation map and its inverse. The hypernetwork learns a smooth mapping from input history to neural network parameters, enabling adaptation across U. During inference, a new input requires only a forward pass through the GRU, with no retraining needed. The results confirm that both variants achieve consistent improvements across four qualitatively different input regimes that were not individually optimized for, demonstrating a general input-to-observer mapping. VI. C ONCLUSION 
+
+We presented a hypernetwork-based framework (Hyper-KKL) for designing KKL observers for controlled nonlinear systems. We proposed two methods: HyperKKL obs , which learns static transformation mappings via encoder-decoder networks and employs input injection in the observer dynam-ics, and HyperKKL dyn , which learns dynamic transformation mappings via weight conditioning of encoder and decoder by a hypernetwork. We derived worst-case error bounds that explicitly relate the encoder-decoder approximation errors, the PDE residual, and the decoder’s Lipschitz constant. Through numerical experiments, we demonstrated that input conditioning is necessary for learning the transformation map and its inverse for a KKL observer. Future work will investigate spectral normalization to bound the decoder’s Lipschitz constant, hybrid architectures that dynamically condition only the decoder, and extensions to unmeasured disturbances via a disturbance estimation module. REFERENCES [1] N. Kazantzis and C. Kravaris, “Nonlinear observer design using Lyapunov’s auxiliary theorem,” Systems & Control Letters , vol. 34, no. 5, pp. 241–247, 1998. [2] V. Andrieu and L. Praly, “On the existence of a Kazantzis– Kravaris/Luenberger observer,” SIAM Journal on Control and Opti-mization , vol. 45, no. 2, pp. 432–456, 2006. [3] L. Brivadis, V. Andrieu, P. Bernard, and U. Serres, “Further remarks on KKL observers,” Systems & Control Letters , vol. 172, p. 105429, 2023. [4] P. Bernard, V. Andrieu, and D. Astolfi, “Observer design for continuous-time dynamical systems,” Annual Reviews in Control ,vol. 53, pp. 224–248, 2022. [5] V. Andrieu and P. Bernard, “Remarks about the numerical inversion of injective nonlinear maps,” in 60th IEEE Conference on Decision and Control (CDC) , 2021, pp. 5428–5434. [6] K. J. ˚ Astr¨ om and R. Murray, Feedback Systems: An Introduction for Scientists and Engineers . Princeton University Press, 2021. [7] P. Bernard, “Luenberger observers for nonlinear controlled systems,” in 56th IEEE Conference on Decision and Control (CDC) , 2017, pp. 3676–3681. [8] P. Bernard and V. Andrieu, “Luenberger observers for nonautonomous nonlinear systems,” IEEE Transactions on Automatic Control , vol. 64, no. 1, pp. 270–281, 2018. [9] P. Bernard, Observer Design for Nonlinear Systems . Springer, 2019, vol. 479. [10] M. Buisson-Fenet, L. Bahr, V. Morgenthaler, and F. Di Meglio, “To-wards gain tuning for numerical KKL observers,” IFAC-PapersOnLine ,vol. 56, no. 2, pp. 4061–4067, 2023. [11] M. U. B. Niazi, J. Cao, M. Barreau, and K. H. Johansson, “KKL ob-server synthesis for nonlinear systems via physics-informed learning,” 
+
+arXiv:2501.11655 , 2025. [12] L. d. C. Ramos, F. Di Meglio, V. Morgenthaler, L. F. F. da Silva, and P. Bernard, “Numerical design of Luenberger observers for nonlinear systems,” in 59th IEEE Conference on Decision and Control (CDC) ,2020, pp. 5435–5442. [13] S. Janny, V. Andrieu, M. Nadri, and C. Wolf, “Deep KKL: Data-driven output prediction for non-linear systems,” in 60th IEEE Conference on Decision and Control (CDC) , 2021, pp. 4376–4381. [14] M. U. B. Niazi, J. Cao, X. Sun, A. Das, and K. H. Johansson, “Learning-based design of Luenberger observers for autonomous nonlinear systems,” in American Control Conference (ACC) , 2023, pp. 3048–3055. [15] K. Miao and K. Gatsis, “Learning robust state observers using neural ODEs,” in Learning for Dynamics and Control Conference , 2023, pp. 208–219. [16] Y. Marani, I. Filho, T. Al-Naffouri, and T. M. L. Kirati, “Unsupervised physics informed neural network based nonlinear observer design for autonomous systems using contraction analysis,” in European Control Conference (ECC) , 2025, pp. 2327–2332. [17] J. Peralez and M. Nadri, “Deep learning-based Luenberger observer design for discrete-time nonlinear systems,” in 60th IEEE Conference on Decision and Control (CDC) , 2021, pp. 4370–4375. [18] J. Peralez, M. Nadri, and D. Astolfi, “Neural network-based KKL observer for nonlinear discrete-time systems,” in 61st IEEE Conference on Decision and Control (CDC) , 2022, pp. 2105–2110. [19] J. Peralez and M. Nadri, “Deep model-free KKL observer: A switching approach,” in Learning for Dynamics and Control Conference , 2024, pp. 929–940. [20] Y. Marani, Z. Fu, I. N’doye, E. Feron, T. M. L. Kirati, and A. Bayen, “Position and speed estimation using deep learning-based KKL ob-server in mixed autonomy traffic systems,” in 64th IEEE Conference on Decision and Control (CDC) , 2025, pp. 1181–1187. [21] M. Woelk, J. Morris, and W. Tang, “Neural luenberger state observer for nonautonomous nonlinear systems,” 2026. [22] D. Ha, A. M. Dai, and Q. V. Le, “HyperNetworks,” arXiv preprint arXiv:1609.09106 , 2016. [23] V. K. Chauhan, J. Zhou, P. Lu, S. Molaei, and D. A. Clifton, “A brief review of hypernetworks in deep learning,” Artificial Intelligence Review , vol. 57, no. 9, p. 250, 2024. [24] K. Cho, B. Van Merri¨ enboer, C ¸ . Gulc ¸ehre, D. Bahdanau, F. Bougares, H. Schwenk, and Y. Bengio, “Learning phrase representations using RNN encoder–decoder for statistical machine translation,” in Proceed-ings of the Conference on Empirical Methods in Natural Language Processing (EMNLP) , 2014, pp. 1724–1734. [25] E. D. Sontag, Mathematical Control Theory: Deterministic Finite Dimensional Systems , 2nd ed. Springer New York, NY, 2013, vol. 6. [26] H. L. Royden and P. Fitzpatrick, Real Analysis , 4th ed. Prentice Hall, 2010. [27] G. Cybenko, “Approximation by superpositions of a sigmoidal func-tion,” Mathematics of Control, Signals and Systems , vol. 2, no. 4, pp. 303–314, 1989. [28] K. Hornik, M. Stinchcombe, and H. White, “Multilayer feedforward networks are universal approximators,” Neural Networks , vol. 2, no. 5, pp. 359–366, 1989. [29] T. Miyato, T. Kataoka, M. Koyama, and Y. Yoshida, “Spectral normalization for generative adversarial networks,” in International Conference on Learning Representations , 2018. [30] Y. Bengio, J. Louradour, R. Collobert, and J. Weston, “Curriculum learning,” in Proceedings of the 26th International Conference on Machine Learning (ICML) , 2009, pp. 41–48. [31] P. R. Vlachas, J. Zavadlav, and P. Koumoutsakos, “Beyond static mod-els: Hypernetworks for adaptive and generalizable forecasting in com-plex parametric dynamical systems,” arXiv preprint arXiv:2506.19609 ,2025.
