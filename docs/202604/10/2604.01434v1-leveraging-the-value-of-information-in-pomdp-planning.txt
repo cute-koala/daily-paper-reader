@@ -1,0 +1,2505 @@
+Title: Leveraging the Value of Information in POMDP Planning
+
+URL Source: https://arxiv.org/pdf/2604.01434v1
+
+Published Time: Fri, 03 Apr 2026 00:13:02 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Leveraging the Value of Information in POMDP Planning 
+
+## Zakariya Laouar 1, Qi Heng Ho 2, Zachary Sunberg 1
+
+> 1
+
+Department of Aerospace Engineering Sciences, University of Colorado Boulder 
+
+> 2
+
+Kevin T. Crofton Department of Aerospace and Ocean Engineering, Virginia Tech zakariya.laouar@colorado.edu, qihengho@vt.edu, zachary.sunberg@colorado.edu 
+
+Abstract 
+
+Partially observable Markov decision processes (POMDPs) offer a principled formalism for planning under state and tran-sition uncertainty. Despite advances made towards solving large POMDPs, obtaining performant policies under limited planning time remains a major challenge due to the curse of dimensionality and the curse of history. For many POMDP problems, the value of information (VOI) — the expected per-formance gain from reasoning about observations — varies over the belief space. We introduce a dynamic programming framework that exploits this structure by conditionally pro-cessing observations based on the value of information at each belief. Building on this framework, we propose Value of Information Monte Carlo planning (VOIMCP), a Monte Carlo Tree Search algorithm that allocates computational effort more efficiently by selectively disregarding observa-tion information when the VOI is low, avoiding unnecessary branching of observations. We provide theoretical guaran-tees on the near-optimality of our VOI reasoning framework and derive non-asymptotic convergence bounds for VOIMCP. Simulation evaluations demonstrate that VOIMCP outper-forms baselines on several POMDP benchmarks. 
+
+## Introduction 
+
+Decision making in uncertain environments presents a criti-cal challenge. The partially observable Markov decision pro-cess (POMDP) framework provides a principled way to plan in such environments ( ˚ Astr¨ om 1965; Smallwood and Sondik 1973). Their applications include robotics (Lauri, Hsu, and Pajarinen 2023), resource management (Papakonstantinou and Shinozuka 2014), human-computer interaction (Chen et al. 2020), and medical diagnosis (Ayer, Alagoz, and Stout 2012). However, finding even approximate solutions for POMDPs is computationally intractable (Madani, Hanks, and Condon 2003) for two main reasons. Firstly, the computational complexity of the problem scales exponentially with the dimensionality of the state, action, and observation spaces. Secondly, since the state is not directly observable, optimal decisions may depend on the entire history of previous actions and observations, the space of which grows exponentially with the planning hori-zon. These two fundamental challenges are known as the 
+
+Accepted for publication in the Proceedings of the 36th Interna-tional Conference on Automated Planning and Scheduling (ICAPS 2026). 
+
+curse of dimensionality and curse of history . In this work, we aim to alleviate the curse of history by developing a frame-work that enables planners to dynamically prune areas of the action-observation histories while maintaining performance guarantees. To address the challenges of POMDP planning, many practical solvers have been proposed in the past few decades (Shani, Pineau, and Kaplow 2013; Silver and Veness 2010; Kurniawati, Hsu, and Lee 2009; Smith and Simmons 2005; Somani et al. 2013; Sunberg and Kochenderfer 2018). Sampling-based approximate solvers such as Silver and Ve-ness (2010); Sunberg and Kochenderfer (2018); Somani et al. (2013) have made good progress, especially regarding the curse of dimensionality in the state space, by employ-ing particles in search and exploring a subset of histories in the search tree. Nonetheless, problems with large observa-tion spaces still remain relatively difficult for state-of-the-art planners. In such problems, many planners tend to generate shallow trees, which lead to myopic plans that fail to capture long-horizon consequences of such plans. For many POMDP problems, the value of information (VOI) (Wei 2024; Flaspohler, Roy, and Fisher III 2020), which is the performance gain from fully reasoning about all possible observations from a belief or history, varies sig-nificantly over the belief space. This suggests that it may not always be necessary to consider all possible observations at every decision point: when the VOI is small, ignoring ob-servations may incur negligible performance loss while sub-stantially reducing the effective branching on observations. In this work, we introduce an adaptive VOI framework that formalizes this structure by selectively processing ob-servations based on the VOI at a belief. When VOI is low, this framework disregards uninformative observations. We further derive an upper bound on the suboptimality incurred by this adaptive VOI framework relative to the original POMDP value function. This framework offers a principled mechanism that formalizes the trade-off between open-loop execution (disregarding observations) and closed-loop exe-cution (reasoning over observations). Then, we introduce the VOI-POMDP, a structural transformation that encodes this meta-level choice directly into the problem dynamics. Leveraging this theoretical framework, we propose value of information Monte Carlo planning (VOIMCP), an MCTS-based POMDP planning algorithm that selectively 
+
+> arXiv:2604.01434v1 [cs.AI] 1 Apr 2026
+
+branches on observations when useful, enabling more effi-cient planning for POMDPs with lower value of informa-tion by implicitly pruning the history space and reducing the effective branching factor on observations. We prove the non-asymptotic theoretical properties of VOIMCP, and show that we can also recover the optimal POMDP pol-icy. Simulation experiments across a series of benchmarks show that incorporating our VOI framework in online time-constrained planning leads to better performance by en-abling long-horizon reasoning. 
+
+## Related Work 
+
+Incorporating the value of information in decision making can be traced back to work on information value theory (Howard 1966). In this line of work, the value of computa-tion is treated such that computations are selected according to the expected improvement in decision quality resulting from their execution. Russell and Wefald (1988) and Russell and Wefald (1991) formulated a meta-level decision prob-lem designed to enable optimal allocation of computation, while other works employ heuristic approximations (Hay et al. 2012). However, these approaches are limited to fully observable sequential decision making. The use of the VOI for partially observable problems has been relatively less explored. Wei (2024) discusses the value of information based on the difference between purely open-loop and purely closed-loop policies. In contrast, we con-sider a recursive formulation of VOI that enables adaptive switching between the two modalities. A recent work by Flaspohler, Roy, and Fisher III (2020) shows how VOI can be used to construct macro-actions in POMDPs. The authors propose a VOI framework simi-lar to the one we introduce in this paper. However, while Flaspohler, Roy, and Fisher III (2020) define a Bellman backup based on an absolute difference threshold between open-loop and closed-loop values, our formulation com-putes a relative percentage difference threshold of the closed-loop value. This formulation is more general and in-tuitive since the VOI reasoning does not depend on the spe-cific POMDP instantiation, its reward structure or the mag-nitude of its optimal value. This enables adaptive reasoning. Additionally, we introduce a novel alternative POMDP rep-resentation that exposes the machinery relevant for VOI rea-soning in planning. Finally, we leverage our framework in a variant of POMCP for sampling-based planning instead of a method to construct macro-actions. A core challenge when using tree search methods to solve POMDPs lies in the search strategy: when to sim-ulate empirically valuable actions vs. lesser explored ac-tions. This exploration-exploitation tradeoff has been the subject of many works attempting to address the curse of his-tory. Several approaches have incorporated heuristic infor-mation gathering procedures. Do Carmo Alves et al. (2023); Pokharel (2024) use belief and observation entropy heuris-tics to bias the policy towards entropy-reducing actions as a proxy for actions with high VOI. However, neither belief nor observation entropy alone can sufficiently characterize the true VOI at a belief. Instead, we tackle the exploration-exploitation tradeoff by explicitly reasoning over VOI. Kim, Karunanayake, and Kurniawati (2023); Kim and Kurniawati (2025) have explored sampling actions based on a reference policy instead of fully expanding them at each node, showing promise in addressing challenges with long-horizon planning. While Kim, Karunanayake, and Kurni-awati (2023) focus on reducing the effective action branch-ing by embedding a reference policy in the objective, our work can be seen as reducing the effective observation branching factor when the value gained by branching is low. Our work is also related to abstraction (Ho et al. 2019) and selective perception (McCallum 1996). In particular, taking an open-loop execution mode in our framework is equivalent to abstracting all observations into a single observation. In online POMDP planning, Wu et al. (2021) propose a belief packing procedure that merges similar beliefs, effectively creating a branch that corresponds to an abstracted observa-tion. On the other hand, our methodology adaptively ignores observations based on the VOI rather than belief similarity. This distinction is critical because observations may gener-ate statistically dissimilar beliefs that nonetheless support the same optimal policy. Whereas similarity-based metrics would force branching in these cases, our value-based ap-proach identifies that the information is decision-irrelevant, enabling more aggressive pruning of the search space. 
+
+## Partially Observable Markov Decision Processes 
+
+A finite-horizon Partially Observable Markov Decision Pro-cess (POMDP) can be formally represented as a tuple P
+
+= (S, A, O, T , R, Z, D, b 0, γ ), where: S, A, and O are fi-nite sets of states, actions, and observations, respectively. 
+
+T : S × A × S → [0 , 1] is the transition probability func-tion, R : S × A → [−Rmax , R max ], for some Rmax > 0,is the immediate reward function, Z : S × A × O → [0 , 1] 
+
+is the probabilistic observation function, D is the horizon of the problem, b0 ∈ ∆( S) is the initial belief or probability distribution over states, and γ ∈ [0 , 1] is the discount factor. A defining characteristic of POMDPs is that the state s ∈S cannot be observed directly. Instead, after taking an action 
+
+a ∈ A , an observation o ∈ O is received which provides incomplete information about the state. Unlike in MDPs, where optimal actions depend on states alone, in POMDPs, the optimal action must be computed from a history ht ∈ H 
+
+at time t, which defines a sequence of action-observation pairs: ht ≡ { b0, a 1, o 1, ..., a t, o t}. Action-terminated histo-ries are defined as ha t+1 ≡ { b0, a 1, o 1, ..., a t, o t, a t+1 }. It is sufficient to summarize the information contained in ht as the belief bt(s) ≡ P(st = s|ht) ∈ ∆( S). With a slight abuse of notation, we sometimes drop the subscript t and express histories as h and action-terminated histories as ha .A general finite-horizon policy is a sequence π =(πD , . . . , π 1) where each πd : ∆( S) → A describes how an agent behaves at any belief. The objective of the agent is to find a policy that maxi-mizes the discounted sum of future rewards for each belief starting from an initial belief b0. Formally, the optimal pol-icy is defined as: 
+
+π∗ ∈ arg max 
+
+> π
+
+E
+
+hD−1X
+
+> t=0
+
+γtr(bt, π D−t(bt)) b0
+
+i
+
+, (1) where bt is the updated belief at time t.Given an action and observation, a belief update can be performed using Bayes’ rule: 
+
+b′(s′) = τ (b, a, o )( s′) = Z(s′, o, a ) P 
+
+> s∈S
+
+T (s, a, s ′) b(s)
+
+P(o | b, a ) ,
+
+(2) where the probability of observing o is 
+
+P(o | b, a ) = X
+
+> s′∈S
+
+Z(s′, o, a ) X
+
+> s∈S
+
+T (s, a, s ′)b(s). (3) The optimal value function, denoted V ∗ 
+
+> d
+
+(b), represents the maximum discounted expected reward obtainable from be-lief b with d steps remaining. It is defined recursively by the Bellman optimality equation: 
+
+V ∗ 
+
+> d
+
+(b) = max 
+
+> a∈A
+
+n
+
+r(b, a ) + γE[V ∗
+
+> d−1
+
+(τ (b, a, o ))] 
+
+o
+
+, (4) with V ∗ 
+
+> 0
+
+(b) = 0 . Here, the expected immediate reward is 
+
+r(b, a ) = P 
+
+> s∈S
+
+b(s) R(s, a ), and the expectation over fu-ture values is computed with respect to the observation prob-abilities: 
+
+E[·] = X
+
+> o∈O
+
+P(o | b, a ) V ∗
+
+> d−1
+
+(τ (b, a, o )) . (5) It is often useful to express the optimal value for a partic-ular action at a belief using the Q-value function: 
+
+Q∗
+
+> d
+
+(b, a ) = r(b, a ) + γE[V ∗
+
+> d−1
+
+(τ (b, a, o ))] . (6) Consequently, the optimal decision rule for the horizon step d can be retrieved directly from the Q-values: 
+
+π∗ 
+
+> d
+
+(b) ∈ arg max 
+
+> a∈A
+
+Q∗
+
+> d
+
+(b, a ). (7) 
+
+## Value of Information for POMDPs 
+
+The curse of history renders exact planning intractable for non-trivial horizons and problem sizes. However, the stan-dard formulation implicitly assumes that every observation is critical for decision-making, necessitating reasoning over all possible reachable histories. In practice, the utility of observation information is rarely uniform across the belief space; there are often regions where an agent can act effec-tively without immediate observation feedback. In this sec-tion, we introduce our adaptive value of information (VOI) reasoning framework to exploit this non-uniformity. By for-malizing the trade-off between open-loop execution (disre-garding observations) and closed-loop execution (branching on observations), we expose a principled mechanism that en-ables an agent to selectively prune the history space while maintaining bounds on optimality. This lays the fundamen-tal groundwork for our algorithm that exploits this tradeoff for improved search efficiency. 
+
+Adaptive Value of Information 
+
+As discussed in the previous section, the optimal solution to a POMDP satisfies the Bellman equation given in (4). Here, the agent performs a Bayesian belief update (2) after every action and observation pair. An agent that integrates feed-back at every step is said to act in a closed-loop manner: by acting, observing, and updating its belief, it closes the feedback loop prior to every subsequent decision. The cor-responding closed-loop value function is 
+
+V CL d (b) = max 
+
+> a∈A
+
+n
+
+r(b, a ) + γEo
+
+V CL d−1(τ (b, a, o )) o
+
+. (8) From a computational complexity perspective, the num-ber of distinct histories at depth d is 
+
+|H d|CL = ( |A| · |O| )d. (9) Since the branching factor depends on the size of the ob-servation space, the number of histories grows exponentially with the planning horizon. This relationship directly high-lights the curse of history .Alternatively, an agent may choose to ignore observa-tions, planning based purely on expected beliefs. This is referred to as open-loop reasoning. Formally, an agent em-ploys an open-loop belief update by marginalizing over the observation space in (2), such that 
+
+τ (b, a )( s′) = Eo[τ (b, a, o )] = X
+
+> s
+
+T (s, a, s ′) b(s). (10) The resulting open-loop value function is defined as 
+
+V OL d (b) = max 
+
+> a∈A
+
+n
+
+r(b, a ) + γV OL d−1(τ (b, a )) 
+
+o
+
+, (11) with V OL  
+
+> 0
+
+(b) = 0 . The computational advantage is imme-diately apparent: the number of distinct histories at depth d
+
+when acting open-loop drops by a factor of |O| to 
+
+|H d|OL = |A| d ≪ |H d|CL . (12) However, acting open-loop is generally suboptimal. Since the value function is convex with respect to the belief state (Smallwood and Sondik 1973), Jensen’s inequality implies that the value of the expected belief is upper bounded by the expected value of the posterior beliefs: 
+
+Eo[V ∗ 
+
+> d
+
+(τ (b, a, o ))] ≥ V ∗ 
+
+> d
+
+(Eo[τ (b, a, o )]) , (13) 
+
+V CL d ≥ V OL d . (14) We can quantify this suboptimality as the simple value of information (VOI), defined as the difference between the closed-loop and open-loop values (Wei 2024): 
+
+V OI d(b) = V CL d (b) − V OL d (b). (15) The simple VOI presents a static dichotomy: it compares a policy that always observes against one that never observes over the horizon d. However, this fails to capture the poten-tial for adaptive reasoning over the value of information. In many POMDPs, the performance gain from reasoning about observations varies over the belief space. For instance, an agent may justifiably act in an open-loop manner while ob-servations are uninformative, but must switch to closed-loop planning as uncertainty accumulates. Therefore, a more nu-anced treatment of VOI requires evaluating the value of in-formation locally at each belief state, allowing the agent to dynamically switch between open-loop and closed-loop modalities. In what follows, we outline a framework designed to en-able this selective reasoning. We begin by defining a new value function, denoted as ˆV ∗ 
+
+> d
+
+, which is the value of a policy that selects between open-loop and closed-loop reasoning strategies based on the criterion defined below. The core of this framework is our proposed adaptive value of information criterion. At each decision step, the agent computes the value difference between the two strategies and acts closed-loop only if the value gain exceeds a thresh-old parameter κ. We define the adaptive VOI as: 
+
+ˆV OI κd (b) = ˆV CL d (b) − ˆV OL d (b), (16) where 
+
+ˆV OL d (b) = max 
+
+> a∈A
+
+n
+
+r(b, a ) + γ ˆV ∗
+
+> d−1
+
+(τ (b, a )) 
+
+o
+
+, (17) 
+
+ˆV CL d (b) = max 
+
+> a∈A
+
+n
+
+r(b, a ) + γEo
+
+ ˆV ∗
+
+> d−1
+
+(τ (b, a, o )) o
+
+. (18) Crucially, unlike the simple VOI, where open-loop and closed-loop values are computed independently, our com-ponents ˆV OL d and ˆV CL d are coupled recursively through the optimal κ-adaptive value function ˆVd−1, defined as 
+
+ˆV ∗ 
+
+> d
+
+(b) = 
+
+( ˆV OL d (b), if ˆV OL d (b) ≥ ˆV CL d (b) − κ| ˆV CL d (b)|,
+
+ˆV CL d (b), otherwise, (19) for κ ∈ [0 , 1] .With ˆV ∗ 
+
+> 0
+
+= 0 , it is clear by induction on d that ˆV ∗ 
+
+> d
+
+is bounded and exists for any d ∈ { 0, . . . , D }. (19) represents a Bellman-like update under the operator Bκ, where 
+
+ˆV ∗ 
+
+> d
+
+(b) = Bκ ˆV ∗
+
+> d−1
+
+(b). (20) 
+
+ˆV ∗ defines a decision rule at each belief b based on κ. If the open-loop backup value at b is within κ of the closed-loop value, the ˆV OI κd (b) is sufficiently low . Therefore, the agent performs the open-loop backup, which ignores redun-dant information. On the other hand, if the V OI κd (b) is rela-tively high , there is too much value to be lost by disregarding observations; therefore, the agent performs the full closed-loop backup. This adaptive reasoning is applied at every de-cision step, enabling the agent to selectively incur the cost of closed-loop reasoning only when the adaptive VOI justifies it. As a result, the policy interpolates between purely open-loop behavior (when κ is large and VOI is generally low) and fully closed-loop behavior (when κ is small and VOI is high), reducing unnecessary reasoning over future obser-vations in low-VOI regions while preserving near-optimal performance where observations are valuable. 
+
+Bounded suboptimality 
+
+Here, we analyze the suboptimality of the adaptive VOI value. We define the regret ρ of the adaptive VOI value for d
+
+steps at a belief b as 
+
+ρd(b) = V ∗ 
+
+> d
+
+(b) − ˆV ∗ 
+
+> d
+
+(b) . (21) In the following theorem, we prove that the worst-case regret is bounded by a function of κ.
+
+Theorem 1 (Bounded Regret) . Let κ ∈ [0 , 1] . Then, for any 
+
+b and d ≥ 1,
+
+ρd(b) ≤ κ Rmax 
+
+1 − γ
+
+ 1 − γd
+
+1 − γ
+
+
+
+.
+
+Proof. Let ρd(b) = V ∗ 
+
+> d
+
+(b) − ˆV ∗ 
+
+> d
+
+(b) . Let B be the Bellman operator for (4). Then, by the triangle inequality, 
+
+ρd(b) = BV ∗
+
+> d−1
+
+(b) − Bκ ˆV ∗
+
+> d−1
+
+(b)
+
+≤ BV ∗
+
+> d−1
+
+(b) − B ˆV ∗
+
+> d−1
+
+(b) + B ˆV ∗
+
+> d−1
+
+(b) − Bκ ˆV ∗
+
+> d−1
+
+(b)
+
+The first term is a γ-contraction. For the second term, (19) implies the single-step suboptimality is at most 
+
+κ | ˆV CL d (b)| ≤ κ Rmax  
+
+> 1−γ
+
+, and since V ∗ 
+
+> 0
+
+= ˆV ∗ 
+
+> 0
+
+, we have that 
+
+ρd(b) ≤
+
+> d
+
+X
+
+> t=1
+
+γd−t(κ| ˆV CL d (b)|) ≤
+
+> d
+
+X
+
+> t=1
+
+γd−t(κ Rmax 
+
+1 − γ )= κ Rmax 
+
+1 − γ
+
+ 1 − γd
+
+1 − γ
+
+
+
+Theorem 1 shows that the adaptive VOI reasoning pro-vides a sound and bounded approximation of V ∗ 
+
+> d
+
+. In partic-ular, the adaptive VOI regret scales linearly with the param-eter κ, ensuring that the approximation error remains con-trolled. This result motivates the use of the adaptive VOI to efficiently allocate planning computation in the pursuit of mitigating the curse of history, especially in settings where the intrinsic VOI is low and the resulting regret is small. 
+
+## POMDP Planning using Value of Information 
+
+This section demonstrates how the adaptive VOI reasoning framework can be integrated into a planning algorithm to ef-fectively allocate computational effort. Optimizing the adap-tive value function ˆV ∗ directly would traditionally require evaluating and comparing the open-loop (17) and closed-loop (18) value functions at every step. Rather than perform-ing this comparison as an external step, we introduce the 
+
+Value of Information POMDP (VOI-POMDP). This meta-level representation explicitly encodes the choice between open-loop and closed-loop execution modes as distinct ac-tions within the problem structure. By unifying these modal-ities into a single decision space, we enable standard solvers to automatically perform VOI reasoning during the search process. Subsequently, we propose Value of Information Monte Carlo Planning (VOIMCP), a solver based on Monte Carlo Tree Search (MCTS) that exploits the VOI-POMDP structure for efficient planning. VOI-POMDP Representation 
+
+The adaptive VOI framework establishes a mathematical ba-sis for disregarding observations. Consequently, computing 
+
+ˆV ∗ can be viewed as a meta-level choice between open-loop and closed-loop execution modalities at each belief. The following POMDP transformation encodes this meta-level choice as distinct actions directly into the problem structure. Given a POMDP P = (S, A, O, T , R, Z, D, b 0, γ ),we define the VOI-POMDP as the tuple P′ =(S, A′, O′, T ′, R′, Z′, D, b 0, γ ). The state space S, initial belief b0, horizon D, and discount factor γ remain identical to the original problem. We construct the augmented com-ponents as follows. Let A be the original action space. We duplicate each action and define an augmented action space with an open-loop action set and a closed-loop action set: 
+
+AOL = { aOL | a ∈ A} , ACL = { aCL | a ∈ A} ,
+
+A′ = AOL ∪ A CL = {(a, m ) | a ∈ A , m ∈ { OL , CL }} .
+
+Further, we augment the observation space with a null (or uninformative) observation 
+
+O′ := O ∪ { onull },
+
+where onull is received with probability 1 under open-loop actions while observations under closed-loop actions behave as in the original POMDP: 
+
+Z′(s′, o, a m) = 
+
+(1{o = onull }, m = OL ,Z(s′, o, a ), m = CL . (22) 
+
+T ′ and R′ map both open-loop and closed-loop action vari-ants to the same values: 
+
+T ′(s, a m, s ′) = T (s, a, s ′), (23) 
+
+R′(s, a m) = R(s, a ). (24) The belief update for a VOI-POMDP depends on the ac-tion taken. For open-loop actions, the computed belief up-date marginalizes over observations, as in (10). Closed-loop actions allow for the full belief update as in (2). Thus, 
+
+b′(s′) = 
+
+τ (b, a m, o null ) = P 
+
+> s
+
+T ′(s, a, s ′) b(s), m = OL ,τ (b, a m, o ) = τ (b, a, o ), m = CL .
+
+(25) The adaptive VOI value function ˆV ′ 
+
+> d
+
+for P′ is computed recursively for d ∈ { 0, . . . , D }, starting from the base case 
+
+ˆV ′ 
+
+> 0
+
+≡ ˆV0 = 0 . To simplify notation, we denote the optimal value function for P′ as ˆV ′ 
+
+> d
+
+, dropping the superscript ∗ (i.e., 
+
+ˆV ′ 
+
+> d
+
+= ˆV ′∗  
+
+> d
+
+). The value backup is defined as: 
+
+ˆV ′ 
+
+> d
+
+(b) = Q′
+
+> d
+
+(b, ˆπ∗ 
+
+> d
+
+(b)) , ∀d ∈ { 0, . . . , D }, (26) where Q′ 
+
+> d
+
+is the standard action-value for P′, computed as: 
+
+Q′
+
+> d
+
+(b, a ) = r(b, a ) + γE
+
+h ˆV ′
+
+> d−1
+
+(τ (b, a, o )) 
+
+i
+
+. (27) and ˆπ∗ 
+
+> d
+
+denotes the optimal adaptive VOI-based policy at depth d that satisfies for every belief b
+
+ˆπ∗ 
+
+> d
+
+(b) = arg max 
+
+> a∈A ′
+
+Q′
+
+> d
+
+(b, a ), a ∈ A OL ,Q′
+
+> d
+
+(b, a ) − κ|Q′
+
+> d
+
+(b, a )|, a ∈ A CL .
+
+(28) We see that the VOI-POMDP representation preserves the same (optimal) adaptive VOI value function as (19). 
+
+Proposition 1. Let P be the original POMDP and let P′ be the corresponding transformed VOI-POMDP defined above. We have that for every depth d ∈ { 0, . . . , D } and belief 
+
+b ∈ ∆( S),
+
+ˆV ′ 
+
+> d
+
+(b) = ˆV ∗ 
+
+> d
+
+(b). (29) The VOI-POMDP representation has distinct benefits in planning. By mapping the meta-level choice to the ac-tion and value backup space, we allow standard solvers to optimize for ˆV ∗ using minor modifications to existing search heuristics. The representation structurally simplifies the search process. Although duplicating the action space doubles the nominal action branching ( |A ′| = 2 |A| ) and raises the worst-case branching factor from O(( |A||O| )d) to 
+
+O(( |A||O| + |A| )d), this cost is offset by the collapse of the observation space under open-loop actions. Under open-loop actions, the action-observation branching factor drops to 1. In practice, this prevents expanding dense observation branches of a search tree whenever VOI is low, significantly reducing the effective branching factor and enabling deeper planning under the same computational budget. 
+
+Value of Information Monte Carlo Planning 
+
+To leverage the advantages of VOI reasoning for POMDP planning, we build on PO-UCT (Silver and Veness 2010), a widely used Monte Carlo tree search (MCTS) algorithm for large POMDPs. PO-UCT extends the upper confidence trees (UCT) algorithm to partially observable problems by build-ing a search tree over the space of histories instead of states, relying solely on a generative model G of the problem. Our algorithm, called Value of Information Monte Carlo Planning (VOIMCP), models adaptive VOI reasoning by solving for ˆV ∗ 
+
+> d
+
+on P′. The procedure for VOIMCP is out-lined in Algorithm 1. The global parameters include the number of tree queries n, the exploration bonus β, the prob-lem horizon D, the discount factor γ, and κ. The S EARCH 
+
+procedure serves as the entry point, taking as input a belief b
+
+and repeatedly calling the S IMULATE procedure to build out the tree T . At each history-action node T (ha ) in the tree, the visitation count N (ha ), and the estimated value ¯Q(ha )
+
+are stored. These statistics are all initialized to 0. While our theoretical VOIMCP formulation has every simulation itera-tion reaching the full depth D, our practical implementation follows the standard PO-UCT approach for efficiency (see attached Supplementary). Specifically, when the S IMULATE 
+
+procedure expands a new history node h / ∈ T , it terminates the iteration and invokes a V ALUE ESTIMATE procedure to estimate the value of initialized leaf nodes. A common eval-uation approach is to simulate with a heuristic rollout policy. We adopt the polynomial upper confidence bound (UCB) from Shah, Xie, and Xu (2022). Our primary contribu-tion is a modified polynomial UCB, which implements the adaptive VOI backup in (26). We approximate the adaptive VOI backup operator by replacing the exact values Q′ 
+
+> d
+
+with Monte Carlo estimates ¯Q and applying a penalty κ directly to the closed-loop exploitation term. For open-loop actions, the selection metric follows the standard optimistic princi-ple: 
+
+U CB V OI (ha OL ) = ¯Q(ha OL ) + BN (ha OL ), (30) where ¯Q(·) denotes the mean value estimate of simulations that visit a history-action pair, and BN (·) denotes the poly-nomial bonus term proposed by Shah, Xie, and Xu (2022): 
+
+BN (ha m) = β1/ξ · N (h)α/ξ 
+
+N (ha m)1−η , ∀m ∈ { OL, CL },
+
+(31) parameterized by β, ξ, α , and η.For closed-loop actions, we leverage the adaptive VOI ob-jective to enforce a κ-dependent bias against unnecessary observation branching. This is achieved by deflating the ex-ploitation term in the UCB calculation: 
+
+U CB V OI (ha CL ) = ¯Q(ha CL ) − κ| ¯Q(ha CL )|
+
++ BN (ha CL ). (32) This deflation biases the search towards open-loop actions whenever the potential VOI is insufficient to meet relative tolerance κ, effectively steering the search toward the com-putationally cheaper open-loop branches. By integrating this VOI-guided reasoning into our selection policy, VOIMCP focuses computation on actions and observations that are likely to yield significant value, enabling deeper tree search while maintaining near-optimal policy quality. 
+
+Annealing for Global Convergence While a fixed κ
+
+prunes unnecessary observation branching based on a con-stant threshold (converging to ˆV ∗ 
+
+> D
+
+), recovering the optimal POMDP value V ∗ 
+
+> D
+
+requires this bias to vanish over time. To achieve this, we employ an annealing schedule where κN
+
+decays as a function of the visitation counts. Specifically, we require κ to decay as a function of the confidence width, i.e., 
+
+0 ≤ κi(t, s i) ≤ 1 
+
+> cκRmax
+
+Bt,s i where cκ > 1. This ensures that the selection bias is always dominated by the confidence width; as BN → 0, the bias vanishes and the algorithm re-covers the optimal value function in the limit. 
+
+Convergence Analysis of VOIMCP 
+
+Here, we analyze the non-asymptotic properties of VOIMCP. First, we prove that for a fixed κ, VOIMCP con-verges polynomially to the optimal VOI-value function ˆV ∗ 
+
+> D
+
+.Let ¯Vn(b0) = 1
+
+> n
+
+P 
+
+> a∈A ′
+
+N (h0a) ¯Q(h0a) denote the value estimate at the root after n simulations, where h0 = {b0}.Then we have the following result. 
+
+Theorem 2. Consider a POMDP P with D ≥ 1 and a fixed 
+
+κ ∈ [0 , 1] . There exists a valid configuration of the algo-rithm’s depth dependent parameters (specifically, depth de-pendent ξ, α, β detailed in the Supplementary) such that for any η ∈ [0 .5, 1) and any initial belief b0, the following claim holds for the output ¯Vn(b0) of VOIMCP with n simulations: 
+
+|E[ ¯Vn(b0)] − ˆV ∗ 
+
+> D
+
+(b0)| ≤ O(nη−1). (33) Algorithm 1: VOIMCP                                                                                      
+
+> 1: procedure SEARCH (b)2: for all i= 1 , . . . , n do
+> 3: s∼b
+> 4: h0={b}
+> 5: SIMULATE (s, h 0,0)6: end for
+> 7: return arg max
+> a∈A ′
+> ¯Q(h0a)
+> 8: end procedure
+> 9: procedure SIMULATE (s, h, depth )10: if depth =Dthen
+> 11: return 0
+> 12: end if
+> 13: if h / ∈Tthen
+> 14: for all a∈ A ′do
+> 15: T(ha )←(0 ,0)
+> 16: end for
+> 17: end if
+> 18: a∗∈arg max
+> a∈A ′
+> U CB V OI (ha )
+> 19: if a∗∈ A CL then
+> 20: (s′, o, r )∼ G (s, a ∗)
+> 21: else
+> 22: (s′, r )∼ G (s, a ∗)
+> 23: o←onull
+> 24: end if
+> 25: N(h)←N(h) + 1 ;N(ha ∗)←N(ha ∗) + 1
+> 26: R←r+γSIMULATE (s′, ha ∗o, depth +1)
+> 27: ¯Q(ha ∗)←¯Q(ha ∗) + R−¯Q(ha ∗)
+> N(ha ∗)
+> 28: return R
+> 29: end procedure
+
+Proof Sketch. We defer the detailed derivation to the Sup-plementary. The proof structure adapts the analysis of (Shah, Xie, and Xu 2022) and models the search tree as a hierar-chy of non-stationary κ-biased Multi-Armed Bandit (MAB) problems. Using backward induction from the leaf nodes to the root, we prove polynomial concentration and conver-gence to the VOI-optimal value. Finally, we transfer this re-sult to VOIMCP via a history-MDP equivalence. We now demonstrate that by annealing κ as a function of the confidence bonus, the selection bias vanishes sufficiently fast to guarantee convergence to V ∗ 
+
+> D
+
+.
+
+Theorem 3. Consider a POMDP P with D ≥ 1 and 
+
+0 ≤ κi(t, s i) ≤ 1 
+
+> cκRmax
+
+Bt,s i for some cκ > 1. There ex-ists a valid configuration of the algorithm’s depth dependent parameters (specifically, depth dependent ξ, α, β detailed in the Supplementary) such that for any η ∈ [0 .5, 1) and any initial belief b0, the following claim holds for the output 
+
+¯Vn(b0) of VOIMCP with n simulations: 
+
+|E[ ¯Vn(b0)] − V ∗ 
+
+> D
+
+(b0)| ≤ O(nη−1). (34) 
+
+Proof Sketch. We defer the detailed derivation to the Sup-plementary. The proof follows the same backward induc-tion structure established in Theorem 2. The distinction lies in the selection bias for closed-loop actions: by enforcing 
+
+κi(t, s i) ≤ 1 
+
+> cκRmax
+
+Bt,s i , the VOI penalty effectively acts as a vanishing exploration noise rather than a fixed bias. For ev-ery node, as visitation count → ∞ , this bias term shrinks to zero and is asymptotically dominated by the suboptimality gap of the actions. Propagating this result from leaves to the root, we demonstrate that the value estimates at each depth concentrate around the true optimal value function V ∗.
+
+## Empirical Evaluation 
+
+In this section, we evaluate our adaptive VOI approach. 
+
+Domains We evaluate VOIMCP with a fixed κ1 on three POMDP benchmark domains with large observation spaces: 1. Target Tracking (Flaspohler, Roy, and Fisher III 2020): An agent aims to track a moving target on a 10 × 10 grid. The agent’s own state is fully observable, while the target is only partially observable through noisy measurements. 2. FieldVision RockSample (Ross et al. 2008): A variant of RockSample with a much larger observation space. A robot explores a grid to collect valuable rocks while avoiding bad rocks. Rock quality is observed noisily through sensor readings after each action. 3. Laser Tag (Somani et al. 2013): A robot aims to tag a moving target on a 7 ×11 grid with eight randomly placed obstacles. The robot receives noisy distance measure-ments to the nearest obstacle in each direction, yielding an observation space of roughly 1.5 × 10 6 observations. 
+
+Comparison Algorithms We evaluate VOIMCP against the following baselines: 1. PO-UCT (Silver and Veness 2010): The standard MCTS solver for POMDPs, which uses the original UCB1 se-lection policy. This also serves as an ablation study, as VOIMCP reduces to PO-UCT if the meta-level action space is removed and standard selection policy is used. 2. I-UCB POMCP (Do Carmo Alves et al. 2023): A variant of POMCP that augments the UCB term with an obser-vation entropy heuristic. 3. Open-Loop : A VOIMCP variant that acts purely in an open-loop manner by only expanding null observations. This baseline essentially plans a sequence of actions without reasoning about future observations. To isolate the impact of the search component in the plan-ning algorithms, we standardize the belief update mech-anism across all methods by using a Sequential Impor-tance Resampling (SIR) particle filter (Gordon, Salmond, and Smith 1993). Similarly, we estimate leaf node values using a random rollout policy for all approaches. 
+
+Implementation Details We tuned the key parame-ters of each approach and report the best performance. The horizon D for each algorithm was optimized from the set {20 , 40 , 60 , 80 }, and the exploration constant c
+
+for POMCP and VOIMCP was optimized from the set 
+
+{1, 10 , 100 , 1000 }. For VOIMCP, β1/ξ = c and η = 12
+
+for all nodes in the tree, resulting in a bonus term BN that 
+
+> 1Additional results for annealing experiments are available in the Supplementary.
+
+scales as N (h) 14 /pN (ha ), consistent with Shah, Xie, and Xu (2022). For I-UCB POMCP, we adopt the parameters recommended by Do Carmo Alves et al. (2023). Detailed pa-rameters used for the experiments are outlined in the supple-mentary material. We evaluate all approaches under compu-tational budgets ranging from 100 to 1000 tree queries, av-eraged over 1000 trials. All algorithms were implemented in Julia and executed single-threaded on a computer equipped with an Intel Xeon(R) W-1370P processor. 
+
+Results and Discussion 
+
+In Figure 1, we report the discounted cumulative reward against the number of tree queries. We also report the mean maximum tree depth and effective branching factor in Fig-ure 2. We define the maximum tree depth as the greatest depth reached by any history node in the search tree, and the effective branching factor as the average number of action-observation branches expanded per visited node. VOIMCP outperforms all baselines in mean discounted cumulative reward across all the benchmark problems. The statistics in Figure 2 reveal the mechanism behind this suc-cess: with the exception of the Open-Loop policy which only has 1 observation branch per action, VOIMCP consistently achieves the highest maximum tree depth while maintaining the lowest effective branching factor. These results confirm that the adaptive VOI framework enables VOIMCP to “take shortcuts” via selectively avoiding expanding dense obser-vation branches (closed-loop actions) whenever the value of information is low. By selectively reducing the compu-tational overhead of observation processing, VOIMCP al-locates limited planning resources to enable deeper search. This alleviates the curse of history and facilitates a more ef-ficient exploration, leading to superior performance. In domains with large observation spaces, the perfor-mance of PO-UCT degrades. This occurs because the origi-nal UCB heuristic distributes exploration across the observa-tions, leading to shallower search trees than VOIMCP. Inter-estingly, the Open-Loop policy performs better than I-UCB POMCP in both the Target Tracking and FieldVision Rock-Sample problems, and better than PO-UCT in the latter. This counter-intuitive result provides an insight: when observa-tion spaces are large and noisy, the computational cost of fully processing observations may outweigh the benefit. By always ignoring observations, the Open-Loop policy elimi-nates observation branching and searches deeply, but cannot reason about observation information. VOIMCP bridges this gap through the adaptive VOI, acting open-loop when obser-vations are noisy or irrelevant, while retaining the reactivity of closed-loop planning when necessary. While the I-POMCP algorithm has demonstrated supe-rior performance on some domains (Do Carmo Alves et al. 2023), its planning component I-UCB POMCP was the worst-performing baseline across all three benchmarks. I-UCB augments the traditional UCB with an observation en-tropy heuristic. This term is designed to induce information-gathering behavior by rewarding actions that heuristically reduce uncertainty. However, our results demonstrate that the observation entropy is an insufficient proxy for the value of information. I-UCB may prioritize high-entropy obser-Number of Tree Queries 150 300 450 600 750 900 Cumulative Reward 
+
+> −600
+> −560
+> −520
+> −480
+> −440
+> −400
+> −360
+> −320
+
+Target Tracking    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Cumulative Reward 8910 11 12 13 14 
+
+FieldVision RockSample    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Cumulative Reward 
+
+> −18.4
+> −18.0
+> −17.6
+> −17.2
+> −16.8
+> −16.4
+> −16.0
+> −15.6
+
+Laser Tag    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Figure 1: Comparative benchmark results presenting discounted cumulative reward against the number of tree queries over 
+
+1000 trials. The lighter colored ribbons around the Monte Carlo mean display the 95% confidence interval. Number of Tree Queries 150 300 450 600 750 900 Max Depth 3.0 4.5 6.0 7.5 9.0 10.5 12.0 13.5 
+
+Target Tracking    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Max Depth 3456789
+
+FieldVision RockSample    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Max Depth 36912 15 18 21 
+
+Laser Tag    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Branching Factor 0.8 1.6 2.4 3.2 4.0 4.8 5.6 
+
+Target Tracking    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Branching Factor 0612 18 24 30 36 
+
+FieldVision RockSample    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Number of Tree Queries 150 300 450 600 750 900 Branching Factor 015 30 45 60 75 
+
+Laser Tag    
+
+> VOIMCP PO-UCT I-UCB POMCP Open-Loop
+
+Figure 2: Tree growth statistics. (Top Row) Maximum tree depth vs. number of tree queries. (Bottom Row) Effective action-observation branching factor vs. number of tree queries. Statistics are computed over 100 trials. vations that are irrelevant to the task rewards. In contrast, VOIMCP directly searches based on the value of informa-tion, ensuring that the agent only seeks observations that contribute to reward maximization. The effectiveness of VOIMCP relies on the search-depth gains from avoiding observation branching outweighing the increase of the augmented action space. For many POMDPs, such as our case studies, the existence of open-loop short-cuts enables more efficient search. However, for problems in which the value of information is high but poorly captured during search, the selection policy may persistently select open-loop actions that are counterproductive for high-value policies. We posit that VOI-guided pruning is most effective in domains where the computational curse of history is the primary bottleneck to discovering high-value policies. 
+
+## Conclusion 
+
+This paper presents a recursive framework to reason about the VOI. We propose VOIMCP, an algorithm that selectively disregards observation information when the VOI is low. We prove the theoretical properties of both the framework and our algorithm, showing bounded regret and non-asymptotic convergence. This work shows that value of information rea-soning can reduce the effective branching factor, alleviating the curse of history in POMDPs. Future work includes inves-tigating fundamental structures of POMDPs that are most amenable to VOI reasoning, designing better schemes for tuning and annealing κ, and integrating the adaptive VOI reasoning into other POMDP solution techniques. 
+
+## Acknowledgments 
+
+This work was partially supported by the National Science Foundation, Grants 2340958 and 2137269 and the members of the Center for Autonomous Air Mobility and Sensing (CAAMS) IUCRC. References 
+
+Ayer, T.; Alagoz, O.; and Stout, N. K. 2012. OR Forum—A POMDP Approach to Personalize Mammography Screening Decisions. Operations Research , 60(5): 1019–1034. Chen, M.; Nikolaidis, S.; Soh, H.; Hsu, D.; and Srinivasa, S. 2020. Trust-aware decision making for human-robot collab-oration: Model learning and planning. ACM Transactions on Human-Robot Interaction (THRI) , 9(2): 1–23. Do Carmo Alves, M. A.; Varma, A.; Elkhatib, Y.; and So-riano Marcolino, L. 2023. Information-guided Planning: An Online Approach for Partially Observable Problems. In 
+
+Advances in Neural Information Processing Systems , vol-ume 36, 69157–69177. Flaspohler, G.; Roy, N. A.; and Fisher III, J. W. 2020. Belief-dependent macro-action discovery in POMDPs using the value of information. Advances in Neural Information Pro-cessing Systems , 33: 11108–11118. Gordon, N.; Salmond, D.; and Smith, A. 1993. Novel ap-proach to nonlinear/non-Gaussian Bayesian state estimation. 
+
+IEE Proceedings F (Radar and Signal Processing) , 140: 107–113. Hay, N.; Russell, S.; Tolpin, D.; and Shimony, S. E. 2012. Selecting computations: theory and applications. In Pro-ceedings of the Twenty-Eighth Conference on Uncertainty in Artificial Intelligence , 346–355. Ho, M. K.; Abel, D.; Griffiths, T. L.; and Littman, M. L. 2019. The value of abstraction. Current opinion in behav-ioral sciences , 29: 111–116. Howard, R. A. 1966. Information Value Theory. IEEE Transactions on Systems Science and Cybernetics , 2(1): 22– 26. Kim, E.; Karunanayake, Y.; and Kurniawati, H. 2023. Reference-Based POMDPs. In Advances in Neural Infor-mation Processing Systems , volume 36, 40659–40675. Kim, E.; and Kurniawati, H. 2025. Partially Observable Ref-erence Policy Programming. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelli-gence, IJCAI-25 , 8536–8543. Kurniawati, H.; Hsu, D.; and Lee, W. S. 2009. SARSOP: Efficient Point-Based POMDP Planning by Approximating Optimally Reachable Belief Spaces. In Robotics: Science and Systems IV , 65–72. Lauri, M.; Hsu, D.; and Pajarinen, J. 2023. Partially Ob-servable Markov Decision Processes in Robotics: A Survey. 
+
+IEEE Transactions on Robotics , 39(1): 21–40. Madani, O.; Hanks, S.; and Condon, A. 2003. On the Unde-cidability of Probabilistic Planning and Related Stochastic Optimization Problems. Artificial Intelligence , 147(1-2): 5– 34. McCallum, A. K. 1996. Reinforcement Learning with Selec-tive Perception and Hidden State . University of Rochester. Papakonstantinou, K.; and Shinozuka, M. 2014. Planning structural inspection and maintenance policies via dynamic programming and Markov processes. Part II: POMDP im-plementation. Reliability Engineering & System Safety , 130: 214–224. Pokharel, G. 2024. Increasing the Value of Information Dur-ing Planning in Uncertain Environments. arXiv preprint arXiv:2409.13754 .Ross, S.; Pineau, J.; Paquet, S.; and Chaib-Draa, B. 2008. Online planning algorithms for POMDPs. Journal of Artifi-cial Intelligence Research , 32: 663–704. Russell, S.; and Wefald, E. 1988. Decision-Theoretic Con-trol of Reasoning: General Theory and an Application to Game-Playing. Technical Report UCB/CSD-88-435, Uni-versity of California Berkeley. Russell, S.; and Wefald, E. 1991. Principles of metareason-ing. Artificial Intelligence , 49(1): 361–395. Shah, D.; Xie, Q.; and Xu, Z. 2022. Nonasymptotic Analysis of Monte Carlo Tree Search. Operations Research , 70(6): 3234–3260. Shani, G.; Pineau, J.; and Kaplow, R. 2013. A survey of point-based POMDP solvers. Autonomous Agents and Multi-Agent Systems , 27(1): 1–51. Silver, D.; and Veness, J. 2010. Monte-Carlo Planning in Large POMDPs. In Advances in Neural Information Pro-cessing Systems , volume 23. Smallwood, R. D.; and Sondik, E. J. 1973. The optimal con-trol of partially observable Markov processes over a finite horizon. Operations research , 21(5): 1071–1088. Smith, T.; and Simmons, R. 2005. Point-based POMDP al-gorithms: improved analysis and implementation. In Pro-ceedings of the Twenty-First Conference on Uncertainty in Artificial Intelligence , 542–549. AUAI Press. Somani, A.; Ye, N.; Hsu, D.; and Lee, W. S. 2013. DESPOT: Online POMDP Planning with Regularization. In Advances in Neural Information Processing Systems , volume 26. Sunberg, Z.; and Kochenderfer, M. 2018. Online Algorithms for POMDPs with Continuous State, Action, and Observa-tion Spaces. Proceedings of the International Conference on Automated Planning and Scheduling , 28(1): 259–263. Wei, R. 2024. Value of Information and Reward Specifica-tion in Active Inference and POMDPs. In The First Work-shop on NeuroAI @ NeurIPS2024 .Wu, C.; Yang, G.; Zhang, Z.; Yu, Y.; Li, D.; Liu, W.; and Hao, J. 2021. Adaptive Online Packing-guided Search for POMDPs. In Ranzato, M.; Beygelzimer, A.; Dauphin, Y.; Liang, P.; and Vaughan, J. W., eds., Advances in Neural Information Processing Systems , volume 34, 28419–28430. Curran Associates, Inc. ˚Astr¨ om, K. 1965. Optimal control of Markov processes with incomplete state information. Journal of Mathemati-cal Analysis and Applications , 10(1): 174–205. 
+
+## Proof of Theorem 2 
+
+Our analysis relies on a sequence of theoretical results anal-ogous to Lemmas 1 − 7 and Theorems 1 and 3 in Shah, Xie, and Xu (2022). As the algebraic structure remains largely invariant, we omit repetitive derivations. The key deviations arise from our definition of an optimal conditional VOI ac-tion and the selection strategy, both of which depend on κ,propagating changes to the constants in the final results. We provide the theoretical statements with updated variables be-low, but detail the full proofs only where the deviation is non-trivial. We first start with the analysis of a class of nonstation-ary multi-armed bandit as defined in Shah, Xie, and Xu (2022). Let there be K ≥ 1 arms or actions. Let ¯Xi,n =
+
+> 1
+> n
+
+Pnt=1 Xi,t denote the empirical average of choosing arm 
+
+i for n times, and let μi,n be its expectation. For each arm 
+
+i ∈ [K], the reward Xi,t is bounded in [−R, R ] for some 
+
+R > 0, with the reward sequence being a nonstationary pro-cess satisfying: 
+
+A. Convergence : The expectation μi,n converges to a value 
+
+μi, that is, 
+
+μi = lim  
+
+> n→∞
+
+E[ ¯Xi,n ] (35) 
+
+B. Concentration : There exist constants β > 1, ξ > 0, and 
+
+1/2 ≤ η < 1 such that for any n ≥ 1 and z ≥ 1:
+
+P n( ¯Xi,n − μi) ≥ nη z ≤ βz −ξ , (36) 
+
+P n( ¯Xi,n − μi) ≤ − nη z ≤ βz −ξ . (37) Distinct from Shah, Xie, and Xu (2022), we keep track of the modified arm mean biased by a negative fraction κ of its absolute value: 
+
+μUi ≡ μi − κi|μi|, (38) We define the new conditional VOI optimal value with re-spect to the κ-biased converged expectation 
+
+μU 
+
+> ∗
+
+≡ max  
+
+> i∈[K]
+
+μUi , (39) where κi ∈ [0 , 1] may be different for each arm. This will be useful for our VOI-POMDP since it allows open-loop actions to be optimal if their expected reward is within a 
+
+κ-fraction of their closed-loop counterparts. We define i∗ ∈
+
+arg max i∈[K] μUi and assume the optimal arm is unique. Let the conditional VOI-based suboptimality gap for a subopti-mal arm i be: 
+
+∆Ui ≡ μU 
+
+> ∗
+
+− μUi > 0. (40) and the minimum gap ∆Umin = min i∈[K],i ̸=i∗ ∆Ui .Consider the VOI-UCB: 
+
+Ui(si, t ) ≡ ¯Xi,s i − κi| ¯Xi,s i | + Bt,s i . (41) The bonus or bias Bt,s i is specified as: 
+
+Bt,s i = β1/ξ · tα/ξ 
+
+s1−ηi
+
+, (42) where t is the total number of pulls and si is the number of pulls of arm i. Then we define the VOI-UCB algorithm as: 
+
+It ∈ arg max  
+
+> i∈[K]
+
+Ui(si, t ), (43) where a tie between arms is broken arbitrarily. Let δi∗,n =
+
+μi∗,n − μi∗ , which measures how fast the mean of the VOI-optimal arm converges. For simplicity, we sometimes drop the arm index i from quantities related to the optimal arm i∗,e.g. δi∗,n = δ∗,n .With the following useful Lemma, we have that the prob-ability that a suboptimal arm or action has a large upper con-fidence is polynomially small. 
+
+Lemma 1. Let i ∈ [K] be a suboptimal arm. Define 
+
+Ai(t) ≡ min 
+
+> u∈N
+
+n
+
+Bt,u ≤ ∆Ui
+
+2(1 + κi)
+
+o
+
+=
+
+& 2(1 + κi)∆Ui
+
+· β1/ξ · tα/ξ 
+
+ 11−η
+
+'
+
+(44) 
+
+For any t ≥ 1, t ≥ si ≥ Ai(t), we have 
+
+P Ui(si, t ) > μ U
+
+> ∗
+
+ ≤ t−α. (45) 
+
+Proof. Fix t ≥ 1 and si ≥ Ai(t). Define f (x) = x − κi|x|
+
+and note that μUi = f (μi) and the exploitation component of 
+
+Ui satisfies ¯Xi,s i −κi| ¯Xi,s i | = f ( ¯Xi,s i ). We can decompose 
+
+Ui(si, t ) − μU 
+
+> ∗
+
+= f ( ¯Xi,s i ) − f (μi) + Bt,s i − ∆Ui .
+
+Since si ≥ Ai(t), by definition Bt,s i ≤ ∆Ui /2(1 + κi) ≤
+
+∆Ui /2, so 
+
+Bt,s i − ∆Ui ≤ − ∆Ui
+
+2 .
+
+Therefore, Ui(si, t ) > μ U 
+
+> ∗
+
+requires f ( ¯Xi,s i ) − f (μi) >
+
+∆Ui /2 > 0. Since f is non-decreasing, the strict inequal-ity f ( ¯Xi,s i ) − f (μi) > ∆Ui /2 > 0 implies ¯Xi,s i > μ i.Furthermore, for any y > x , we have the Lipschitz bound 
+
+f (y) − f (x) ≤ (1 + κi)( y − x),
+
+since the steepest slope of f is 1 + κi. Applying this with 
+
+y = ¯Xi,s i and x = μi yields 
+
+f ( ¯Xi,s i ) − f (μi) ≤ (1 + κi)( ¯Xi,s i − μi).
+
+Thus, whenever Ui(si, t ) > μ U 
+
+> ∗
+
+we must have 
+
+(1 + κi)( ¯Xi,s i − μi) > ∆Ui
+
+2 ,
+
+i.e., 
+
+¯Xi,s i − μi > ∆Ui
+
+2(1 + κi) ≥ Bt,s i ,
+
+where the last inequality follows from si ≥ Ai(t). There-fore, 
+
+P Ui(si, t ) > μ U
+
+> ∗
+
+ ≤ P
+
+ ¯Xi,s i − μi > B t,s i
+
+
+
+≤ t−α,
+
+using the concentration assumption (37). 
+
+Lemma 2. For any t ≥ 1 and 1 ≤ s∗ ≤ t,
+
+P U∗(s∗, t ) ≤ μU
+
+> ∗
+
+ ≤ (1 + κ∗)ξ t−α,
+
+provided β is chosen large enough so that β1/ξ ≥ 1 + κ∗.Proof. Define 
+
+f∗(x) ≡ x − κ∗|x|.
+
+Then f∗ is nondecreasing on R and 
+
+U∗(s∗, t ) = f∗( ¯X∗,s ∗ ) + Bt,s ∗ , μU 
+
+> ∗
+
+= f∗(μ∗).
+
+Hence 
+
+P U∗(s∗, t ) ≤ μU
+
+> ∗
+
+ = P f∗( ¯X∗,s ∗ ) + Bt,s ∗ ≤ f∗(μ∗) .
+
+On this event, since Bt,s ∗ > 0, we must have f∗( ¯X∗,s ∗ ) <f∗(μ∗), and therefore, by monotonicity of f∗,
+
+¯X∗,s ∗ ≤ μ∗.
+
+Now, for any x ≤ y,
+
+f∗(y) − f∗(x) ≤ (1 + κ∗)( y − x),
+
+since the maximum slope of f∗ is 1 + κ∗. Applying this with 
+
+x = ¯X∗,s ∗ and y = μ∗ gives 
+
+f∗(μ∗) − f∗( ¯X∗,s ∗ ) ≤ (1 + κ∗)( μ∗ − ¯X∗,s ∗ ).
+
+Therefore, whenever f∗( ¯X∗,s ∗ ) + Bt,s ∗ ≤ f∗(μ∗), we have 
+
+Bt,s ∗ ≤ f∗(μ∗) − f∗( ¯X∗,s ∗ ) ≤ (1 + κ∗)( μ∗ − ¯X∗,s ∗ ),
+
+which implies 
+
+¯X∗,s ∗ − μ∗ ≤ − Bt,s ∗
+
+1 + κ∗
+
+.
+
+Thus, 
+
+P U∗(s∗, t ) ≤ μU
+
+> ∗
+
+ ≤ P
+
+
+
+¯X∗,s ∗ − μ∗ ≤ − Bt,s ∗
+
+1 + κ∗
+
+
+
+.
+
+Multiplying by s∗ and matching the concentration form in (37), set 
+
+z = s 1−η
+
+> ∗
+
+Bt,s ∗
+
+1 + κ∗
+
+= s 1−η
+
+> ∗
+
+β1/ξ tα/ξ 
+
+s 1−η 
+
+> ∗
+
+(1 + κ∗) = β1/ξ 
+
+1 + κ∗
+
+tα/ξ .
+
+If β1/ξ ≥ 1 + κ∗, then z ≥ 1 for all t ≥ 1. Applying the lower-tail concentration assumption (37), 
+
+P U∗(s∗, t ) ≤ μU
+
+> ∗
+
+ ≤ βz −ξ =β
+
+ β1/ξ 
+
+1 + κ∗
+
+tα/ξ 
+
+−ξ
+
+=(1 + κ∗)ξ t−α.
+
+Lemma 1 and 2 allow us to upper bound the expected number of suboptimal arm pulls as follows. 
+
+Lemma 3 (Adapted from Lemma 2 of (Shah, Xie, and Xu 2022)) . Let i ∈ [K], i̸ = i∗ be a suboptimal arm. Then, for all n ≥ 1, the expected number of pulls of arm i satisfies 
+
+E[Ti(n)] ≤
+
+ 2(1 + κi)∆Ui
+
+β1/ξ 1/(1 −η)
+
+nα/ (ξ(1 −η)) 
+
++ 1 + (1 + κi∗ )ξ
+
+α − 2 + 1 .
+
+Proof. The proof follows Shah, Xie, and Xu (2022)(cf. Lemma 2) after replacing Shah’s threshold Ai(t) by our threshold in (44), replacing Shah’s suboptimal-arm upper-tail bound by Lemma 1, and replacing Shah’s optimal-arm lower-tail bound by Lemma 2. With these substitutions, the decomposition at Ti(t) ≥ Ai(n), the summation over poly-nomial tails, and the conversion to the expected-pulls bound proceed identically up to constants. Let ¯Xn ≡ 1
+
+> n
+
+PKi=1 Ti(n) ¯Xi,T i(n) denote the empirical average under the VOI-UCB algorithm (43). Then, ¯Xn satis-fies the following convergence and concentration properties. 
+
+Theorem 4 (Adapted from Theorem 3 of (Shah, Xie, and Xu 2022)) . Consider a nonstationary MAB satisfying (35) 
+
+and (37) . Suppose that Algorithm (43) is applied with pa-rameter α such that ξη (1 − η) ≤ α < ξ (1 − η) and α > 2.Then, the following holds: 
+
+A. Convergence :
+
+E[ ¯Xn] − μ∗ ≤ | δ∗,n | +2R(K − 1) 
+
+n
+
+  4∆Umin 
+
+β 1
+
+> ξ
+
+ 11−η · n α 
+
+> (ξ(1 −η))
+
++ 1 + 2 ξ
+
+α − 2 + 1 
+
+
+
+,
+
+B. Concentration : there exists constants, β′ > 1 and ξ′ > 0
+
+and 1/2 ≤ η′ < 1 such that for every n ≥ 1 and every 
+
+z ≥ 1,
+
+P(n ¯Xn − nμ ∗ ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(n ¯Xn − nμ ∗ ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = αξ(1 −η) , ξ ′ = α − 1, β ′ depends on 
+
+R, K, ∆Umin , β, ξ, α, η, κ .Proof. The proof follows the proof of Theorem 3 in Shah, Xie, and Xu (2022) after replacing Shah’s threshold by 
+
+A(t) = max  
+
+> i∈[K]
+
+Ai(t) = 
+
+& 4∆U
+
+> min
+
+β1/ξ 
+
+ 11−η
+
+t αξ(1 −η)
+
+'
+
+,
+
+replacing Shah’s suboptimal-arm upper-tail bound by Lemma 1, replacing Shah’s optimal-arm lower-tail bound by Lemma 2, and using Lemma 3 in place of Shah’s expected-pulls bound. With these substitutions, the remainder of the convergence and concentration argument is identical up to constants, yielding the stated result. We aim to prove that under our VOI-based MCTS (adapted from Algorithm 1 in Shah, Xie, and Xu (2022)), the mean of the empirical reward at the root node of the MCTS tree is within O(nη−1) of the mean reward obtained as the number of samples tends to infinity. To construct the VOI-based MCTS, we replace the standard action selection pol-icy (cf. (5) of Shah, Xie, and Xu (2022)) with the following 
+
+κ-biased policy: 
+
+a(h+1) = arg max  
+
+> a∈A
+
+QhN (s, a ) − κa|QhN (s, a )| + BhN (s, a )
+
+(46) where 
+
+QhN (s, a ) = q(h+1) (s(h), a ) + γ˜v(h+1) (s(h) ◦ a)
+
+N (h+1) (s(h) ◦ a) (47) and 
+
+BhN (s, a ) = (β(h+1) )1/ξ (h+1) 
+
+· (N (h)(s(h))) α(h+1) /ξ (h+1) 
+
+(N (h+1) (s(h) ◦ a)) 1−η(h+1) 
+
+(48) Note, κa is parameterized by action a where for each a ∈
+
+[K], κa ∈ [0 , 1] 
+
+Analyzing Leaf Level d = D Let nD−1 denote the number of nodes at depth D − 1, corresponding to states 
+
+s1,D −1, . . . , s nD−1,D −1 ∈ S . Consider node i ∈ [nD−1]
+
+at level D − 1 corresponding to state si,D −1. Under the VOI-MCTS algorithm, whenever this node is visited, an action a ∈ [K] will be taken, reaching the leaf node 
+
+s′ 
+
+> D
+
+= si,D −1 ◦ a. This results in the cumulative reward 
+
+R(si,D −1, a ) + γ˜v(D)(s′ 
+
+> D
+
+), where ˜v(D)(·) denotes an ini-tial value estimate Vϵ0 = 0 . Similar to (38) and (39) for the bandit, we define the following VOI-based terms for the tree: 
+
+μ(D-1)  
+
+> a
+
+(si,D -1 ) = E [R(si,D -1 , a )] + γ˜v(D)(si,D -1 ◦ a),μU, (D-1)  
+
+> a
+
+(si,D -1 ) = μ(D-1)  
+
+> a
+
+(si,D -1 ) − κ(D-1)  
+
+> a
+
+|μ(D-1)  
+
+> a
+
+(si,D -1 )|,a(D-1)  
+
+> ∗
+
+(si,D -1 ) ∈ arg max  
+
+> a∈[K]
+
+μU, (D-1)  
+
+> a
+
+(si,D -1 ),μU, (D-1)  
+
+> ∗
+
+(si,D -1 ) = max  
+
+> a∈[K]
+
+μU, (D-1)  
+
+> a
+
+(si,D -1 ),μ(D-1)  
+
+> ∗
+
+(si,D -1 ) = μ(D-1)  
+
+> a(D-1)
+> ∗(si,D -1 )
+
+(si,D -1 ),
+
+∆U, (D-1)  
+
+> min
+
+(si,D -1 ) = μU, (D-1)  
+
+> ∗
+
+(si,D -1 )
+
+− max  
+
+> a̸=a(D-1)
+> ∗(si,D -1 )
+
+μU, (D-1)  
+
+> a
+
+(si,D -1 ),
+
+(49) where all rewards belong to [− ˜R(D−1) max , ˜R(D−1) max ] consistent with Shah, Xie, and Xu (2022). By applying Lemma 4 from Shah, Xie, and Xu (2022), we obtain that for η(D) ∈  12 , 1, and sufficiently large ξ(D),there exists a constant β(D) such that the collected rewards at si,D −1 (i.e., the sum of the i.i.d. stochastic reward and the value evaluation) satisfy the convergence property (cf. (35)) and the concentration property (cf. (37)). Therefore, by an application of Theorem 4, we have the following Lemma. 
+
+Lemma 4 (Adapted from Lemma 5 of Shah, Xie, and Xu (2022)) . Consider a node corresponding to state si,D −1 at level d = D − 1 within the VOI-MCTS for i ∈ [nD−1]. Let 
+
+˜v(D−1) (si,D −1)n be the total discounted reward collected at si,D −1 during n ≥ 1 visits of it, to one of its K leaf nodes under the VOI-UCB policy. Then, for the choice of appropriately large β(D) > 0, for a given ξ(D) > 0, η(D) ∈
+
+[ 12 , 1) and α(D) > 2, we have 
+
+A. Convergence: 
+
+E
+
+ 1
+
+n ˜v(D−1) (si,D −1)n
+
+
+
+− μ(D−1)  
+
+> ∗
+
+(si,D −1)
+
+≤ ψ(D−1) 
+
+> n
+
+ 4( β(D)) 
+
+> 1
+> ξ(D)
+
+∆U, (D−1)  
+
+> min
+
+(si,D −1)
+
+
+
+> 11−η(D)
+
+· n 
+
+> α(D)
+> ξ(D)(1 −η(D))
+
++ C(D)
+
+ ,
+
+where ψ(D−1)  
+
+> n
+
+= 2 ˜R(D−1) max (K−1)  
+
+> n
+
+and C(D) = 1+2 ξ(D) 
+
+> α(D)−2
+
++ 1 .
+
+B. Concentration: there exist constants, β′ > 1 and ξ′ > 1
+
+and 1/2 ≤ η′ < 1 such that for every n ≥ 1 and every 
+
+z ≥ 1,
+
+P(˜ v(D−1) (si,D −1)n − nμ (D−1)  
+
+> ∗
+
+(si,D −1) ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(˜ v(D−1) (si,D −1)n − nμ (D−1)  
+
+> ∗
+
+(si,D −1) ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = α(D) 
+
+> ξ(D)(1 −η(D))
+
+, ξ′ = α(D) − 1, and β′ is a large enough constant that is function of parameters 
+
+α(D), β (D), ξ (D), η (D), ˜R(D−1) max , K , and ∆U, (D−1) min (si,D -1 ).
+
+Recursion: Going from level d to d − 1 The proof for the convergence and concentration properties of the value esti-mates across all levels d of the VOI-MCTS tree proceeds via mathematical induction, following the structure established by Shah, Xie, and Xu (2022). The mechanism of the induc-tion is identical to the original paper, but the final, global convergence rate differs due to how we defined the sample threshold Ai(t).Assume the estimated value ˜v(d)(·) at level d satisfies properties (35) and (37) with parameters α(d), ξ(d), η(d), and an appropriately large constant β(d). For any node si,d −1 at level d − 1, the effective reward received is the combined value R(si,d −1, a ) + γ˜v(d)(s′
+
+> d
+
+) where s′ 
+
+> d
+
+= si,d −1 ◦ a, and 
+
+˜v(d)(·) returns the collected rewards recursively until the leaf node at depth D. By the inductive hypothesis and an appli-cation of Lemma 4 (Shah, Xie, and Xu 2022), this combined reward sequence continues to satisfy assumptions (35) and (37) with the same α, ξ, η dependencies and a re-adjusted constant β(d−1) .Note, μ(d−1)  
+
+> ∗
+
+(si,d −1), μU, (d−1)  
+
+> a
+
+(si,d −1), μ U, (d−1)  
+
+> ∗
+
+(si,d −1),
+
+a(d−1)  
+
+> ∗
+
+(si,d −1), and ∆U, (d−1) min (si,d −1) are defined similarly to (49), and rewards here belong to [− ˜R(d−1) max , ˜R(d−1) max ].By an application of Theorem 4, we obtain the following result regarding the desired convergence and concentration properties of the combined reward sequence at level d − 1,which completes the induction and proves the results for all 
+
+d ≥ 0.
+
+Lemma 5 (Adapted from Lemma 6 of Shah, Xie, and Xu (2022)) . Consider a node corresponding to state si,d −1
+
+at level d − 1 within the VOIMCP for i ∈ [nd−1]. Let 
+
+˜v(d−1) (si,d −1)n be the total discounted reward collected at 
+
+si,d −1 during n ≥ 1 visits. Then, for the choice of appropri-ately large β(d) > 0, for a given ξ(d) > 0, η(d) ∈ [ 12 , 1) and 
+
+α(d) > 2, we have A. Convergence: 
+
+E
+
+ 1
+
+n ˜v(d−1) (si,d −1)n
+
+
+
+− μ(d−1)  
+
+> ∗
+
+(si,d −1)
+
+≤ ψ(d−1) 
+
+> n
+
+ 4( β(d)) 1
+
+> ξ(d)
+
+∆U, (d−1) min (si,d −1)
+
+
+
+> 11−η(d)
+
+· n 
+
+> α(d)
+> ξ(d)(1 −η(d))
+
++ C(d)
+
+ ,
+
+where ψ(d−1)  
+
+> n
+
+= 2 ˜R(d−1) max (K−1)  
+
+> n
+
+and C(d) = 1+2 ξ(d) 
+
+> α(d)−2
+
++ 1 .
+
+B. Concentration: there exist constants, β′ > 1 and ξ′ > 1
+
+and 1/2 ≤ η′ < 1 such that for n ≥ 1, z ≥ 1,
+
+P(˜ v(d−1) (si,d −1)n − nμ (d−1)  
+
+> ∗
+
+(si,d −1) ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(˜ v(d−1) (si,d −1)n − nμ (d−1)  
+
+> ∗
+
+(si,d −1) ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = α(d) 
+
+> ξ(d)(1 −η(d))
+
+, ξ′ = α(d) − 1, and β′ is a large enough constant that is function of parameters 
+
+α(d), β (d), ξ (d), η (d), ˜R(d−1) max , K, ∆U, (d−1) min (si,d −1).
+
+Completing Proof of Theorem 2 Using Lemma 5, we conclude that the recursive relationship going from d to d−1
+
+holds for all d ≥ 1, with level 0 being the root. Thus, for the root state s(0) , under n total simulations of VOI-MCTS, the empirical average of the rewards 1 
+
+> n
+
+˜v(0) (s0)n satisfies 
+
+E
+
+ 1
+
+n ˜v(0) (s0)n
+
+
+
+− μ(0)  
+
+> ∗
+
+(s0) ≤ O
+
+
+
+n α(0)  
+
+> ξ(0) (1 −η(0) )−1
+
+
+
+= O(nη−1), (50) where μ(0)  
+
+> ∗
+
+(s0) is the raw depth-D value obtained at the root by the κ-adaptive VOI-MCTS recursion. To transfer this root-level VOI-MCTS result to the VOIMCP estimator ¯Vn(b0) = 1
+
+> n
+
+P 
+
+> a∈A ′
+
+N (h0a) ¯Q(h0a),we introduce the derived history-MDP for the transformed VOI-POMDP P′. Let 
+
+˜M′ = ( H′, A′, ¯T , ¯R, D, h 0, γ ),
+
+where H′ is the set of reachable histories of P′, and for any 
+
+h ∈ H ′ and a ∈ A ′,
+
+¯R(h, a ) := X
+
+> s∈S
+
+B(s, h ) R′(s, a ), (51) 
+
+¯T (h, a, hao ) := X
+
+> s∈S
+
+X
+
+> s′∈S
+
+B(s, h ) T ′(s, a, s ′) Z′(s′, o, a ),
+
+(52) with B(·, h ) denoting the exact belief induced by h in P′.Define κi = κ for closed-loop actions, and κi = 0 for open-loop actions. The deterministic-transition analysis above extends to stochastic transitions by the same meta-node construction as in Lemma A.1 of Shah, Xie, and Xu (2022). Since P′
+
+is a finite-horizon POMDP and B(·, h ) is the exact belief, the derived history-MDP equivalence of Lemmas 1 and 2 in Silver and Veness (2010) applies. Let ˜V κD (h0) denote the depth-D value at the root of ˜M′
+
+under the same κ-adaptive selection rule induced by the VOI-MCTS recursion. Since Lemma 5 is centered at the raw mean of the action selected by this κ-adaptive rule, the root target satisfies 
+
+μ(0)  
+
+> ∗
+
+(s0) = ˜V κD (h0).
+
+By Lemma 1 of Silver and Veness (2010), the value of any history-dependent policy in P′ is equal to its value in the derived history-MDP ˜M′. Therefore, 
+
+˜V κD (h0) = ˆV ′ 
+
+> D
+
+(b0).
+
+Furthermore, by Proposition 1, 
+
+ˆV ′ 
+
+> D
+
+(b0) = ˆV ∗ 
+
+> D
+
+(b0).
+
+Moreover, by Lemma 2 of Silver and Veness (2010), the rollout distribution in P′ is equal to the rollout distribution in ˜M′ for any history-dependent simulation policy. Since VOIMCP in P′ and VOI-MCTS in ˜M′ use the same history-dependent selection rule, their simulation traces are equal in distribution. Consequently, the VOIMCP root estimator 
+
+¯Vn(b0) = 1
+
+n
+
+X
+
+> a∈A ′
+
+N (h0a) ¯Q(h0a)
+
+has the same distribution as the root empirical average 
+
+1
+
+n ˜v(0) (s0)n
+
+analyzed above. Hence, 
+
+E[ ¯Vn(b0)] − ˆV ∗ 
+
+> D
+
+(b0) ≤ O(nη−1),
+
+which proves Theorem 2. Theorem 2 establishes that VOIMCP converges to the adaptive VOI value ˆV ∗ 
+
+> D
+
+, while Theorem 1 bounds how far 
+
+ˆV ∗ 
+
+> D
+
+can deviate from the true optimal value V ∗ 
+
+> D
+
+. Combining the two yields the following bound. 
+
+Corollary 1. 
+
+E[ ¯Vn(b0)] − V ∗ 
+
+> D
+
+(b0) ≤ O nη−1 + κ Rmax 
+
+1 − γ
+
+ 1 − γD
+
+1 − γ
+
+
+
+.
+
+Proof. By the triangle inequality, 
+
+E[ ¯Vn(b0)] − V ∗ 
+
+> D
+
+(b0) ≤ E[ ¯Vn(b0)] − ˆV ∗ 
+
+> D
+
+(b0)
+
++ ˆV ∗ 
+
+> D
+
+(b0) − V ∗ 
+
+> D
+
+(b0) .
+
+The first term is O(nη−1) by Theorem 2, and the second term is bounded by Theorem 1. 
+
+## Proof of Theorem 3 
+
+The proof of Theorem 3 follows the same structure as Theo-rem 2. Thus, our analysis relies on a sequence of theoretical results analogous to Lemmas 1 − 7 and Theorems 1 and 3 in Shah, Xie, and Xu (2022). From Theorem 2, the main mod-ifications are the optimality criterion and a scheduled de-caying κi. We provide the statements with updated variables below, but detail the full proofs only where the deviation is non-trivial. We begin again by considering the same non-stationary multi-armed bandit defined in Shah, Xie, and Xu (2022). Let there be K ≥ 1 arms or actions. Let ¯Xi,n = 1
+
+> n
+
+Pnt=1 Xi,t 
+
+denote the empirical average of choosing arm i for n times, and let μi,n be its expectation. For each arm i ∈ [K], the reward Xi,t is bounded in [−R, R ] for some R > 0, with the reward sequence being a nonstationary process satisfy-ing (35) and (37). Distinct from Theorem 2, we now consider the optimal value with respect to the converged expectation of each arm, 
+
+μ∗ = max  
+
+> i∈[K]
+
+μi (53) with the suboptimality gap 
+
+∆i = μ∗ − μi. (54) As stated in the main text, any annealing schedule satisfy-ing 0 ≤ κi(t, s i) ≤ 1 
+
+> cκR
+
+Bt,s i suffices. Define the scheduled VOI-UCB dependent on a time-varying κ as 
+
+U ′(si, t ) ≡ ¯Xi,s i − κi(t, s i)| ¯Xi,s i | + Bt,s i , (55) Then we define the annealed VOI-UCB algorithm as: 
+
+It ∈ arg max  
+
+> i∈[K]
+
+U ′ 
+
+> i
+
+(si, t ), (56) where a tie between arms is broken arbitrarily. All other terms are as defined in Shah, Xie, and Xu (2022). With the above, we have that the probability that a subop-timal arm or action has a large upper confidence is polyno-mially small. 
+
+Lemma 6. Let i ∈ [K] be a suboptimal arm. Define 
+
+A′
+
+> i
+
+(t) ≡ min 
+
+> u∈N
+
+n
+
+Bt,u ≤ ∆i
+
+2
+
+o
+
+=
+
+& 2∆i
+
+· β1/ξ · tα/ξ 
+
+ 11−η
+
+'
+
+(57) 
+
+For any t ≥ 1, t ≥ si ≥ A′
+
+> i
+
+(t),
+
+P U ′ 
+
+> i
+
+(si, t ) > μ ∗
+
+ ≤ t−α. (58) 
+
+Proof. Fix t ≥ 1 and si ≥ A′
+
+> i
+
+(t). Since κi(t, s i) ≥ 0, the penalty term κi(t, s i)| ¯Xi,s i | is non-negative, so 
+
+U ′ 
+
+> i
+
+(si, t ) = ¯Xi,s i − κi(t, s i)| ¯Xi,s i | + Bt,s i ≤ ¯Xi,s i + Bt,s i .
+
+Therefore, 
+
+P U ′ 
+
+> i
+
+(si, t ) > μ ∗
+
+ ≤ P  ¯Xi,s i + Bt,s i > μ ∗
+
+
+
+= P  ¯Xi,s i − μi > ∆i − Bt,s i
+
+.
+
+Since si ≥ A′
+
+> i
+
+(t), by definition Bt,s i ≤ ∆i/2, so ∆i −
+
+Bt,s i ≥ ∆i/2 ≥ Bt,s i . Hence, 
+
+P U ′ 
+
+> i
+
+(si, t ) > μ ∗
+
+ ≤ P  ¯Xi,s i − μi > B t,s i
+
+ ≤ t−α,
+
+where the last step uses the concentration assumption (37). As in Theorem 4, let i∗ ∈ arg max i∈[K] μi be the optimal arm. Then we have the following lemma. 
+
+Lemma 7. For any t ≥ 1 and 1 ≤ s ≤ t,
+
+P U ′∗(s∗, t ) ≤ μ∗
+
+ ≤
+
+ cκ
+
+cκ − 1
+
+ξ
+
+t−α.
+
+Proof. Since κ∗(t, s ∗) ≤ 1 
+
+> cκR
+
+Bt,s ∗ and | ¯X∗,s ∗ | ≤ R, the penalty satisfies 
+
+κ∗(t, s ∗)| ¯X∗,s ∗ | ≤ 1
+
+cκR Bt,s ∗ · R = Bt,s ∗
+
+cκ
+
+.
+
+Therefore, 
+
+Bt,s ∗ − κ∗(t, s ∗)| ¯X∗,s ∗ | ≥ Bt,s ∗
+
+ cκ − 1
+
+cκ
+
+
+
+Hence, 
+
+P U ′∗(s∗, t ) ≤ μ∗
+
+
+
+= P  ¯X∗,s ∗ + Bt,s ∗ − κ∗(t, s ∗)| ¯X∗,s ∗ | ≤ μ∗
+
+
+
+≤ P  ¯X∗,s ∗ + Bt,s ∗
+
+ cκ − 1
+
+cκ
+
+
+
+≤ μ∗
+
+
+
+= P s( ¯X∗,s ∗ − μ∗) ≤ − s · Bt,s ∗
+
+ cκ − 1
+
+cκ
+
+
+
+To apply the concentration assumption (37), we match 
+
+sη z = s · Bt,s ∗ (( cκ − 1) /c κ), giving 
+
+z = s1−η Bt,s ∗
+
+ cκ − 1
+
+cκ
+
+
+
+= s1−η · β1/ξ tα/ξ 
+
+s1−η
+
+ cκ − 1
+
+cκ
+
+
+
+= β1/ξ tα/ξ  cκ − 1
+
+cκ
+
+
+
+.
+
+To ensure z ≥ 1, without loss of generality, let β be large enough that β1/ξ ≥ (cκ/(cκ − 1)) (cf. the discussion below Eq. (20) in Shah, Xie, and Xu (2022)). Applying (37): 
+
+P U ′∗(s∗, t ) ≤ μ∗
+
+ ≤ βz −ξ = β ·
+
+
+
+β1/ξ tα/ξ  cκ − 1
+
+cκ
+
+−ξ
+
+=
+
+ cκ
+
+cκ − 1
+
+ξ
+
+t−α.
+
+Lemma 6 allows us to upper bound the expected number of suboptimal arm pulls as follows. 
+
+Lemma 8. Let i ∈ [K], i̸ = i∗ be a suboptimal arm. Then, for all n ≥ 1, the expected number of pulls of arm i satisfies 
+
+E[Ti(n)] ≤
+
+ 2∆i
+
+· β1/ξ 
+
+ 11−η
+
+n αξ(1 −η) +1 + 
+
+ cκ
+
+> cκ−1
+
+ξ
+
+α − 2 + 1 .
+
+Proof. The proof follows the structure of Lemma 3. Event 
+
+E1 (suboptimal arm’s VOI-UCB exceeds μ∗) is bounded us-ing Lemma 6. Event E2 (optimal arm’s VOI-UCB falls be-low μ∗) is bounded using Lemma 7. The remainder follows identically, with the constant (1 + ( cκ/(cκ − 1)) ξ )/(α − 2) 
+
+absorbing the factor from the scaled bonus. Now we can state the convergence and concentration re-sults for the annealed VOI nonstationary multi-armed ban-dit. Let ¯Xn ≡ 1
+
+> n
+
+PKi=1 Ti(n) ¯Xi,T i(n) denote the empirical average under the annealed VOI-UCB algorithm (56). Then, 
+
+¯Xn satisfies the following convergence and concentration properties. 
+
+Theorem 5. Consider a nonstationary MAB satisfying (35) 
+
+and (37) . Suppose that Algorithm (56) is applied with pa-rameter α such that ξη (1 − η) ≤ α < ξ (1 − η) and α > 2.Then, the following holds: 
+
+A. Convergence :
+
+E[ ¯Xn] − μ∗
+
+≤ | δ∗
+
+> n
+
+|
+
++ 2R(K − 1) 
+
+n
+
+ 2∆min 
+
+β 1
+
+> ξ
+
+ 11−η
+
+·n αξ(1 −η) +1 + 
+
+ cκ
+
+> cκ−1
+
+ξ
+
+α − 2 +1 
+
+ .
+
+B. Concentration : there exists constants, β′ > 1 and ξ′ > 0
+
+and 1/2 ≤ η′ < 1 such that for every n ≥ 1 and every 
+
+z ≥ 1,
+
+P(n ¯Xn − nμ ∗ ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(n ¯Xn − nμ ∗ ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = αξ(1 −η) , ξ ′ = α−1, β ′ is a large enough constant that depends on R, K, ∆min , β, ξ, α, η .Proof. The proof follows directly from the proof of Theo-rem 4, by substituting the global sample threshold: 
+
+A′(t) = max  
+
+> i∈[K]
+
+A′
+
+> i
+
+(t) = 
+
+& 2∆min 
+
+· β1/ξ 
+
+1/(1 −η)
+
+tα/ (ξ(1 −η)) 
+
+'
+
+.
+
+(59) 
+
+Analyzing Leaf Level d = D By applying Lemma 4 from Shah, Xie, and Xu (2022), we obtain that for η(D) ∈  12 , 1,and sufficiently large ξ(D), there exists a constant β(D) such that the collected rewards at si,D −1 (i.e., the sum of the i.i.d. stochastic reward and the value evaluation) satisfy the convergence property (cf. (35)) and the concentration prop-erty (cf. (37)). The optimal mean target μ(D-1)  
+
+> ∗
+
+(si,D -1 ) and 
+
+∆(D-1)  
+
+> min
+
+(si,D -1 ) are as defined in Shah, Xie, and Xu (2022). Then, by an application of Theorem 5, we have the follow-ing Lemma. 
+
+Lemma 9. Consider a node corresponding to history 
+
+si,D −1 at level D−1 within the VOIMCP for i ∈ [nD−1]. Let 
+
+˜v(D−1) (si,D −1)n be the total discounted reward collected at 
+
+si,D −1 during n ≥ 1 visits. Then, for the choice of appro-priately large β(D) > 0, for a given ξ(D) > 0, η(D) ∈ [ 12 , 1) 
+
+and α(D) > 2, we have 
+
+A. Convergence: 
+
+E
+
+ 1
+
+n ˜v(D−1) (si,D −1)n
+
+
+
+− μ(D−1)  
+
+> ∗
+
+(si,D −1)
+
+≤ ψ(D−1) 
+
+> n
+
+ 2( β(D)) 1
+
+> ξ(D)
+
+∆(D−1) min (si,D −1)
+
+
+
+> 11−η(D)
+
+· n 
+
+> α(D)
+> ξ(D)(1 −η(D))
+
++ C(D)
+
+ ,
+
+where ψ(D−1)  
+
+> n
+
+= 2 ˜R(D−1) max (K−1)  
+
+> n
+
+and C(D) =
+
+> 1+
+
+( cκ cκ −1 )ξ(D) 
+
+> α(D)−2
+
++ 1 .
+
+B. Concentration: there exist constants, β′ > 1 and ξ′ > 1
+
+and 1/2 ≤ η′ < 1 such that for n ≥ 1, z ≥ 1,
+
+P(˜ v(D−1) (si,D −1)n − nμ (D−1)  
+
+> ∗
+
+(si,D −1) ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(˜ v(D−1) (si,D −1)n − nμ (D−1)  
+
+> ∗
+
+(si,D −1) ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = α(D) 
+
+> ξ(D)(1 −η(D))
+
+, ξ′ = α(D) − 1, and β′ is a large enough constant that is function of parameters 
+
+α(D), β (D), ξ (D), η (D), ˜R(D−1) max , K, ∆(D−1) min (si,D −1).
+
+Recursion: Going from level d to d − 1 The proof for the convergence and concentration properties of the value estimates across all levels d of the VOIMCP tree proceeds via mathematical induction, following the structure in Shah, Xie, and Xu (2022). The mechanism of the induction is iden-tical to the original paper, but the final, global convergence rate differs due to how we defined the sample threshold 
+
+A′
+
+> i
+
+(t).Assume the estimated value ˜v(d)(·) at level d satisfies properties (35) and (37) with parameters α(d), ξ(d), η(d), and an appropriately large constant β(d). For any node si,d −1 at level d − 1, the effective reward received is the combined value R(si,d −1, a ) + γ˜v(d)(s′
+
+> d
+
+). By the inductive hypothesis and an application of Lemma 4 of Shah, Xie, and Xu (2022), this combined reward sequence continues to satisfy assump-tions (35) and (37) with the same α, ξ, η dependencies and a re-adjusted constant β(d−1) .Under the same bounded reward, value definitions, and objects μ(d-1)  
+
+> ∗
+
+(si,d -1 ) and ∆(d-1)  
+
+> min
+
+(si,d -1 ) defined in Shah, Xie, and Xu (2022), we apply Theorem 5 and obtain the fol-lowing result regarding the desired convergence and concen-tration properties of the combined reward sequence at level 
+
+d − 1, which completes the induction and proves the results for all d ≥ 0.
+
+Lemma 10. Consider a node corresponding to state si,d −1
+
+at level d − 1 within the VOIMCP for i ∈ [nd−1]. Let 
+
+˜v(d−1) (si,d −1)n be the total discounted reward collected at 
+
+si,d −1 during n ≥ 1 visits. Then, for the choice of appropri-ately large β(d) > 0, for a given ξ(d) > 0, η(d) ∈ [ 12 , 1) and 
+
+α(d) > 2, we have A. Convergence: 
+
+E
+
+ 1
+
+n ˜v(d−1) (si,d −1)n
+
+
+
+− μ(d−1)  
+
+> ∗
+
+(si,d −1)
+
+≤ ψ(d−1) 
+
+> n
+
+ 2( β(d)) 1
+
+> ξ(d)
+
+∆(d−1) min (si,d −1)
+
+
+
+> 11−η(d)
+
+· n 
+
+> α(d)
+> ξ(d)(1 −η(d))
+
++ C(d)
+
+ ,
+
+where ψ(d−1)  
+
+> n
+
+= 2 ˜R(d−1) max (K−1)  
+
+> n
+
+and C(d) = 1+ ( cκ cκ −1 )ξ(d) 
+
+> α(d)−2
+
++1.
+
+B. Concentration: there exist constants, β′ > 1 and ξ′ > 1
+
+and 1/2 ≤ η′ < 1 such that for n ≥ 1, z ≥ 1,
+
+P(˜ v(d−1) (si,d −1)n − nμ (d−1)  
+
+> ∗
+
+(si,d −1) ≥ nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+P(˜ v(d−1) (si,d −1)n − nμ (d−1)  
+
+> ∗
+
+(si,d −1) ≤ − nη′
+
+z) ≤ β′
+
+zξ′ ,
+
+where η′ = α(d) 
+
+> ξ(d)(1 −η(d))
+
+, ξ′ = α(d) − 1, and β′ is a large enough constant that is function of parameters 
+
+α(d), β (d), ξ (d), η (d), ˜R(d−1) max , K, ∆(d−1) min (si,d −1).
+
+Completing Proof of Theorem 3. 
+
+Using Lemma 10, we conclude that the recursive relation-ship going from d to d − 1 holds for all d ≥ 1 with level 
+
+0 being the root. Thus, for the root state s(0) , under n total simulations of annealed VOI-MCTS, the empirical average of the rewards 1 
+
+> n
+
+˜v(0) (s0)n is such that (using the fact that 
+
+α(0) ≡ ξ(0) (1 − η(0) )/η (0) )
+
+E
+
+ 1
+
+n ˜v(0) (s0)n
+
+
+
+− μ(0)  
+
+> ∗
+
+(s0) ≤ O
+
+
+
+n α(0)  
+
+> ξ(0) (1 −η(0) )−1
+
+
+
+= O(nη−1) (60) where μ(0)  
+
+> ∗
+
+(s0) is the value for s0 after D iterations of value iteration. We seek to transfer this root-level VOI-MCTS result to the VOIMCP estimator ¯Vn(b0) =
+
+> 1
+> n
+
+P 
+
+> a∈A ′
+
+N (h0a) ¯Q(h0a).The deterministic-transition analysis above extends to stochastic transitions by the same meta-node construction as in Lemma A.1 of Shah, Xie, and Xu (2022). Since P′ is a finite-horizon POMDP, Lemmas 1 and 2 of Silver and Ve-ness (2010) apply directly. Recall the derived history-MDP 
+
+˜M′ for P′ defined in the proof of Theorem 2. Let ˜V ∗ 
+
+> D
+
+(h0) denote the ordinary depth-D optimal value at the root of ˜M′. Since Lemma 10 is centered at the raw optimal mean, the root target satisfies 
+
+μ(0)  
+
+> ∗
+
+(s0) = ˜V ∗ 
+
+> D
+
+(h0).
+
+By Lemma 1 of Silver and Veness (2010), the value of any history-dependent policy in P′ equals its value in the derived history-MDP ˜M′. Moreover, because the augmented action space A′ = AOL ∪ A CL contains a closed-loop counter-part of every original action and closed-loop backups weakly dominate open-loop backups, the ordinary optimal value in 
+
+P′ is exactly the original POMDP optimal value. Hence 
+
+˜V ∗ 
+
+> D
+
+(h0) = V ∗ 
+
+> D
+
+(b0).
+
+By Lemma 2 of Silver and Veness (2010), the simula-tion traces generated by annealed VOIMCP in P′ are equal in distribution to those generated by annealed VOI-MCTS in ˜M′. Therefore, the root estimator produced by annealed VOIMCP after n simulations has the same distribution as the root estimator analyzed above. Thus, we conclude that the output ¯Vn(b0) of annealed VOIMCP with n simulations satisfies 
+
+E[ ¯Vn(b0)] − V ∗ 
+
+> D
+
+(b0) ≤ O (nη−1), (61) thus proving the theorem. 
+
+## Supplement on Empirical Evaluation 
+
+Implementation Details of VOIMCP 
+
+While the main text presents the theoretical recursive for-mulation of VOIMCP for convergence analysis, our prac-tical implementation utilizes the standard PO-UCT expan-sion and rollout strategy for computational efficiency. Algo-rithm 2 details this implementation. The primary distinction is the termination of the SIMULATE procedure and returning a value estimate (e.g., with a heuristic rollout policy) in Line 
+
+17 upon expanding a new history node h.
+
+Experimental Protocol 
+
+Each experimental trial refers to one full environment episode rollout under an online replanning framework, start-ing from an initial state/belief, and terminating under the task’s terminal state or when the horizon is reached. We plan by interleaving policy planning and execution, using a standard SIR particle filter to update the belief before each replanning step. Each trial uses an independent seed, con-trolling any randomness in the trial, e.g., sampling from the generative model, particle filtering. 
+
+Hyperparameters 
+
+Table 1 summarizes the best-performing hyperparameters identified through grid search. We observed that VOIMCP is relatively robust to the exploration constant c. Across all three benchmark domains, we found that VOIMCP perfor-mance is relatively robust to the choice of κ, with values in the range [0 .01 , 0.2] consistently outperforming the base-lines. 
+
+Annealing Results 
+
+We additionally evaluate the performance of VOIMCP us-ing a simplified count-based schedule where κ decays as 
+
+κN = κmax x 
+
+> 1+ x
+
+where x = κκmax BN . As visit counts grow, 
+
+κ decays proportionally to BN and is smoothly bounded in [0, κmax ). Figure 3 compares the discounted cumulative re-ward difference between the fixed-κ implementation and the annealed variant across all three benchmarks (annealed mi-nus standard). Algorithm 2: VOIMCP (Implementation) 
+
+1: procedure SEARCH (b)2: for all i = 1 , . . . , n do 
+
+3: s ∼ b
+
+4: h0 = {b}
+
+5: SIMULATE (s, h 0, 0)6: end for 
+
+7: return arg max 
+
+> a∈A ′
+
+¯Q(ha )
+
+8: end procedure 
+
+9: procedure SIMULATE (s, h, depth )10: if depth = D then 
+
+11: return 0
+
+12: end if 
+
+13: if h / ∈ T then 
+
+14: for all a ∈ A ′ do 
+
+15: T (ha ) ← (0 , 0) 
+
+16: end for 
+
+17: return VALUE ESTIMATE (s, h, depth )18: end if 
+
+19: a∗ ∈ arg max 
+
+> a∈A ′
+
+U CB V OI (ha )
+
+20: if a∗ ∈ A CL then 
+
+21: (s′, o, r ) ∼ G (s, a ∗)
+
+22: else 
+
+23: (s′, r ) ∼ G (s, a ∗)
+
+24: o ← onull 
+
+25: end if 
+
+26: N (h) ← N (h) + 1 ; N (ha ∗) ← N (ha ∗) + 1 
+
+27: R ← r + γSIMULATE (s′, ha ∗o, depth +1) 
+
+28: ¯Q(ha ∗) ← ¯Q(ha ∗) + R − ¯Q(ha ∗)
+
+N (ha ∗)
+
+29: return R
+
+30: end procedure 
+
+Domain Algorithm c κ D
+
+Tracking VOIMCP 100 0.03 20 PO-UCT 100 - 20 I-UCB POMCP 100 - 20 Open-Loop 100 - 20 FVRockSample VOIMCP 10 0.02 20 PO-UCT 10 - 20 I-UCB POMCP 10 - 20 Open-Loop 10 - 20 Laser Tag VOIMCP 100 0.01 20 PO-UCT 100 - 20 I-UCB POMCP 100 - 20 Open-Loop 100 - 20 Table 1: Summary of hyperparameters used in experiments. These results show that this annealing schedule is not only theoretically rigorous but also practically beneficial. Over a range of κmax , when compared to a fixed κmax baseline, the annealed VOIMCP variant achieved peak performance improvements of approximately 2.52%, 4.06%, and 3.44% 𝜅       
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 Delta Reward
+> −16
+> −80816 24
+
+Target Tracking 𝜅       
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 Delta Reward
+> −1.00
+> −0.75
+> −0.50
+> −0.25 0.00 0.25 0.50 0.75
+
+FieldVision RockSample 𝜅       
+
+> 0.0 0.1 0.2 0.3 0.4 0.5 0.6 Delta Reward
+> −0.4
+> −0.2 0.0 0.2 0.4 0.6 0.8
+
+Laser Tag 
+
+Figure 3: Results for VOIMCP difference between the an-nealed and standard algorithms, presenting delta discounted cumulative reward over 1000 trials. The lighter-colored rib-bons around the Monte Carlo mean display the 95% confi-dence interval. for the Target Tracking, FieldVision RockSample, and Laser Tag domains, respectively. While these gains are modest, these results serve as a valuable proof of concept: annealing can provide a path to asymptotic optimality while reducing reliance on careful tuning of a fixed κ. A more exhaustive analysis of complex annealing schedules and their empirical trade-offs remains a subject for future work.

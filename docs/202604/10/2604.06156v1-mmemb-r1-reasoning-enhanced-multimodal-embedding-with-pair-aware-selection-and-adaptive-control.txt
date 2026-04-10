@@ -1,0 +1,1018 @@
+Title: MMEmb-R1: Reasoning-Enhanced Multimodal Embedding with Pair-Aware Selection and Adaptive Control
+
+URL Source: https://arxiv.org/pdf/2604.06156v1
+
+Published Time: Wed, 08 Apr 2026 01:25:28 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+## MMEmb-R1: Reasoning-Enhanced Multimodal Embedding with Pair-Aware Selection and Adaptive Control 
+
+Yuchi Wang 1, Haiyang Yu 2, Weikang Bian 1, Jiefeng Long 2, Xiao Liang 2†
+
+Chao Feng 2‡, Hongsheng Li 1‡
+
+> 1
+
+MMLab, The Chinese University of Hong Kong 2ByteDance 
+
+> †
+
+Project Lead. ‡Corresponding Authors. 
+
+wangyuchi369@gmail.com chaofeng.zz@bytedance.com hsli@ee.cuhk.edu.hk Image      
+
+> Encoder
+> Image Emb .
+> Text
+> Encoder
+> Girl feeds cat
+> under cherry
+> blossoms
+> Text Emb .
+> Contrast
+> (a)
+> What
+> does the
+> girl feed?
+> Multimodal
+> Emb .
+> Query Target
+
+MLLM      
+
+> Contrast
+> (b)
+> Cat
+> Instruction
+> CoT Tokens Multimodal
+> Emb .
+> Query Target Contrast
+> (c)
+> What
+> does the
+> girl feed?
+
+MLLM 
+
+> Cat
+> Instruction
+
+Figure 1: The evolution of multimodal embedding. (a) Early approaches employ modality-specific encoders to project different modalities into a shared semantic space. (b) MLLM-based methods process multimodal inputs with task instructions and are trained using semantically related query–target pairs. (c) Recent reasoning-enhanced embedding methods introduce chain-of-thought (CoT) reasoning prior to generating multimodal embeddings. 
+
+Abstract 
+
+MLLMs have been successfully applied to mul-timodal embedding tasks, yet their generative reasoning capabilities remain underutilized. Di-rectly incorporating chain-of-thought reasoning into embedding learning introduces two funda-mental challenges. First, structural misalign-ment between instance-level reasoning and pair-wise contrastive supervision may lead to short-cut behavior, where the model merely learns the superficial format of reasoning. Second, reasoning is not universally beneficial for em-bedding tasks. Enforcing reasoning for all in-puts may introduce unnecessary computation and latency, and can even obscure salient se-mantic signals for simple cases. To address these issues, we propose MMEmb-R1, an adap-tive reasoning-based multimodal embedding framework. We formulate reasoning as a latent variable and introduce pair-aware reasoning se-lection that employs counterfactual interven-tion to identify reasoning paths beneficial for query–target alignment. Furthermore, we adopt reinforcement learning to selectively invoke reasoning only when necessary. Experiments on the MMEB-V2 benchmark demonstrate that our model achieves a score of 71.2 with only 4B parameters, establishing a new state-of-the-art while significantly reducing reasoning over-head and inference latency. 
+
+1 Introduction 
+
+Multimodal embedding models aim to project heterogeneous inputs, such as text, images, and interleaved image-text content, into a unified se-mantic space. They serve as a fundamental infras-tructure for a wide range of applications, including recommendation systems (Lin et al., 2025; Zhang et al., 2025a), cross-modal retrieval (Faysse et al., 2025a; Wei et al., 2024), and retrieval-augmented generation (Yu et al., 2025b; Ren et al., 2025). Early work, exemplified by CLIP (Radford et al., 2021), leverages large-scale image-text pairs to align different modalities within a shared semantic space (Fig. 1(a)). More recently, multimodal large language models (MLLMs) have revolutionized this field (Meng et al., 2025; Zhang et al., 2025b; Jiang et al., 2025b) by providing rich world knowl-edge, compositional understanding, and strong instruction-following capabilities (Fig. 1(b)). However, the current utilization of MLLMs in embedding models remains limited. Most existing approaches treat MLLMs primarily as static fea-ture extractors, without fundamentally departing from the conventional paradigm. In contrast, the success of LLMs (Brown et al., 2020; Yang et al., 2025) and MLLMs (Comanici et al., 2025; OpenAI et al., 2024a) largely stems from their generative 1
+
+> arXiv:2604.06156v1 [cs.CV] 7 Apr 2026
+
+capability: next-token prediction and the genera-tive paradigm have substantially enhanced abstrac-tion, reasoning, and structured understanding, giv-ing rise to emergent abilities (Wei et al., 2022a). The embedding community has only marginally benefited from these strengths. This raises a fun-damental question: Can generative reasoning be effectively integrated into embedding learning, and if so, what is the appropriate formulation? 
+
+By reexamining the paradigms of embedding and reasoning, as well as prior related works, we identify two key challenges. (1) Structural mis-alignment between reasoning and representa-tion learning may induce shortcut behavior. Em-bedding models are trained under pairwise con-trastive supervision, whereas reasoning is gener-ated at the instance level. Existing pioneering reasoning-driven embedding models (Lan et al., 2025b; Cui et al., 2026), as illustrated in Fig. 1(c), typically require the model to learn or incorpo-rate a single teacher-provided chain-of-thought (CoT) (Wei et al., 2022b) separately for the query and the target before generating the embedding. In this setup, reasoning quality is largely decoupled from the paired objective that ultimately governs contrastive representation learning. As shown in Fig. 2(a), embedding tokens in prior models such as UME-R1 (Lan et al., 2025b) attend heavily to the original input but minimally to CoT tokens, suggesting that reasoning is often treated as a de-terministic procedural prefix rather than a latent variable subject to selection. Consequently, the model exhibits shortcut behavior: it mimics the surface format of reasoning without establishing a meaningful dependency between reasoning and the learned representation. (2) Reasoning is not universally necessary for embedding tasks. For simple or concise inputs, enforced autoregressive reasoning may induce “overthinking”, introducing unnecessary computation and latency. Moreover, excessive reasoning can obscure salient semantic signals and may even degrade performance by con-fusing the model, as shown in Fig. 2(b). To harvest the ability of the generative paradigm and address above challenges, we pro-pose MMEmb-R1, an adaptive Reasoning-based 
+
+Multi Modal Emb edding framework. Instead of deterministically generating a single reasoning tra-jectory, we formulate the reasoning path as a latent variable and introduce a pair-aware reasoning selection mechanism tailored to contrastive em-bedding . Specifically, we employ multiple hetero-Input Tokens CoT Tokens EMB         
+
+> UME -R1
+> MMEmb -R1
+> (Ours)
+> CoT largely
+> ignored
+> CoT actively
+> utilized
+> High
+> Correlation
+> Low
+> Correlation
+> What does the girl feed?
+> The image shows a
+> girl….. feeding an orange
+> tabby cat. The question asks
+> what she feeds. Focus on
+> the interaction …. she is
+> clearly caring for the cat.
+> The target is the single word
+> "cat.” …First, "cat" could
+> refer to various feline
+> species including domestic
+> cats, wildcats, or even big
+> cats like lions and tigers ….
+> cat
+> Query Target
+> (a)
+> (b)
+
+Figure 2: Two challenges of reasoning in embedding. (a) Shortcut behavior: UME-R1’s embedding token largely ignores CoT tokens, while MMEmb-R1 actively utilizes them. (b) Overthinking: reasoning helps the complex query (top) but introduces irrelevant noise for the simple target “cat” (bottom). 
+
+geneous worker MLLMs to generate diverse rea-soning candidates, simulating a rich prior distribu-tion over the latent reasoning space and mitigating single-teacher bias. We then design a pair-aware evaluator that employs counterfactual intervention to score each reasoning path: by comparing the matching confidence with and without the ratio-nale, we isolate its marginal contribution to query-target alignment, which subsequently guides model training. Furthermore, we develop an adaptive reasoning mechanism that explicitly models the utility of reasoning and mitigates unnecessary over-thinking. We quantify the reasoning benefit by computing the similarity gap between reasoning-enhanced and direct embeddings. This continuous utility signal serves as a reward in reinforcement learning with GRPO (Guo et al., 2025), enabling the model to learn a policy that selectively invokes reasoning only when it provides substantial benefit. By integrating pair-aware selection with adaptive reasoning control, our framework achieves a princi-pled balance between effectiveness and efficiency. Extensive experiments on the MMEB-V2 bench-mark (Meng et al., 2025) demonstrate the effective-ness of our approach. MMEmb-R1 achieves state-of-the-art performance across both small-size and 2medium-size settings, attaining 68.3 overall with a Qwen3-VL-2B backbone and 71.2 with Qwen3-VL-4B, surpassing strong baselines such as Embed-RL (Jiang et al., 2026) (66.8) and RzenEmbed-v1 (Jian et al., 2025) (68.9) while using fewer parameters. The proposed adaptive mechanism reduces inference latency by 2.5 × compared to UME-R1 (Lan et al., 2025b), with improvement in retrieval accuracy. We hope this work offers a fresh perspective on reasoning-aware representa-tion learning and opens new avenues for integrating generative paradigms into multimodal embedding. 
+
+2 Related Works 
+
+2.1 Multimodal Embedding Models 
+
+Multimodal embedding aims to learn compact, se-mantically meaningful representations for heteroge-neous data. CLIP (Radford et al., 2021) established the dual-tower contrastive paradigm, training sepa-rate encoders via large-scale image-text alignment. Subsequent studies extended this paradigm to ad-ditional modalities like AudioCLIP (Guzhov et al., 2022) and CLIP4Clip (Luo et al., 2022). Other works further improve the contrastive learning paradigm by introducing novel training objectives or pre-training strategies, such as BLIP (Li et al., 2022) and SigLIP (Zhai et al., 2023). With the rise of MLLMs, the community has shifted toward MLLM-based embedding frameworks. Early repre-sentative works include VLM2Vec (Jiang et al., 2025b), GME (Zhang et al., 2025b), and Col-Pali (Faysse et al., 2025b). Building on this founda-tion, recent efforts have explored expanding modal-ity coverage (Meng et al., 2025; Jian et al., 2025; Tzachor et al., 2026; Liu et al., 2025b), scaling data quality (Li et al., 2026a; Zhou et al., 2025; Gu et al., 2025b), and designing specialized architec-tures or training strategies (Chen et al., 2025a; Qin et al., 2025; Gu et al., 2026; Li et al., 2026b). More recently, several studies have explored incorporat-ing generative reasoning into embedding learning. UME-R1 (Lan et al., 2025b) applies supervised fine-tuning to endow embedding models with rea-soning capability; TTE (Cui et al., 2026) investi-gates diverse combinations of reasoners and embed-ders; and our concurrent work Embed-RL (Jiang et al., 2026) optimizes the reasoner to generate evidential chains of thought. While these pioneer-ing efforts demonstrate the potential of reasoning for embedding, they largely overlook the structural misalignment between instance-level reasoning and pair-level contrastive supervision, which motivates the design of MMEmb-R1. 
+
+2.2 Large Reasoning Models 
+
+Recent advances have shown that LLMs and MLLMs benefit substantially from enhanced rea-soning capabilities (Guo et al., 2025; Comanici et al., 2025), as exemplified by OpenAI o1 (Ope-nAI et al., 2024b) and QwQ (Team, 2025). Early methods adopt chain-of-thought prompting (Ko-jima et al., 2022; Wang et al., 2023; Xu et al., 2025; Shao et al., 2024a) to elicit step-by-step rationales. Inspired by GRPO in DeepSeek-R1 (Guo et al., 2025), a growing body of work applies reinforce-ment learning to optimize reasoning trajectories across diverse domains, including visual under-standing (Feng et al., 2025; Shen et al., 2025), text-to-image generation (Jiang et al., 2025a), mathe-matical reasoning (Lu et al., 2024; Zhang et al., 2024b), and domain-specific applications such as finance (Liu et al., 2026) and medicine (Lai et al., 2026). However, multimodal embedding and representation learning, an important subfield of multimodal learning, has yet to benefit from this paradigm much, a gap our work aims to bridge. 
+
+3 Methodology 
+
+We present our MMEmb-R1 framework, illustrated in Fig. 3, which consists of three stages: (1) con-structing a pair-aware reasoning pool via diverse candidate generation and counterfactual selection (§ 3.2); (2) jointly training the model for reason-ing generation and contrastive embedding (§ 3.3); and (3) adaptive reasoning control via utility-aware reinforcement learning (§ 3.4). We begin with pre-liminaries and an architectural overview in § 3.1. 
+
+3.1 Preliminaries and Framework Overview Preliminaries of Multimodal Embedding. 
+
+Given a multimodal input x = {t, v } consisting of text and visual (image or video) content, an embedding model E maps it to a d-dimensional representation z = E(x) ∈ Rd. Training follows the contrastive paradigm: given a batch of N
+
+query–target pairs {(qk, t + 
+
+> k
+
+)}Nk=1 , we compute embeddings zqk = E(qk) and ztk = E(t+ 
+
+> k
+
+).The objective pulls positive pairs closer while pushing in-batch negatives apart by optimizing the InfoNCE loss: 
+
+Lcon = − 1
+
+N
+
+> N
+
+X
+
+> k=1
+
+log exp  sim( zqk , ztk )/τ PNj=1 exp  sim( zqk , ztj )/τ 
+
+3What does the                
+
+> girl feed?
+> <EMPTY>
+> <reason> The image shows a young girl in a
+> school uniform …cat… is the only animal present
+> in the scene. Therefore, the answer to "what
+> does the girl feed" is: a cat. </reason>
+> <generate> The setting appears …. The orange -
+> colored animal …with both a small dog and a
+> tabby cat. Considering …. , it is most likely a
+> domestic cat. However, the exact food being
+> provided is not clearly visible... </generate>
+> Length
+> 𝐿 !
+> Length
+> 𝐿 "
+> Direct Reward 𝛼
+> Reasoning
+> Utility 𝛿
+> Policy 𝜋 #
+> Direct: 𝛼
+> Reason: 𝛿 −𝜇 (𝐿 $)
+
+𝑹 𝒂𝒅𝒂 
+
+𝑹 𝒇𝒐𝒓𝒎𝒂𝒕 
+
+𝑹 𝒆𝒎𝒃             
+
+> 1. Valid CoT structure
+> 2. Proper
+> <reason>..</reason> tags
+> 3. Missing/malformed
+> output
+> Rank of the
+> positive pair
+> (c) Adaptive Reasoning
+> RL Training
+
+MLLM   
+
+> What
+> does the
+> girl feed?
+> Query
+> 𝒒
+> Target
+> 𝒕 %
+
+w!
+
+w"
+
+w#                     
+
+> Pair -aware Evaluator 𝓙
+> 𝒓 𝟏
+> 𝒓 𝟐
+> 𝒓 𝟑
+> Represent the
+> above input text,
+> images, videos, or
+> any combination
+> of the three as
+> embeddings…
+> Instruction
+> Reasoning
+> Pool 𝐷 ℛ
+> (b) Joint Reasoning and
+> Embedding Training
+> Direct Emb .𝒛 "Reason Emb .𝒛 𝒓
+> CoT tokens
+> NTP Loss ℒ$%&
+> Contrast
+> Loss
+> ℒ'()*+,
+> Contrast
+> Loss
+> ℒ)*-.%/
+> w"
+> w#
+> w$
+> Rationale
+> latent space
+> 𝓡
+> <d_emb ><r_emb >
+> Sampling
+> (a) Pair -aware
+> Reasoning Selection
+> 𝑣
+> 𝑡
+> 𝑟
+> 𝑆 (𝑟 ;𝑞 ,𝑡 %)
+> Direct Emb .
+> 𝒛 "Reason Emb .
+> 𝒛 𝒓
+> Query
+> Target
+> 𝑠 )
+> 𝑠 '
+
+Figure 3: Overview of the MMEmb-R1 framework. Upper Left: Pair-aware reasoning selection—multiple heterogeneous workers generate diverse rationale candidates for the query and target, and a counterfactual evaluator scores each candidate to produce selection weights w1, w 2, w 3. Upper right: Joint reasoning and embedding training—the MLLM is trained with a direct embedding path ( Ldirect ), a reasoning-enhanced embedding path (Lreason ), and a next-token prediction objective over CoT tokens ( LCoT ). Lower: Adaptive reasoning via GRPO—the policy πθ decides whether to invoke reasoning or emit <EMPTY> for each query, guided by three reward signals: adaptive reward Rada , format reward Rformat , and embedding reward Remb .
+
+where τ is sampling temperature and sim( ·, ·) de-notes cosine similarity. 
+
+Architecture Overview. MMEmb-R1 is built upon a multimodal large language model (MLLM). Visual inputs are first processed by a vision trans-former (ViT) (Dosovitskiy et al., 2020) and pro-jected into the language token space via a visual adapter, enabling unified sequence modeling across modalities. The model operates in two modes. In direct mode , the embedding is extracted from the hidden state of the final input special token: 
+
+zd = E(x). In reasoning mode , the model first generates a reasoning path r conditioned on the input, and the embedding is derived from the final token after the reasoning trajectory: zr = E(x ⊕ r),where ⊕ denotes sequence concatenation. 
+
+Reasoning as a Latent Variable. A central de-parture of MMEmb-R1 from prior work is the treatment of the reasoning path r as a latent vari-able rather than a deterministic output of a fixed teacher. Formally, we posit a latent reasoning space 
+
+R with a prior distribution P(R), from which rea-soning candidates are sampled: r ∼ P (R). The reasoning-enhanced embedding can then be written as a marginalization over this latent space: zr =
+
+Er∼P (R)
+
+E(x ⊕ r). In practice, direct marginal-ization is intractable. Our framework addresses this by: (1) simulating P(R) through diverse multi-worker generation, (2) introducing a pair-aware scoring function S(r; q, t +) to perform structured posterior selection aligned with the contrastive ob-jective, and (3) learning an adaptive policy that decides whether to sample from P(R) at all. We detail each component in the following sections. 
+
+3.2 Pair-Aware Reasoning Selection for Contrastive Embedding 
+
+As established in § 3.1, we model reasoning as a latent variable r ∼ P (R) whose quality should be assessed under the joint query–target context. 
+
+3.2.1 Diverse Prior Simulation via Multi-Worker Generation 
+
+To approximate a rich prior P(R) and reduce single-teacher bias, we employ K heterogeneous worker MLLMs {Mk}Kk=1 spanning complemen-tary capabilities: (1) Instruct-based models (e.g., Qwen2-VL-Instruct (Wang et al., 2024)): pro-4duce concise, structured analyses of core seman-tics and retrieval-relevant keypoints. (2) Thinking models (e.g., GLM-4.1V-Thinking (Team et al., 2026)): generate exploratory, long-form reason-ing chains that capture deeper analytical perspec-tives, though potentially with greater verbosity. (3) 
+
+High-capacity proprietary models (e.g., Gemini 2.5 Pro (Comanici et al., 2025)): provide broad world knowledge and rich contextual coverage. As shown in Fig. 3(a), for each input x (either a query q or target t+), each worker independently produces a candidate rationale rk = Mk(x), k = 1 , . . . , K .Note that generation is still performed single-sided 
+
+in this stage to avoid information leakage. The resulting candidates Rx = {r1, r 2, . . . , r K } col-lectively form empirical samples from the latent reasoning prior P(R). Detailed prompt and imple-mentations can be found in Appendix. B.1. 
+
+3.2.2 Counterfactual Posterior Selection 
+
+Given samples from the prior, we perform poste-rior selection : identifying which reasoning paths are most useful for the pair (qi, t + 
+
+> i
+
+). Specifically, we employ an evaluator model J prompted to judge whether the query and target match, and extract the logit of the affirmative token [YES] 
+
+as a confidence score. We apply causal interven-tion (Pearl, 2009) to isolate reasoning’s contribu-tion, computing matching confidence without and with the rationale candidate: c0 = Conf J (qi, t + 
+
+> i
+
+)
+
+and cr = Conf J (qi, t + 
+
+> i
+
+, r ). The counterfactual reasoning gain is: ∆r = cr − c0. This measures how much rationale r improves recognizing query-target correspondence beyond raw input. Posi-tive ∆r indicates useful semantic bridging rather than mere rephrasing. We retain candidates with 
+
+∆r > ϵ , forming R+ 
+
+> i
+
+= {r ∈ R i | ∆r > ϵ }, and normalize gains via softmax: 
+
+wr = exp(∆ r/γ )
+
+P
+
+> r′∈R +
+> i
+
+exp(∆ r′ /γ )
+
+where γ is a temperature controlling the sharp-ness of the selection distribution. This pro-duces a weighted reasoning pool: DR =(qi, t + 
+
+> i
+
+, r i,j , w i,j ) i,j where higher-gain reason-ing paths contribute more strongly to subsequent training. More details can be found in Ap-pendix B.2 and Appendix A.3. 
+
+3.3 Joint Reasoning and Embedding Training 
+
+With the curated reasoning pool DR representing the selected posterior over latent reasoning, we fine-tune the MLLM to acquire: (1) contrastive alignment for embedding matching, and (2) coher-ent chain-of-thought generation internalizing the reasoning distribution. This is achieved through a multi-objective training scheme with two comple-mentary embedding paths (Fig. 3(b)). 
+
+Reasoning-Enhanced Embedding Path. For each training pair (qi, t + 
+
+> i
+
+), we sample a reasoning path ri,j from DR according to its posterior weight 
+
+wi,j . This path is optimized with the contrastive loss: Lreason = Lcon 
+
+ zr
+
+> q
+
+, zr
+
+> t
+
+, where Lcon follows the InfoNCE formulation defined above. To explic-itly cultivate reasoning generation ability within the backbone, we additionally apply a next-token prediction loss over the chain-of-thought tokens: 
+
+LCoT = −
+
+> |r|
+
+X
+
+> l=1
+
+log pθ(rl | x, r <l ),
+
+which trains the model to internalize the reasoning trajectories in DR as generative knowledge. 
+
+Direct Embedding Path. To preserve embed-ding quality without reasoning overhead, we in-clude a direct path encoding raw inputs as zd =
+
+E(x), optimized with: Ldirect = Lcon 
+
+ zd
+
+> q
+
+, zd
+
+> t
+
+.
+
+Overall Objective. The complete training objec-tive combines all three components: 
+
+L = Lreason + λCoT LCoT + λdirect Ldirect .
+
+where LCoT and Ldirect are hyperparameters. 
+
+3.4 Adaptive Reasoning Control via Utility-Aware Optimization 
+
+While the joint training stage equips the model with reasoning capability, not all inputs benefit from explicit reasoning as discussed in § 1. We therefore introduce a reinforcement learning stage that trains the model to selectively invoke reasoning only when it provides measurable benefit .
+
+3.4.1 Reasoning Utility Estimation 
+
+We estimate reasoning utility from the embedding geometry learned after the joint training stage. For each query qi in the reinforcement learning dataset, we compute its similarity with the corresponding target using both normalized direct embeddings and reasoning-enhanced embeddings produced by the jointly trained model, yielding sd 
+
+> i
+
+and sr 
+
+> i
+
+, re-spectively. We then define the reasoning utility gap 
+
+as δi = sr 
+
+> i
+
+− sd 
+
+> i
+
+. This continuous signal quantifies 5the marginal benefit of reasoning for each instance: 
+
+δi > 0 indicates that reasoning improves retrieval quality, whereas δi ≤ 0 suggests that direct embed-ding is sufficient or even preferable. Importantly, we treat δi as a continuous intrinsic signal rather than a binary supervision label, enabling more fine-grained and stable policy learning. 
+
+3.4.2 Policy Optimization with GRPO 
+
+We formulate adaptive reasoning as a sequen-tial decision-making problem (Puterman, 1990; Chen et al., 2023). As shown in Fig. 3(c), for each query qi, the model selects an action ai ∈{DIRECT , REASON }, indicating whether to gener-ate the embedding directly or to invoke reasoning before embedding. If the R EASON action is se-lected, the model first generates a rationale and then produces the embedding conditioned on it. We design a reward function that balances retrieval improvement and computational cost: 
+
+Rada =
+
+(
+
+α, ai = DIRECT ∧ (n ≤ N )
+
+δi − μ(Li), ai = REASON 
+
+where α is a positive constant that encourages ex-ploration of the D IRECT action during the early stage of training (i.e., when the training step n ≤
+
+N ), mitigating the tendency to always generate ra-tionales inherited from the supervised stage. For the R EASON action, Li denotes the length of the generated reasoning, and μ(·) controls the trade-off between performance gain and computational over-head. In particular, we penalize excessively long rationales by applying an additional coefficient c
+
+when the reasoning length exceeds 512 tokens. Fol-lowing Lan et al. (2025b), we also incorporate an embedding reward Remb , which evaluates embed-ding quality based on the ranking position of the positive target among in-batch negatives, and a for-mat reward Rformat to ensure that the generated rationales follow the required output structure. To ensure symmetry, we additionally compute the re-ward in the reverse direction (target → query) and take the mean of the two scores. More details can be found in Appendix B.4. The overall objective is optimized using Group Relative Policy Optimiza-tion (GRPO) (Shao et al., 2024b), which maximizes the expected reward: 
+
+max  
+
+> θ
+
+Eai∼πθ (·| qi)
+
+Rada + Rformat + Remb 
+
+.
+
+4 Experiements 
+
+4.1 Setup 4.1.1 Implementation Details 
+
+We build MMEmb-R1 on the Qwen-VL family. For diverse prior simulation, we use GLM-4.1V-Thinking (Team et al., 2026), InternVL3-14B-Instruct (Zhu et al., 2025), and Doubao-Seed-1.6-Vision (ByteDance, 2025). The pair-aware eval-uator J is Qwen3-VL-32B-Instruct (Yang et al., 2025). For joint training, we use batch size 32 per GPU under DeepSpeed ZeRO-3, a cosine learn-ing rate schedule with initial rate 5 × 10 −5, and train for 3 epochs. For adaptive reasoning, we use GRPO (Shao et al., 2024b) with α = 0 .2 and 
+
+β = 0 .04 . All experiments run on 8 × H20 90GB GPUs. See Appendix B for details. 
+
+4.1.2 Training Datasets and Benchmark 
+
+Following prior work, we use MMEB-Train (Meng et al., 2025) for training. After data filtering and pair-aware selection (§ 3.2.2), we obtain ∼1.2M samples for joint embedding and reasoning train-ing and ∼10K for adaptive reasoning reinforcement learning. For evaluation, we use MMEB-V2 (Meng et al., 2025), a comprehensive benchmark covering 78 tasks across classification, VQA, retrieval, and visual grounding. Following the standard evalu-ation protocol, we report Hit@1 for image/video tasks and NDCG@5 for visual document tasks. 
+
+4.2 Main Results Baselines. We compare MMEmb-R1 against a broad set of multimodal embedding models, in-cluding classical MLLM-based models such as GME (Zhang et al., 2025b), ColPali (Faysse et al., 2025b), VLM2Vec (Jiang et al., 2025b), and VLM2Vec-V2 (Meng et al., 2025); recent methods like LamRA (Liu et al., 2025c), CAFe (Yu et al., 2025a), and RzenEmbed (Jian et al., 2025); and reasoning-driven models including UME-R1 (Lan et al., 2025b), TTE (Cui et al., 2026), and Embed-RL (Jiang et al., 2026). All methods are evaluated on MMEB-V2 (Meng et al., 2025) across Image, Video, and VisDoc modalities (Tab. 1). 
+
+Analysis. We can see that MMEmb-R1 achieves state-of-the-art performance in both size categories. With a Qwen3-VL-2B backbone, MMEmb-R1 at-tains 68.3 overall, surpassing the strongest base-lines Embed-RL and RzenEmbed-v1 by +1.5 and +3.9 points respectively. Scaling to Qwen3-VL-6Model Backbone Image Video VisDoc All CLS QA RET GD Overall CLS QA RET MRET Overall VDRv1 VDRv2 VR OOD Overall Small-size Models                                                                                                                                                                                                                                                                                                                                                                      
+
+> GME Qwen2-VL-2B 54.4 29.9 66.9 55.5 51.9 34.9 42.0 25.6 32.4 33.9 86.1 54.0 82.5 43.1 72.7 54.1 ColPali-V1.3 PaliGemma-3B 40.3 11.5 48.1 40.3 34.9 26.7 37.8 21.6 25.5 28.2 83.6 52.0 81.1 43.1 71.0 44.4 VLM2Vec Qwen2-VL-2B 58.7 49.3 65.0 72.9 59.7 33.4 30.5 20.6 33.0 29.0 49.8 13.5 51.8 33.5 41.6 47.0 VLM2Vec-V2 Qwen2-VL-2B 62.9 56.3 69.5 77.3 64.9 39.3 34.3 28.8 38.5 34.9 75.5 44.9 79.4 39.4 65.4 58.0 UME-R1 Qwen2-VL-2B 64.8 62.8 67.6 77.2 66.6 44.3 51.2 32.9 39.7 42.2 72.4 46.2 79.2 37.2 63.9 60.1 TTE †
+> sQwen3-VL-2B 67.9 66.6 70.2 84.1 70.1 47.3 49.1 34.4 33.2 32.1 77.5 53.2 83.2 41.1 68.8 63.1 RzenEmbed-v1 Qwen2-VL-2B 65.3 61.7 73.8 77.9 68.5 45.6 47.5 38.3 36.7 42.6 87.0 57.6 85.4 43.3 74.4 64.4 Embed-RL Qwen3-VL-2B 62.8 67.9 68.6 90.4 69.2 57.0 55.9 45.1 49.4 52.1 79.9 52.0 84.6 65.7 74.1 66.8 MMEmb-R1 (Ours) Qwen2-VL-2B 64.5 68.1 70.0 88.9 70.0 56.3 52.8 47.6 42.5 50.6 74.1 56.0 78.9 48.3 68.0 65.0 MMEmb-R1 (Ours) Qwen3-VL-2B 63.5 73.7 70.2 89.8 71.5 59.8 60.3 50.6 49.2 55.6 82.0 55.7 80.7 56.7 73.2 68.3 Medium-size Models
+> GME Qwen2-VL-7B 57.7 34.7 71.2 59.3 56.0 37.4 50.4 28.4 38.2 38.6 89.4 55.6 85.0 44.4 75.2 57.8 LamRA Qwen2-VL-7B 59.2 26.5 70.0 62.7 54.1 39.3 42.6 24.3 34.6 35.2 22.0 11.5 37.4 21.0 23.9 40.4 LamRA Qwen2.5-VL-7B 51.7 34.1 66.9 56.7 52.4 32.9 42.6 23.2 37.6 33.7 56.3 33.3 58.2 40.1 50.2 47.4 VLM2Vec Qwen2-VL-7B 62.7 56.9 69.4 82.2 65.5 39.1 30.0 29.0 40.6 34.0 56.9 9.4 59.1 38.1 46.4 52.3 CAFe LLaVA-OV-7B 63.6 61.7 69.1 87.6 67.6 35.8 58.7 34.4 39.5 42.4 70.7 49.6 79.5 38.1 63.9 60.6 UME-R1 Qwen2-VL-7B 67.1 69.2 71.9 84.9 71.3 48.6 60.7 38.2 39.3 47.5 75.7 50.5 83.7 37.6 67.1 64.5 Embed-RL Qwen3-VL-4B 63.7 70.5 71.3 91.4 70.1 57.6 58.4 45.1 49.5 53.0 80.2 53.4 84.9 67.1 74.7 68.1 TTE †
+> sQwen2-VL-7B 69.7 72.4 74.0 90.6 74.2 49.1 60.6 36.4 37.2 46.8 84.1 62.7 91.9 47.6 76.4 68.6 RzenEmbed-v1 Qwen2-VL-7B 69.8 68.7 76.8 85.7 73.6 52.8 56.2 41.9 41.8 48.9 89.5 60.8 87.9 44.4 76.8 68.9 MMEmb-R1 (Ours) Qwen2-VL-7B 68.1 71.8 77.7 87.1 74.4 60.2 56.0 51.2 41.1 53.3 79.6 65.3 84.7 58.0 74.9 69.7 MMEmb-R1 (Ours) Qwen3-VL-4B 67.7 74.2 74.5 94.9 74.8 60.7 61.1 51.6 50.6 56.6 83.0 60.6 83.7 66.6 76.7 71.2
+
+Table 1: Comparison of baseline methods and MMEmb-R1 on MMEB-V2. Given the diversity of model backbones, we aggregate results by model size. Models with 2B–3B parameters are categorized as small , while those with 4B–7B parameters are categorized as medium . † indicates that for the TTE model, we adopt the student variant to ensure a fair comparison without relying on a large external teacher model. Metrics are abbreviated as follows: 
+
+CLS (classification), QA (question answering), RET (retrieval), GD (grounding), MRET (moment retrieval), VDR 
+
+(ViDoRe), VR (VisRAG), and OOD (out-of-domain). 
+
+4B yields 71.2, outperforming the best medium-size baseline RzenEmbed-v1-7B with nearly half the parameters. Notably, MMEmb-R1 at 2B al-ready surpasses several 7B baselines, suggesting that high-quality reasoning can partially compen-sate for the capacity gap. The improvements are consistent across modality groups but particularly pronounced on Video, where MMEmb-R1 (Qwen3-VL-2B) achieves 55.6, outperforming Embed-RL by +3.5. This aligns with our expectation: video un-derstanding demands compositional reasoning over temporal dynamics, precisely the setting where pair-aware latent reasoning provides the greatest benefit. Detailed results and results on MMEB-V1 can be found in Appendix A.5. We also provide qualitative analysis in Appendix A.1. 
+
+4.3 Further Analysis 4.3.1 Further Analysis of Adaptive Reasoning Inference latency comparison. As discussed in § 3.4, our adaptive reasoning mechanism eliminates unnecessary reasoning paths, thereby improving performance while effectively reducing the infer-ence latency of reasoning-driven embedding mod-els. To verify this, we compare the wall-clock inference time and performance under different 
+
+Strategy Latency/s Accuracy 
+
+UME-R1 459 60.1 MMEmb-R1 (Always Reason) 337 63.6 MMEmb-R1 (Adaptive) 185 65.0 
+
+Table 2: Inference latency on a subset and overall ac-curacy on MMEB-V2. MMEmb-R1 Adaptive achieves the best performance while being fastest. 
+
+inference strategies. For a fair comparison with UME-R1-2B, we use Qwen2VL-2B as the back-bone. For the “always-reasoning” setting, we also perform reinforcement learning but set the adaptive reward Rada to zero. The results are summarized in Tab. 2. We can see that MMEmb-R1 Adaptive achieves 185s, a 1.8 × speedup over the always-reason variant and 2.5 × over UME-R1, while si-multaneously delivering the highest accuracy. The latency gap between MMEmb-R1 Always-reason and UME-R1 reflects the efficiency of our pair-aware selected reasoning, which produces more concise and targeted rationales than UME-R1’s ver-bose single-teacher chains. The further reduction from always-reason to adaptive confirms that the learned policy effectively skips unnecessary rea-soning for simple queries, yielding a model that is both faster and more accurate. 70 20 40 60 80 100 
+
+> Reasoning Invocation Ratio (%)
+> 56
+> 57
+> 58
+> 59
+> 60
+> 61
+> 62
+> 63
+> 64
+> Overall Accuracy (%)
+> Direct only
+> Always reason
+> Reasoning helps
+> Overthinking
+> hurts
+> -0.8
+> Optimal (74.3%, 62.7)
+
+Figure 4: Reasoning invocation ratio vs. overall accu-racy. The curve peaks at 74.3% reasoning ratio, after which accuracy declines. 
+
+Pareto Frontier between Reasoning and Accu-racy The coefficient c, which controls the trade-off between reasoning benefits and the length bud-get, provides an informative lens for analyzing how the adaptive policy allocates reasoning budget. In this experiment, we remove the 512-token limit and directly vary the cost coefficient c, tracing the resulting trade-off between reasoning invocation ratio and retrieval accuracy in Fig. 4. Each point corresponds to a policy trained with a different w
+
+and evaluated on a subset of MMEB-V2 for effi-ciency. As shown in the figure, the curve increases slowly at first and then rises steeply from around 57.2 to 62.7 at a reasoning ratio of 74.3%. Beyond this point, performance declines slightly to 61.9 under near-universal reasoning, representing a 0.8-point drop that empirically confirms the overthink-ing phenomenon discussed in § 1. These results indicate that the adaptive policy learns to prioritize the most reasoning-critical instances first: the earli-est queries selected for reasoning yield the highest marginal returns, while those added later contribute diminishing or even negative gains. 
+
+4.3.2 Ablation Studies 
+
+We conduct ablation studies to validate our design choices (Tab. 3). (1) Replacing the diverse multi-worker prior with a single teacher causes the largest drop, confirming that diverse candidates cover the reasoning space more effectively. Uniform sam-pling without pair-aware scoring degrades perfor-mance by 2.2 points, and removing the counterfac-tual baseline c0 causes an additional 0.9-point drop, indicating both selection and causal intervention filter genuinely useful rationales. (2) Removing the reasoning path entirely (Direct only) results in                         
+
+> Variant Score ∆
+> MMEmb-R1 (Full) 65.0 –
+> Pair-aware Reasoning Selection
+> Single-teacher rationale 61.2 −3.8 w/o pair-aware selection (uniform) 62.8 −2.2 w/o counterfactual (use cronly) 64.1 −0.9
+> Training Objective
+> w/o Lreason (Direct only) 59.2 −5.8
+> Adaptive Reasoning
+> Always reason 63.6 −1.4 Always direct 60.4 −4.6 Random (50%) 60.6 −4.4 Oracle 66.2 +1.2
+
+Table 3: Ablation study on MMEB-V2. Each row removes or modifies one component from the full MMEmb-R1 framework. 
+
+a 5.8-point drop, establishing reasoning-enhanced representations as the primary driver of our frame-work. (3) The always-reason variant achieves 63.6, 1.4 points lower than the full model, confirming that indiscriminate reasoning harms simple queries. The always-direct and random 50% strategies per-form comparably, suggesting naive stochastic selec-tion provides no advantage over skipping reasoning, whereas the learned policy captures meaningful structure. The oracle strategy (selecting the bet-ter of direct vs. reasoning-enhanced embedding) provides an upper bound of 66.2, indicating our learned policy recovers most achievable gain. 
+
+5 Conclusion 
+
+In this paper, we present MMEmb-R1, a frame-work that integrates generative reasoning into mul-timodal embedding learning. To address the struc-tural misalignment between instance-level reason-ing and pair-level contrastive supervision, we for-mulate the reasoning path as a latent variable and introduce a pair-aware selection mechanism. To mitigate the unnecessary overhead caused by indis-criminate reasoning, we further develop a utility-aware reinforcement learning stage that trains the model to selectively invoke reasoning. Experi-ments on MMEB-V2 demonstrate that MMEmb-R1 achieves state-of-the-art performance while sub-stantially reducing inference latency compared to existing reasoning-enhanced methods. We hope our work will inspire further research on reasoning-driven models and open new possibilities for the multimodal representation learning community. 8Limitations 
+
+Our framework has several limitations that warrant future investigation. First, the pipeline nature of our approach—offline reasoning generation, pair-aware selection, and two-stage training—prevents joint optimization of these components. An end-to-end formulation that unifies reasoning genera-tion, selection, and adaptive invocation within a single training loop could improve overall perfor-mance. Second, the adaptive policy makes binary decisions (invoke reasoning or not), which may be suboptimal. Extending it to control reasoning depth or granularity (e.g., brief vs. detailed chains) would enable more fine-grained resource allocation. Third, reasoning-enhanced embedding inevitably incurs additional inference cost. While precom-puting embeddings for the corpus side partially alleviates this in retrieval scenarios, fundamentally reducing the latency of reasoning-based models remains an open challenge. 
+
+References 
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, and 1 others. 2020. Language models are few-shot learners. Advances in neural information processing systems , 33:1877–1901. ByteDance. 2025. Doubao-seed-1.6-vision. Haonan Chen, Hong Liu, Yuping Luo, Liang Wang, Nan Yang, Furu Wei, and Zhicheng Dou. 2025a. Moca: Modality-aware continual pre-training makes bet-ter bidirectional multimodal embeddings. Preprint ,arXiv:2506.23115. Haonan Chen, Liang Wang, Nan Yang, Yutao Zhu, Zil-iang Zhao, Furu Wei, and Zhicheng Dou. 2025b. mme5: Improving multimodal multilingual embed-dings via high-quality synthetic data. In Findings of the Association for Computational Linguistics: ACL 2025 , pages 8254–8275. Liang Chen, Yichi Zhang, Shuhuai Ren, Haozhe Zhao, Zefan Cai, Yuchi Wang, Peiyi Wang, Tianyu Liu, and Baobao Chang. 2023. Towards end-to-end embod-ied decision making via multi-modal large language model: Explorations with gpt4-vision and beyond. 
+
+arXiv preprint arXiv:2310.02071 .Mehdi Cherti, Romain Beaumont, Ross Wightman, Mitchell Wortsman, Gabriel Ilharco, Cade Gordon, Christoph Schuhmann, Ludwig Schmidt, and Jenia Jitsev. 2023. Reproducible scaling laws for con-trastive language-image learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 2818–2829. Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Mar-cel Blistein, Ori Ram, Dan Zhang, Evan Rosen, Luke Marris, Sam Petulla, Colin Gaffney, Asaf Aharoni, Nathan Lintz, Tiago Cardal Pais, Henrik Jacobs-son, Idan Szpektor, Nan-Jiang Jiang, and 3416 oth-ers. 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. Preprint ,arXiv:2507.06261. Xuanming Cui, Jianpeng Cheng, Hong you Chen, Satya Narayan Shukla, Abhijeet Awasthi, Xi-chen Pan, Chaitanya Ahuja, Shlok Kumar Mishra, Yonghuan Yang, Jun Xiao, Qi Guo, Ser-Nam Lim, Aashu Singh, and Xiangjun Fan. 2026. Think then embed: Generative context improves multimodal em-bedding. Preprint , arXiv:2510.05014. Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. 2020. An image is worth 16x16 words: Transformers for image recognition at scale. ArXiv , abs/2010.11929. Manuel Faysse, Hugues Sibille, Tony Wu, Bilel Omrani, Gautier Viaud, Céline Hudelot, and Pierre Colombo. 2025a. Colpali: Efficient document retrieval with vi-sion language models. Preprint , arXiv:2407.01449. Manuel Faysse, Hugues Sibille, Tony Wu, Bilel Omrani, Gautier Viaud, Céline Hudelot, and Pierre Colombo. 2025b. Colpali: Efficient document retrieval with vi-sion language models. Preprint , arXiv:2407.01449. Kaituo Feng, Kaixiong Gong, Bohao Li, Zonghao Guo, Yibing Wang, Tianshuo Peng, Junfei Wu, Xiaoy-ing Zhang, Benyou Wang, and Xiangyu Yue. 2025. Video-r1: Reinforcing video reasoning in mllms. 
+
+Preprint , arXiv:2503.21776. Geonmo Gu, Byeongho Heo, Jaemyung Yu, Jae-hui Hwang, Taekyung Kim, Sangmin Lee, HeeJae Jun, Yoohoon Kang, Sangdoo Yun, and Dongyoon Han. 2026. Muco: Multi-turn contrastive learn-ing for multimodal embedding model. Preprint ,arXiv:2602.06393. Tiancheng Gu, Kaicheng Yang, Ziyong Feng, Xingjun Wang, Yanzhao Zhang, Dingkun Long, Yingda Chen, Weidong Cai, and Jiankang Deng. 2025a. Breaking the modality barrier: Universal embedding learning with multimodal llms. In Proceedings of the 33rd ACM International Conference on Multimedia , pages 2860–2869. Tiancheng Gu, Kaicheng Yang, Kaichen Zhang, Xi-ang An, Ziyong Feng, Yueyi Zhang, Weidong Cai, Jiankang Deng, and Lidong Bing. 2025b. Unime-v2: Mllm-as-a-judge for universal multimodal embed-ding learning. Preprint , arXiv:2510.13515. Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, 
+
+9Shirong Ma, Xiao Bi, Xiaokang Zhang, Xingkai Yu, Yu Wu, Z. F. Wu, Zhibin Gou, Zhihong Shao, Zhu-oshu Li, Ziyi Gao, Aixin Liu, and 175 others. 2025. Deepseek-r1 incentivizes reasoning in llms through reinforcement learning. Nature , 645(8081):633–638. Andrey Guzhov, Federico Raue, Jörn Hees, and An-dreas Dengel. 2022. Audioclip: Extending clip to image, text and audio. In ICASSP 2022-2022 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 976–980. IEEE. Weijian Jian, Yajun Zhang, Dawei Liang, Chunyu Xie, Yixiao He, Dawei Leng, and Yuhui Yin. 2025. Rzen-embed: Towards comprehensive multimodal retrieval. 
+
+Preprint , arXiv:2510.27350. Dongzhi Jiang, Ziyu Guo, Renrui Zhang, Zhuofan Zong, Hao Li, Le Zhuo, Shilin Yan, Pheng-Ann Heng, and Hongsheng Li. 2025a. T2i-r1: Reinforcing im-age generation with collaborative semantic-level and token-level cot. Preprint , arXiv:2505.00703. Haonan Jiang, Yuji Wang, Yongjie Zhu, Xin Lu, Wenyu Qin, Meng Wang, Pengfei Wan, and Yansong Tang. 2026. Embed-rl: Reinforcement learning for reasoning-driven multimodal embeddings. Preprint ,arXiv:2602.13823. Ziyan Jiang, Rui Meng, Xinyi Yang, Semih Yavuz, Yingbo Zhou, and Wenhu Chen. 2025b. Vlm2vec: Training vision-language models for massive multimodal embedding tasks. Preprint ,arXiv:2410.05160. Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yu-taka Matsuo, and Yusuke Iwasawa. 2022. Large lan-guage models are zero-shot reasoners. Advances in neural information processing systems , 35:22199– 22213. Yuxiang Lai, Jike Zhong, Ming Li, Shitian Zhao, Yuheng Li, Konstantinos Psounis, and Xiaofeng Yang. 2026. Med-r1: Reinforcement learning for general-izable medical reasoning in vision-language models. 
+
+IEEE Transactions on Medical Imaging .Zhibin Lan, Liqiang Niu, Fandong Meng, Jie Zhou, and Jinsong Su. 2025a. Llave: Large language and vision embedding models with hardness-weighted contrastive learning. In Conference on Empirical Methods in Natural Language Processing .Zhibin Lan, Liqiang Niu, Fandong Meng, Jie Zhou, and Jinsong Su. 2025b. Ume-r1: Exploring reasoning-driven generative multimodal embeddings. arXiv preprint arXiv:2511.00405 .Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. 2023. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large lan-guage models. In International conference on ma-chine learning , pages 19730–19742. PMLR. Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. 2022. Blip: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In International conference on ma-chine learning , pages 12888–12900. PMLR. Mingxin Li, Yanzhao Zhang, Dingkun Long, Keqin Chen, Sibo Song, Shuai Bai, Zhibo Yang, Pengjun Xie, An Yang, Dayiheng Liu, Jingren Zhou, and Junyang Lin. 2026a. Qwen3-vl-embedding and qwen3-vl-reranker: A unified framework for state-of-the-art multimodal retrieval and ranking. Preprint ,arXiv:2601.04720. Qi Li, Yanzhe Zhao, Yongxin Zhou, Yameng Wang, Yandong Yang, Yuanjia Zhou, Jue Wang, Zuo-jian Wang, and Jinxiang Liu. 2026b. Magic-mm-embedding: Towards visual-token-efficient universal multimodal embedding with mllms. arXiv preprint arXiv:2602.05275 .Lin Lin, Jiefeng Long, Zhihe Wan, Yuchi Wang, Dingkang Yang, Shuang Yang, Yueyang Yao, Xu Chen, Zirui Guo, Shengqiang Li, Weiran Li, Hanyu Li, Yaling Mou, Yan Qiu, Haiyang Yu, Xiao Liang, Hongsheng Li, and Chao Feng. 2025. Sail-embedding technical report: Omni-modal embedding foundation model. Preprint , arXiv:2510.12709. Keliang Liu, Dingkang Yang, Ziyun Qian, Weijie Yin, Yuchi Wang, Hongsheng Li, Jun Liu, Peng Zhai, Yang Liu, and Lihua Zhang. 2025a. Reinforcement learning meets large language models: A survey of advancements and applications across the llm lifecy-cle. arXiv preprint arXiv:2509.16679 .Qianying Liu, Xiao Liang, Zhiqiang Zhang, Zhongfei Qing, Fengfan Zhou, Yibo Chen, Xu Tang, Yao Hu, and Paul Henderson. 2025b. Rematch: Boosting representation through matching for multimodal re-trieval. arXiv preprint arXiv:2511.19278 .Yikun Liu, Yajie Zhang, Jiayin Cai, Xiaolong Jiang, Yao Hu, Jiangchao Yao, Yanfeng Wang, and Weidi Xie. 2025c. Lamra: Large multimodal model as your advanced retrieval assistant. In Proceedings of the Computer Vision and Pattern Recognition Confer-ence , pages 4015–4025. Zhaowei Liu, Xin Guo, Zhi Yang, Fangqi Lou, Lingfeng Zeng, Mengping Li, Qi Qi, Zhiqiang Liu, Yiyang Han, Dongpo Cheng, Ronghao Chen, Huacan Wang, Xingdong Feng, Huixia Judy Wang, Chengchun Shi, and Liwen Zhang. 2026. Fin-r1: A large language model for financial reasoning through reinforcement learning. Preprint , arXiv:2503.16252. Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chun-yuan Li, Hannaneh Hajishirzi, Hao Cheng, Kai-Wei Chang, Michel Galley, and Jianfeng Gao. 2024. Mathvista: Evaluating mathematical reasoning of foundation models in visual contexts. Preprint ,arXiv:2310.02255. Huaishao Luo, Lei Ji, Ming Zhong, Yang Chen, Wen Lei, Nan Duan, and Tianrui Li. 2022. Clip4clip: 
+
+10 An empirical study of clip for end to end video clip retrieval and captioning. Neurocomputing , 508:293– 304. Rui Meng, Ziyan Jiang, Ye Liu, Mingyi Su, Xinyi Yang, Yuepeng Fu, Can Qin, Zeyuan Chen, Ran Xu, Caim-ing Xiong, Yingbo Zhou, Wenhu Chen, and Semih Yavuz. 2025. Vlm2vec-v2: Advancing multimodal embedding for videos, images, and visual documents. 
+
+Preprint , arXiv:2507.04590. OpenAI, :, Aaron Hurst, Adam Lerer, Adam P. Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, Aleksander M ˛ adry, Alex Baker-Whitcomb, Alex Beutel, Alex Borzunov, Alex Carney, Alex Chow, Alex Kirillov, and 401 others. 2024a. Gpt-4o system card. Preprint , arXiv:2410.21276. OpenAI, :, Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec Helyar, Aleksander Madry, Alex Beutel, Alex Carney, Alex Iftimie, Alex Karpenko, Alex Tachard Passos, Alexander Neitz, Alexander Prokofiev, Alexander Wei, Allison Tam, and 244 others. 2024b. Openai o1 system card. Preprint , arXiv:2412.16720. Judea Pearl. 2009. Causality . Cambridge university press. Judea Pearl and Dana Mackenzie. 2018. The book of why: the new science of cause and effect . Basic books. Martin L Puterman. 1990. Markov decision processes. 
+
+Handbooks in operations research and management science , 2:331–434. Jiajun Qin, Yuan Pu, Zhuolun He, Seunggeun Kim, David Z. Pan, and Bei Yu. 2025. Unimoco: Unified modality completion for robust multi-modal embed-dings. Preprint , arXiv:2505.11815. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. 2021. Learn-ing transferable visual models from natural language supervision. Preprint , arXiv:2103.00020. Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741. Xubin Ren, Lingrui Xu, Long Xia, Shuaiqiang Wang, Dawei Yin, and Chao Huang. 2025. Videorag: Retrieval-augmented generation with extreme long-context videos. Preprint , arXiv:2502.01549. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. 2017. Proxi-mal policy optimization algorithms. arXiv preprint arXiv:1707.06347 .Hao Shao, Shengju Qian, Han Xiao, Guanglu Song, Zhuofan Zong, Letian Wang, Yu Liu, and Hong-sheng Li. 2024a. Visual cot: Advancing multi-modal language models with a comprehensive dataset and benchmark for chain-of-thought reasoning. Ad-vances in Neural Information Processing Systems ,37:8612–8642. Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo. 2024b. Deepseekmath: Pushing the limits of mathemati-cal reasoning in open language models. Preprint ,arXiv:2402.03300. Haozhan Shen, Peng Liu, Jingcheng Li, Chunxin Fang, Yibo Ma, Jiajia Liao, Qiaoli Shen, Zilun Zhang, Kangjia Zhao, Qianqian Zhang, Ruochen Xu, and Tiancheng Zhao. 2025. Vlm-r1: A stable and general-izable r1-style large vision-language model. Preprint ,arXiv:2504.07615. Qwen Team. 2025. Qwq-32b: Embracing the power of reinforcement learning. V Team, Wenyi Hong, Wenmeng Yu, Xiaotao Gu, Guo Wang, Guobing Gan, Haomiao Tang, Jiale Cheng, Ji Qi, Junhui Ji, Lihang Pan, Shuaiqi Duan, Wei-han Wang, Yan Wang, Yean Cheng, Zehai He, Zhe Su, Zhen Yang, Ziyang Pan, and 74 others. 2026. Glm-4.5v and glm-4.1v-thinking: Towards versatile multimodal reasoning with scalable reinforcement learning. Preprint , arXiv:2507.01006. Issar Tzachor, Dvir Samuel, and Rami Ben-Ari. 2026. Vidvec: Unlocking video mllm embed-dings for video-text retrieval. arXiv preprint arXiv:2602.08099 .Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhi-hao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. 2024. Qwen2-vl: Enhancing vision-language model’s per-ception of the world at any resolution. Preprint ,arXiv:2409.12191. Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. 2023. Self-consistency improves chain of thought reasoning in language models. Preprint ,arXiv:2203.11171. Yuchi Wang, Yishuo Cai, Shuhuai Ren, Sihan Yang, Linli Yao, Yuanxin Liu, Yuanxing Zhang, Pengfei Wan, and Xu Sun. 2025. Rico: Improving accuracy and completeness in image recaptioning via visual reconstruction. In Proceedings of the 2025 Confer-ence on Empirical Methods in Natural Language Processing , pages 21796–21815. Cong Wei, Yang Chen, Haonan Chen, Hexiang Hu, Ge Zhang, Jie Fu, Alan Ritter, and Wenhu Chen. 2024. Uniir: Training and benchmarking univer-sal multimodal information retrievers. In European 
+
+11 Conference on Computer Vision , pages 387–404. Springer. Jason Wei, Yi Tay, Rishi Bommasani, Colin Raffel, Barret Zoph, Sebastian Borgeaud, Dani Yogatama, Maarten Bosma, Denny Zhou, Donald Metzler, Ed H. Chi, Tatsunori Hashimoto, Oriol Vinyals, Percy Liang, Jeff Dean, and William Fedus. 2022a. Emer-gent abilities of large language models. Preprint ,arXiv:2206.07682. Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, and 1 others. 2022b. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems , 35:24824– 24837. Guowei Xu, Peng Jin, Ziang Wu, Hao Li, Yibing Song, Lichao Sun, and Li Yuan. 2025. Llava-cot: Let vision language models reason step-by-step. In Proceedings of the IEEE/CVF International Conference on Com-puter Vision , pages 2087–2098. Shusheng Xu, Wei Fu, Jiaxuan Gao, Wenjie Ye, Weilin Liu, Zhiyu Mei, Guangju Wang, Chao Yu, and Yi Wu. 2024. Is dpo superior to ppo for llm align-ment? a comprehensive study. arXiv preprint arXiv:2404.10719 .An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Day-iheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, and 41 others. 2025. Qwen3 technical report. Preprint ,arXiv:2505.09388. Dingkang Yang, Zhaoyu Chen, Yuzheng Wang, Shunli Wang, Mingcheng Li, Siao Liu, Xiao Zhao, Shuai Huang, Zhiyan Dong, Peng Zhai, and 1 others. 2023. Context de-confounded emotion recognition. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19005–19015. Dingkang Yang, Kun Yang, Haopeng Kuang, Zhaoyu Chen, Yuzheng Wang, and Lihua Zhang. 2024. To-wards context-aware emotion recognition debiasing from a causal demystification perspective via de-confounded training. IEEE Transactions on Pattern Analysis and Machine Intelligence , 46(12):10663– 10680. Hao Yu, Zhuokai Zhao, Shen Yan, Lukasz Korycki, Jianyu Wang, Baosheng He, Jiayi Liu, Lizhu Zhang, Xiangjun Fan, and Hanchao Yu. 2025a. Cafe: Uni-fying representation and generation with contrastive-autoregressive finetuning. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 6286–6297. Shi Yu, Chaoyue Tang, Bokai Xu, Junbo Cui, Jun-hao Ran, Yukun Yan, Zhenghao Liu, Shuo Wang, Xu Han, Zhiyuan Liu, and Maosong Sun. 2025b. Visrag: Vision-based retrieval-augmented gener-ation on multi-modality documents. Preprint ,arXiv:2410.10594. Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. 2023. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision , pages 11975–11986. Chao Zhang, Haoxin Zhang, Shiwei Wu, Di Wu, Tong Xu, Xiangyu Zhao, Yan Gao, Yao Hu, and Enhong Chen. 2025a. Notellm-2: Multimodal large represen-tation models for recommendation. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 , pages 2815–2826. Kai Zhang, Yi Luan, Hexiang Hu, Kenton Lee, Siyuan Qiao, Wenhu Chen, Yu Su, and Ming-Wei Chang. 2024a. Magiclens: Self-supervised image retrieval with open-ended instructions. Preprint ,arXiv:2403.19651. Renrui Zhang, Xinyu Wei, Dongzhi Jiang, Ziyu Guo, Shicheng Li, Yichi Zhang, Chengzhuo Tong, Jiaming Liu, Aojun Zhou, Bin Wei, Shanghang Zhang, Peng Gao, Chunyuan Li, and Hongsheng Li. 2024b. Mavis: Mathematical visual instruction tuning with an auto-matic data engine. Preprint , arXiv:2407.08739. Xin Zhang, Yanzhao Zhang, Wen Xie, Mingxin Li, Ziqi Dai, Dingkun Long, Pengjun Xie, Meishan Zhang, Wenjie Li, and Min Zhang. 2025b. Gme: Improving universal multimodal retrieval by multimodal llms. 
+
+Preprint , arXiv:2412.16855. Junjie Zhou, Yongping Xiong, Zheng Liu, Ze Liu, Shi-tao Xiao, Yueze Wang, Bo Zhao, Chen Jason Zhang, and Defu Lian. 2025. Megapairs: Massive data syn-thesis for universal multimodal retrieval. In Proceed-ings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Pa-pers) , pages 19076–19095. Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian, Yuchen Duan, Weijie Su, Jie Shao, Zhangwei Gao, Erfei Cui, Xue-hui Wang, Yue Cao, Yangzhou Liu, Xingguang Wei, Hongjie Zhang, Haomin Wang, Weiye Xu, and 32 others. 2025. Internvl3: Exploring advanced train-ing and test-time recipes for open-source multimodal models. Preprint , arXiv:2504.10479. 
+
+12 A Additional Experimental Results 
+
+A.1 Qualitative Analysis 
+
+We conduct qualitative analyses to demonstrate the capability of MMEmb-R1 and illustrate several design principles. For simplicity, we present only the main reasoning traces produced by the model. Fig. 7 presents two retrieval cases highlighting the advantages of adaptive reasoning in MMEmb-R1. In the upper case, the query is a cartoon pen-guin, which is visually unambiguous. MMEmb-R1 adaptively skips reasoning and correctly retrieves “penguin,” whereas UME-R1’s enforced reasoning introduces spurious alternatives (“penguin, mag-pie, or puffin”) and ultimately retrieves the wrong target. In the lower case, the query is a cooking video that requires temporal inference. MMEmb-R1 invokes reasoning and correctly decomposes the cooking sequence, inferring that “the logical next step after stir-frying is to add seasoning.” In contrast, the non-reasoning baseline VLM2Vec-V2 appears to capture only the coarse semantic concept of cooking and retrieves a temporally preceding action instead. These examples demonstrate that MMEmb-R1 learns when reasoning is beneficial and when it is unnecessary. Fig. 8 further illustrates why diverse workers combined with pair-aware selection outperform single-source reasoning approaches such as UME-R1 and TTE. Given a chart query asking “How common was it for people to feel depressed dur-ing the outbreak?” and a ground-truth target stat-ing that “about one in four Americans (24%) re-ported feeling depressed some or a little of the time, while 9% felt depressed most or all of the time,” the three workers exhibit complementary strengths and weaknesses. The Instruct worker ( w = 0 .28 )correctly extracts the relevant numbers (9%, 15%, 24%, 52%) but merely lists them without inter-preting which frequency band each corresponds to, leaving a gap between the raw data and the natural-language phrasing of the target. The Think-ing worker ( w = 0 .17 ) produces a detailed cross-category comparison—contrasting depression with anxiety and discussing clinical instruments—but this exhaustive analysis diverges from the specific query, burying the target-relevant information. The Proprietary worker ( w = 0 .55 ) receives the high-est weight because it directly mirrors the target semantics: it rephrases “24%” as “about one in four respondents,” associates “9%” with the “most or all of the time” frequency band, and provides 2B 3B 4B 7B 
+
+> Model Parameters (B)
+> 64
+> 66
+> 68
+> 70
+> 72
+> MMEB-V2 Overall
+> 65.0
+> 69.7
+> 66.7
+> 70.8
+> 68.3
+> 71.2
+> Qwen2-VL
+> Qwen2.5-VL
+> Qwen3-VL
+
+Figure 5: Scaling behavior of MMEmb-R1 across back-bone families and parameter scales. Performance im-proves consistently within each family, and newer archi-tectures achieve higher scores at comparable or smaller model sizes. Instruct    
+
+> (Intern3-VL)
+> Thinking
+> (GLM-Thinking)
+> Proprietary
+> (Seed-1.6)
+> −0.3
+> −0.2
+> −0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Counterfactual Gain  Δr
+> 0.037 0.058 0.070
+> ε= −0.1
+> Filtered
+
+Figure 6: Distribution of counterfactual reasoning gains 
+
+∆r across worker types. Median values are shown as horizontal bars. The dashed line indicates the selection threshold ϵ = −0.1; candidates below are filtered out. 
+
+the complementary statistic that the majority rarely felt depressed. These examples illustrate that the pair-aware evaluator identifies reasoning paths that effectively bridge the semantic gap between a spe-cific query and its target, rather than favoring rea-soning that is merely more elaborate or complex. 
+
+A.2 Scaling Behavior Across Backbones 
+
+To assess the generality and scalability of MMEmb-R1, we apply our framework to six backbone MLLMs spanning three model families and varying parameter scales: Qwen2-VL (2B, 7B), Qwen2.5-VL (3B, 7B), and Qwen3-VL (2B, 4B). Fig. 5 re-ports the overall MMEB-V2 performance for each configuration. Two observations emerge. First, MMEmb-R1 exhibits consistent intra-family scaling: perfor-13 What animal is shown          
+
+> in the image?
+> The image shows a stylized
+> illustration of a bird -like figure . The
+> black and white coloring could
+> suggest a penguin ,magpie, or puffin .
+> The rounded body shape and short
+> wings are consistent with several
+> flightless birds. The art style makes
+> it difficult to identify specific
+> species features... puffin
+> penguin
+> What will the person most
+> likely do next?
+> The video shows a cooking sequence:
+> first, vegetables are being chopped
+> on a cutting board; then, they are
+> transferred to a heated pan and
+> stir -fried. The cooking process is in
+> the mid -stage —ingredients are in
+> the pan but the dish appears
+> unfinished. The logical next step in a
+> typical cooking workflow after stir -
+> frying is to add seasoning.
+> take the
+> vegetables
+> out of the
+> refrigerator
+
+[EMPTY] 
+
+[EMPTY] 
+
+> season the
+> dish with
+> salt and
+> pepper
+
+Query 
+
+Retrieved Item  
+
+> MMEmb -R1 (Ours)
+> MMEmb -R1
+> (Ours)
+> UME -R1
+> VLM2Vec -V2
+
+Figure 7: Adaptive reasoning: MMEmb-R1 skips reasoning for a simple visual query (top, avoiding overthinking) and invokes it for a complex temporal query (bottom), outperforming UME-R1 and VLM2Vec-V2 respectively. 
+
+mance improves monotonically with model size across all three families, indicating that our frame-work effectively leverages the additional capac-ity of larger backbones without saturating. Sec-ond, the gains from backbone architecture advance-ment are substantial and largely orthogonal to those from scaling. Qwen3-VL-2B surpasses Qwen2-VL-7B at less than one-third of the parameters, and Qwen3-VL-4B outperforms Qwen2.5-VL-7B at roughly half the size. This suggests that MMEmb-R1 benefits from both stronger representations and larger capacity, and that the pair-aware reason-ing selection and adaptive invocation mechanisms transfer effectively across architectures without architecture-specific tuning. 
+
+A.3 Counterfactual Gain Distribution 
+
+Fig. 6 presents the distribution of counterfactual reasoning gains ∆r across the three worker types used in our diverse prior simulation (values are rescaled for better visualization). We can see that no single worker dominates the distribution. The Proprietary worker achieves the highest median gain and exhibits the most compact, positively skewed distribution, while the Instruct worker pro-duces a tighter but lower-centered distribution. In contrast, the Thinking worker shows the widest spread with a clearly bimodal shape—its upper mode reaches the highest individual ∆r values among all workers, yet its lower mode extends well into negative territory. This observation sup-ports our hypothesis that thinking models generate exploratory reasoning chains that are occasionally exceptional but frequently noisy, making them a high-variance complement to the more conserva-tive Instruct and Proprietary workers. This com-plementarity further motivates our latent-variable formulation: diverse samples from heterogeneous workers collectively approximate a richer reason-ing space than any single source, while the pair-aware scoring mechanism assigns higher weights to higher-quality samples. We adopt a lenient threshold ϵ = −0.1 across all worker types, allowing samples whose reasoning introduces only a small performance drop to be retained. As shown in Fig. 6, the Thinking worker produces the largest number of filtered samples, in-dicating that many of its reasoning chains substan-tially harm query–target alignment. Importantly, this does not imply that most samples are simply re-tained such that the selection mechanism becomes ineffective. Instead, the key aspect of our design 14 How common was it for people to feel 
+
+> depressed during the outbreak?
+> The chart shows a stacked bar chart from Pew Research Center about
+> Americans' mental health during the outbreak. Six categories are
+> listed. For the `felt depressed' row, the segments show 9%, 15%, 24%,
+> and 52% ...
+> Let me analyze this chart carefully. It is a horizontal stacked bar chart
+> showing six mental health indicators. The color coding uses teal/green shades
+> for higher frequency and gold/yellow for lower frequency. Looking across all
+> categories, `felt hopeful about the future' has the highest combined frequent
+> response (22+28=50%), while `had a physical reaction' has the lowest
+> (2+5=7%). The depression category falls in the middle. Comparing depression
+> to anxiety, depression appears less prevalent overall ---9% felt depressed most
+> of the time versus 18% for anxiety. The survey methodology note mentions
+> GAD -7 and CES -D scales, which are validated clinical instruments...
+> The survey data indicates that depression was a moderately common
+> experience during the outbreak. Specifically, about one in four respondents
+> (24%) felt depressed some or a little of the time (1 --2 days per week), and
+> a smaller but notable 9% reported feeling depressed most or all of the time
+> (5 --7 days). Combined, roughly 48% of Americans experienced some degree
+> of depressive feelings, though the majority (52%) rarely or never felt
+> depressed.
+
+𝑤 = 0.28 
+
+𝑤 = 0.17 
+
+𝑤 = 0.55 
+
+Evaluator 
+
+Instruct -based Model 
+
+Thinking Model 
+
+Proprietary Model 
+
+> About one in
+> four Americans
+> (24%) reported
+> feeling
+> depressed some
+> or a little of the
+> time, while 9%
+> felt depressed
+> most or all of
+> the time.
+
+Query GT Target Figure 8: Pair-aware reasoning selection: three heterogeneous workers produce complementary rationales for the same query. The evaluator assigns the highest weight to the Proprietary worker ( w = 0 .55 ), which best bridges the query–target semantic gap. 
+
+lies in the relative weighting among the accepted samples, which is determined by the pair-aware alignment scores across different workers. 
+
+A.4 Distribution of Reasoning Utility 
+
+As described in § 3.4.1, we compute the reason-ing utility δi = sr
+
+i − sd
+
+i for each training query by comparing the normalized similarity scores ob-tained from reasoning-enhanced and direct embed-dings. Fig. 9 shows the distribution of δi across a subset. The distribution is unimodal and centered slightly above zero, with a longer right tail than left. Roughly 60% of instances exhibit positive utility, confirming that reasoning-enhanced embeddings are generally beneficial after pair-aware selection. However, a substantial 40% of instances show nega-tive utility, meaning that reasoning introduces noise or obscures salient signals for these samples. This mixed landscape directly motivates our adaptive reasoning mechanism: a one-size-fits-all strategy— whether always reasoning or never reasoning—is inherently suboptimal. The continuous, instance-dependent nature of δi further justifies using rein-forcement learning rather than a hard threshold to learn the decision boundary, as the optimal reason-ing policy must account for fine-grained variations across inputs. 
+
+A.5 Detailed Results on MMEB-V2 and MMEB-V1 
+
+We provide per-dataset results on MMEB-V2 (78 datasets, three modality groups) in Tab. 7. For com-patibility with prior work evaluated on the original image-only benchmark, we also report MMEB-−4 −3 −2 −1 0 1 2 3 4
+
+Reasoning Utility δi = sr − sd
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Density
+
+mean = 0.084 
+
+reasoning hurts 
+
+39.9% 
+
+reasoning helps 
+
+60.1% 
+
+Figure 9: Distribution of reasoning utility δi over the training set. Green bars ( δi ≥ 0) indicate instances where reasoning improves retrieval; red bars ( δi < 0)indicate the opposite. 
+
+V1 results (36 datasets) in Tab. 8. MMEmb-R1 (Qwen3-VL-4B) achieves 74.8 overall on V1, out-performing all baselines including Embed-RL-4B and UME-R1-7B, confirming that the benefits of our framework are not specific to the video and document modalities newly introduced in V2. 
+
+B More Implementation Details 
+
+B.1 Multi-Worker Reasoning Path Generation 
+
+As discussed in § 3.2.1, we leverage heterogeneous MLLMs to approximate the distribution of the rea-soning latent space. The key principle is to maxi-mize complementarity across workers: each type contributes distinct reasoning styles and knowl-edge coverage, collectively simulating a richer prior than any single model. Specifically, we em-15 == I NSTRUCTION TO INSTRUCT -BASED AND HIGH -CAPACITY PROPRIETARY MODELS == 
+
+The input above is a query or a candidate item for retrieval. Carefully analyze the input, which may contain text, images, videos, or any combination of modalities. Identify the core semantic content, including the main topic, key entities, relevant relationships, contextual information, and any salient details that are essential for understanding its meaning. Provide a concise, factual reasoning process that focuses on semantic understanding rather than speculation. Enclose this reasoning within <reason> and </reason> tags. Then, on a new line, produce a compact semantic summary that best represents the input for retrieval purposes. The summary should be either a single word or a short sentence, and must begin with <sum> .Your response must strictly follow this format: 
+
+<reason> ... </reason> <sum>... 
+
+Any response that does not follow this format is invalid. 
+
+================== I NSTRUCTION TO THINKING MODELS ================== 
+
+The above input is a query/candidate for retrieval. Carefully examine and analyze the above input (which may include text, images, videos, or any combination). Identify and describe the key elements present in the input, such as the main topic, important entities, relationships, context, and any notable features or details that contribute to the overall meaning. Finally, synthesize your analysis and reflection into a single word or a concise sentence that best captures the essence of the input for retrieval purposes. If the input is a phrase or word, the summary is that word itself. 
+
+> Table 4: Instructions to different workers MLLM for prior distribution simulation.
+
+ploy the following models with carefully designed prompts, inspired by UME-R1 (Lan et al., 2025b) and TTE (Cui et al., 2026). 
+
+Instruct-based models. We use InternVL3-14B-Instruct (Zhu et al., 2025) with the prompt shown in Tab. 4 (top). The prompt enforces a struc-tured <reason> ... <sum> format, encouraging con-cise, factual semantic analysis. Empirically, this worker produces the most consistently formatted and retrieval-oriented rationales, serving as a stable baseline in the candidate pool. 
+
+Thinking models. We leverage GLM-4.1V-Thinking (Team et al., 2026), using the prompt adopted in UME-R1 (Lan et al., 2025b) (Tab. 4, bottom). Unlike the instruct-based prompt, we do not enforce a rigid output format, allowing the model to reason in its native chain-of-thought style. This produces longer, more exploratory chains with higher variance—occasionally yielding uniquely high-gain candidates, as shown in Appendix A.3. 
+
+High-capacity proprietary models. We fur-ther leverage the API of Doubao-Seed-1.6-Vision (ByteDance, 2025), using the same prompt template as the instruct-based models. Despite sharing the prompt, the proprietary model gener-ates qualitatively richer rationales due to its broader world knowledge, resulting in the highest median counterfactual gain among all worker types. 
+
+B.2 Pair-Aware Evaluator Implementation 
+
+For the pair-aware evaluator J , we employ Qwen3-VL-32B-Instruct (Yang et al., 2025) and use vLLM 1 for efficient inference. We leverage this strong open-source model to obtain reliable logit scores for relevance estimation. The evaluator prompts are provided in Tab. 5. For each train-ing pair (qi, t + 
+
+> i
+
+) and each reasoning candidate 
+
+r ∈ R i generated by the worker models, we per-form two inference passes through the evaluator. In the baseline pass , the evaluator receives only the raw query and target (with their associated images or videos) and is prompted to judge se-
+
+> 1https://vllm.ai/
+
+16 ================= B ASELINE PROMPT (WITHOUT RATIONALE ) ================= 
+
+Above are two items for a retrieval task: 
+
+Query Item: 
+
+<image><video> 
+
+Text: {query_text} 
+
+Target Item: 
+
+<image><video> 
+
+Text: {target_text} 
+
+Based on the query item and target item, are these two items semantically relevant for retrieval? Consider whether they match in terms of content, topic, and intent. Answer with YES or NO only. 
+
+======== W ITH -R ATIONALE PROMPT (FOR COUNTERFACTUAL EVALUATION ) ======== 
+
+Above are two items for a retrieval task: 
+
+Query Item: 
+
+<image><video> 
+
+Text: {query_text} 
+
+Rationale: {query_rationale} 
+
+Target Item: 
+
+<image><video> 
+
+Text: {target_text} 
+
+Rationale: {target_rationale} 
+
+The rationales are reasoning paths generated to help understand the semantic content of each item. Based on the query item, target item, and their rationales, does adding the rationale improve the retrieval effectiveness? Consider whether the rationales capture essential semantic information that aids in matching these two items. Answer with YES or NO only.            
+
+> Table 5: Prompts used for the pair-aware counterfactual evaluator J. The baseline prompt (top) evaluates query– target relevance without reasoning. The with-rationale prompt (bottom) includes generated rationales, enabling the counterfactual comparison ∆r=cr−c0.
+
+mantic relevance with a binary YES/NO response. In the with-rationale pass , the same query–target pair is augmented with the candidate rationale. We extract the logit of the first generated token for both [YES] and [NO] , and compute a log-probability ratio diff = log p([YES] )−log p([NO] )
+
+for each pass. The counterfactual gain is then: 
+
+∆r = diff with − diff baseline . A positive ∆r in-dicates that the rationale improves the evalua-tor’s confidence in the query–target match be-yond what the raw inputs alone provide. After computing ∆r for all three worker sources (In-struct, Thinking, Proprietary), we apply a soft-max over the scores to obtain normalized se-lection weights: wk = softmax (∆ rk ), k ∈{instruct , thinking , proprietary }. These weights are stored alongside the rationales and used dur-ing training for weighted sampling. 
+
+B.3 Details of Joint Reasoning and Embedding Training 
+
+We adopt the instruction template shown in Tab. 6. Two special tokens are introduced: <d_emb> , ap-pended at the beginning of the instruction to mark the direct embedding extraction point, and 
+
+<r_emb> , generated after optional reasoning tokens to mark the reasoning-enhanced embedding extrac-tion point. Although the adaptive reasoning policy 17 <input_image><input_video><input_text><d_emb> Represent the above input text, images, videos, or any combination of the three as embeddings. You may output the thinking process in 
+
+<reason> </reason> tags and then summarize the entire input in a word or sentence. Finally, use the <r_emb> tag to represent the entire input. If explicit reasoning is not necessary (e.g., the task is simple or the input is concise), you may directly produce the embeddings without generating intermediate thinking. 
+
+> Table 6: Instruction template used during joint reasoning and embedding training (§ 3.3).
+
+is formally learned in the RL stage (§ 3.4), we find it beneficial to expose the model to a small fraction of direct-embedding samples during joint training, preventing the model from becoming overly reliant on reasoning generation and easing the subsequent policy learning. Specifically, we select samples that are unlikely to benefit from reasoning based on two criteria: (1) samples with very low pair-aware selection weight wr, indicating that no generated ra-tionale meaningfully improves query–target align-ment, and (2) samples with very short input text (fewer than 5 words), where reasoning would con-stitute overthinking. For these samples, we replace the rationale with an <empty> token with proba-bility 0.1, training the model to directly produce embeddings without intermediate reasoning. During training, the vision encoder is kept frozen, while both the multimodal projector and the LLM backbone are updated. We train for 3 epochs with a per-device batch size of 4 and gradi-ent accumulation steps of 8, yielding an effective batch size of 256 across 8 GPUs. We use AdamW with a learning rate of 5 × 10 −5, cosine schedul-ing, and a warmup ratio of 0.03. The loss weights 
+
+λCoT and λdirect are both set to 1. The maximum sequence length is 12288 tokens, with image pixels clipped to [768 , 2359296] . Training is conducted in bfloat16 precision with DeepSpeed ZeRO-3 and gradient checkpointing. 
+
+B.4 Details of Adaptive Reasoning Control 
+
+For adaptive reasoning control, we adopt the code-base of VLM-R1 2 (Shen et al., 2025). We sample 
+
+8 completions for each query with a maximum generation length of 1024 and temperature 1.0.The GRPO clipping coefficient is set to the range 
+
+[0 .8, 1.28] , and the KL-divergence coefficient is set to 0.04 . Training is performed with a batch size of 8 per device and 2 gradient accumulation steps. The learning rate is 1 × 10 −6, and the model is 
+
+> 2https://github.com/om-ai-lab/VLM-R1
+
+trained for 2 epochs. Additional details regarding GRPO are provided in Section 3.4.2. For the adaptive reward design, we set α = 0 .2
+
+and encourage the D IRECT action during the first 
+
+500 training steps. The reasoning cost coefficient is set to c = 1 × 10 −3. For the format reward, any chain-of-thought (CoT) that deviates from our predefined format receives a reward of 0, while valid outputs receive a reward of 1. For the em-bedding reward, we adopt the design proposed in UME-R1 (Lan et al., 2025b), which measures how well the generated representations distinguish pos-itive targets from negative ones. Specifically, the reward considers two criteria: (i) the ranking of positive targets among negative targets, and (ii) the similarity gap between positives and negatives. For each query q with a positive target t+ and a neg-ative target t−, we sample a group of responses 
+
+{o+ 
+
+> j
+
+}Gj=1 associated with the positive target and another group {o− 
+
+> j
+
+}Gj=1 associated with the neg-ative target. Given the i-th sampled response oi
+
+and embedding model Eθ, we compute its sim-ilarity scores with the positive targets as S+ =
+
+{E θ([ q, o i]) · E θ([ t+, o + 
+
+> j
+
+)] }Gj=1 and with the nega-tive targets as S− = {πθ(q, o i) · πθ(t−, o − 
+
+> j
+
+)}Gj=1 .
+
+The embedding reward is defined as: 
+
+Remb (oi) = |S+ ∩ top G(S+ ∪ S−)|
+
+G
+
+×  avg (S+) − avg (S−) ,
+
+where top G(·) selects the G largest elements from the input set. The first term measures whether pos-itive similarities rank higher than negative ones, while the second term captures the magnitude of the similarity gap. Maximizing this reward encour-ages the model to produce reasoning trajectories that lead to more discriminative and informative embeddings. Moreover, we treat the query and the target symmetrically and compute the final reward as the mean of the rewards obtained from both di-rections. 18 C Background and Preliminaries 
+
+C.1 Causal Inference and Causal Learning 
+
+Causal inference (Pearl, 2009) aims to identify cause-and-effect relationships beyond associational patterns. The structural causal model (SCM) frame-work represents data-generating processes as di-rected acyclic graphs, where Pearl’s do-operator 
+
+do( X = x) formalizes interventions by fixing a variable while severing its incoming causal edges. This distinguishes the interventional distribution 
+
+P (Y | do( X = x)) from the observational con-ditional P (Y | X = x), enabling isolation of the true causal effect from confounders. A key quan-tity is the average treatment effect: ATE = E[Y |
+
+do( X = 1)] − E[Y | do( X = 0)] . At a higher level, counterfactual reasoning (Pearl and Mackenzie, 2018) addresses “what if” questions—computing the outcome under an alternative intervention for the same instance. Causal perspectives have been increasingly adopted in the deep learning commu-nity (Yang et al., 2023, 2024). These works share a common principle: explicitly modeling causal pathways isolates target effects from confounders, yielding more robust systems. 
+
+C.2 Group Relative Policy Optimization 
+
+Standard RLHF alignment via PPO (Schulman et al., 2017) requires a separate critic network to estimate per-token advantages, introducing sub-stantial memory overhead when the policy is a large language model. An alternative line of work replaces reinforcement learning with preference-based optimization. Direct Preference Optimiza-tion (DPO) (Rafailov et al., 2023) learns from paired preference data (x, y +, y −) by directly opti-mizing the likelihood difference between preferred and rejected responses, eliminating the need for an explicit reward model or policy gradient up-dates. However, DPO relies on curated prefer-ence pairs (Xu et al., 2024; Wang et al., 2025) and does not naturally accommodate reward signals de-rived from multiple sampled outputs. GRPO (Shao et al., 2024b) addresses these limitations by com-puting advantages at the group level. For each input x, G candidate outputs {o1, . . . , o G} are sam-pled from πθ and scored by a reward function 
+
+R(·), with advantages normalized within the group: 
+
+ˆAi = ( R(oi) − mean( {R(oj )})) /std( {R(oj )}).
+
+The policy is updated via a clipped surrogate ob-jective with KL regularization against a reference policy πref :
+
+LGRPO = E
+
+h
+
+min  ri ˆAi, clip( ri, 1 − ϵ, 1 + ϵ) ˆAi
+
+i
+
+− β D KL (πθ∥πref )
+
+where ri = πθ(oi | x)/π old (oi | x). GRPO has been widely adopted in reasoning model training, notably by DeepSeek-R1 (Guo et al., 2025). Its key advantages are: no critic network (lower mem-ory), stable gradients via group normalization, and straightforward implementation atop standard LM training infrastructure (Liu et al., 2025a). 19 Table 7: Detailed results of baselines and MMEmb-R1 on full MMEB v2 benchmark. Rows are colored by modality: Image , Video , and VisDoc . Best results per row are in bold .
+
+ColPali v1.3 GME-7B VLM2Vec-7B VLM2Vec-V2-2B CAFe-7B UME-R1-2B UME-R1-7B Embed-RL-2B Embed-RL-4B Ours (Qwen2-VL-2B) Ours (Qwen3-VL-4B) ImageNet-1K 42.4 64.6 80.1 80.8 77.3 75.3 80.4 78.0 79.5 76.2 81.8 
+
+N24News 25.5 50.5 79.7 72.9 83.2 81.1 82.3 44.9 48.3 56.5 62.2 HatefulMemes 50.6 53.6 69.7 56.3 78.7 75.2 79.0 65.0 66.2 71.8 70.5 VOC2007 69.8 80.3 80.7 85.0 89.8 80.0 90.8 78.7 79.5 79.5 82.1 SUN397 56.1 69.5 77.4 71.0 79.9 79.4 80.3 75.4 79.2 76.2 79.7 Place365 27.5 39.1 37.4 35.9 45.0 42.6 46.8 43.9 43.1 48.5 46.8 ImageNet-A 14.9 41.2 58.1 47.4 55.2 50.4 53.9 59.2 58.1 53.8 62.3 
+
+ImageNet-R 64.6 83.9 73.9 89.3 88.0 88.7 90.1 88.5 88.2 89.2 91.5 
+
+ObjectNet 45.6 69.0 40.1 65.2 22.5 52.0 42.3 74.8 75.4 62.5 75.9 
+
+Country211 6.0 24.8 29.8 30.2 16.7 23.4 25.0 20.0 19.4 25.5 23.8 OK-VQA 9.4 33.2 56.8 51.5 67.3 62.4 71.7 61.4 67.3 66.8 68.9 
+
+A-OKVQA 6.6 21.0 47.3 43.6 63.8 51.1 58.7 54.7 59.3 57.2 64.1 
+
+DocVQA 11.3 41.4 89.7 90.1 79.2 92.2 93.8 92.4 94.3 92.8 95.2 
+
+InfographicsVQA 5.0 20.3 60.0 58.8 53.3 67.7 79.2 76.7 77.5 78.5 82.1 
+
+ChartQA 5.7 17.8 56.9 47.4 48.8 64.9 75.1 80.7 80.9 75.2 81.5 
+
+Visual7W 6.1 22.2 52.7 52.9 52.5 54.1 55.2 52.7 55.3 58.0 65.2 
+
+ScienceQA 16.3 28.0 38.5 38.2 65.4 42.7 53.7 57.3 61.6 49.8 64.8 VizWiz 27.6 39.0 39.9 43.3 43.8 46.8 51.6 54.5 56.2 54.5 64.5 
+
+GQA 8.3 76.9 55.1 64.9 65.7 67.3 69.3 64.9 68.5 64.2 69.8 TextVQA 18.8 46.8 71.6 72.2 76.8 78.6 83.5 83.8 84.3 83.5 85.9 
+
+VisDial 41.2 60.8 81.9 82.7 82.7 76.6 80.7 81.5 84.9 83.2 83.5 CIRR 8.2 54.9 51.1 57.5 60.4 53.7 55.3 47.6 61.2 52.8 69.7 
+
+VisualNews_t2i 50.1 79.7 80.5 74.5 69.5 71.7 76.8 71.9 73.7 63.5 75.1 VisualNews_i2t 47.6 83.6 81.2 78.2 79.4 74.2 82.0 73.6 73.9 74.8 77.3 MSCOCO_t2i 59.2 71.2 77.2 75.3 75.4 75.1 78.3 79.4 78.9 81.2 84.5 
+
+MSCOCO_i2t 49.9 57.7 73.9 71.4 73.1 68.9 71.4 75.3 76.3 73.5 76.2 NIGHTS 65.5 67.6 67.6 68.6 66.7 67.2 68.1 66.3 66.4 73.2 70.9 WebQA 53.8 91.4 88.3 90.6 89.3 90.0 90.9 89.3 90.5 87.8 91.2 FashionIQ 5.9 37.8 17.1 19.5 39.0 17.1 23.4 24.0 31.9 26.5 37.8 
+
+Wiki-SS-NQ 80.5 78.2 62.3 66.9 61.2 62.0 72.5 68.9 69.6 70.2 74.1 OVEN 50.0 75.1 66.5 64.3 60.8 66.9 71.4 61.4 60.7 66.8 61.5 EDIS 64.7 96.0 85.7 84.1 71.3 88.0 92.0 84.5 87.4 86.5 91.8 MSCOCO 36.7 31.4 75.7 67.1 84.7 69.5 72.7 92.9 93.6 87.2 94.2 
+
+RefCOCO 64.5 60.9 87.6 87.1 89.4 83.3 91.4 94.9 95.9 97.5 99.1 
+
+RefCOCO-Matching 3.9 78.4 84.6 85.8 83.0 84.4 91.1 85.8 88.0 83.8 92.5 
+
+Visual7W-Pointing 56.1 66.5 81.0 69.2 93.2 71.5 84.2 88.0 87.9 87.2 93.8 
+
+K700 23.4 39.7 35.5 38.0 40.1 35.8 42.8 55.8 56.8 57.2 57.3 
+
+SmthSmthV2 25.1 30.6 32.1 42.8 35.8 44.1 50.4 56.7 59.5 55.8 64.8 
+
+HMDB51 24.8 47.9 42.2 40.9 46.9 54.4 58.3 56.7 60.1 61.2 62.5 
+
+UCF101 49.4 54.7 61.8 60.0 39.6 67.2 70.0 79.3 78.5 74.5 81.2 
+
+Breakfast 10.9 14.3 23.8 14.8 16.6 20.1 21.5 36.7 33.0 32.8 37.5 
+
+MVBench 33.7 46.6 28.5 33.7 48.9 49.9 58.2 50.8 55.9 55.5 58.2 
+
+Video-MME 30.6 39.2 27.8 30.7 46.0 41.7 47.3 47.1 50.5 49.8 52.1 
+
+NExTQA 35.2 53.6 20.3 20.9 62.4 59.9 69.6 53.9 58.2 53.2 60.8 EgoSchema 38.4 46.8 21.8 34.0 60.0 45.4 52.4 53.0 52.8 37.5 57.2 ActivityNetQA 51.3 65.6 51.4 52.3 76.0 57.8 76.0 74.8 74.4 67.8 77.1 
+
+DiDeMo 22.8 26.4 29.3 30.4 37.8 32.4 40.0 45.3 46.8 48.5 55.3 
+
+MSR-VTT 17.6 31.8 34.5 28.3 36.5 34.3 38.9 45.7 46.2 47.2 51.8 
+
+MSVD 45.4 49.7 46.7 48.1 56.4 55.4 60.8 67.2 65.8 62.8 68.2 
+
+VATEX 16.7 24.9 25.5 26.5 32.0 29.9 32.6 43.6 43.4 44.2 52.9 
+
+YouCook2 5.3 9.1 9.0 10.6 9.5 12.7 18.5 23.5 23.3 35.5 29.7 QVHighlight 19.9 59.5 57.7 49.4 58.4 57.5 54.9 70.7 73.6 48.2 68.3 Charades-STA 29.0 14.0 19.8 20.2 18.7 20.4 21.9 26.4 25.0 34.8 31.5 MomentSeeker 27.6 37.4 39.3 40.8 41.4 41.2 41.1 50.9 49.9 44.5 52.1 
+
+ViDoRe_arxivqa 81.7 86.9 60.2 80.6 73.3 73.9 73.6 86.1 88.7 68.2 89.3 
+
+ViDoRe_docvqa 56.6 57.5 34.7 44.9 38.3 37.9 41.1 45.7 47.5 46.8 53.8 
+
+ViDoRe_infovqa 84.9 91.6 70.4 83.7 80.6 76.2 80.8 86.8 86.9 82.5 87.2 ViDoRe_tabfquad 86.9 94.6 78.2 89.2 80.7 86.1 90.2 94.5 94.7 91.2 94.1 ViDoRe_tatdqa 70.9 74.1 27.6 43.8 37.8 40.6 46.7 54.6 54.8 43.5 72.3 ViDoRe_shiftproject 75.1 96.8 38.6 60.8 52.0 66.8 65.0 70.7 69.0 67.8 69.5 ViDoRe_artificial_intelligence 95.7 99.6 67.7 88.5 86.0 85.9 89.5 94.0 91.6 89.2 92.1 ViDoRe_energy 94.7 95.3 60.4 86.5 84.8 83.3 85.7 86.7 88.1 81.5 88.6 ViDoRe_government_reports 93.6 98.8 61.8 85.0 85.0 82.6 89.8 89.0 90.7 84.8 91.2 ViDoRe_healthcare_industry 95.9 99.3 69.9 92.2 88.4 90.8 94.3 91.1 90.4 85.8 91.8 ViDoRe_esg_reports_human_labeled_v2 51.3 63.4 6.8 45.6 50.7 50.2 50.4 56.9 59.8 56.2 67.5 
+
+ViDoRe_biomedical_lectures_v2_multilingual 54.7 49.5 5.1 44.3 50.9 46.2 50.7 51.0 50.1 47.5 55.7 
+
+ViDoRe_economics_reports_v2_multilingual 49.0 54.2 13.9 43.0 54.3 45.7 57.8 53.0 53.9 59.2 64.3 
+
+ViDoRe_esg_reports_v2_multilingual 52.9 55.4 11.9 46.6 42.3 42.7 43.2 46.9 49.7 61.2 54.9 VisRAG_ArxivQA 80.9 87.4 52.6 76.9 74.0 74.3 80.5 84.9 86.9 84.8 87.2 
+
+VisRAG_ChartQA 72.3 86.1 57.7 83.7 82.7 86.0 85.0 88.3 88.5 74.2 88.1 VisRAG_MP-DocVQA 82.0 89.7 60.6 88.1 75.1 75.6 83.4 79.1 79.3 71.5 84.8 VisRAG_SlideVQA 85.1 92.6 54.7 84.1 87.6 87.1 91.5 92.3 92.6 82.8 92.1 VisRAG_InfoVQA 83.5 88.6 66.0 82.3 87.9 84.4 89.2 90.0 89.6 91.8 90.8 VisRAG_PlotQA 79.3 76.5 62.7 75.9 69.4 68.0 72.7 73.0 72.4 68.5 58.9 ViDoSeek-page 38.1 32.6 16.3 29.1 22.5 21.2 21.3 82.0 84.4 32.2 74.8 ViDoSeek-doc 87.5 90.3 69.4 79.0 73.8 75.9 75.3 82.6 82.4 78.5 88.9 MMLongBench-page 27.1 36.9 0.4 15.8 13.3 11.9 12.3 47.7 51.0 32.4 47.5 MMLongBench-doc 80.4 85.2 28.8 63.0 42.6 39.7 41.3 50.3 50.7 49.9 55.2 
+
+20 Table 8: Results on the MMEB-V1 benchmark, which consists of 36 image embedding tasks. IND and OOD denote in-distribution and out-of-distribution datasets, respectively. Some results are adopted from Embed-RL (Jiang et al., 2026). 
+
+Model Per Meta-Task Score Average Score Classification VQA Retrieval Grounding IND OOD Overall # of Datasets 10 10 12 4 20 16 36 
+
+Baseline Models 
+
+CLIP (Radford et al., 2021) 42.8 9.1 53.0 51.8 37.1 38.7 37.8 BLIP-2 (Li et al., 2023) 27.0 4.2 33.9 47.0 25.3 25.1 25.2 SigLIP (Zhai et al., 2023) 40.3 8.4 31.6 59.5 32.3 38.0 34.8 OpenCLIP (Cherti et al., 2023) 47.8 10.9 52.3 53.3 39.3 40.2 39.7 UniIR (BLIP FF ) (Wei et al., 2024) 42.1 15.0 60.1 62.2 44.7 40.4 42.8 UniIR (CLIP SF ) (Wei et al., 2024) 44.3 16.2 61.8 65.3 47.1 41.7 44.7 Magiclens (Zhang et al., 2024a) 38.8 8.3 35.4 26.0 31.0 23.7 27.8 
+
+MLLM-based Baseline Models 
+
+VLM2Vec-2B (Jiang et al., 2025b) 59.0 49.4 65.4 73.4 66.0 52.6 60.1 VLM2Vec-7B (Jiang et al., 2025b) 62.6 57.8 69.9 81.7 72.2 57.8 65.8 VLM2Vec-V2 (Meng et al., 2025) 62.9 56.3 69.5 77.3 68.8 59.9 64.9 MMRet-7B (Zhou et al., 2025) 56.0 57.4 69.9 83.6 68.0 59.1 64.1 CAFe-V1-7B (Yu et al., 2025a) 65.2 65.6 70.0 91.2 75.8 62.4 69.8 CAFe-V2-7B (Yu et al., 2025a) 63.6 61.7 69.1 87.6 72.8 61.1 67.6 mmE5-11B (Chen et al., 2025b) 67.6 62.8 70.9 89.7 72.3 66.7 69.8 LLaVE-2B (Lan et al., 2025a) 62.1 60.2 65.2 84.9 69.4 59.8 65.2 LLaVE-7B (Lan et al., 2025a) 65.7 65.4 70.9 91.9 75.0 64.4 70.3 UniME-4B (Gu et al., 2025a) 54.8 55.9 64.5 81.8 68.2 52.7 64.2 UniME-7B (Gu et al., 2025a) 66.8 66.6 70.6 90.9 74.6 65.8 70.7 UME-R1-2B (Lan et al., 2025b) 64.8 62.8 67.6 77.2 71.5 60.4 66.6 UME-R1-7B (Lan et al., 2025b) 67.1 69.2 71.9 84.9 76.1 65.1 71.3 Embed-RL-2B (Jiang et al., 2026) 62.8 67.9 68.6 90.4 71.9 65.9 69.2 Embed-RL-4B (Jiang et al., 2026) 63.7 70.5 71.3 91.4 74.3 67.3 71.2 
+
+Ours 
+
+MMEmb-R1 (Qwen2-VL-2B) 64.5 69.0 70.0 88.9 71.4 68.4 70.0 MMEmb-R1 (Qwen3-VL-4B) 67.7 74.2 74.5 94.9 75.4 74.0 74.8 
+
+21
