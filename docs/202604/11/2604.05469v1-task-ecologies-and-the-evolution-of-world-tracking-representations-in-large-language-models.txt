@@ -1,0 +1,2418 @@
+Title: Task Ecologies and the Evolution of World-Tracking Representations in Large Language Models
+
+URL Source: https://arxiv.org/pdf/2604.05469v1
+
+Published Time: Wed, 08 Apr 2026 00:35:05 GMT
+
+Number of Pages: 50
+
+Markdown Content:
+# Task Ecologies and the Evolution of World-Tracking Representations in Large Language Models 
+
+Giulio Valentino Dalla Riva me@gvdallariva.net 
+
+Baffelan OÜ 
+
+https: // www. baffelan. com 
+
+Abstract 
+
+We study language models as evolving model organisms and ask when autoregressive next-token learning selects for world-tracking representations. For any encoding of latent world states, the Bayes-optimal next-token cross-entropy decomposes into the irreducible con-ditional entropy plus a Jensen–Shannon excess term. That excess vanishes if and only if the encoding preserves the training ecology’s equivalence classes. This yields a precise no-tion of ecological veridicality for language models and identifies the minimum-complexity zero-excess solution as the quotient partition by training equivalence. We then determine when this fixed-encoding analysis applies to transformer families: frozen dense and frozen Mixture-of-Experts transformers satisfy it, in-context learning does not enlarge the model’s separation set, and per-task adaptation breaks the premise. The framework predicts two characteristic failure modes: simplicity pressure preferentially removes low-gain distinc-tions, and training-optimal models can still incur positive excess on deployment ecologies that refine the training ecology. A conditional dynamic extension shows how inter-model selection and post-training can recover such gap distinctions under explicit heredity, varia-tion, and selection assumptions. Exact finite-ecology checks and controlled microgpt exper-iments validate the static decomposition, split-merge threshold, off-ecology failure pattern, and two-ecology rescue mechanism in a regime where the relevant quantities are directly observable. The goal is not to model frontier systems at scale, but to use small language models as laboratory organisms for theory about representational selection. 
+
+Keywords: ecological veridicality, representation learning, large language models, Jensen– Shannon divergence, multi-task selection 
+
+1 Introduction 
+
+Recent work on language-model representations asks whether optimization drives models toward internal structure that tracks the world, or only toward whatever distinctions are locally useful for prediction. The Platonic Representation Hypothesis (Huh et al., 2024) argues that task generality, capacity, and simplicity jointly push learned representations toward a shared statistical model of reality; Gröger et al. (2026) challenge the strongest form of that claim, showing that much apparent global alignment is a scale confound and that the robust signal is local-neighborhood rather than global-spectral convergence. Debates about whether language models develop “world models” or “understanding” (Bender and Koller, 2020; Agüera y Arcas, 2022; Mitchell and Krakauer, 2023; van Dijk et al., 2023; Cuskley et al., 2024; Loru et al., 2025) and empirical demonstrations of domain-specific internal structure (Li et al., 2023; Gurnee and Tegmark, 2024; Nanda et al., 2023; Taniguchi et al., 2025) concern the same issue. We isolate two parts of it that we can state exactly: for a fixed training ecology, which latent distinctions must an autoregressive model preserve in  
+
+> ©2026 Giulio V. Dalla Riva. License: CC-BY 4.0, see https://creativecommons.org/licenses/by/4.0/ .
+> arXiv:2604.05469v1 [stat.ME] 7 Apr 2026 Dalla Riva
+
+order to achieve Bayes-optimal next-token loss? And under explicit heredity, variation, and selection assumptions on model lineages, what population-level pressure does inter-model competition exert on those distinctions? Throughout, “representation” means an encoding of latent world states into behavioural distinctions: which states the model keeps apart, which it merges, and which differences survive into its next-token predictions. This is close in spirit to the ecological-veridicality framework developed in evolutionary perception, where Hoffman et al. (2015) showed that single-task selection generically favors non-veridical encodings, Berke et al. (2022) showed by simulation that multi-task selection reverses this, and Dalla Riva (2026) provided the full theory: the separation structure of the task ecology determines which distinctions are preserved, and population-level convergence requires explicit mutation-selection assump-tions. An encoding is ecologically veridical when it may merge task-equivalent states but not ecology-separated ones. We carry that logic into frozen autoregressive transformers. Several nearby literatures frame parts of this problem. In multi-task representation learning, Baxter (2000) and Maurer et al. (2016) show that shared representations improve sample complexity, but they do not characterize the exact representational object selected by the autoregressive loss. Lobashev (2025) gives a Bayesian route to convergence in the large-data limit, but attributes failure mainly to capacity mismatch. On the neural-theory side, Wang et al. (2025) prove approximately orthogonal latent-variable representations for feedforward networks at global minima, while mechanistic interpretability supplies ar-chitectural analogues rather than ecological theorems: Elhage et al. (2021) formalize the transformer residual stream as a shared communication channel, Elhage et al. (2022) give a capacity-pressure account of feature storage, and Gurnee et al. (2025) show that next-token training can induce low-dimensional internal geometry for structural task variables. The information-bottleneck literature (Tishby et al., 1999) is also adjacent, but our object is more concrete: the minimum-complexity encoding that achieves zero excess next-token loss under a fixed ecology. We study that question in small transformers used as model organisms: systems sim-ple enough that we can inspect induced partitions, exact finite-ecology quantities, and population-level selection trajectories directly. This is a methodological use of model or-ganisms in the sense discussed by Hubinger et al. (2024) and Páez (2024); Section 2 makes the laboratory regime concrete. We make four main contributions. First, we prove that the Bayes-optimal next-token loss induced by an encoding decomposes exactly into an irreducible entropy term plus a Jensen– Shannon excess term, and that this excess vanishes exactly when the encoding preserves the task-equivalence classes of the training ecology. This is a theorem about the target of the Bayes-optimal next-token objective under a fixed ecology, not a convergence theorem for realistic SGD. Second, we identify when that pressure is well-defined for transformer architectures: frozen dense and frozen Mixture-of-Experts transformers satisfy the required fixed-encoding conditions, in-context learning does not enlarge the separation set, and per-task adaptation changes the encoding. Third, we characterize the simplest zero-excess solution: the minimum-complexity encoding is exactly the quotient partition W/ ∼μ, which preserves all and only the distinctions the ecology supports. Fourth, we add a conditional dynamic extension: under explicit heredity, variation, and selection assumptions on model lineages, inter-model selection pushes toward lower ecological excess loss, and a two-ecology 
+
+> 2Task Ecologies and World-Tracking Representations in LLMs
+
+mechanism shows how post-training can rescue distinctions weakly supported by the token ecology alone. We proceed as follows. Section 2 introduces the laboratory model organism. Sec-tions 3 to 5 formalise the autoregressive task ecology and establish the static optimality results. Section 6 states when the ecological-veridicality population dynamics can be im-ported to model lineages and develops the two-ecology extension. Section 7 develops the minimum-complexity and simplicity-pressure results. Section 8 collects the failure pre-dictions, production-scale implications, geometric limits, and concluding discussion, with supplementary results in the appendices. 
+
+2 The Laboratory LLM Organism 
+
+We build our empirical results on a single model organism : a small Julia implementation of a frozen autoregressive transformer inspired by the architectural template of Karpa-thy’s (2026) microgpt . As in the model-organisms methodology discussed by Hubinger et al. (2024) and Páez (2024), its value lies not in scale or ecological realism, but in the fact that we can directly observe, enumerate, and compare every theoretically relevant quantity (induced partitions, exact finite-ecology decompositions, population-level selection trajec-tories) against the theorems. The laboratory world states are languages or language groups drawn from aligned multilingual corpora of three widely translated texts: Alice’s Adventures in Wonderland ,Dante’s Commedia , and the Communist Manifesto . The off-ecology probe uses the Voyn-ich manuscript through an EVA transliteration from Rene Zandbergen’s digital archive. Specific editions and digital sources are listed in Section F. In the neural experiments, the observables are behavioural distance matrices, thresholded induced partitions, held-out to-ken losses, and population-level selection trajectories. At the exact level, we collapse the same held-out corpora into finite empirical ecologies whose world states are languages and whose contexts are short prefix-length conditions, so we can evaluate the theorem quantities directly rather than only through SGD-trained proxies. This distinction between an exact empirical ecology and a learned neural approximation also determines how the empirical results should be read. Some figures report theorem quantities directly, evaluated either in finite synthetic ecologies or in held-out empirical ecologies. Others report the behaviour of trained models relative to those same quantities, and therefore include the additional effects of optimization error, finite capacity, and finite-sample noise. The model organism validates the theoretical machinery in a regime where all quantities are observable; the predictions for production models (Section 8) necessarily rely on proxies. 
+
+3 The Autoregressive Task Ecology 
+
+We use only a limited part of the framework of Dalla Riva (2026). In that setting, one starts with a finite world-state space W , a task ecology μ over functions on W , and an encoding 
+
+p that may merge world states. The ecology induces an equivalence relation on W : two states are equivalent when the tasks sampled from μ do not distinguish them. An encoding is ecologically veridical when it merges only states that are equivalent in that sense. The 
+
+> 3Dalla Riva
+
+static theory then identifies those veridical encodings as the zero-excess solutions, while the dynamic theory adds conditional evolutionary convergence when a genuine reproduction– selection–mutation process is present. For an autoregressive language model with frozen weights, those objects take the fol-lowing form. 
+
+3.1 World States and Linguistic Accessibility Definition 1 (World states) Let W be a finite set of world states : latent configurations of reality that are relevant to the agent’s task ecology, equipped with a prior distribution π
+
+with π(w) > 0 for all w ∈ W . Each w ∈ W determines a joint distribution over observable texts. 
+
+We do not require W to include all possible configurations of reality, only those that the agent’s task ecology may query. The finiteness assumption matches the finite-state setup of Dalla Riva (2026) and holds because any practical task ecology distinguishes only finitely many states. For language models, W includes cultural and informational states alongside physical ones. Moreover, LLMs are now among the agents that produce such states: model-generated text enters future training corpora, model-written code becomes infrastructure, model out-puts reshape what is “true” about the informational environment. W is therefore not exoge-nous to the population of models whose veridicality we study; it is partially co-constructed by them. At any snapshot in time, we may fix W and apply the framework’s static results (Thms. 30 and 50). But the interpretation of ecological veridicality must acknowledge that the target reality is itself a moving object shaped by the models that are veridical to it. We return to this point in Section 8 under the heading of niche construction. Let V be a finite token vocabulary, let V ∗ denote the set of all finite token sequences over V , and let ∆( V ) denote the simplex of probability distributions on V .
+
+Definition 2 (Text distribution conditioned on world state) For each w ∈ W and each finite token sequence (context) c ∈ V ∗, let Pw(· | c) ∈ ∆( V ) denote the conditional distribution of the next token given context c when the world state is w.
+
+Definition 3 (Linguistic equivalence) Two world states w1, w 2 ∈ W are linguistically equivalent , written w1 ≈L w2, if 
+
+Pw1 (· | c) = Pw2 (· | c) for all c ∈ V ∗.
+
+That is, no text context can distinguish them. 
+
+Remark 4 Linguistic equivalence is an equivalence relation on W (reflexive, symmetric, and transitive, the last by transitivity of equality). The equivalence classes [w]L partition W
+
+into groups of states that are indistinguishable through text. These classes are at least as coarse as the task-equivalence classes [w]μ, i.e. the equivalence classes induced by the task ecology μ in the framework of Dalla Riva (2026), and in general strictly coarser: an em-bodied agent with non-linguistic sensory channels may separate states that are linguistically equivalent. 
+
+> 4Task Ecologies and World-Tracking Representations in LLMs
+
+3.2 Contexts as Tasks 
+
+In this subsection, we translate the ecological-veridicality framework into the autoregressive setting. We treat next-token prediction as a task ecology in the precise sense needed by Dalla Riva (2026), and the resulting objective admits the same kind of exact excess-loss decomposition. Once that translation is in place, ecological veridicality becomes a direct statement about the standard token-level training loss. The ingredients of the decomposition are standard information-theoretic facts: Bayes-optimal prediction under log-loss is given by conditional mixtures, and the excess above the entropy floor expands into conditional KL or Jensen–Shannon terms. What is new here is their assembly for the autoregressive world-state setting. 
+
+Definition 5 (Vector context-task) A context-task is a vector-valued function fc : W →
+
+R|V | defined by a context c ∈ V ∗:
+
+fc(w) = Pw(· | c),
+
+the next-token distribution in world state w.
+
+Definition 6 (Training task ecology) Let D be a distribution over context-target pairs 
+
+(c, v ), where c ∈ V ∗ is a context and v ∈ V is the next-token target, and let DC be its marginal over contexts. The training task ecology is the pushforward measure 
+
+μD = DC ◦ f −1(·) ,
+
+i.e. the distribution over vector tasks obtained by sampling a context c from DC and mapping it to the corresponding task fc.
+
+For the induced task ecology and the excess-loss decomposition below, the full pair dis-tribution D matters only through its context marginal DC . The next-token law is supplied separately by the world-conditioned distributions Pw(· | c).
+
+Definition 7 (Token log-loss of an encoding) For an encoding p : W → X into an ab-stract code space X, and a decoder q : X × V ∗ → ∆( V ), define the expected next-token cross-entropy under the training distribution D by 
+
+LD(p, q ) := Ew∼π, c ∼DC , v ∼Pw (·| c)
+
+> [
+
+− log q(v | p(w), c )].
+
+Equivalently, 
+
+LD(p, q ) = Ew∼π, c ∼DC
+
+> [
+
+CE( Pw(· | c), q (p(w), c )) ],
+
+where CE( P, Q ) = H(P ) + KL( P ∥Q) is cross-entropy, H(P ) is Shannon entropy, and 
+
+KL( P ∥Q) is Kullback–Leibler divergence. 
+
+In the entropy and mutual-information identities below, we write (W, C, Y ) for the random world state, context, and next token generated by 
+
+W ∼ π, C ∼ DC , Y ∼ PW (· | C),
+
+and set X := p(W ).
+
+> 5
+
+Dalla Riva 
+
+Theorem 8 (Optimal decoder and exact excess-loss decomposition) Fix an encod-ing p : W → X, let X = p(W ), and write Cx := {w ∈ W : p(w) = x} for the cell of code x.For each non-empty cell define 
+
+πx := ∑
+
+> w∈Cx
+
+π(w), αx(w) := π(w)/π x,
+
+and the cell-average next-token distribution 
+
+¯Px(· | c) := ∑
+
+> w∈Cx
+
+αx(w) Pw(· | c).
+
+Then: (a) The Bayes-optimal decoder for p is q∗ 
+
+> p
+
+(· | x, c ) = ¯Px(· | c).(b) The optimal loss attainable with encoding p, denoted L∗
+
+> D
+
+(p) := inf q LD(p, q ), satisfies 
+
+L∗
+
+> D
+
+(p) = H(Y | C, X ),
+
+and admits the exact decomposition 
+
+L∗
+
+> D
+
+(p) = H(Y | C, W ) + I(Y ; W | C, X )= H(Y | C, W ) + Ec∼DC
+
+[∑
+
+> x
+
+πx JS αx
+
+({Pw(· | c)}w∈Cx
+
+)]
+
+.
+
+where all entropies and mutual informations are taken under the joint law induced by π, DC , and the conditional token distributions Pw(· | c), and where JS αx is the weighted Jensen–Shannon divergence inside cell Cx, i.e. the αx-weighted average of 
+
+KL( Pw(· | c)∥ ¯Px(· | c)) over w ∈ Cx.(c) Consequently, the excess loss above the irreducible entropy floor, L∗
+
+> D
+
+(p)−H(Y | C, W ),vanishes if and only if every cell of p contains only training-equivalent states, i.e. whenever p(w1) = p(w2), we have 
+
+Pw1 (· | c) = Pw2 (· | c)
+
+for DC -almost every c. If DC separates all points, equality requires p to be injective on W .
+
+Proof For fixed x and c, the contribution to LD(p, q ) from code x is 
+
+∑
+
+> w∈Cx
+
+π(w) CE (Pw(· | c), q (x, c )).
+
+Using CE( P, Q ) = H(P ) + KL( P ∥Q), this equals 
+
+∑
+
+> w∈Cx
+
+π(w) H(Pw(· | c)) + πx
+
+∑
+
+> w∈Cx
+
+αx(w) KL (Pw(· | c)∥q(x, c )).
+
+6Task Ecologies and World-Tracking Representations in LLMs 
+
+The first term is independent of q, and the second is minimized at the mixture q(x, c ) = ¯Px(· | c), proving (a). Substituting this optimizer yields 
+
+L∗
+
+> D
+
+(p) = Ew,c,v 
+
+> [
+
+− log P (Y = v | X = p(w), C = c)] = H(Y | C, X ),
+
+which is the first identity in (b). The standard chain rule gives 
+
+H(Y | C, X ) = H(Y | C, X, W ) + I(Y ; W | C, X ).
+
+Since X = p(W ) is a deterministic function of W , conditioning on X in addition to W adds no information, so H(Y | C, X, W ) = H(Y | C, W ). Therefore 
+
+H(Y | C, X ) = H(Y | C, W ) + I(Y ; W | C, X ).
+
+Expanding the conditional mutual information cell-by-cell gives the weighted Jensen–Shannon form in (b): 
+
+I(Y ; W | C, X ) = Ec∼DC
+
+> [∑
+> x
+
+πx
+
+> ∑
+> w∈Cx
+
+αx(w) KL (Pw(· | c)∥ ¯Px(· | c))]
+
+.
+
+For (c), each weighted Jensen–Shannon term is non-negative and is zero iff all distributions in that cell agree. Hence the total excess is zero iff for every x and DC -almost every c, the family {Pw(· | c)}w∈Cx is constant. If DC separates all points, no two distinct states can satisfy this, so every zero-excess encoding must be injective. 
+
+Definition 9 (Task distance under the training ecology) The task distance under μD
+
+is defined via the squared Hellinger distance between the next-token distributions: 
+
+σ2
+
+> D
+
+(w1, w 2) = Ec∼DC
+
+> [
+
+H2(Pw1 (· | c), P w2 (· | c)) ],
+
+where DC is the marginal distribution of D over contexts and H2(P, Q ) = 12
+
+> ∑
+> v
+
+(√P (v) −√Q(v)) 2 is the squared Hellinger distance. 
+
+Dalla Riva (2026) defines task distance via expected squared difference of task values. The qualitative separation structure, i.e. which pairs of world states have σ2 
+
+> D
+
+> 0, depends only on whether Pw1 (· | c)̸ = Pw2 (· | c) on a set of positive DC -measure, and is therefore identical under any divergence that vanishes exactly on equality. For the actual autoregres-sive objective, Thm. 8 provides the exact loss statement directly: next-token cross-entropy is minimized exactly when the encoding preserves the same DC -almost-everywhere equiv-alence classes. Hellinger is retained only as an auxiliary quantitative metric because it gives a Hilbert-space geometry (Section A) and the same zero/nonzero separation structure. Thus we import the separation logic from Dalla Riva (2026), but recast the geometry in a Hellinger-based analogue; the main loss results below are proved directly for cross-entropy. The squared Hellinger distance is an ℓ2 norm on square-root-transformed distributions: 
+
+H2(P, Q ) = 12 ∥√P − √Q∥22. This preserves the Hilbert space structure needed for the geometric results in Section A (the canonical embedding becomes ΨD(w)( c) = √Pw(· | c) ∈
+
+> 7
+
+Dalla Riva Excess loss L*_D(p) - H(V | C, W) 0.00 0.05 0.10 JS excess 0.00 0.05 0.10 
+
+> Number of partition cells 1234
+
+Figure 1: Exact finite-ecology calibration of Thm. 8. Each point is a discrete ecol-ogy/partition pair from the synthetic sweep. The excess loss coincides exactly with the Jensen–Shannon excess term, giving the diagonal identity predicted by the theorem. Ecology size T 1 2 3 5Partition size 12345Ecology size T 1 2 3 5Exact loss term 0.00 0.05 0.10 Exact ecology k (both corpora) Alice exact excess Alice exact JS excess Manifesto exact excess Manifesto exact JS excess 
+
+Figure 2: Empirical-corpus corroboration of the static theory. Left: the exact empirical ecology built from held-out Alice and Manifesto corpora has partition size kexact = 1 , 2, 3, 5
+
+as the ecology expands. Right: on those same exact empirical ecologies, the measured excess loss coincides with the exact Jensen–Shannon excess term, as predicted by Thm. 8. 
+
+L2(DC ; R|V |)). For the present paper, the only unconditional comparison facts we use are the one-sided bound 
+
+H2(P, Q ) ≤ − 2 log (1 − H2(P, Q )) ≤ KL( P ∥Q),
+
+8Task Ecologies and World-Tracking Representations in LLMs 
+
+where the second inequality is Rényi monotonicity (here Dα denotes the Rényi divergence of order α, with D1/2(P ∥Q) = −2 log ∑
+
+> v
+> √
+
+P (v)Q(v) and D1(P ∥Q) = KL( P ∥Q)). Thus positive Hellinger separation implies positive KL separation, and small KL forces small Hellinger. The main text uses only these one-sided facts and the shared zero set H2(P, Q ) = 0 ⇔ P = Q ⇔ KL( P ∥Q) = 0 ; any stronger local equivalence is inessential here. 
+
+Remark 10 (Scalar-coordinate version) If one instead defines scalar tasks fc,v (w) = 
+
+Pw(v | c), then E(c,v )∼D[( fc,v (w1) − fc,v (w2)) 2] = Ec∼DC 
+
+> [∑
+> v
+
+D(v | c)∆ v(c)2], with ∆v(c) = 
+
+Pw1 (v | c) − Pw2 (v | c). This equals the unweighted ℓ2 norm only under additional assump-tions on D(v | c). The vector-task formulation avoids this mismatch. 
+
+Corollary 11 (Separation under the training ecology) The training ecology μD sep-arates w1 from w2 (in the sense of Dalla Riva (2026, Definition 3.3)) if and only if 
+
+DC
+
+> (
+
+{c ∈ V ∗ : Pw1 (· | c)̸ = Pw2 (· | c)}) > 0.
+
+That is, there exists a set of training contexts of positive measure under which the next-token distributions differ. 
+
+Proof By the definition of task distance under the training ecology, 
+
+σ2
+
+> D
+
+(w1, w 2) = Ec∼DC
+
+> [
+
+H2(Pw1 (· | c), P w2 (· | c))]
+
+.
+
+The squared Hellinger distance is nonnegative and vanishes exactly when its two arguments are equal. Hence the expectation is strictly positive if and only if the integrand is strictly positive on a set of positive DC -measure. This is equivalent to saying that 
+
+Pw1 (· | c)̸ = Pw2 (· | c)
+
+for a set of contexts c of positive DC -measure, which is exactly the stated condition. 
+
+Definition 12 (Textual separation margin) When μD separates all points of W :
+
+δD = min  
+
+> w1̸=w2
+
+σ2
+
+> D
+
+(w1, w 2) > 0.
+
+Remark 13 (Quantitative connection to training loss) Thm. 8 already gives the ex-act zero/nonzero characterisation for the token-level cross-entropy objective. Hellinger serves only an auxiliary role: it provides a geometry on world states and a quantitative surrogate for how strongly a pair is separated. The unconditional facts we use are only that 
+
+H2(P, Q ) ≤ KL( P ∥Q) and that both vanish iff P = Q. Thus Hellinger separation implies KL separation, and small KL implies small H2. If one also works locally away from the boundary of the simplex, then the two divergences are second-order equivalent near equality, with KL( P ∥Q) = 4 H2(P, Q ) + o(H2) under our convention for H2.
+
+> 9Dalla Riva
+
+3.3 Bounding the Linguistic Separation 
+
+The previous subsection defined the training ecology induced by a corpus. We now relate that ecology to the larger space of distinctions that are in principle expressible in language at all. This matters because the training corpus can only separate pairs that are both linguistically distinguishable and actually probed by contexts of positive training measure. 
+
+Proposition 14 (Linguistic equivalence bounds the text ecology) For all w1, w 2 ∈
+
+W :(a) If w1 ≈L w2 then σ2
+
+> D
+
+(w1, w 2) = 0 for every training distribution D.(b) If w1̸ ≈L w2, then there exists a training distribution D such that σ2
+
+> D
+
+(w1, w 2) > 0.(c) Therefore, [w]μD ⊇ [w]L for every D. Equality holds whenever, for every pair w1̸ ≈L
+
+w2, the context marginal DC assigns positive mass to at least one separating context 
+
+c with Pw1 (· | c)̸ = Pw2 (· | c). Since W is finite, this requires positive mass only on a finite witness set of such contexts; full support on V ∗ is a stronger idealization, not a necessity. 
+
+Proof (a) If Pw1 (· | c) = Pw2 (· | c) for all c, every integrand vanishes. (b) By w1̸ ≈L w2,
+
+∃ c∗ with Pw1 (· | c∗)̸ = Pw2 (· | c∗). Let DC assign mass ε > 0 to c∗. Then σ2 
+
+> D
+
+> 0. (c) Part (a) implies [w]μD ⊇ [w]L for every D: linguistic equivalence forces zero ecology distance under every training distribution. For the converse under the stated witness condition, take any pair w1̸ ≈L w2. By hypothesis there is a separating context c∗ with DC (c∗) > 0. Then part (b) gives σ2
+
+> D
+
+(w1, w 2) > 0, so w1 and w2 cannot lie in the same μD-equivalence class. Hence no μD-class can strictly contain multiple linguistic classes, and [w]μD = [ w]L. Be-cause W is finite, only finitely many non-linguistically-equivalent pairs exist, so only finitely many witness contexts are needed. Full support on V ∗ implies this condition automatically, but is stronger than what the argument actually uses. 
+
+Proposition 15 (Ecology expansion refines equivalence) Let μ′ = (1 − α)μD + αν 
+
+for some α ∈ (0 , 1] and any additional task distribution ν. Then for all w1, w 2:
+
+σ2 
+
+> μ′
+
+(w1, w 2) = (1 − α)σ2
+
+> D
+
+(w1, w 2) + α σ 2 
+
+> ν
+
+(w1, w 2).
+
+Hence [w]μ′ ⊆ [w]μD : adding task families can split existing equivalence classes but cannot merge previously separated states. 
+
+Proof For each pair (w1, w 2),
+
+σ2 
+
+> μ′
+
+(w1, w 2) = Et∼μ′ Eq∼Dt [dt(P tw1 (· | q), P tw2 (· | q)) 2].
+
+Since μ′ = (1 − α)μD + αν , linearity of expectation gives the displayed interpolation iden-tity. If σ2
+
+> D
+
+(w1, w 2) > 0, then the first term contributes (1 − α)σ2
+
+> D
+
+(w1, w 2) > 0, so every pair separated by μD remains separated by μ′. Hence μ′ can split existing equivalence classes but cannot merge previously separated states. 
+
+> 10 Task Ecologies and World-Tracking Representations in LLMs
+
+Interpretation. The training corpus determines which linguistically accessible distinctions are actually separated. A corpus that never includes contexts probing the difference between 
+
+w1 and w2 leaves them merged, even if they are linguistically distinguishable. The textual separation margin δD is a property of the corpus, not of language in the abstract. 
+
+4 The Frozen Transformer as a Fixed Encoding 
+
+The ecological-veridicality theorems require a single encoding held fixed across the tasks sampled from the ecology. In the present setting, the corresponding architectural question is whether a transformer deploys one task-invariant implementation whose behaviour varies only with the input context, or whether the implementation itself changes across tasks. Cognitive impenetrability plays that role below. 
+
+4.1 Dense Transformers Definition 16 (Frozen transformer implementation) A dense transformer with frozen weight vector θ ∈ Θ, where Θ denotes the parameter space of the architecture, defines a func-tion Fθ : V ∗ → ∆( V ) mapping every context c to a distribution over the next token. Here, 
+
+θ is the implementation-level parameterisation . The representational object of interest is not θ itself, nor any particular hidden-state tensor, but the ecology-relative induced state encoding derived from the model’s behaviour over world states, defined precisely below. 
+
+Proposition 17 (Cognitive impenetrability of frozen dense transformers) The im-plementation θ induces a cognitively impenetrable state encoding: (a) θ is fixed across all tasks (contexts). (b) Different tasks produce different outputs only because they produce different contexts 
+
+c, processed by the same fixed function Fθ.(c) Any state distinctions available to the model are therefore induced by a single fixed map Fθ, with task variation entering through c alone. 
+
+Proof Part (a) is immediate from the frozen-weights assumption: the same parameter vec-tor θ is used for every input context. Part (b) then follows because the output distribution on any task is computed by the single map Fθ, evaluated at different contexts c. Part (c) is just the corresponding representation-level statement: any distinguishability the model exhibits must be induced by that same fixed implementation, with task variation entering only through the context. A transformer computes intermediate hidden states hl(c) at each layer. These de-pend on c and hence vary across inputs. They are not the “encoding” in the sense of Dalla Riva (2026), and current empirical work does not give a unique, theory-independent way of identifying the representation of an LLM from weights or activations alone. Probes, representational-similarity methods, and interventions provide partial empirical access, but they do not eliminate the need for abstraction. For the formal theory, the relevant object 
+
+> 11 Dalla Riva
+
+is therefore the operational equivalence relation over world states induced by the model’s behaviour under a probe repertoire. Hidden states are possible empirical windows onto that object, not the object itself. The Transformer Circuits framework gives this a useful architectural reading: in a frozen transformer, attention heads and MLP blocks are additive readers and writers on a shared residual stream (Elhage et al., 2021). Different contexts can recruit different circuit com-positions, but they still do so through one fixed implementation acting on one shared state space. That is the mechanism-level analogue of the impenetrability condition used here. 
+
+4.2 Mixture-of-Experts Transformers Definition 18 (MoE transformer) A Mixture-of-Experts transformer with frozen weights 
+
+θ = ( θshared , θ 1, . . . , θ E , θ router ) defines a routing function r : V ∗ → 2[E], where [E] := 
+
+{1, . . . , E } and 2[E] is its power set, with |r(c)| = k for fixed k < E , determined by θrouter .Thus r(c) is the subset of experts activated by context c. For each input c, the active pa-rameter set is θ(c) = ( θshared , {θe : e ∈ r(c)}).
+
+Proposition 19 (Cognitive impenetrability of frozen MoE transformers) A frozen MoE transformer is cognitively impenetrable: the full weight vector θ is fixed at inference, the routing function r is determined by θrouter and the input c (not by a task identifier), and the mapping Fθ : V ∗ → ∆( V ) is a single fixed function. 
+
+Proof The full parameter tuple (θshared , θ 1, . . . , θ E , θ router ) is fixed at inference. For each input c, the router computes r(c) from c using the frozen parameters θrouter ; there is no independent task-specific parameter update. Consequently the overall input-output map 
+
+Fθ is a single fixed function of c, even though different contexts activate different expert subsets. Note that MoE routing is input-dependent ( r(c) varies with c), but this is true of any non-trivial function. The relevant distinction is that r does not receive a task identifier as input. Per-task fine-tuning, by contrast, changes θ itself depending on the task, which constitutes cognitive penetration (Section 4.4). 
+
+4.3 In-Context Learning 
+
+To compare transformers with the world-state encodings of Dalla Riva (2026), we must connect latent world states to textual evidence presented to the model. The next two definitions make that interface explicit and then define the induced equivalence relation on world states generated by the model’s behaviour on those prompts. 
+
+Definition 20 (World-text interface) Fix an interface map obs : W → V ∗ that provides textual evidence for world state w. For probe context c, the model is queried on c ⊕ obs( w),where ⊕ denotes sequence concatenation. 
+
+Definition 21 (Readout repertoire) For a frozen transformer implementation θ, define the separation set :
+
+S(θ) := {(w1, w 2) : ∃ c ∈ V ∗ s.t. Fθ(c ⊕ obs( w1)) ̸ = Fθ(c ⊕ obs( w2)) },
+
+> 12 Task Ecologies and World-Tracking Representations in LLMs
+
+the set of world-state pairs that θ can distinguish under some context. 
+
+Proposition 22 (ICL does not expand separation) S(θ) is determined by θ alone. In-context learning selects which context c to use, thereby selecting which element of the readout repertoire to deploy, but does not enlarge S(θ).
+
+Proof Fθ is a fixed function determined by θ. For any c, the outputs Fθ(c ⊕ obs( w1)) and 
+
+Fθ(c ⊕ obs( w2)) are values of this fixed function. S(θ) is the union over all c of the set of pairs distinguished by Fθ(c ⊕ · ), which is determined by θ.In the circuit language of Elhage et al. (2021), induction-style in-context learning is a concrete example of this bounded flexibility: prompts can alter which composed circuit is activated, but they do so through the same frozen QK/OV machinery. The prompt changes the readout path, not the underlying separation set available to the implementation. 
+
+Corollary 23 (ICL and training-time veridicality) If (w1, w 2) /∈ S(θ), then no prompt-ing strategy can make the frozen model distinguish that pair. Whenever a deployment ecology assigns positive separation weight to such a pair, a strictly positive excess token loss is un-avoidable for that frozen θ (by Thm. 8(c)). 
+
+Proof By Prop. 22, in-context learning can only choose among contexts already available to the fixed implementation θ; it cannot enlarge S(θ). Thus if (w1, w 2) /∈ S(θ), then 
+
+Fθ(c ⊕ obs( w1)) = Fθ(c ⊕ obs( w2)) 
+
+for every prompt context c, so no prompting strategy can separate the pair. If a deployment ecology nevertheless assigns positive separation weight to that pair, then the induced en-coding merges a deployment-separated distinction, and Thm. 8(c) implies strictly positive excess token loss. 
+
+Definition 24 (Operational state encoding) Relative to the world-text interface obs 
+
+and the context marginal DC under discussion, define an equivalence relation ∼θ,D on W
+
+by 
+
+w1 ∼θ,D w2 iff Fθ(c ⊕ obs( w1)) = Fθ(c ⊕ obs( w2)) for DC -almost every c. 
+
+Let pθ,D : W → W/ ∼θ,D map each world state to its ∼θ,D -equivalence class under the context marginal DC . This induced partition is the abstract encoding that lets us transport the separation logic of Dalla Riva (2026) into the present cross-entropy framework. 
+
+The object pθ,D is defined by the model’s behavior on DC -almost every context, so finite probing generally cannot reveal it directly in realistic production LLMs. Only laboratory settings with exhaustively enumerable context sets, such as the microgpt experiments in our model-organism study, allow exact recovery. For production models, we can only estimate coarse proxies for the induced partition from finite prompt families and observed next-token distributions. 
+
+> 13 Dalla Riva
+
+Remark 25 (Separation set vs. ecology-relative encoding) The full readout reper-toire S(θ) from Def. 21 records which pairs are distinguishable by some context in V ∗. The ecology-relative partition ∼θ,D is coarser: if a pair is separated only on a DC -null set of contexts, then (w1, w 2) ∈ S(θ) but w1 ∼θ,D w2. Thus S(θ) can be strictly larger than what the training or deployment ecology actually exposes. This is the model-side analogue of Cor. 11: zero-measure distinguishing contexts do not affect the ecology-induced partition. 
+
+Chain-of-thought prompting and scratchpads can improve performance within a frozen model by generating intermediate tokens that create longer, more informative contexts (Wei et al., 2022; Nye et al., 2021), but they do not enlarge the underlying separation set S(θ).The deployment decoding gap (Def. 39) formalizes this distinction: such procedures reduce the gap between the Bayes-optimal decoder and the restricted deployment class, without changing the representational term. 
+
+Definition 26 (Ecological excess token loss of a model) Define 
+
+∆D(θ) := L∗
+
+> D
+
+(θ) − H(Y | C, W ).
+
+Then ∆D(θ) = 0 if and only if pθ,D is ecologically veridical, by Thm. 8(c). 
+
+4.4 Partial Penetrability: Per-Task Adaptation Definition 27 (Per-task adaptation) A model with per-task adaptation uses weights θ+∆θτ when performing task τ , where τ is a task index and ∆θτ is the task-specific parameter update (LoRA adapter, prefix tuning, or full fine-tuning). 
+
+Proposition 28 (Per-task adaptation is cognitive penetration) A model with per-task adaptation does not satisfy the cognitive-impenetrability assumption of Dalla Riva (2026). The implementation changes with τ , so the induced state encoding need not be fixed across tasks. Hoffman’s FBT applies independently to each task. 
+
+Proof The implementation used on task τ is θ + ∆ θτ , so different tasks need not be pro-cessed by the same input-output map. Hence the induced encoding is not fixed across tasks, violating the cognitive-impenetrability premise required by the static ecological-veridicality framework. Once the implementation itself varies with τ , Hoffman’s fixed-benefit theorem applies only task by task, not to a single shared encoding. 
+
+Remark 29 (The penetrability spectrum) This yields a formal spectrum: (a) Fully impenetrable (frozen θ): the fixed-encoding premise needed for the static theorem of Dalla Riva (2026, Theorem 4.1) is satisfied. (b) Partially penetrable (shared θ + small ∆θτ ): the shared base still faces multi-task pressure, but the effective ecology seen by the model may differ from the frozen-weight idealisation. Analysing that regime requires additional assumptions not developed here. (c) Fully penetrable (independent θτ per task): Hoffman’s FBT regime. 
+
+> 14 Task Ecologies and World-Tracking Representations in LLMs
+
+4.5 Framework Mapping 
+
+We summarize the correspondence between the ecological-veridicality framework and the frozen-transformer setting below. Ecological-veridicality framework Frozen Transformer World states W Latent world configurations Encoding p : W → X Induced state encoding pθ,D from ∼θ,D 
+
+Task f : W → Rd Context-task fc(w) = Pw(· | c)
+
+Task distribution μ μD induced by DC over contexts Readout af : X → Actions Task-specific Bayes-optimal readout on pθ,D -cells Cognitive impenetrability Frozen weights θ at inference Task distance σ2(w1, w 2) Ec∼DC [H2(Pw1 (· | c), P w2 (· | c))] 
+
+Separation margin δμ δD = min w1̸ =w2 σ2
+
+> D
+
+(w1, w 2)
+
+5 Static Optimality for LLM Encodings 
+
+The previous section supplied the model-side object that plays the role of an encoding, namely the induced partition pθ,D . We can now ask the static question central to the paper: when does the actual next-token objective favor induced encodings that preserve exactly the distinctions required by the training ecology? 
+
+Theorem 30 (Cross-entropy optimum and ecological veridicality) For θ ∈ Θ, write 
+
+L∗
+
+> D
+
+(θ) := L∗
+
+> D
+
+(pθ,D )
+
+for the Bayes-optimal next-token cross-entropy induced by pθ,D . Assume this objective at-tains its minimum on Θ, and let θ∗ ∈ argmin θ∈Θ L∗
+
+> D
+
+(θ). Then: (a) The irreducible minimum H(Y | C, W ) is attained by θ∗ iff pθ∗,D merges only μD-equivalent states. (b) If μD separates all points of W and Θ realises at least one injective encoding on W ,then any minimizer θ∗ is fully veridical (up to label symmetry). (c) If every θ ∈ Θ merges at least one μD-separated pair, then 
+
+inf  
+
+> θ∈Θ
+
+L∗
+
+> D
+
+(θ) > H (Y | C, W ),
+
+so the model class is necessarily lossy relative to the training ecology. 
+
+Proof Apply Thm. 8 to the induced encoding pθ,D . Part (a) is exactly the zero-excess characterization. For (b), if μD separates all points and some θ induces an injective en-coding, then Thm. 8(c) shows that this encoding attains the entropy floor H(Y | C, W ).Hence every minimizer θ∗ must also attain that floor, and under full separation Thm. 8(c) again implies that only injective encodings can do so, i.e. every minimizer is fully veridical up to relabelling of codes. For (c), if every θ merges a μD-separated pair, then no induced 
+
+> 15 Dalla Riva
+
+encoding can satisfy the DC -almost-everywhere equality condition inside every cell, so the Jensen–Shannon excess term in Thm. 8(b) is strictly positive for every θ. Since W is finite, 
+
+L∗
+
+> D
+
+(θ) depends on θ only through the induced partition pθ,D , and there are at most B(|W |)
+
+such partitions. The infimum is therefore a minimum over finitely many strictly positive values, so it lies strictly above the entropy floor H(Y | C, W ).
+
+Remark 31 (Existence of minimisers) The non-empty argmin assumption is standard. It holds, for example, for finite hypothesis classes, or more generally when Θ is compact and θ 7 → L∗
+
+> D
+
+(θ) is lower semicontinuous. 
+
+Remark 32 (Bell-number bound) Here B(|W |) denotes the Bell number, i.e. the num-ber of set partitions of W .
+
+5.1 Finite-Class Generalization Guarantee 
+
+The static theorem above characterizes the Bayes-optimal token-loss target under the train-ing ecology, but it does not yet say when finite data and approximate empirical optimisation recover a veridical induced encoding. The next result provides a deliberately conservative learning-theoretic bridge: under a finite induced encoding class and bounded token losses, near-optimal empirical token loss for an oracle decoder objective is enough to force ecological veridicality whenever the veridicality gap is strictly positive. This is a standard finite-class uniform-convergence argument specialized to the induced-encoding family: the proof is just Hoeffding concentration plus a union bound, applied to the token-loss gap defined by the ecological-veridicality criterion. 
+
+Definition 33 (Empirical token log-loss) Draw iid triples (w1, c 1, v 1), . . . , (wn, c n, v n)
+
+from the joint distribution 
+
+w ∼ π, c ∼ DC , v ∼ Pw(· | c).
+
+For θ ∈ Θ, let q∗ 
+
+> θ
+
+:= q∗ 
+
+> pθ,D
+
+be the Bayes-optimal decoder from Thm. 8. Define 
+
+¯Ln(θ) := 1
+
+n
+
+> n∑
+> t=1
+> [
+
+− log q∗ 
+
+> θ
+
+(vt | pθ,D (wt), c t)].
+
+Definition 34 (Technical assumption: finite induced encoding class) Let 
+
+PΘ := {pθ,D : θ ∈ Θ},
+
+and assume MΘ := |P Θ| < ∞.
+
+Definition 35 (Technical assumption: bounded per-task risk) Assume there exists 
+
+τ ∈ (0 , 1) such that for every θ ∈ Θ and every triple (w, c, v ) with positive sampling proba-bility: 
+
+q∗ 
+
+> θ
+
+(v | pθ,D (w), c ) ≥ τ. 
+
+Then each token loss is bounded: 
+
+0 ≤ − log q∗ 
+
+> θ
+
+(v | pθ,D (w), c ) ≤ Cτ , Cτ := log(1 /τ ).
+
+> 16
+
+Task Ecologies and World-Tracking Representations in LLMs 
+
+The next theorem is a finite-class concentration result over induced encodings paired with their Bayes-optimal decoders . It is therefore not a theorem about SGD in transformer parameter space or about the trajectory of a single training run. More narrowly, it states when near-optimal empirical token loss for the oracle objective ¯Ln certifies that the induced encoding is ecologically veridical. 
+
+Theorem 36 (Finite-class certification from near-optimal token loss) Assume: (i) There exists θv ∈ Θ with L∗
+
+> D
+
+(θv) = H(Y | C, W ) (equivalently: pθv ,D is ecologically veridical). (ii) The learner outputs ˆθ with empirical optimisation error 
+
+¯Ln(ˆθ) ≤ inf 
+
+> θ∈Θ
+
+¯Ln(θ) + εopt .
+
+(iii) Technical assumptions 34 and 35 hold. Let ρ be any probability distribution on PΘ, fixed independently of the training sample, and write pv := pθv ,D . For each induced encoding p ∈ P Θ, define the concentration radius 
+
+ηρ(p) := Cτ
+
+√
+
+log(1 /ρ (p)) + log(2 /α )2n .
+
+Define the smallest positive excess over non-veridical induced encodings by 
+
+γCE  
+
+> D
+
+:= min   
+
+> p∈P Θ:pnon-veridical
+
+(L∗
+
+> D
+
+(p) − H(Y | C, W )).
+
+For each non-veridical p ∈ P Θ, write 
+
+∆D(p) := L∗
+
+> D
+
+(p) − H(Y | C, W ),
+
+so ∆D(p) ≥ γCE  
+
+> D
+
+. For the veridical encoding, write 
+
+Nv := log(1 /ρ (pv)) + log(2 /α ).
+
+For each non-veridical p, write 
+
+Np := (log(1 /ρ (p)) + log(2 /α ))( γCE  
+
+> D
+
+/∆D(p))2.
+
+If εopt < γ CE  
+
+> D
+
+, then with probability at least 1 − α:
+
+pˆθ,D is ecologically veridical ,
+
+provided 
+
+n ≥ 2C2
+
+> τ
+
+(γCE  
+
+> D
+
+− εopt )2 max 
+
+{
+
+Nv, max   
+
+> pnon-veridical
+
+Np
+
+}
+
+.
+
+17 Dalla Riva 
+
+Proof For fixed p ∈ P Θ, Hoeffding with range [0 , C τ ] gives 
+
+P (| ¯Ln(p) − L∗
+
+> D
+
+(p)| ≥ η) ≤ 2 exp( −2nη 2/C 2 
+
+> τ
+
+).
+
+Setting η = ηρ(p) yields 
+
+P (| ¯Ln(p) − L∗
+
+> D
+
+(p)| ≥ ηρ(p)) ≤ α ρ (p).
+
+Summing over p ∈ P Θ gives 
+
+P (∃ p ∈ P Θ : | ¯Ln(p) − L∗
+
+> D
+
+(p)| ≥ ηρ(p)) ≤ α. 
+
+Let Eρ denote the complementary event. On Eρ, for the veridical partition pv:
+
+¯Ln(pv) < H (Y | C, W ) + ηρ(pv).
+
+For any non-veridical p:
+
+¯Ln(p) > H (Y | C, W ) + ∆ D(p) − ηρ(p).
+
+Therefore no non-veridical partition can satisfy the empirical near-optimality condition in (ii) provided 
+
+∆D(p) − ηρ(p) > η ρ(pv) + εopt for all non-veridical p. 
+
+It is enough to require 
+
+ηρ(pv) ≤ (γCE  
+
+> D
+
+− εopt )/2
+
+and, for each non-veridical p,
+
+ηρ(p) ≤ γCE  
+
+> D
+
+− εopt 
+
+2∆D(p)
+
+γCE 
+
+> D
+
+.
+
+The first inequality is exactly the first term in the displayed sample-size bound. The second is exactly the second term. Under those two inequalities, 
+
+ηρ(pv) + εopt ≤ (γCE  
+
+> D
+
++ εopt )/2
+
+and 
+
+ηρ(p) ≤ ∆D(p) − (γCE  
+
+> D
+
++ εopt )/2,
+
+because ∆D(p) ≥ γCE  
+
+> D
+
+. Hence 
+
+∆D(p) − ηρ(p) ≥ (γCE  
+
+> D
+
++ εopt )/2 ≥ ηρ(pv) + εopt ,
+
+with strict inequality coming from the strict concentration inequalities on Eρ. Thus ˆθ must induce a veridical partition on Eρ, which has probability at least 1 − α.
+
+18 Task Ecologies and World-Tracking Representations in LLMs 
+
+Corollary 37 (Uniform prior recovers the finite-class bound) If ρ(p) = 1 /M Θ for every p ∈ P Θ, all concentration radii in Thm. 36 become equal and the per-partition condi-tions collapse to a single bound. Since ∆D(p) ≥ γCE  
+
+> D
+
+for every non-veridical p, the sample-size requirement reduces to 
+
+n ≥ 2C2
+
+> τ
+
+(γCE  
+
+> D
+
+− εopt )2
+
+> (
+
+log(2 MΘ) + log(1 /α )).
+
+Proof Under the uniform prior, log(1 /ρ (p)) = log MΘ for every induced partition p. The sample-size condition in Thm. 36 therefore becomes 
+
+n ≥ 2C2
+
+> τ
+
+(∆ D(p) − εopt )2
+
+> (
+
+log 2 + log MΘ + log(1 /α ))
+
+for every non-veridical p. Since ∆D(p) ≥ γCE  
+
+> D
+
+on that set by definition of the ecological veridicality gap, it is enough to impose the displayed lower bound with ∆D(p) replaced by γCE  
+
+> D
+
+.
+
+Corollary 38 (Conditional near-optimality in token loss) Under assumptions (ii)– (iii) of Thm. 36, for any η > 0, with probability at least 1 − 2MΘ exp( −2nη 2/C 2 
+
+> τ
+
+):
+
+L∗
+
+> D
+
+(ˆθ) ≤ inf  
+
+> θ∈Θ
+
+L∗
+
+> D
+
+(θ) + εopt + 2 η. 
+
+Proof On Eη, L∗
+
+> D
+
+(ˆθ) ≤ ¯Ln(ˆθ) + η ≤ inf θ ¯Ln(θ) + εopt + η ≤ inf θ
+
+> (
+
+L∗
+
+> D
+
+(θ) + η) + εopt + η =inf θ L∗
+
+> D
+
+(θ)+ εopt +2 η. The probability bound is exactly the concentration bound defining Eη
+
+in Thm. 36. An informative choice of ρ is the entropic prior 
+
+ρβ0 (p) ∝ exp (−β0H(p(W )) ), β0 > 0.
+
+Then 
+
+log(1 /ρ β0 (p)) = β0H(p(W )) + log Zβ0 ,
+
+where Zβ0 is the normalizing constant. Under that choice, low-complexity induced partitions receive larger mass and therefore tighter concentration radii. If the model class contains a minimum-complexity veridical partition, its contribution is governed by β0I∗(μD) + log Zβ0
+
+from Thm. 50. The exact sample bound depends on the full maximum over non-veridical partitions and cannot in general be reduced to the gap-achieving partition alone without extra structure relating ∆D(p) to H(p(W )) .The theorem is a uniform-convergence result over induced encodings, not a statement about SGD on transformer parameter space. Unlike the earlier ecological-risk formulation, the objective is the actual token-level log-loss, but each induced encoding pθ,D is paired with its Bayes-optimal decoder q∗ 
+
+> θ
+
+. The decomposition therefore separates representation choice from decoder optimality, and within those, optimisation error εopt from statistical error η.
+
+> 19
+
+Dalla Riva 
+
+The gap between the Bayes-optimal decoder and the decoder a trained transformer actually implements is absorbed into the optimisation idealisation; Def. 39 below isolates that term explicitly. The finite induced class assumption holds automatically since W is finite, but MΘ
+
+can reach the Bell number B(|W |), which grows super-exponentially ( B(20) ≈ 5.2 × 10 13 ). The bound is therefore mainly conceptual unless the effective induced class is far smaller than the worst-case partition count and γCE  
+
+> D
+
+is not too small. The entropy H(p(W )) plays three roles in the framework: it is the minimum-complexity target (Thm. 50), the explicit simplicity term in JD,β below, and, under an entropic prior, the statistical price of certifying a partition from finite data. 
+
+Definition 39 (Deployment decoder class and decoding gap) Fix a nonempty class 
+
+Qdep of admissible deployment-time decoders 
+
+q : X × V ∗ → ∆( V ).
+
+For θ ∈ Θ, define the best deployment-realizable token loss by 
+
+LQdep  
+
+> D
+
+(θ) := inf 
+
+> q∈Q dep
+
+LD(pθ,D , q ),
+
+and the corresponding deployment decoding gap by 
+
+ΓQdep  
+
+> D
+
+(θ) := LQdep  
+
+> D
+
+(θ) − L∗
+
+> D
+
+(θ).
+
+Proposition 40 (Representational excess plus deployment decoding gap) For ev-ery θ ∈ Θ and every nonempty deployment decoder class Qdep :(a) The deployment decoding gap is nonnegative: 
+
+ΓQdep  
+
+> D
+
+(θ) ≥ 0.
+
+(b) The best deployment-realizable loss decomposes as 
+
+LQdep  
+
+> D
+
+(θ) = H(Y | C, W ) + ∆ D(θ) + Γ Qdep  
+
+> D
+
+(θ).
+
+(c) If Qdep contains a Bayes-optimal decoder for pθ,D , then 
+
+ΓQdep  
+
+> D
+
+(θ) = 0 .
+
+Proof Because Qdep is a subset of the class of all decoders, we have 
+
+LQdep  
+
+> D
+
+(θ) ≥ L∗
+
+> D
+
+(θ),
+
+which gives (a). Part (b) follows by adding and subtracting L∗
+
+> D
+
+(θ) and then using the definition 
+
+∆D(θ) = L∗
+
+> D
+
+(θ) − H(Y | C, W ).
+
+For (c), if q∗ 
+
+> θ
+
+∈ Q dep attains L∗
+
+> D
+
+(θ), then 
+
+LQdep  
+
+> D
+
+(θ) ≤ LD(pθ,D , q ∗ 
+
+> θ
+
+) = L∗
+
+> D
+
+(θ).
+
+20 Task Ecologies and World-Tracking Representations in LLMs 
+
+Combined with (a), this yields equality and hence ΓQdep  
+
+> D
+
+(θ) = 0 .This isolates the missing computational term cleanly. The finite-class theorem above controls the representational term ∆D(θ) and the statistical error of the oracle objective, but it says nothing about ΓQdep  
+
+> D
+
+(θ) for realistic deployment inference classes. Bounding that term for concrete transformer inference regimes is the joint ecology-computation problem left open here. Section B records only the basic monotonicity facts needed for that separation. 
+
+5.2 Capacity Criterion 
+
+Define ecological complexity kD := |W/ ∼μD |.
+
+Proposition 41 (Capacity criterion for non-lossy versus lossy) For a model class Θ
+
+with induced encodings {pθ,D : θ ∈ Θ}:(a) If there exists θ such that pθ,D assigns distinct codes to distinct μD-equivalence classes (equivalently: ∼θ,D refines ∼μD ), then the non-lossy regime is feasible and the entropy floor H(Y | C, W ) is attainable. (b) If no θ ∈ Θ separates the μD-equivalence classes in that sense, then the problem is necessarily lossy and inf θ∈Θ L∗
+
+> D
+
+(θ) > H (Y | C, W ).
+
+Proof Part (a) follows from Thm. 8(c): separating the μD-equivalence classes is exactly what is required for zero excess. For (b), if no θ ∈ Θ separates the μD-equivalence classes, then every induced encoding pθ,D merges at least one μD-separated pair. Thm. 30(c) then gives inf θ∈Θ L∗
+
+> D
+
+(θ) > H (Y | C, W ).Scaling can improve two different objects: (a) realisability, in that larger classes Θ
+
+may realise finer partitions pθ,D ; and (b) ecology, in that broader data can increase kD by separating more pairs. Hence non-lossy behaviour is an empirical question about the pair 
+
+(Θ , μ D), not a universal consequence of parameter count alone. Representational capacity is not the only bottleneck. Even when the non-lossy regime is feasible and a fixed model achieves ∆D(θ) = 0 , realized deployment loss can still remain above the entropy floor through a positive deployment decoding gap ΓQdep  
+
+> D
+
+(θ) from Def. 39. Chain-of-thought prompting and scratchpads are relevant on that axis: for fixed weights they can reduce the decoding gap by making an available distinction easier to exploit at readout time (Wei et al., 2022; Nye et al., 2021), but they do not change the representational term ∆D(θ). Ecology injection or broader training data are needed when the distinction is absent from the frozen encoding itself. The present framework proves statements about the representational side of that divide; bounding the decoding gap for realistic transformer inference regimes remains open. 
+
+> 21 Dalla Riva
+
+6 The LLM Ecosystem as an Evolutionary System 
+
+6.1 Units of Selection 
+
+The relevant level distinction is the same as in Dalla Riva (2026). SGD within the training run of a single model is developmental optimisation , not the population process analysed by Price’s equation or quasispecies theory. The relevant evolutionary entities are whole trained models and model lineages : frozen artefacts that are copied, modified, deployed, retained, distilled into successors, or abandoned. Selection across such lineages is the population-level process. Ecological-veridicality framework LLM ecosystem Organism A trained model (full weights, frozen at deployment) Population The set of extant models and variants Encoding p Induced world-state encoding pθ,D 
+
+Fitness F(p) Multi-task benchmark performance Reproduction Fine-tuning, distillation, next-generation training Mutation Architecture changes, data mix, RLHF Horizontal transfer Attention, MoE, RLHF spreading across labs 
+
+Definition 42 (Model-lineage population) Fix a time horizon over which the deploy-ment ecology μ remains approximately stationary. A model-lineage population is a finite set of deployed or developmentally active lineages {θ1, . . . , θ K }, where each lineage carries a frozen deployment encoding pθi,D during evaluation, abbreviated pi below, may serve as a parent for successor lineages, and may generate descendants by checkpoint inheritance, distillation, fine-tuning, or retraining with modified architecture/data/objective. 
+
+Proposition 43 (Darwinian conditions hold at the inter-model level) Suppose over a fixed horizon that: (a) descendant models inherit substantial structure from parent models (weights, architec-ture, tokenizer, training recipe, or dataset); (b) lineages vary in their induced encodings pθ through such inherited modifications; (c) the probability that a lineage is copied, retained, fine-tuned, distilled, or used as the base for further training is increasing in its expected deployment success; (d) deployment success is evaluated on the performance of the whole trained model across the relevant task ecology. Then the model ecosystem instantiates heredity, variation, and differential reproduction at the level of whole trained models. In the sense relevant to the population theory of Dalla Riva (2026), it is therefore a Darwinian population of encodings. 
+
+Proof Condition (a) gives heredity, (b) gives variation, and (c)–(d) give differential re-production on whole-model performance. The heritable trait under selection is the induced 
+
+> 22 Task Ecologies and World-Tracking Representations in LLMs
+
+encoding pθ carried by the lineage. SGD updates within a lineage are part of the develop-mental map from parent lineage to offspring lineage, not the population law itself. 
+
+6.2 Conditions for Importing the Ecological-Veridicality Population Dynamics Proposition 44 (Selection dynamics across model lineages) Consider a population of model lineages over a time window on which: (a) each active lineage i carries a frozen deployment encoding pi;(b) expected fitness is frequency-independent and depends on the encoding only through deployment performance, e.g. F(pi) = C −∆D(pi) or any strictly decreasing transform of ∆D(pi), where ∆D(pi) := L∗
+
+> D
+
+(pi) − H(Y | C, W );(c) parent lineages are chosen with probability proportional to F(pi);(d) offspring lineages inherit their parent’s encoding up to a mutation kernel Q on induced encodings (architecture changes, data changes, distillation noise, fine-tuning updates); (e) the mutation/reproduction process is Markovian on the induced encoding space over the chosen horizon. Then the population dynamics reduce to the same Wright–Fisher / replicator-mutator form analysed by Dalla Riva (2026) on the induced encoding space PΘ. Consequently, the same population model, together with its Price-equation and quasispecies consequences at the ex-pectation/asymptotic level, applies conditionally to model populations, with the same caveat that convergence is only to the best mutation-accessible asymptotic regime unless stronger connectivity assumptions hold. 
+
+Proof Under (a)–(e), lineages are discrete heritable units carrying encodings, fitness is attached to those encodings, selection acts by weighted parent choice, and inherited modi-fications are represented by a mutation kernel Q. This is exactly the structure assumed by the population-level process model of Dalla Riva (2026), with organisms replaced by model lineages and perceptual encodings replaced by induced deployment encodings pi. The con-clusion is therefore a conditional structural reduction: once those assumptions hold, the same population theorems apply on the relabelled state space. If a common deployment decoder class Qdep is fixed across lineages and realized deploy-ment performance rather than the oracle objective drives selection, the same formulation can instead use the realized excess 
+
+∆D(pi) + Γ Qdep  
+
+> D
+
+(pi) = LQdep  
+
+> D
+
+(pi) − H(Y | C, W )
+
+in place of ∆D(pi). We retain the oracle form in the main text because the proved results in this paper characterize ∆D directly, while ΓQdep  
+
+> D
+
+is only structurally constrained. 
+
+Consequences if these conditions hold. Over any window on which Prop. 44 is a good approximation, inter-model selection creates expectation-level pressure toward lower 
+
+> 23
+
+Dalla Riva Generation 0 20 40 Cumulative selection  ΔR̄−0.10   
+
+> −0.05 0.00
+> Standardized residual z
+> −202Count 0510 15 20
+
+Figure 3: Selection-stage diagnostics in the microgpt Wright–Fisher experiment. Left: cumulative selection-stage change in mean risk across generations. The downward trend shows a weak but persistent net selection pressure toward lower risk. Right: histogram of standardized residuals z := (∆ ¯Rsel − E[∆ ¯Rsel | risk, fitness ]) /sd(∆ ¯Rsel | risk, fitness ). The residuals are centered and mostly fall inside ±2, with rms z = 1 .05 and exact 95%-band coverage 0.96 , consistent with the Wright–Fisher conditional sampling law. ecological excess loss and therefore toward more ecologically veridical induced encodings. The static theorems identify the target partition; the dynamic theorems of Dalla Riva (2026) describe the conditional route by which a population of model lineages can move toward it. The conclusion remains conditional: convergence is only to the best mutation-accessible asymptotic regime. Prop. 44 does not imply that SGD within a single training run obeys Price’s equation or quasispecies theory. The proposition applies at the lineage level: once whole trained models are treated as the replicating entities, the inter-model process can satisfy the as-sumptions of the population theory. Some departures from the idealisation are benign :performance-aligned reuse, distillation, architecture borrowing, directed engineering, and horizontal transfer across lineages can all accelerate search toward the same ecology-defined target without changing it, and mild frequency dependence need not destroy a local fixed-fitness approximation. The serious failures are the target-changing ones: strong frequency dependence that reorders effective fitness by population composition, rapid non-stationarity of the deployment ecology, or engineering interventions that change the effective objective rather than merely the speed of search. The result is accordingly best read as a conditional framework for hypothesis generation and controlled experiments, not as a claim that the current production-model ecosystem literally satisfies the required assumptions. Those as-sumptions are more plausible in controlled microgpt populations than in commercial LLM markets. 
+
+6.3 Token and Evaluation Ecologies 
+
+The static theorems above characterise optimality under a single ecology μ. Here we add the cases in which real LLM development is shaped by a second ecology beyond the base 
+
+24 Task Ecologies and World-Tracking Representations in LLMs 
+
+next-token objective, without replacing that one-ecology result. In the LLM setting, token-prediction training follows one ecology, while lineage retention and post-training may follow another; their interaction is naturally read as a Baldwin effect (Baldwin, 1896; Hinton and Nowlan, 1987). The token ecology μtok defines the single-run training target through next-token prediction. The evaluation ecology μeval defines which model lineages are re-tained, invested in, fine-tuned, distilled into successors, and used as starting points for next-generation training through benchmarks, deployment, and user preferences. These two ecologies have overlapping but generally non-nested separation sets. Many important world-state distinctions (mathematical validity, code correctness, long-range log-ical consistency) have only weak local next-token signatures, so σ2tok (w1, w 2) may be small even when the evaluation ecology separates the pair strongly. Conversely, fine-grained or-thographic patterns may be token-separated but evaluation-invisible. The point is not that every global or structurally extended property requires a second ecology. Some such properties already have strong token-level signatures. Gurnee et al. (2025), for example, show that a next-token transformer can learn a low-dimensional “char-acter count manifold” that tracks cumulative line length and supports line-break prediction from language modeling alone. Bracket balance can also be partly learned this way, as the experiments below illustrate. The two-ecology argument is needed for distinctions whose token-level signatures are too weak relative to simplicity pressure or competing variation in the training signal: not “all nonlocal structure,” but the gap cases for which σ2tok is small while σ2eval remains large. To state that relationship precisely, we treat both ecologies as instances of the same formal object. 
+
+Definition 45 (Generalized task ecology) A generalized task ecology η on a finite la-tent state space W with prior π consists of a probability measure over tasks t, where each task has a query space Qt, a target space Yt, a query distribution Dt, conditional target laws 
+
+P tw(· | q) for each w ∈ W and q ∈ Qt, and a loss ℓt. For an encoding p : W → X and a Bayes-optimal decoder family under η, define the ecology-relative excess 
+
+∆η(p) := L∗
+
+> η
+
+(p) − L∗
+
+> η
+
+(id W ),
+
+where id W denotes the unreduced encoding. 
+
+The token ecology instantiates this object with next-token prediction tasks under log loss. The evaluation ecology instantiates it with benchmark or deployment evaluations and their associated losses. Here we use the generalized object only to state separation sets and evaluation-relative excess; we do not invoke a full generalized analogue of Thm. 8. The pairwise separation functional under η is 
+
+σ2 
+
+> η
+
+(w1, w 2) := Et∼η Eq∼Dt
+
+> [
+
+dt
+
+> (
+
+P tw1 (· | q), P tw2 (· | q))2],
+
+where dt is a divergence on target laws that vanishes exactly on equality. Write Sη := 
+
+{(w1, w 2) : σ2 
+
+> η
+
+(w1, w 2) > 0} for the separation set. 
+
+Proposition 46 (Two-ecology scope) Let μtok and μeval be two ecologies on the same latent state space W .
+
+> 25
+
+Dalla Riva 
+
+(a) Static scope. If an encoding p satisfies ∆μtok (p) = 0 , then p preserves all and only the 
+
+μtok -equivalence classes. Zero-excess token-ecology optimality constrains the partition of W only through ∼μtok .(b) Dynamic scope. Suppose a model-lineage population satisfies the assumptions of Prop. 44, and suppose expected lineage fitness has the form F(p) = φ(∆ μeval (p)) for some strictly decreasing φ. Then the same population dynamics apply with μeval in place of μtok : at the expectation level, selection pushes the population toward lower evaluation excess. (c) Non-implication. In general, ∆μtok (p) = 0 does not imply ∆μeval (p) = 0 . A lineage process can be driven by evaluation-ecology fitness even on pairs for which μtok gives only weak or vanishing separation. 
+
+Proof For part (a), apply Thm. 8(c) to the token ecology μtok : zero excess under that ecology is equivalent to preserving exactly the μtok -equivalence classes, so the static theorem constrains only that partition. For part (b), Prop. 44 requires only that expected fitness be a strictly decreasing func-tion of the relevant ecology-relative excess. Replacing ∆D there by ∆μeval therefore leaves the structural reduction unchanged: parent choice is still weighted by fitness, offspring in-herit encodings up to a mutation kernel, and the same Wright–Fisher / replicator-mutator conclusions apply on the induced-encoding space. For part (c), the two excess terms are tied to different separation structures. If μeval 
+
+separates a pair that μtok leaves merged, then an encoding can have ∆μtok (p) = 0 while still merging an evaluation-relevant distinction, which forces ∆μeval (p) > 0. Hence token-optimality does not in general imply evaluation-optimality. This proposition makes explicit that the static optimality theorem and the evolutionary population theorem may be talking about different ecologies. Post-training provides a concrete mechanism for partially injecting the evaluation ecology into the token-prediction process. The next result formalises that mechanism. 
+
+Proposition 47 (Ecology injection threshold) Let μ0 and ν be two ecologies on the same latent state space W , and for α ∈ [0 , 1] define the mixed ecology μα := (1 − α)μ0 + αν .Then for every pair (w1, w 2):(a) Exact interpolation. σ2 
+
+> μα
+
+(w1, w 2) = (1 − α) σ2 
+
+> μ0
+
+(w1, w 2) + α σ 2 
+
+> ν
+
+(w1, w 2).(b) Monotonicity. If σ2 
+
+> ν
+
+(w1, w 2) ≥ σ2 
+
+> μ0
+
+(w1, w 2), then σ2 
+
+> μα
+
+(w1, w 2) is nondecreasing in α;if the inequality is strict, it is strictly increasing. (c) Threshold. Fix an effective separation threshold ε > 0. If σ2 
+
+> μ0
+
+(w1, w 2) ≤ ε < σ2 
+
+> ν
+
+(w1, w 2), then the pair becomes effectively resolved under μα exactly when α > α∗(w1, w 2), where 
+
+α∗(w1, w 2) := ε − σ2 
+
+> μ0
+
+(w1, w 2)
+
+σ2 
+
+> ν
+
+(w1, w 2) − σ2 
+
+> μ0
+
+(w1, w 2) .
+
+26 Task Ecologies and World-Tracking Representations in LLMs 
+
+Proof Part (a): by linearity of expectation under the mixed measure, 
+
+σ2 
+
+> μα
+
+(w1, w 2) = (1 − α) Et∼μ0 [Zt] + α Et∼ν [Zt],
+
+where Zt := Eq∼Dt [dt(P tw1 , P tw2 )2]. Part (b): the derivative with respect to α is σ2 
+
+> ν
+
+− σ2 
+
+> μ0
+
+.Part (c): solve (1 − α)σ2 
+
+> μ0
+
++ ασ 2 
+
+> ν
+
+> ε for α.
+
+Corollary 48 (Post-training refines token-ecology resolution) Let μ0 be a base to-ken ecology and ν a post-training task family. Define μ(α)tok := (1 − α)μ0 + αν for α ∈ [0 , 1] .(a) For every α ∈ [0 , 1) , the induced partition satisfies [w]μ(α)tok 
+
+⊆ [w]μ0 : post-training can split existing equivalence classes but cannot coarsen them. (b) If (w1, w 2) is a gap pair with σ2 
+
+> μ0
+
+(w1, w 2) ≤ ε and σ2 
+
+> ν
+
+(w1, w 2) > ε , then for every 
+
+α > α ∗(w1, w 2) from Prop. 47, the pair is resolved under μ(α)tok .(c) The rescued set Rα := {(w1, w 2) ∈ Gε : σ2
+
+> μ(α)tok
+
+(w1, w 2) > ε } is nondecreasing in α
+
+whenever σ2 
+
+> ν
+
+≥ σ2 
+
+> μ0
+
+pairwise on Gε.
+
+Proof For (a), if σ2 
+
+> μ0
+
+(w1, w 2) > 0 and α < 1, then Prop. 47(a) gives σ2 
+
+> μα
+
+(w1, w 2) ≥
+
+(1 − α)σ2 
+
+> μ0
+
+(w1, w 2) > 0, so every pair separated by μ0 remains separated. For (b), apply Prop. 47(c). For (c), each pairwise score is nondecreasing in α by Prop. 47(b), so once a pair enters Rα it remains for all larger α.The two-ecology picture refines the failure predictions of Section 8. Models should fail on distinctions where both σ2tok ≈ 0 and σ2eval ≈ 0. On distinctions where σ2tok ≈ 0
+
+but σ2eval ≫ 0, the evolutionary dynamics provide pressure through lineage selection, and post-training injects the evaluation signal into the token-prediction process with an explicit threshold. The rate of improvement on such gap pairs is controlled by the efficiency of ecology injection. 
+
+Model-organism checks. Two microgpt experiments test the two-ecology mechanism on bracket balance in real Lisp source code (from Practical Common Lisp ). Both use the same design: a recipe trait α ∈ [0 , 1] controls ecology injection, a static sweep measures the effect of varying α, and a Wright–Fisher population selects on evaluation fitness. The experiments are named by what the evaluation ecology tests, not by what the model is trained to do (which is always next-token prediction). In the balance checking task, the world states are balanced versus unbalanced Lisp chunks, with a summary token appended to indicate bracket balance. The token ecology trains on the chunks without the summary; post-training at level α mixes in the labeled version. The underlying global property, bracket nesting, is structural and capacity-limited: on held-out evaluation, summary cross-entropy falls gradually from 25 .6 at α = 0 to 0.19 at 
+
+α = 1 .0, while selection raises ¯α from 0.46 to 0.92 . This experiment demonstrates ecology injection on a genuinely hard structural task, but the evaluation signal leaks into training through the summary token itself. 
+
+> 27
+
+Dalla Riva 
+
+The minimal code validation task removes that leakage. The recipe trait α controls only the fraction of bracket-containing Lisp code in the next-token training corpus; at α = 0 the model trains on the same code with brackets scrubbed out. No balance labels or summary tokens appear during training. Evaluation measures the held-out NLL gap between balanced and bracket-permuted chunks: a model that has learned bracket structure from real Lisp should find valid code more predictable than structurally scrambled code. At α = 0 the model is blind to bracket balance (discrimination −0.002 ); at α = 0 .1 discrimination rises to 
+
+0.46 , and it increases steadily to 0.78 at α = 1 .0. The transfer is indirect: bracket exposure during next-token prediction develops sensitivity to a structural distinction that is never directly supervised. Population selection shows a noisy but clearly upward trajectory (from 
+
+¯α = 0 .47 to 0.89 over 25 generations), with ¯αeval ≥ ¯α in nearly every generation, leaving the final population concentrated on bracket-rich recipes. Figure 4 summarizes the static and population-level patterns. 𝛼     
+
+> 0.0 0.5 1.0 Evaluation signal captured 0.0 0.5 1.0
+> Static sweep
+> Generation 010 20
+> 𝛼̄
+> 0.4 0.6 0.8
+> Population selection
+> Balance checking Code validation Balance checking Code validation
+
+Figure 4: Neural validation of the two-ecology mechanism on bracket balance in Lisp source code. Left: static sweep showing the fraction of maximum evaluation signal captured as a function of the recipe trait α. Both tasks start at zero signal when α = 0 . Balance checking (direct supervision via summary token) saturates quickly; code validation (no balance labels, held-out NLL discrimination only) rises more steadily, confirming that the transfer is indirect. Right: population selection drives ¯α upward in both tasks, concentrating the recipe distribution on bracket-rich training. 
+
+Non-stationarity and directed variation. Real LLM “mutations” are directed (Lamar-ckian): engineers observe failures and design improvements. Architectural innovations, training practices, and weight sharing spread across labs by horizontal transfer. These fea-tures can all accelerate convergence toward the same ecology-defined target without break-ing the framework, so long as they do not change the effective objective. The task ecology μ
+
+does shift over time (new benchmarks, new user demands), creating Red Queen dynamics where the population must track a moving optimum. Within any window of approximate stationarity, however, the static theorems identify the target partition and the population dynamics describe the conditional path toward it. With that dynamic bridge in place, the next question is what target such pressure selects when ecological veridicality is achievable. 
+
+28 Task Ecologies and World-Tracking Representations in LLMs 
+
+7 Minimum-Complexity Ecological Veridicality 
+
+The static theorem identifies when zero excess is achievable, but not which zero-excess encoding should be preferred when several are available. In this section, we add a simplicity refinement on top of that static result: among all ecologically veridical encodings, which one preserves only the task-relevant distinctions and no more? The results below are stated for a generic ecology μ; they apply equally to the token ecology μtok , the evaluation ecology μeval ,or any mixture. 
+
+7.1 The Minimum-Complexity Theorem Definition 49 (Representational complexity) For an encoding p : W → X with prior 
+
+π, the representational complexity is I(p) = I(W ; p(W )) = H(p(W )) , since p is determin-istic. 
+
+Theorem 50 (Minimum-complexity veridicality) Among all encodings with 
+
+L∗
+
+> D
+
+(p) = H(Y | C, W )
+
+(equivalently: among all ecologically veridical encodings under the training ecology): (a) The minimum representational complexity is: 
+
+I∗(μ) = H(W/ ∼μ) = − ∑
+
+> [w]∈W/ ∼μ
+
+π([ w]) log π([ w]) ,
+
+where 
+
+π([ w]) := ∑
+
+> u∈[w]
+
+π(u)
+
+is the total prior mass of the μ-equivalence class [w];(b) This minimum is achieved by encodings whose partition is exactly W/ ∼μ, no finer and no coarser. (c) Any strictly finer encoding (e.g. fully veridical when some |[w]| > 1) has I(p) >H(W/ ∼μ). For the fully veridical encoding, I(p) = H(W ), so the maximal excess complexity is H(W ) − H(W/ ∼μ) = H(W | W/ ∼μ), the within-class entropy. 
+
+Proof By Thm. 8(c), attaining L∗
+
+> D
+
+(p) = H(Y | C, W ) is equivalent to each cell containing only μ-equivalent states. The partition induced by p must therefore refine the quotient partition W/ ∼μ. Let Q := W/ ∼μ and let P := p(W ). Because P refines Q, the grouping identity gives 
+
+H(P) = H(Q) + H(P | Q ) ≥ H(Q),
+
+with equality iff H(P | Q ) = 0 , i.e. iff P = Q. This proves (a): the minimum possible representational complexity among zero-excess encodings is H(Q) = H(W/ ∼μ). It also proves (b): the minimizers are exactly the encodings whose partition is W/ ∼μ itself, neither finer nor coarser. For (c), any strictly finer zero-excess encoding has H(P | Q ) > 0, hence 
+
+I(p) = H(P) > H (Q) = H(W/ ∼μ). The fully veridical encoding corresponds to the 
+
+> 29 Dalla Riva
+
+identity partition on W , so its complexity is H(W ), and the excess complexity relative to the minimum is 
+
+H(W ) − H(W/ ∼μ) = H(W | W/ ∼μ).
+
+Interpretation. The minimum-complexity ecologically veridical encoding carries exactly the task-relevant information and nothing else. This gives a precise entropy-based benchmark for what a simplicity preference would have to select: among all zero-excess representations, the coarsest partition compatible with the ecology. Any extra resolution within μ-equivalence classes carries additional information cost without improving Bayes-optimal token loss. 
+
+Corollary 51 (Topological convergence of optima) If two models θ1, θ 2 both attain the training optimum 
+
+L∗
+
+> D
+
+(θi) = H(Y | C, W )
+
+and both have minimum representational complexity under the same μD, then pθ1,D and 
+
+pθ2,D induce exactly the same partition W/ ∼μD . Consequently they agree on the zero/nonzero separation pattern, and any kernel built from the kD := |W/ ∼μD | distinct class codes has rank at most kD − 1, with equality only under non-degenerate geometry. 
+
+Proof By Thm. 50(b), every minimum-complexity training-optimal encoding induces the quotient partition W/ ∼μD and no finer one. Therefore pθ1,D and pθ2,D identify exactly the same world-state pairs, namely the μD-equivalent pairs, so they agree on the full zero/nonzero separation pattern. For the rank statement, both encodings realize exactly kD := |W/ ∼μD | distinct class codes. After centering, those class representatives lie in an affine subspace of dimension at most kD − 1, because the centered representatives sum to zero. Any centered Gram matrix built from them therefore has rank at most kD − 1, with equality only when the kD class representatives are in affine general position. 
+
+7.2 The Rate-Distortion Curve 
+
+The minimum-complexity theorem identifies the first zero-excess point. It is also useful to phrase the same fact as a rate-distortion statement: how much representational complexity is required before zero excess becomes achievable at all? The next corollary makes that threshold explicit. 
+
+Corollary 52 (Rate-distortion characterisation) Define the excess-loss distortion 
+
+R(p) := L∗
+
+> D
+
+(p) − H(Y | C, W ),
+
+and the induced rate-distortion function 
+
+R(I) := min     
+
+> p:I(W;p(W)) ≤I
+
+R(p).
+
+Then R(I) = 0 for I ≥ I∗(μ) and R(I) > 0 for I < I ∗(μ). The critical rate I∗(μ) is the phase transition point from strictly positive excess loss to zero excess loss. 
+
+> 30 Task Ecologies and World-Tracking Representations in LLMs
+
+Proof By Thm. 50, zero excess is achievable exactly for encodings whose complexity is at least the minimum zero-excess complexity I∗(μ). Hence if I ≥ I∗(μ), the feasible set in the definition of R(I) contains a zero-excess encoding, so R(I) = 0 . If I < I ∗(μ), then no encoding with complexity at most I can attain zero excess, again by Thm. 50; therefore every feasible encoding has strictly positive distortion, and so does their minimum. 
+
+I∗(μ) is determined by the task ecology, not the model. Scaling the model does not change I∗(μ); scaling the data changes μ and hence I∗(μ). If optimisation has a simplicity preference, I∗(μ) is the lower bound it would favour among zero-excess encodings. Whether SGD exhibits such a preference strongly enough to drive pθ,D near this bound is an additional empirical and theoretical question. 
+
+7.3 Local Split Criterion under Simplicity Pressure 
+
+The minimum-complexity result is global: it compares entire zero-excess encodings. To derive concrete failure predictions, we also want a local criterion saying when a distinction is worth preserving under an explicit simplicity pressure. The next setup isolates a single candidate split and computes the exact gain from resolving it. 
+
+Definition 53 (Complexity-regularized token objective) For β ≥ 0 and encoding 
+
+p : W → X, define 
+
+JD,β (p) := L∗
+
+> D
+
+(p) + β I (W ; p(W )) = L∗
+
+> D
+
+(p) + β H (p(W )) .
+
+This objective is not identified with the exact SGD objective. It serves instead as an explicit model of a simplicity pressure that trades predictive performance against representational complexity. 
+
+Definition 54 (One-cell refinement) Let p be an encoding and let S ⊆ W be one of its cells with πS := ∑ 
+
+> w∈S
+
+π(w) > 0. Partition S into two non-empty subcells A and B, write 
+
+πA := ∑
+
+> w∈A
+
+π(w), πB := ∑
+
+> w∈B
+
+π(w), λ := πA/π S ,
+
+and let pA|B be the refinement obtained by replacing cell S with the two cells A and B and leaving all other cells unchanged. For each context c, define the subcell-average next-token distributions 
+
+¯PA(· | c) := ∑
+
+> w∈A
+
+π(w)
+
+πA
+
+Pw(· | c), ¯PB (· | c) := ∑
+
+> w∈B
+
+π(w)
+
+πB
+
+Pw(· | c).
+
+Theorem 55 (Split-versus-merge threshold) In the setup of Def. 54, 
+
+JD,β (p) − JD,β (pA|B ) = πS
+
+> (
+
+Ec∼DC
+
+> [
+
+JS λ 
+
+> (
+
+¯PA(· | c), ¯PB (· | c))] − β h (λ)
+
+> )
+
+,
+
+where 
+
+h(λ) := −λ log λ − (1 − λ) log(1 − λ)
+
+is the binary entropy. Consequently: 
+
+> 31 Dalla Riva
+
+(a) the refinement pA|B is preferred to p under JD,β iff 
+
+Ec∼DC
+
+> [
+
+JS λ 
+
+> (
+
+¯PA(· | c), ¯PB (· | c))] > β h (λ); 
+
+(b) the merge is preferred iff the opposite inequality holds; (c) when β > 0, distinctions with sufficiently small predictive Jensen–Shannon gain are optimally merged. 
+
+Proof Let X := p(W ) and X′ := pA|B (W ). Since X is a deterministic function of X′, the loss difference is 
+
+L∗
+
+> D
+
+(p) − L∗
+
+> D
+
+(pA|B ) = H(Y | C, X ) − H(Y | C, X ′) = I(Y ; X′ | C, X ).
+
+Only the split cell contributes. More explicitly, if X = x with x̸ = S, then X′ = x
+
+deterministically as well, so I(Y ; X′ | C, X = x) = 0 . Outside cell S, X′ therefore carries no extra information beyond X. On the original cell S, the refinement amounts to a binary label Z ∈ { A, B } with P (Z = A | X = S) = λ and P (Z = B | X = S) = 1 − λ. Therefore 
+
+I(Y ; X′ | C, X ) = πS I(Y ; Z | C, X = S) = πS Ec∼DC
+
+> [
+
+JS λ 
+
+> (
+
+¯PA(· | c), ¯PB (· | c))] .
+
+For the complexity term, splitting one cell of mass πS into masses πA and πB increases entropy by the grouping identity: 
+
+H(X′) − H(X) = −πA log πA − πB log πB + πS log πS = πS h(λ).
+
+Subtracting β(H(X′) − H(X)) from the loss improvement gives the stated formula for 
+
+JD,β (p) − JD,β (pA|B ). Parts (a)–(c) are immediate. 
+
+Interpretation. The quantity 
+
+∆pred (A, B ) := Ec∼DC
+
+> [
+
+JS λ 
+
+> (
+
+¯PA(· | c), ¯PB (· | c))] 
+
+is the predictive value of resolving the distinction A versus B under the ecology in question. The complexity cost of doing so is the binary entropy term h(λ). Under the explicit encoding-level objective JD,β , distinctions whose predictive gain is too small relative to that cost are locally preferred merge candidates. What is proved here is a local comparison between p and one refinement pA|B under that explicit objective; this theorem by itself does not identify the exact SGD objective, nor does it imply that ordinary parameter-space regularizers such as weight decay generate a globally monotone merge path. Elhage et al. (2022) suggest a plausible implementation-level picture for this threshold in actual transformers: under capacity pressure, weak features need not disappear discretely, but can be stored in superposition, with noisier downstream readout than strongly useful features. We use that only as a mechanistic interpretation of how weak distinctions may become fragile under simplicity pressure, not as a derivation of Thm. 55. The present theorem is purely representational: it favors lower-entropy partitions among zero-excess encodings. Under restricted deployment inference classes there may be a second, 
+
+> 32
+
+Task Ecologies and World-Tracking Representations in LLMs 
+
+computational analogue of simplicity pressure, favoring encodings whose preserved distinc-tions are easier to exploit and therefore induce smaller decoding gaps ΓQdep  
+
+> D
+
+. A joint theory of representational and computational simplicity remains open. The split-threshold criterion applies to any ecology, not only the token ecology. In the two-ecology setting of Section 6.3, a distinction that is a merge candidate under μtok alone (because ∆pred (A, B ) is small under token prediction) may nevertheless be preserved if ecol-ogy injection raises the effective separation above the threshold: once α > α ∗(w1, w 2) from Prop. 47, the injected ecology contributes enough predictive gain that simplicity pressure no longer favours the merge. 
+
+Definition 56 (One-step partition neighborhood) Identify an encoding p with its in-duced partition of W into non-empty cells. Define: 
+
+Nsplit (p) := {p′ : p′ is obtained from p by splitting one cell into two non-empty subcells },Nmerge (p) := {p′ : p′ is obtained from p by merging two distinct cells },N (p) := Nsplit (p) ∪ Nmerge (p).
+
+We call p a local minimum of JD,β on the partition lattice if 
+
+JD,β (p) ≤ JD,β (p′) for every p′ ∈ N (p).
+
+Proposition 57 (Local minima on the partition lattice) An encoding p is a local min-imum of JD,β if and only if both of the following conditions hold: (a) Split stability. For every cell S of p and every non-trivial bipartition S = A ⊔ B
+
+with λ = π(A)/π (S),
+
+Ec∼DC
+
+[JS λ
+
+( ¯PA(· | c), ¯PB (· | c))] ≤ β h (λ).
+
+(b) Merge stability. For every pair of distinct cells C1, C 2 of p, with πC1∪C2 = π(C1) + 
+
+π(C2) and λ = π(C1)/π C1∪C2 ,
+
+Ec∼DC
+
+[JS λ
+
+( ¯PC1 (· | c), ¯PC2 (· | c))] ≥ β h (λ).
+
+Proof By Thm. 55(a), a one-step split lowers JD,β exactly when the corresponding Jensen– Shannon gain exceeds βh (λ). Hence condition (a) is equivalent to JD,β (p) ≤ JD,β (p′) for every p′ ∈ Nsplit (p).For a one-step merge of two cells C1, C 2, let p′ denote the merged partition and view 
+
+p as the refinement of p′ obtained by splitting C1 ∪ C2 back into C1 and C2. Applying Thm. 55(b) to that split shows that the merge lowers JD,β exactly when the same Jensen– Shannon gain is < βh (λ). Thus condition (b) is equivalent to JD,β (p) ≤ JD,β (p′) for every 
+
+p′ ∈ Nmerge (p).Combining the two equivalences and using N (p) = Nsplit (p)∪Nmerge (p) proves the claim. 
+
+33 Dalla Riva 
+
+Corollary 58 (Local stability of the minimum-complexity veridical partition) Let 
+
+p⋆ be a minimum-complexity zero-excess encoding, so that its partition is exactly W/ ∼μD
+
+by Thm. 50. Then p⋆ is split-stable for every β ≥ 0, and it is a local minimum of JD,β if and only if 
+
+β ≤ βmin ,
+
+where 
+
+βmin := min  
+
+> C1,C 2∈W/ ∼μD
+> C1̸=C2
+
+Ec∼DC
+
+> [
+
+JS λ 
+
+> (
+
+¯PC1 (· | c), ¯PC2 (· | c))] 
+
+h(λ) , λ := π(C1)
+
+π(C1) + π(C2) .
+
+Proof If A, B lie inside a single μD-equivalence class, then Pw(· | c) is the same for all 
+
+w ∈ A ∪ B for DC -almost every c. Hence ¯PA(· | c) = ¯PB (· | c) almost everywhere and the split-gain term in Prop. 57(a) is zero. So every within-class split is neutral or disfavored, which proves split stability. For merges between distinct μD-classes, Prop. 57(b) shows that local stability is equiv-alent to requiring the Jensen–Shannon gain of every class pair to be at least βh (λ). Taking the minimum over class pairs gives the threshold βmin .
+
+Remark 59 (Limits of the local criterion) At β = 0 , every zero-excess partition is a local minimum of JD, 0 = L∗
+
+> D
+
+, and Thm. 50 selects p⋆ as the coarsest such partition. As β
+
+increases past βmin , Cor. 58 identifies exactly which distinction first becomes locally unstable: the class pair with the smallest Jensen–Shannon-gain-to-entropy-cost ratio. Beyond that first threshold, however, the local criterion must be recomputed on the up-dated partition. Once two cells merge, both the Jensen–Shannon gains and the weights 
+
+λ change, so later transitions are determined by the current partition rather than by the original pairwise ordering alone. The theorem therefore gives an exact characterization of one-step local stability, but not a complete global merge path through partition space or parameter space. 
+
+8 Predictions, Limits, and Conclusion 
+
+Together, the decomposition theorem, the minimum-complexity result, and the two-ecology framework identify where representational failure should occur. The logic requires no new propositions beyond those already proved. Section E adds quantitative lower bounds on off-ecology excess and a constructive non-identifiability witness. 
+
+Merged distinctions incur excess. If an encoding merges a pair (w1, w 2) that a probe ecology separates, Thm. 8(b) immediately gives positive excess under that ecology. By Thm. 50, a minimum-complexity zero-excess encoding for ecology μ merges exactly the μ-equivalent pairs. Any probe ecology that refines μ therefore exposes positive excess on the newly separated pairs. 
+
+> 34
+
+Task Ecologies and World-Tracking Representations in LLMs Complexity weight β   
+
+> 0.00 0.02 0.04 0.06 J(merge) - J(split)
+> −0.01 0.00 0.01
+> Theorem 7.3 threshold Exact objective difference
+
+Figure 5: Exact finite-ecology calibration of Thm. 55. The plotted quantity is the objective difference JD,β (pmerge ) − JD,β (psplit ) for an illustrative local split. The crossing occurs at the theorem’s threshold β∗: below it the split is preferred, above it the merge is preferred. Complexity weight β    
+
+> 0.0 0.1 0.2 Optimal number of classes k 246Transition step 246
+> β* of realized global transition 0.05 0.10 0.15 Commedia Manifesto Commedia local match Manifesto local match Manifesto mismatch
+
+Figure 6: Exact corpus-induced test of Thm. 55. Left: the exact global optimum path under 
+
+JD,β for the Commedia and Manifesto ecologies as β increases. Right: the realized global transitions are compared step-by-step to the theorem’s local split-threshold prediction. The alignment is exact on Commedia and has a single nonlocal deviation on Manifesto .
+
+Simplicity pressure sheds low-gain distinctions first. Under the regularized objec-tive JD,β , Thm. 55 shows that distinctions whose predictive Jensen–Shannon gain is smaller 
+
+35 Dalla Riva Probe category On Off-related Voynich Cross-entropy 2.5 3.0 3.5 4.0   
+
+> Probe category On Off-related Voynich Pairwise inter-model JS 0.0025 0.0050 0.0075 0.0100 0.0125
+
+Figure 7: Off-ecology failure in the microgpt model organism. Left: per-model cross-entropy rises from the training ecology (English, French, German) to related unseen languages (Italian, Finnish) and rises again on Voynich. Right: pairwise inter-model Jensen–Shannon disagreement shows the same ordering. This is the empirical signature predicted by the decomposition theorem: off-ecology probes incur larger excess and leave more room for divergent model behaviour. than β h (λ) are locally preferred merge candidates. The pairs with the smallest gain-to-cost ratio are the first to become unstable as β increases (Cor. 58). 
+
+Token and evaluation ecologies may disagree. The two-ecology framework (Sec-tion 6.3) identifies the gap set: pairs where σ2tok (w1, w 2) ≈ 0 but σ2eval (w1, w 2) ≫ 0. On such pairs the token ecology provides little pressure to preserve the distinction, but the evaluation ecology rewards it. Ecology injection (Prop. 47) can rescue gap pairs, with the required injection level given by the explicit threshold α∗.
+
+Predictions for production models. The model-organism experiments validate the framework in a regime where every quantity is observable. For production-scale models, the same logic yields only proxy-level predictions: holding deployment query type fixed, error should be highest on distinctions with low predictive split gain; models trained on comparable ecologies should agree on strongly separated distinctions and diverge on weakly separated or off-ecology ones; adding a modality should expand μ and resolve previously fused equivalence classes (Prop. 15); and a generalist whose encoding achieves zero excess on a unified ecology should match or outperform specialists on each sub-ecology (Thm. 74). 
+
+Why the model-organism approach matters. The framework matters scientifically before it matters engineering-wise. It lets us ask what representational pressure autoregres-sive training, simplicity bias, and inter-model selection create in language-model popula-tions, and test those claims where the relevant quantities are observable rather than hidden. The resulting predictions for larger systems are therefore conditional and comparative, not direct measurements. 
+
+36 Task Ecologies and World-Tracking Representations in LLMs 
+
+Representational geometry. The framework determines which distinctions optimal representations must preserve (their topology ) but not how far apart the distinguished states lie in representation space (their geometry ). The ecology induces a canonical Hilbertian tar-get geometry through the task-distance kernel Kμ (Section A), but our theorems propagate that geometry to learned encodings only in the Gaussian-linear case (Thm. 66). Mechanistic work provides suggestive empirical analogues without closing that gap: Gurnee et al. (2025) exhibit low-dimensional manifolds tracking structural task variables in a next-token trans-former, while Elhage et al. (2022) provide a plausible mechanism by which weak distinctions become noisy under capacity pressure. This resolves the tension between the Platonic Rep-resentation Hypothesis (Huh et al., 2024) and the Aristotelian refinement of Gröger et al. (2026): topological convergence (shared partition) is proved, but global geometric conver-gence is not established. 
+
+Limits. Ecological veridicality is a claim about representational adequacy relative to a task ecology, not about honesty, calibration, or understanding in any thicker sense. Amodel may preserve all task-separated distinctions and still mislead at the level of surface behaviour. Some such failures may also be computational rather than representational: even when ∆D(θ) = 0 , a restricted deployment inference class can leave a positive decoding gap ΓQdep  
+
+> D
+
+(θ), and extended inference may reduce that term without changing the frozen encoding. The finite-class learning guarantees (Section 5) control the oracle objective L∗
+
+> D
+
+(θ),not a full optimisation theorem for realistic transformer training or a bound on ΓQdep  
+
+> D
+
+(θ).The geometry gap remains the main open mathematical problem; extending the mean-field analysis of Wang et al. (2025) from feedforward to attention-based architectures would be a natural route. 
+
+Niche construction. For language models, W is not exogenous: model-generated text enters future training corpora, reshaping the ecology to which later generations adapt. This is a niche-construction problem (Laland et al., 2016). Recent work on model collapse un-der synthetic-data retraining points to one concrete manifestation of that feedback: when later models train on data that no longer surprises them, performance and diversity can decay across generations (Gambetta et al., 2025). At any snapshot the framework applies; but long-run veridicality may become faithfulness to a partially model-constructed world. Recent evidence that language models can sometimes detect manipulations of their own in-ternal states (Lindsey, 2025) suggests a weaker, individual-level analogue of the same point: some computational states may themselves become part of the effective world the model tracks. Formalising that feedback loop would require coupling the population dynamics of Section 6 to a dynamics on W and μ, which we do not attempt here. Two conclusions follow. The ecological veridicality framework identifies which world-state distinctions the training ecology forces a Bayes-optimal encoding to preserve, and which it leaves free to merge. Simplicity pressure determines the order in which weak distinctions are shed. The two-ecology extension locates the gap pairs where evaluation pressure and post-training injection matter beyond the base token objective. These are specific, testable claims; they do not require geometric convergence, which the present results leave unresolved. The strongest convergence narratives therefore remain conditional: on the ecology, on penetrability, on simplicity pressure, and on whether model populations 
+
+> 37 Dalla Riva
+
+reshape the worlds to which they are supposed to become veridical. The model-organism methodology makes those conditions testable in a regime where every theoretical quantity is directly observable, and the resulting distinctions can be carried as disciplined hypotheses into the study of larger systems. 
+
+Acknowledgments and Disclosure of Funding 
+
+No external funding. No conflicts of interest. Thanks to Sinon, son of Autolycus. Code and experiment scripts are available at https://github.com/gvdr/llm_evo_ veridicity .
+
+References 
+
+Blaise Agüera y Arcas. Do large language models understand us? Daedalus , 151(2):183–197, 2022. doi: 10.1162/daed_a_01909. Alexander Atanasov, Blake Bordelon, and Cengiz Pehlevan. Neural networks as kernel learners: The silent alignment effect. In The Tenth International Conference on Learn-ing Representations , 2022. ICLR 2022 poster. https://openreview.net/forum?id= 1NvflqAdoom .Jimmy Ba, Murat A. Erdogdu, Taiji Suzuki, Zhichao Wang, Denny Wu, and Greg Yang. High-dimensional asymptotics of feature learning: How one gradient step improves the representation. In Advances in Neural Information Processing Systems , volume 35, pages 37932–37946, 2022. https://proceedings.neurips.cc/paper_files/paper/ 2022/hash/f7e7fabd73b3df96c54a320862afcb78-Abstract-Conference.html .James Mark Baldwin. A new factor in evolution. American Naturalist , 30(354):441–451, 1896. Jonathan Baxter. A model of inductive bias learning. Journal of Artificial Intelligence Research , 12:149–198, 2000. Emily M. Bender and Alexander Koller. Climbing towards NLU: On meaning, form, and understanding in the age of data. In Proceedings of the 58th Annual Meeting of the Asso-ciation for Computational Linguistics , pages 5185–5198, 2020. https://aclanthology. org/2020.acl-main.463/ .Marlene D. Berke, Robert Walter-Terrill, Julian Jara-Ettinger, and Brian J. Scholl. Flex-ible goals require that inflexible perceptual systems produce veridical representations. 
+
+Cognitive Science , 46(10):e13195, 2022. Christine Cuskley, Rebecca Woods, and Molly Flaherty. The limitations of large language models for understanding human language and cognition. Open Mind , 8:1058–1083, 2024. doi: 10.1162/opmi_a_00160. 
+
+> 38 Task Ecologies and World-Tracking Representations in LLMs
+
+Giulio Valentino Dalla Riva. Between interface and truth: Multi-task selection drives ecologically veridical perception, 2026. EcoEvoRxiv preprint, posted March 8, 2026. 
+
+https://ecoevorxiv.org/repository/view/12020/ .Alexandru Damian, Jason Lee, and Mahdi Soltanolkotabi. Neural networks can learn repre-sentations with gradient descent. In Proceedings of Thirty Fifth Conference on Learning Theory , volume 178, pages 5413–5452, 2022. Proceedings of Machine Learning Research. 
+
+https://proceedings.mlr.press/v178/damian22a.html .Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, Nova DasSarma, Dawn Drain, Deep Ganguli, Zac Hatfield-Dodds, Danny Hernandez, Andy Jones, Jackson Kernion, Liane Lovitt, Kamal Ndousse, Dario Amodei, Tom Brown, Jack Clark, Jared Kaplan, Sam McCandlish, and Chris Olah. A mathematical framework for transformer circuits. Trans-former Circuits Thread , 2021. https://transformer-circuits.pub/2021/framework/ index.html .Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec, Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, Roger Grosse, Sam McCandlish, Jared Kaplan, Dario Amodei, Martin Wattenberg, and Christopher Olah. Toy models of superposition. Transformer Circuits Thread , 2022. https: //transformer-circuits.pub/2022/toy_model/index.html .Daniele Gambetta, Gizem Gezici, Fosca Giannotti, Dino Pedreschi, Alistair Knott, and Luca Pappalardo. Learning by surprise: Surplexity for mitigating model collapse in generative AI, 2025. arXiv:2410.12341 [cs.CL], first submitted October 16, 2024; revised September 2, 2025. https://arxiv.org/abs/2410.12341 .Fabian Gröger, Shuo Wen, and Maria Brbić. Revisiting the Platonic Representation Hy-pothesis: An Aristotelian view, 2026. arXiv:2602.14486 [cs.LG]. Submitted February 16, 2026. https://arxiv.org/abs/2602.14486 .Wes Gurnee and Max Tegmark. Language models represent space and time. In The Twelfth International Conference on Learning Representations , 2024. ICLR 2024 poster. https: //openreview.net/forum?id=jE8xbmvFin .Wes Gurnee, Emmanuel Ameisen, Isaac Kauvar, Julius Tarng, Adam Pearce, Chris Olah, and Joshua Batson. When models manipulate manifolds: The geometry of a counting task. Transformer Circuits Thread , 2025. https://transformer-circuits.pub/2025/ linebreaks/index.html .Geoffrey E. Hinton and Steven J. Nowlan. How learning can guide evolution. Complex Systems , 1:495–502, 1987. Donald D. Hoffman, Manish Singh, and Chetan Prakash. The interface theory of perception. 
+
+Psychonomic Bulletin & Review , 22:1480–1506, 2015. Evan Hubinger, Carson Denison, Jesse Mu, Mike Lambert, Meg Tong, Monte MacDi-armid, Tamera Lanham, Daniel M. Ziegler, Tim Maxwell, Newton Cheng, Adam Jermyn, 
+
+> 39 Dalla Riva
+
+Amanda Askell, Ansh Radhakrishnan, Cem Anil, David Duvenaud, Deep Ganguli, Fazl Barez, Jack Clark, Kamal Ndousse, Kshitij Sachan, Michael Sellitto, Mrinank Sharma, Nova DasSarma, Roger Grosse, Shauna Kravec, Yuntao Bai, Zachary Witten, Marina Favaro, Jan Brauner, Holden Karnofsky, Paul Christiano, Samuel R. Bowman, Logan Graham, Jared Kaplan, Sören Mindermann, Ryan Greenblatt, Buck Shlegeris, Nicholas Schiefer, and Ethan Perez. Sleeper agents: Training deceptive LLMs that persist through safety training, 2024. URL https://arxiv.org/abs/2401.05566 .Minyoung Huh, Brian Cheung, Tongzhou Wang, and Phillip Isola. Position: The Platonic Representation Hypothesis. In Proceedings of the 41st International Conference on Ma-chine Learning , volume 235, pages 20617–20642, 2024. Proceedings of Machine Learning Research. https://proceedings.mlr.press/v235/huh24a.html .Andrej Karpathy. microgpt, 2026. Blog post, February 12, 2026. https://karpathy.ai/ microgpt.html .Kevin N. Laland, Blake Matthews, and Marcus W. Feldman. An introduction to niche construction theory. Evolutionary Ecology , 30:191–202, 2016. Kenneth Li, Aspen K. Hopkins, David Bau, Fernanda Viégas, Hanspeter Pfister, and Martin Wattenberg. Emergent world representations: Exploring a sequence model trained on a synthetic task. In The Eleventh International Conference on Learning Representations ,2023. ICLR 2023 notable top 5%. https://openreview.net/forum?id=DeG07_TcZvT .Jack Lindsey. Emergent introspective awareness in large language models. Transformer Circuits Thread , 2025. https://transformer-circuits.pub/2025/introspection/ index.html .Alexander Lobashev. An information-geometric view of the Platonic Hypothesis. In 
+
+NeurIPS 2025 Workshop on Symmetry and Geometry in Neural Representations , 2025. URL https://openreview.net/forum?id=w9P4xFBQK7 .Edoardo Loru, Jacopo Nudo, Niccolò Di Marco, Alessandro Santirocchi, Roberto Atzeni, Matteo Cinelli, Vincenzo Cestari, Clelia Rossi-Arnaud, and Walter Quattrociocchi. The simulation of judgment in LLMs. Proceedings of the National Academy of Sciences , 122 (42):e2518443122, 2025. doi: 10.1073/pnas.2518443122. Andreas Maurer, Massimiliano Pontil, and Bernardino Romera-Paredes. The benefit of multitask representation learning. Journal of Machine Learning Research , 17:1–32, 2016. Melanie Mitchell and David C. Krakauer. The debate over understanding in AI’s large language models. Proceedings of the National Academy of Sciences , 120(13):e2215907120, 2023. doi: 10.1073/pnas.2215907120. Neel Nanda, Lawrence Chan, Tom Lieberum, Jess Smith, and Jacob Steinhardt. Progress measures for grokking via mechanistic interpretability. In The Eleventh International Conference on Learning Representations , 2023. ICLR 2023 notable top 25%. https: //openreview.net/forum?id=9XFSbDPmdW .
+
+> 40 Task Ecologies and World-Tracking Representations in LLMs
+
+Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, Charles Sutton, and Augustus Odena. Show your work: Scratchpads for intermediate computation with language models, 2021. arXiv:2112.00114 [cs.CL]. https://arxiv.org/abs/2112. 00114 .Andrés Páez. Understanding with toy surrogate models in machine learning. Minds and Machines , 34(4):45, 2024. doi: 10.1007/s11023-024-09700-1. Tadahiro Taniguchi, Ryo Ueda, Tomoaki Nakamura, Masahiro Suzuki, and Akira Taniguchi. Generative emergent communication: Large language model is a collective world model, 2025. arXiv:2501.00226 [cs.AI], first submitted December 31, 2024; revised July 16, 2025. 
+
+https://arxiv.org/abs/2501.00226 .Naftali Tishby, Fernando C. Pereira, and William Bialek. The information bottleneck method. In 37th Annual Allerton Conference on Communication, Control, and Com-puting , pages 368–377, 1999. Bram van Dijk, Tom Kouwenhoven, Marco Spruit, and Max Johannes van Duijn. Large language models: The need for nuance in current debates and a pragmatic perspective on understanding. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , pages 12641–12654, Singapore, 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.emnlp-main.779. URL https://aclanthology.org/ 2023.emnlp-main.779/ .Bin Wang, W. Jeffrey Johnston, and Stefano Fusi. A mathematical theory for understanding when abstract representations emerge in neural networks, 2025. arXiv:2510.09816 [q-bio.NC]. Submitted October 10, 2025; revised March 13, 2026. https://arxiv.org/ abs/2510.09816 .Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed H. Chi, Quoc V. Le, and Denny Zhou. Chain-of-thought prompting elicits reasoning in large language models. In Sanmi Koyejo, Shakir Mohamed, Anima Agarwal, Danielle Belgrave, Kyunghyun Cho, and Alice Oh, editors, Advances in Neural Information Processing Systems 35 , pages 24824–24837. Curran Associates, Inc., 2022. URL https://proceedings.neurips.cc/paper_files/paper/2022/hash/ 9d5609613524ecf4f15af0f7b31abca4-Abstract-Conference.html .
+
+Appendix A. Geometry of the Task Ecology 
+
+A.1 Canonical Hilbert Geometry Definition 60 (Task-distance kernel) Let N := |W |, let Dσ be the matrix with (Dσ)ij =
+
+σ2(wi, w j ), and let I denote the N × N identity matrix. Under uniform centering 
+
+J = I − (1 /N )11 T ,
+
+> 41
+
+Dalla Riva 
+
+define 
+
+Kμ = − 12 JD σJ. 
+
+(For non-uniform priors, replace J by weighted centering.) 
+
+Proposition 61 (Canonical Hilbert embedding and PSD kernel) Let HD = L2(DC ;
+
+R|V |) and define the square-root embedding ΨD : W → H D by 
+
+ΨD(w)( c) = 
+
+√
+
+Pw(· | c),
+
+where the square root is taken coordinate-wise. Then for all wi, w j ∈ W :
+
+σ2
+
+> D
+
+(wi, w j ) = 12 ∥ΨD(wi) − ΨD(wj )∥2 
+
+> HD
+
+.
+
+Consequently Dσ is a squared Euclidean distance matrix (up to the factor 12 ). Moreover, 
+
+Kμ = − 12 JD σJ is positive semidefinite, and if ¯ΨD(wi) = Ψ D(wi) − 1
+
+> N
+
+∑ 
+
+> j
+
+ΨD(wj ), then 
+
+(Kμ)ij = 12 ⟨ ¯ΨD(wi), ¯ΨD(wj )⟩HD .
+
+Proof By the definition of task distance under the training ecology, 
+
+σ2
+
+> D
+
+(wi, w j ) = Ec∼DC
+
+[ 12
+
+∑
+
+> v
+
+(√
+
+Pwi (v | c) −
+
+√
+
+Pwj (v | c))2
+
+]
+
+.
+
+Since ΨD(w)( c) = √Pw(· | c) coordinate-wise, the right-hand side is exactly 
+
+12
+
+∫ ∑
+
+> v
+
+(ΨD(wi)( c)v − ΨD(wj )( c)v
+
+)2 dD C (c) = 12 ∥ΨD(wi) − ΨD(wj )∥2 
+
+> HD
+
+,
+
+proving the first claim. Now center the embedded points by 
+
+¯ΨD(wi) = Ψ D(wi) − 1
+
+N
+
+> N
+
+∑
+
+> j=1
+
+ΨD(wj ).
+
+Subtracting the same mean vector from both points does not change pairwise differences, so 
+
+∥ΨD(wi) − ΨD(wj )∥2 = ∥ ¯ΨD(wi) − ¯ΨD(wj )∥2.
+
+For any centered Euclidean point cloud, the standard double-centering identity recovers the Gram matrix from the squared distance matrix: 
+
+− 12 JD σJ
+
+is the Gram matrix of the centered representatives. Hence 
+
+(Kμ)ij = 12 ⟨ ¯ΨD(wi), ¯ΨD(wj )⟩HD ,
+
+so Kμ is positive semidefinite. 
+
+42 Task Ecologies and World-Tracking Representations in LLMs 
+
+The task ecology therefore determines a canonical Hilbertian target geometry indepen-dently of any particular neural architecture. What remains non-trivial is whether a learned representation h : W → Rd approximates this geometry, rather than merely preserving the induced partition. Next we record the standard square-root-embedding fact for Hellinger geometry together with the usual double-centering construction for Euclidean distance matrices, expressed in the present notation. 
+
+A.2 What the Framework Proves for Learned Encoders Definition 62 (Ecological veridicality of a representation map) For h : W → Rd,define the partition ∼h on W by wi ∼h wj iff h(wi) = h(wj ), and let ph : W → W/ ∼h be the induced encoding. Let Kh denote the centered Gram matrix of the learned codes, i.e. the Gram matrix of {h(wi) − 1  
+
+> |W|
+> ∑
+> j
+
+h(wj )}i. We say that h is ecologically veridical when 
+
+ph merges no μ-separated pair. 
+
+Theorem 63 (Topological prediction, general case) Let h : W → Rd be ecologically veridical. Then: (a) h(wi)̸ = h(wj ) for every μ-separated pair. (b) h(wi) = h(wj ) is permitted for μ-equivalent pairs. For minimum-complexity zero-excess encoders (in the sense of Thm. 50), equality on μ-equivalent pairs is additionally required. (c) If h realises exactly kμ := |W/ ∼μ| distinct class codes, then rank( Kh) ≤ kμ − 1, with equality when class representatives are in affine general position. 
+
+Proof Part (a) is exactly Dalla Riva (2026, Theorem 4.1(a)): an ecologically veridical representation may not collapse any μ-separated pair. For (b), the same framework permits equality on μ-equivalent pairs, while Thm. 50(b) adds a stronger requirement for minimum-complexity zero-excess encoders: their partition must be exactly W/ ∼μ. For (c), if h realizes exactly kμ distinct class codes, then after centering there are still at most kμ distinct code vectors and their centered sum is zero. Their span therefore has dimension at most kμ − 1,so the centered Gram matrix Kh has rank at most kμ − 1. Equality is achieved when the distinct class representatives are in affine general position. 
+
+Remark 64 (What this does NOT constrain) Thm. 63 constrains only the partition structure induced by h and the resulting rank bound on Kh. It does NOT constrain relative magnitudes of non-zero distances, eigenvectors, or overall scale. 
+
+A.3 Exact Metric Recovery in the Gaussian-Linear Case Remark 65 (Scope of Appendix A.3) In this section, we use a simplified Gaussian-linear model rather than the autoregressive setting of the main paper. Tasks are scalar-valued 
+
+> 43 Dalla Riva
+
+(f (wi) = cT φi), not distribution-valued ( fc(w) = Pw(· | c)). The results here illustrate when geometric alignment (beyond the topological alignment proved in the main text) is achievable, and identify the restrictive conditions under which it holds. 
+
+Theorem 66 (Geometric alignment, Gaussian-linear case) Consider Gaussian-linear tasks f (wi) = cT φi with c ∼ N (0 , Σc), a linear encoder h(wi) = Aφ i, and the task-relevant subspace V = span {φi − φj : σ2(wi, w j ) > 0}. Write PV for the orthogonal projector onto V
+
+and ∆ = {φi − φj : σ2(wi, w j ) > 0} for the set of separated difference vectors. Assume readouts attain Bayes-optimal prediction on h-cells. Then: (a) Zero risk requires A(φi − φj )̸ = 0 for every separated pair, i.e. ∆ ∩ ker( A) = ∅. Asufficient (but not necessary) condition is ker( A) ∩ V = {0}.(b) Under the sufficient condition ker( A)∩V = {0}, the minimum feasible rank is dim( V ).Without it, lower ranks may suffice if the finitely many vectors in ∆ avoid ker( A).(c) In the canonical projector gauge A = PV (which satisfies the sufficient condition): 
+
+∥h(wi) − h(wj )∥2 = ∥PV (φi − φj )∥2.If Σc = σ2 
+
+> c
+
+PV (isotropic on V ): ∥h(wi) − h(wj )∥2 = σ2(wi, w j )/σ 2 
+
+> c
+
+, i.e. exact propor-tionality. If Σc is anisotropic: exact proportionality is no longer guaranteed and generically fails. The encoder projects onto V uniformly, while σ2 weights directions by Σc.
+
+Proof By Dalla Riva (2026, Theorem 4.1(a)), zero risk is equivalent to merging only μ-equivalent states. In the linear setting, h(wi) = h(wj ) iff A(φi −φj ) = 0 , so zero risk requires 
+
+A(φi − φj )̸ = 0 for every separated pair, proving (a). For (b), ker( A) ∩ V = {0} implies A is injective on V , so rank( A) ≥ dim( V ), with equality achievable. For (c), pick the canonical representative A = PV . For isotropic Σc, σ2(wi, w j ) = σ2 
+
+> c
+
+∥PV (φi −φj )∥2, giving proportion-ality. For anisotropic Σc, write the spectral decomposition of Σc on V as Σc|V = ∑ 
+
+> k
+
+λkukuTk ,where {uk} is an orthonormal basis of V and λk > 0 are the corresponding directional variances. Then σ2 = ∑ 
+
+> k
+
+λk[( φi − φj )T uk]2 while ∥PV (φi − φj )∥2 = ∑
+
+> k
+
+[( φi − φj )T uk]2;proportional iff all λk equal. 
+
+A.4 Neighborhood Stability and the Open Problem 
+
+The main topological convergence result appears in the body of the paper as Cor. 51. Here we record only the neighborhood-stability lemma and the remaining open geometric question. 
+
+Proposition 67 (Neighborhood recovery from metric approximation) Let d be a target metric on W and ˆd a learned metric. Fix k and, for each wi, let rk(i) and rk+1 (i)
+
+denote the distances from wi to its k-th and (k + 1) -st nearest neighbors under d. Assume the k-neighborhood margin 
+
+γk := min 
+
+> i
+> (
+
+rk+1 (i) − rk(i))
+
+> 44 Task Ecologies and World-Tracking Representations in LLMs
+
+is strictly positive. If 
+
+sup 
+
+> i̸=j
+
+| ˆd(wi, w j ) − d(wi, w j )| < γ k/2,
+
+then the directed k-nearest-neighbor graph induced by ˆd is exactly the same as the one induced by d.
+
+Proof Fix wi. Every true k-nearest neighbor wj of wi satisfies d(wi, w j ) ≤ rk(i), hence 
+
+ˆd(wi, w j ) < r k(i)+ γk/2. Every point wℓ outside the true k-neighborhood satisfies d(wi, w ℓ) ≥
+
+rk+1 (i), hence ˆd(wi, w ℓ) > r k+1 (i)−γk/2. Because rk+1 (i)−γk/2 ≥ rk(i)+ γk/2, no outsider can cross into the top-k set under ˆd, and no true member can be pushed out. Since this holds for every i, the directed k-NN graphs coincide. 
+
+Remark 68 (Status) Prop. 67 is a standard margin-based perturbation lemma for nearest-neighbor graphs, included here for completeness rather than as a novel result. 
+
+Remark 69 (Open problem) Prop. 61 identifies the target geometry induced by the ecol-ogy, and Thm. 66 proves exact recovery only in a restrictive Gaussian-linear regime. For deep non-linear learners, existing feature-learning theory suggests partial alignment with the leading eigendirections of Kμ (Ba et al., 2022; Atanasov et al., 2022; Damian et al., 2022), but does not establish full proportional recovery of pairwise distances. Prop. 67 shows what would be sufficient for Aristotelian local-neighborhood recovery, but the required metric-approximation theorem is only proved here in the Gaussian-linear case. General geometric convergence is therefore unresolved by the present results. 
+
+Interpretation. Our framework supplies a canonical ecology kernel Kμ and proves that minimum-complexity zero-excess models agree on the induced partition. Exact recovery of 
+
+Kμ by learned distances is proved only in the Gaussian-linear isotropic case. The predic-tion absent from Huh et al. (2024) is failure : when deployment probes distinctions weakly constrained by training, models may diverge rather than converge. 
+
+Appendix B. Deployment Decoder Classes 
+
+The main text introduces the deployment decoding gap 
+
+ΓQdep  
+
+> D
+
+(θ) = LQdep  
+
+> D
+
+(θ) − L∗
+
+> D
+
+(θ),
+
+which isolates the difference between the Bayes-optimal decoder for a fixed induced encoding and the best decoder available under a restricted deployment inference regime. Here we generalize Def. 39 from induced encodings pθ,D to arbitrary encodings p, and record only the structural facts needed in the body of the paper. 
+
+Definition 70 (Decoder-class loss for a fixed encoding) Let p : W → X be any en-coding and let Q be a nonempty class of decoders 
+
+q : X × V ∗ → ∆( V ).
+
+> 45 Dalla Riva
+
+Define the best loss achievable within Q by 
+
+LQ
+
+> D
+
+(p) := inf  
+
+> q∈Q
+
+LD(p, q ),
+
+and the corresponding decoder-class gap by 
+
+ΓQ
+
+> D
+
+(p) := LQ
+
+> D
+
+(p) − L∗
+
+> D
+
+(p).
+
+The infimum need not be attained in general; when it is attained, any minimizer is a best 
+
+Q-decoder for p.
+
+Proposition 71 (Monotonicity under decoder-class expansion) Let Q1 ⊆ Q 2 be two nonempty decoder classes for the same encoding p. Then 
+
+LQ2 
+
+> D
+
+(p) ≤ LQ1 
+
+> D
+
+(p) and ΓQ2 
+
+> D
+
+(p) ≤ ΓQ1 
+
+> D
+
+(p).
+
+Proof Because Q1 ⊆ Q 2, taking the infimum over the larger class cannot increase the value: 
+
+inf 
+
+> q∈Q 2
+
+LD(p, q ) ≤ inf 
+
+> q∈Q 1
+
+LD(p, q ).
+
+Subtracting the common baseline L∗
+
+> D
+
+(p) gives the same inequality for the decoder-class gaps. 
+
+Corollary 72 (Induced-encoding form) If Q1 ⊆ Q 2 are nonempty deployment decoder classes, then for every θ ∈ Θ:
+
+LQ2 
+
+> D
+
+(θ) ≤ LQ1 
+
+> D
+
+(θ) and ΓQ2 
+
+> D
+
+(θ) ≤ ΓQ1 
+
+> D
+
+(θ).
+
+Proof Apply Prop. 71 to the induced encoding pθ,D .
+
+Remark 73 (Interpretation) Single-pass prompting, chain-of-thought prompting, scratch-pads, and tool-augmented inference can be idealized as different deployment decoder classes for the same frozen encoding. The proposition above therefore supports only the mono-tonic claim used in the main text: if one inference regime genuinely enlarges the admissible decoder family relative to another, then the best achievable decoding gap cannot increase. Establishing concrete inclusion relations among realistic transformer prompting strategies, or bounding the resulting gaps for specific architectures, is a separate circuit-complexity problem that we do not attempt here. 
+
+Appendix C. Supplementary Consequences 
+
+C.1 Generalist versus Specialist 
+
+The generalist-specialist comparison gives a supplementary consequence of the same excess decomposition: broad ecologies favor representations that preserve all distinctions jointly re-quired across tasks, while specialists can be optimal only relative to narrower sub-ecologies. 
+
+> 46
+
+Task Ecologies and World-Tracking Representations in LLMs 
+
+Theorem 74 (Generalist advantage) For each task t ∈ { 1, . . . , T }, let D(t) be the corre-sponding data distribution, μt its induced task ecology, and D(t) 
+
+> C
+
+its context marginal. Define the excess Bayes-optimal token loss 
+
+∆t(θ) := L∗ 
+
+> D(t)
+
+(θ) − HD(t) (Y | C, W ).
+
+For each t, interpret L∗ 
+
+> D(t)
+
+and HD(t) under the joint law induced by π, D(t) 
+
+> C
+
+, and the conditional token distributions Pw(· | c). Let D := (1 /T ) ∑ 
+
+> t
+
+D(t) be the uniform task mixture, with induced ecology μD and context marginal DC := (1 /T ) ∑ 
+
+> t
+
+D(t) 
+
+> C
+
+. Then: (a) If ∆D(θG) = 0 , then ∆t(θG) = 0 for all t: the generalist matches every specialist on each constituent task. (b) For any specialist θt and task s̸ = t: if θt merges a pair (w1, w 2) with σ2 
+
+> μs
+
+(w1, w 2) > 0,then 
+
+∆s(θt) > 0.
+
+More explicitly, if x = pθt,D (s) (w1) = pθt,D (s) (w2) and λ = π(w1)/(π(w1) + π(w2)) ,then 
+
+∆s(θt) ≥ (π(w1) + π(w2)) Ec∼D(s)
+
+> C
+
+[JS λ
+
+(Pw1 (· | c), P w2 (· | c))] > 0.
+
+(c) Hence, on any deployment distribution that gives positive weight to at least one such missed pair, a zero-excess generalist strictly outperforms that specialist in Bayes-optimal next-token loss. 
+
+Proof (a) If ∆D(θG) = 0 , Thm. 8(c) implies that pθG,D merges only pairs that are DC -almost-everywhere equivalent under the mixture ecology. Since DC = (1 /T ) ∑ 
+
+> t
+
+D(t) 
+
+> C
+
+, this implies D(t) 
+
+> C
+
+-almost-everywhere equivalence for every t. Hence ∆t(θG) = 0 for all t.(b) Let x be the merged cell containing w1 and w2 under task s. By Thm. 8(b), the contribution of cell x to ∆s(θt) is 
+
+πx Ec∼D(s)
+
+> C
+
+[JS αx ({Pw(· | c)}w∈Cx )].
+
+Grouping all states in Cx \{ w1, w 2} into a residual component gives the exact decomposition 
+
+JS αx ({Pw}w∈Cx ) = JS (β, 1−β)(M12 , M rest ) + β JS λ(Pw1 , P w2 ) + (1 − β) JS rest ,
+
+where β = αx(w1) + αx(w2), M12 is the (λ, 1 − λ)-mixture of Pw1 , P w2 , Mrest is the mixture of the remaining cell distributions, and JS rest ≥ 0 is their internal weighted Jensen–Shannon divergence. Hence the cell contribution is at least 
+
+πxβ Ec∼D(s)
+
+> C
+
+[JS λ(Pw1 (· | c), P w2 (· | c)) ],
+
+which is the displayed bound because πxβ = π(w1) + π(w2). Because σ2 
+
+> μs
+
+(w1, w 2) > 0,the two next-token laws differ on a set of positive D(s) 
+
+> C
+
+-measure, so the two-state Jensen– Shannon term is positive on a set of positive measure and therefore has strictly positive expectation. (c) From (a) and (b). 
+
+47 Dalla Riva 
+
+Appendix D. Selection on Recipe Traits 
+
+The two-ecology framework of Section 6.3 identifies post-training as an ecology-injection mechanism. The following results characterise how lineage selection acts on the strength of that injection. 
+
+Proposition 75 (Selection on recipe traits) Let R be a finite recipe space with a heri-table scalar trait α(r) ∈ [0 , 1] for each r ∈ R , interpreted as the strength of ecology injection. Consider one selection stage in a Wright–Fisher population over recipes r1, . . . , r K with fre-quencies x(r) and expected fitness f (r). Define the population mean trait ¯α := ∑ 
+
+> r
+
+x(r) α(r)
+
+and let ¯αeval denote the mean trait in the selected-parent population. Then: (a) Exact identity. ¯αeval − ¯α = Cov x(f, α ) / ¯f .(b) Sufficient condition. Write each recipe as r = ( α, ζ ), where ζ collects all other coordinates. If for every fixed ζ the map α 7 → ∆eval (α, ζ ) is nonincreasing, and if fitness has the form f (r) = g(∆ eval (r)) for a strictly decreasing g, then Cov x(f, α ) ≥ 0
+
+and therefore ¯αeval ≥ ¯α.(c) Strict increase. If, in addition, there is positive recipe mass on a set of ζ values for which α 7 → ∆eval (α, ζ ) is strictly decreasing on a set of positive conditional mass, then Cov x(f, α ) > 0 and ¯αeval > ¯α.
+
+Proof The selected-parent distribution is xsel (r) = x(r) f (r)/ ¯f , so 
+
+¯αeval = 1¯f
+
+> ∑
+> r
+
+x(r) f (r) α(r),
+
+giving (a). For (b), under the stated monotonicity the conditional mean fitness m(a) := 
+
+Ex[f | α = a] is nondecreasing in a. Using an independent copy A′ of A,
+
+2 Cov x(m(A), A ) = E[( m(A) − m(A′))( A − A′)] ≥ 0.
+
+Since Cov x(f, α ) = Cov x(m(α), α ) by the law of total covariance, the claim follows. For (c), strict decrease on positive mass gives P (( m(A) − m(A′))( A − A′) > 0) > 0, hence strict positivity. The monotonicity condition in (b) is substantive. It can fail if the injected task family is badly aligned with the evaluation ecology, for example through reward hacking, capability degradation, or post-training that improves a proxy while worsening the actual deployment target. 
+
+Lemma 76 (Selection-stage directional gap closing) Fix a gap pair (w1, w 2) ∈ Gε
+
+and define the recipe-level token-ecology separation score s(r) := σ2tok (r; w1, w 2). Assume 
+
+s(r) depends on recipes only through the scalar trait α(r), and write s(r) = h(α(r)) for some nondecreasing h. If the selected-parent trait distribution first-order stochastically dominates the pre-selection distribution, then Eeval [h(α)] ≥ E[h(α)] .
+
+> 48
+
+Task Ecologies and World-Tracking Representations in LLMs 
+
+Proof By the standard monotone-comparison property of first-order stochastic dominance applied to the nondecreasing function h.The assumption s(r) = h(α(r)) collapses all other recipe coordinates into a single scalar trait and assumes monotone dependence on that trait alone. The lemma is therefore an idealised strengthening that guides the design of controlled synthetic experiments, rather than a claim about realistic recipe spaces. 
+
+Appendix E. Off-Ecology Error Bounds 
+
+The following propositions provide quantitative bounds for the failure predictions stated in Section 8. We prove them only for the next-token log-loss ecology. Extending them to generalized ecologies would require additional assumptions on the task losses; we do not use that extension in the present manuscript. Let μ1 be the ecology under which the encoding was optimized and let μ2 be a probe ecology that refines μ1. Let D(1)  
+
+> C
+
+and D(2)  
+
+> C
+
+denote context marginals inducing μ1 and μ2,respectively. For i ∈ { 1, 2}, interpret L∗ 
+
+> μi
+
+and Hμi under the joint law induced by π, D(i) 
+
+> C
+
+,and the conditional token distributions Pw(· | c).
+
+Proposition 77 (Off-ecology excess bound) Let p be a minimum-complexity zero-excess encoding for μ1. If σ2 
+
+> μ1
+
+(w1, w 2) = 0 and σ2 
+
+> μ2
+
+(w1, w 2) > 0, then p(w1) = p(w2) and 
+
+L∗ 
+
+> μ2
+
+(p) − Hμ2 (Y | C, W ) ≥ (π(w1) + π(w2)) Ec∼D(2) 
+
+> C
+
+[JS λ
+
+(Pw1 (· | c), P w2 (· | c))] > 0,
+
+where λ = π(w1)/(π(w1) + π(w2)) .
+
+Proof By Thm. 50, a minimum-complexity zero-excess encoding for μ1 has partition 
+
+W/ ∼μ1 . Since σ2 
+
+> μ1
+
+(w1, w 2) = 0 , we have w1 ∼μ1 w2, hence p(w1) = p(w2). Let x be that merged cell. By Thm. 8(b), the contribution of cell x to the excess under μ2 is 
+
+πx Ec∼D(2) 
+
+> C
+
+[JS αx ({Pw(· | c)}w∈Cx )].
+
+Group the states in Cx into the pair {w1, w 2} and the residual set Cx \ { w1, w 2}. The same hierarchical weighted Jensen–Shannon decomposition used in Section C.1 gives 
+
+JS αx ({Pw}w∈Cx ) ≥ β JS λ(Pw1 , P w2 ),
+
+where β = αx(w1) + αx(w2) and λ = αx(w1)/β = π(w1)/(π(w1) + π(w2)) . Multiplying by 
+
+πx yields the displayed lower bound because πxβ = π(w1) + π(w2). Since σ2 
+
+> μ2
+
+(w1, w 2) > 0,the two next-token laws differ on a set of positive D(2)  
+
+> C
+
+-measure, so the two-state Jensen– Shannon term has strictly positive expectation. 
+
+Proposition 78 (Off-ecology non-identifiability) Under the same setup, if there exists a context set A with D(1)  
+
+> C
+
+(A) = 0 , D(2)  
+
+> C
+
+(A) > 0, and Pw1 (· | c)̸ = Pw2 (· | c) for c ∈ A, then there exist two decoders q(1) , q (2) that attain the same optimal loss under μ1 but disagree on A. The training objective does not identify a unique off-ecology extension. 
+
+49 Dalla Riva 
+
+Proof Let x := p(w1) = p(w2); by assumption, the probe ecology distinguishes two states that the optimized encoding leaves merged. Set both decoders equal to the Bayes-optimal decoder for p under μ1 outside A. On A, define 
+
+q(1) (x, c ) := Pw1 (· | c), q(2) (x, c ) := Pw2 (· | c),
+
+and leave all other code cells unchanged. Since D(1)  
+
+> C
+
+(A) = 0 , these modifications affect a set of zero μ1-measure, so both decoders attain the same optimal μ1-loss. Since D(2)  
+
+> C
+
+(A) > 0
+
+and the laws differ on A, the two off-ecology extensions disagree on a set of positive probe measure. 
+
+Appendix F. Corpus Sources 
+
+We normalized all corpora to ASCII-range characters. We transliterated Unicode accented characters, removed markup, headers, and metadata, and split each text into fixed-length character chunks for tokenization. 
+
+Alice’s Adventures in Wonderland. Five languages: English, French (trans. Henri Bué), German (trans. Antonie Zimmermann), Italian (trans. T. Pietrocòla-Rossetti), Finnish (trans. Anni Swan). Digital texts from Project Gutenberg ebooks #11, #55456, #19778, #28371, #46569. 
+
+Dante’s Commedia. Seven languages: Italian, English, German, Finnish, Spanish, French, Portuguese. Digital texts from Project Gutenberg ebooks #1000, #1004, #8085, #12546, #57303, #22768/#22769, and Portuguese text from pt.Wikisource. 
+
+Communist Manifesto. Ten languages: English, German, Spanish, French, Italian, Por-tuguese, Polish, Czech, Dutch, Finnish. Digital texts from the Marxists Internet Archive (https://www.marxists.org/ ). 
+
+Voynich manuscript. EVA transliteration in IVTFF format from Rene Zandbergen’s digital archive ( https://www.voynich.nu/transcr.html ), using Takeshi Takahashi’s com-plete transcription. We retained only lowercase Latin-alphabet characters, i.e. the EVA encoding of Voynich glyphs. 
+
+Practical Common Lisp. Source code from Peter Seibel’s Practical Common Lisp , nor-malized to lowercase letters, parentheses, and spaces. We use it for the bracket-balance and code-validation experiments (Section 6.3). We verified balanced chunks for proper bracket nesting and generated unbalanced chunks by randomly permuting bracket characters at the same positions.

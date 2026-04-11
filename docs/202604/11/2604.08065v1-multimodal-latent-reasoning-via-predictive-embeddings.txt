@@ -1,0 +1,621 @@
+Title: Multimodal Latent Reasoning via Predictive Embeddings
+
+URL Source: https://arxiv.org/pdf/2604.08065v1
+
+Published Time: Fri, 10 Apr 2026 00:54:45 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+Preprint. Under review. 
+
+# Multimodal Latent Reasoning via Predictive Embeddings 
+
+Ashutosh Adhikari & Mirella Lapata 
+
+School of Informatics University of Edimburgh 
+
+{ashutosh.adhikari, mlap }@ed.ac.uk 
+
+## Abstract 
+
+Tool-augmented multimodal reasoning enables visual language models (VLMs) to improve perception by interacting with external tools (e.g., crop-ping, depth estimation). However, such approaches incur substantial in-ference overhead, require specialized supervision, and are prone to erro-neous tool calls. We propose PEARL (Predictive Embedding Alignment for 
+
+Reasoning in Latent space), a JEPA-inspired framework that learns from expert tool-use trajectories entirely in the latent space, eliminating the need for explicit tool invocation at inference time. Unlike reconstruction-based la-tent reasoning methods, which autoregressively generate latent tokens and suffer from training–inference mismatch and limited support for multi-step tool use, P EARL directly learns predictive embeddings from multimodal tra-jectories while preserving the standard vision-language generation pipeline: it is model-agnostic, simple to train, and naturally supports trajectories with multiple tool calls. Experiments across multiple perception benchmarks show that P EARL matches or outperforms standard supervised fine-tuning and reconstruction-based latent reasoning approaches. Furthermore, we provide empirical evidence that reconstruction-based methods primarily learn embeddings rather than image edits in latent space, motivating pre-dictive embedding learning as a more principled alternative. 
+
+## 1 Introduction 
+
+Recent work in multimodal reasoning has explored augmenting vision-language models (VLMs) with external tools (e.g., cropping, object detection, depth estimation) to improve grounded reasoning (Su et al., 2024; Wu et al., 2025b; Su et al., 2025). By enabling models to iteratively manipulate visual inputs, these approaches allow VLMs to “think with images” rather than relying solely on textual reasoning. While interacting with expert tools to edit images is an effective strategy for grounding LLMs in visual context (Yue et al., 2024; Hao et al., 2025), tool-based approaches introduce practical and conceptual challenges. First, invoking external tools incurs substantial inference-time latency and compute overhead (Nichols et al., 2025; Wu et al., 2025a). Second, learning to correctly select and parameterize tools requires specialized supervision (Wu et al., 2025b; Su et al., 2024), and even after such training, erroneous calls waste inference compute and pollute the context with irrelevant information. Third, most approaches assume a homogeneous tool set, whereas handling the diverse tools exposed by complex MCP servers requires advanced planning and instruction-following (Wu et al., 2025a). A promising direction replaces explicit tool use with latent reasoning, where models operate in a continuous embedding space instead of generating discrete intermediate outputs (Hao et al., 2024; Tan et al., 2025; Gozeten et al., 2026). Prior work has explored reconstruction-based latent reasoning, in which models autoregressively generate latent tokens intended to represent intermediate visual transformations (Li et al., 2025; Yang et al., 2025; Gu et al., 2025). Borrowing from Coconut (Hao et al., 2024), these methods supervise continuous latent tokens with a reconstruction objective against the outputs of visual tools, while preserving the standard transformer architecture (see Figure 5 for an overview). Despite their appeal, these approaches suffer from two fundamental limitations. First, they exhibit a 1
+
+> arXiv:2604.08065v1 [cs.LG] 9 Apr 2026
+
+Preprint. Under review. 
+
+⟨I 0, Q⟩ R = ( I1, T1, . . . , IN , TN )⟨I 0, Q⟩ R = ( I1, T1, . . . , IN , TN )
+
+> Enc
+
+(⟨I 0, Q⟩ ) Enc (R)
+
+> Pred
+
+( · )  
+
+> [PRED ] tokens
+> ˆhRhR
+
+= sg [Enc (R)] 
+
+LVLM LJEPA = D( ˆhR, hR) LNextLat 
+
+LPEARL = LVLM + λ [LJEPA + LNextLat ] Example trajectory R    
+
+> I0
+> Q:What is the design on the purple shoes worn by the child?
+> input
+> step 1
+> I1
+> T1:Crop to the shoes of the child.
+> ...
+> step N
+> IN
+> TN:The design is a rabbit.
+> Inference: only ⟨I 0,Q⟩
+> no tools, no latent decoding
+
+Figure 1: PEARL architecture. Left: Solid arrows denote forward-pass dataflow; dashed arrows denote which components contribute to each loss (no forward pass). During training, two independent forward passes encode ⟨I 0, Q⟩ and the expert trajectory R. A tied-weights predictor maps the input encoding to the trajectory latent space. LJEPA aligns the predicted embedding ˆhR with the stop-gradient target hR; LVLM preserves autoregressive text generation; LNextLat regularises hidden states to act as belief states. Right: An example trajectory of sequential visual edits (I1, . . . , IN ) interleaved with reasoning text (T1, . . . , TN ).training–inference mismatch: during training, models are supervised with as many latent tokens as there are image patch tokens in the tool output, yet at inference only a small, fixed number of latent tokens is decoded, often without improving, and sometimes degrading, performance (Yang et al., 2025; Li et al., 2025). Second, they are typically confined to single-step transformations, failing to support multi-step reasoning over sequences of tool operations. These observations suggest that reconstruction-based methods primarily learn useful embeddings rather than genuinely simulating visual transformations in latent space. In this work, we propose PEARL (Predictive Embedding Alignment for Reasoning in Latent space), a JEPA-inspired framework that learns predictive representations from expert tool-use trajectories. Rather than autoregressively generating latent tokens, P EARL predicts trajectory embeddings from an image–question pair (see Figure 1, right), allowing the model to internalize the effects of tool use without explicit tool invocation. The framework operates entirely in latent space during training, avoids training–inference mismatch, and supports multi-step reasoning over trajectories with multiple tool calls. We instantiate P EARL by jointly optimizing a standard vision–language generation objective with a predictive em-bedding objective over interleaved multimodal trajectories (see Figure 1, left), enabling the model to retain its text generation capabilities while learning both the effects and sequencing 
+
+of task-relevant transformations. We evaluate P EARL across a range of multimodal reasoning benchmarks, including settings with single and multiple tool calls. P EARL consistently matches or outperforms supervised fine-tuning and reconstruction-based latent reasoning approaches. Moreover, our analysis shows that reconstruction-based methods primarily learn embeddings rather than perform-ing genuine latent “imagination”, supporting predictive embedding learning as a more principled alternative. 
+
+## 2 Related Work 
+
+Tool-augmented Multi-modal Reasoning. A prominent line of work augments vision-2Preprint. Under review. language models with external visual tools to improve grounded reasoning (Su et al., 2024; Huang et al., 2025b; Zheng et al., 2025). These approaches enable models to iteratively manipulate images through operations such as cropping, object detection, or spatial trans-formations, effectively allowing them to “think with images” rather than relying solely on textual reasoning. More advanced systems further integrate specialized tools such as depth estimation or multi-step visual editing pipelines, often interleaving tool execution with chain-of-thought reasoning. To determine when and how to invoke tools, early methods rely on supervised fine-tuning with expert trajectories (Su et al., 2025; Chung et al., 2026) while more recent approaches leverage reinforcement learning to acquire tool-use policies and support multi-step reasoning (Zheng et al., 2025; Su et al., 2024; Geng et al., 2026). Despite their effectiveness, these methods introduce significant practical challenges: tool invocation incurs substantial inference-time overhead, requires specialized supervision for correct tool selection and parameterization, and remains brittle to errors that can propagate through the reasoning process. Furthermore, many approaches assume a fixed or homogeneous tool set, limiting scalability to diverse or dynamically evolving tool environments. We instead explore latent visual reasoning, where the model internalizes the effects of tool use directly in representation space, eliminating the need for explicit tool invocation at inference time. 
+
+Reconstruction-based Latent Reasoning. Existing work on latent reasoning in multimodal models autoregressively generates latent tokens under a reconstruction objective, aiming to “imagine” intermediate image edits. Concretely, these latent tokens are trained to reconstruct tool outputs, borrowing from approaches such as Coconut (Hao et al., 2024) in the text domain. This requires models to switch between latent and discrete tokens at inference, a complication that P EARL avoids. However, this line of work is largely confined to single tool calls within a reasoning trajectory (Li et al., 2025; Yang et al., 2025; Gu et al., 2025). COVT (Qin et al., 2025) extends this setting to multiple tool calls, but applies a fixed sequence of operations regardless of the input query. This design imposes two key limitations. First, COVT avoids dynamic planning by restricting tool calls to parameter-free operations, precluding actions such as cropping that require query-specific arguments. Second, all tool calls are applied directly to the original image I0 rather than to the outputs of preceding operations, resulting in a shallow tree of independent branches rather than a chain of dependent steps. In contrast, P EARL avoids autoregressive latent generation by predicting a single embedding of the full expert trajectory, naturally supporting multi-step tool use as the prediction target encodes the entire trajectory R rather than a single transformation. 
+
+Joint Embedding Predictive Architectures for Language Models. The Joint Embedding Predictive Architecture (JEPA) is a self-supervised learning framework that trains a model to predict the embedding of one view of the data from another, rather than reconstructing raw inputs. It has shown promise as a pre-training objective for multimodal models with V-JEPA2 (Assran et al., 2025) and VL-JEPA (Chen et al., 2026) achieving competitive perfor-mance; however, both require substantial pre-training compute to match the performance of current state-of-the-art models. In the textual domain, LLM-JEPA (Huang et al., 2025a) adapts JEPA to fine-tune off-the-shelf language models, avoiding the need to train from scratch. Concretely, LLM-JEPA minimises a distance between the encoded representations of paired text and code, encouraging the model to develop modality-agnostic representations conducive to text-to-code generation. Similarly, V-JEPA2 aligns embeddings from video frames and robotic actions with predicted future frames for video model pre-training. PEARL adapts the JEPA objective to fine-tune an off-the-shelf VLM from expert multimodal tool-use trajectories, treating the image-question pair and the full reasoning trajectory as two views of the same problem. This allows P EARL to internalize the effect of sequential visual tool use in the latent space, without incurring the prohibitive compute of pre-training or departing from the standard image-text-to-text inference pipeline. 3Preprint. Under review. 
+
+## 3 PEARL: Predictive Latent Reasoning 
+
+3.1 Problem Formulation and Overview 
+
+We consider a training setting where each example consists of an image-question pair 
+
+x = ⟨I 0, Q⟩ and an expert multimodal reasoning trajectory 
+
+R = ( I1, T1, I2, T2, . . . , IN , TN ),where each Ii is an intermediate image produced by an expert visual tool (e.g., crop, highlight, spatial transformation) and each Ti is the associated reasoning text, with the final step containing the answer to Q (see Figure 1). Our goal is to train a VLM that benefits from such tool-use trajectories without invoking tools at inference time. In contrast to prior reconstruction-based approaches, which autoregres-sively generate latent tokens intended to reconstruct intermediate visual edits (Li et al., 2025; Yang et al., 2025; Gu et al., 2025), P EARL (Predictive Embedding Alignment for Reasoning in 
+
+Latent space) directly predicts a latent representation of the full trajectory from the original image-question pair, preserving the standard VLM inference pipeline while internalizing information from tool-based reasoning during training. Concretely, P EARL encodes x and R independently and trains a lightweight predictor to anticipate the trajectory embedding from the input alone. Intuitively, the predictor asks: given only the image and question, can the model anticipate what the expert tool-use trajectory would look like in latent space? This design has three advantages. First, it avoids explicit tool invocation at inference. Second, it avoids the training–inference mismatch of reconstruction-based methods, where models are trained with many latent tokens but decode only a small fixed number at test time. Third, because the prediction target encodes the entire multimodal trajectory rather than a single image edit, P EARL naturally supports multiple tool calls. 
+
+3.2 Trajectory Encoding 
+
+We instantiate both Enc (x) and Enc (R) using the hidden states of an off-the-shelf autore-gressive VLM, serializing the two views as follows (see also Figure 1): • the input view consists of the original image-question pair ⟨I 0, Q⟩ ;• the trajectory view consists of the interleaved sequence (I1, T1, . . . , IN , TN ).For each view, we run a forward pass through the VLM and take the final hidden state of the last token as its sequence representation, following prior work on JEPA-style fine-tuning of decoder-only language models (Huang et al., 2025a): 
+
+hx = Enc (x), hR = Enc (R).Using separate forward passes avoids cross-view information leakage and keeps the method architecture-agnostic, at the cost of additional training-time compute. This overhead applies only during training; inference remains identical to standard VLM decoding. A lightweight predictor network then takes the input encoding hx and produces a predicted version of the trajectory embedding. 
+
+3.3 Latent Trajectory Predictor 
+
+To map the input representation hx to the trajectory latent space, we use a predictor built from the VLM itself. Following prior tied-weights JEPA formulations (Huang et al., 2025a), we append K learnable special tokens [PRED] to the serialized input x, and define the predicted trajectory representation as the hidden state of the final predictor token: ˆhR = Pred (hx).Intuitively, the predictor allows the model to perform additional nonlinear computation over the image-question representation before producing the target latent (see visualization in Figure 1). When K = 0, the predictor reduces to the identity map. In practice, using predictor tokens lets us reuse the VLM’s existing self-attention stack rather than introducing a separate MLP or auxiliary transformer, thereby keeping the method simple and parameter-efficient. 4Preprint. Under review. 
+
+3.4 Predictive Embedding Objective 
+
+Our central training signal is a JEPA-style predictive embedding loss that aligns the predicted latent ˆhR with the encoded expert trajectory hR. We define 
+
+LJEPA = D
+
+ ˆhR, sg [hR]
+
+
+
+, (1) where D(·, ·) is a distance function and sg [·] denotes stop-gradient. In our experiments, we use SmoothL1 loss for D.This objective encourages the model to learn a compact representation of the effect of expert tool use and multimodal reasoning, rather than explicitly reconstructing intermediate image edits. In this sense, PEARL learns predictive trajectory embeddings rather than latent image generation (see Figure 1). 
+
+3.5 Next-Latent Prediction 
+
+A potential limitation of using the final hidden state of a decoder as a sequence represen-tation is that it may not reliably summarize all relevant preceding context. To encourage hidden states to behave as predictive summary states, we add a next-latent prediction objective inspired by recent work on latent dynamics in transformers (Teoh et al., 2025). Let ht denote the hidden state at time step t within the serialized trajectory. A lightweight latent predictor is trained to forecast future hidden states ˆht+i from the current state ht, for a prediction horizon d. We optimize 
+
+LNextLat = Et
+
+"
+
+1
+
+d
+
+> d
+
+# ∑
+
+> i=1
+
+SmoothL1Loss 
+
+
+
+sg [ht+i ], ˆht+i
+
+#
+
+. (2) This objective encourages hidden states to be informative about future trajectory evolution, making them better suited for sequence-level latent alignment. Specifically, Teoh et al. (2025) show that optimizing the hidden state transitions as in Equation (2) causes them to converge to belief states , which Kaelbling et al. (1998) define as sufficient statistics of the past history. We view this term as a regularizer that improves the quality of the learned latent representations, rather than as a separate reasoning mechanism. 
+
+3.6 Autoregressive Generation Objective 
+
+In addition to latent alignment, we retain the standard VLM training objective over the textual portions of the expert trajectory. Given the interleaved multimodal context, the model is trained to autoregressively predict each token in the textual segments T1, . . . , TN :
+
+LVLM = −
+
+> N
+
+# ∑ 
+
+> n=1
+> |T n|
+
+# ∑
+
+> t=1
+
+log pθ
+
+
+
+T (t) 
+
+> n
+
+| I 0, Q, I1, T1, . . . , In, T (<t)
+
+> n
+
+
+
+. (3) Here T (t) 
+
+> n
+
+denotes the t-th token of the n-th reasoning step, T (<t) 
+
+> n
+
+denotes all preceding tokens within that step, and the conditioning context includes all prior image-text pairs 
+
+(I1, T1, . . . , In−1, Tn−1) as well as the original input ⟨I 0, Q⟩ . This term ensures that PEARL preserves the VLM’s standard text generation capability, which is necessary for producing final answers at test time. 
+
+3.7 Training Objective 
+
+We jointly optimize the autoregressive generation objective, the predictive embedding objective, and the next-latent regularizer: 
+
+LPEARL = LVLM + λ [LJEPA + LNextLat ], (4) where λ jointly controls the contribution of both latent objectives relative to the generation loss, reflecting the view that LJEPA and LNextLat together constitute a single latent learning signal (see Figure 1). 5Preprint. Under review. These three terms play complementary roles. LVLM preserves the model’s ability to generate answers in the discrete token space. LJEPA teaches the model to predict a latent repre-sentation of expert multimodal reasoning from the original image-question pair. LNextLat 
+
+encourages hidden states to act as belief states (i.e., sufficient summaries of past context), making them more informative encoding targets for LJEPA .
+
+3.8 Inference 
+
+At inference time, PEARL requires only the original image-question pair ⟨I 0, Q⟩ , and answers using the standard generation pipeline of the underlying VLM. It does not invoke external tools, does not generate intermediate edited images, does not use [PRED] tokens, and does not autoregressively decode latent reasoning tokens. The cost of learning from tool use is shifted entirely to training time, preserving simple and efficient inference. 
+
+## 4 Experimental Setting 
+
+Training Regimes. To demonstrate the effectiveness of P EARL at learning from expert tool-use trajectories, we finetune models across three settings: (i) single-type, single tool call per trajectory; (ii) multiple-type, single tool call per trajectory; and (iii) single-type, multiple tool calls per trajectory. We leave the multiple-type, multiple tool call setting to future work, as no open-source training data currently exists for this combination. For setting (i), we use the data from LVR (Li et al., 2025), which provides regions of interest used to crop the input image I0, forming the trajectory R. For setting (ii), we use the ThinkMorph dataset (Gu et al., 2025), which contains four equal-sized subsets corresponding to different tool types: bounding boxes over regions of interest, highlights over charts, jigsaw puzzle reconstructions, and spatial navigation paths over maze images. For setting (iii), we use the PixelReasoner dataset (Su et al., 2024), where each trajectory R contains up to three sequential crops of I0. Dataset statistics and examples are provided in Appendix B. 
+
+Evaluation Benchmarks. Following previous work (e.g., Li et al. 2025) we evaluate P EARL 
+
+on a suite of perception intensive visual question answering (VQA; Antol et al. 2015) benchmarks. These include V* (Wu & Xie, 2023), which tests models’ ability to perform visual search for objects and their attributes (V* DA ) and to identify relative positions of objects (V* RP ). We further evaluate on five subsets of the Blink benchmark (Fu et al., 2025): Counting, IQ, Jigsaw, Spatial Relation, and Relative Reflectance. Finally, we include MMVP (Tong et al., 2024), which probes perceptual robustness using image pairs that CLIP treats as similar despite clear visual differences. All benchmarks are formulated as multiple-choice tasks, enabling straightforward answer parsing (see Appendix B for details). 
+
+Comparison Models. Our primary comparisons use Qwen2.5-VL-7B-Instruct (Team, 2025), enabling direct head-to-head evaluation against all reconstruction-based baselines. To further demonstrate P EARL ’s model-agnostic nature, we also report results for the smaller Qwen2.5-VL-3B-Instruct variant and the 4B variant of Qwen3-VL (Bai et al., 2025). For the single-type, single tool call setting, we compare against LVR (Li et al., 2025), using their released HuggingFace checkpoint, with 4 latent tokens (aka 4 steps) which the authors note yields the best overall quality. We also compare against CoVT (Qin et al., 2025), reporting results directly from the original paper. LVR achieves the strongest performance among reconstruction-based latent reasoning methods (see Figure 5 for an illustration). For the multiple-type, single tool call setting, we compare P EARL against a LoRA-finetuned variant trained on the ThinkMorph data (Gu et al., 2025). We do not compare against the original ThinkMorph model, as it relies on explicit intermediate image generation at inference, making it incomparable with latent reasoning methods. 1 For the single-type, multiple tool call setting, we compare directly against PixelReasoner’s (2024) released model, which invokes tools explicitly at inference. 
+
+> 1We were also unable to reproduce the original ThinkMorph results, as the released checkpoint and evaluation scripts were not available in a complete form at the time of submission.
+
+6Preprint. Under review.                                                                                              
+
+> Model V∗V∗
+> DA V∗
+> RP MMVP Counting IQ Jigsaw Rel. Ref Spatial Rel
+> No fine-tuning
+> Qwen2.5-VL-7B-Instruct 78.5 81.7 73.7 66.7 66.7 26.0 52.0 38.8 87.4
+> Single-type, single tool call
+> CoVT (Qin et al., 2025) 78.0 ——58.7 —————LVR (Li et al., 2025) (4 steps) 80.1 85.2 73.7 72.0 68.3 26.0 51.3 41.0 89.5 SFT (LVR data) 79.1 82.6 73.7 65.7 67.5 26.7 45.3 33.6 88.8 PEARL (LVR data) 81.5 86.1 74.5 73.5 68.3 28.2 53.1 39.6 89.5
+> Multiple-type, single tool call
+> SFT (ThinkMorph data) 42.4 58.3 18.4 36.7 38.3 16.7 22.0 38.8 60.1 PEARL (ThinkMorph data) 73.8 76.5 69.7 75.3 65.0 26.0 53.3 46.3 88.8
+> Single-type, multiple tool calls
+> PixelReasoner (Su et al., 2024) 80.1 81.7 77.6 67.0 66.7 25.3 52.7 42.5 88.1 PEARL (PixelReasoner data) 79.1 81.7 75.0 70.0 70.0 28.7 53.3 40.3 89.5
+
+Table 1: Results for Qwen2.5-VL-7B-Instruct across all training settings. P EARL requires no tool calls at inference time. Bold denotes best result per block. PEARL is finetuned with LoRA (Hu et al., 2021) adapters (rank r = 64 and α = 128). Across settings, we include a LoRA SFT baseline trained on the same data as P EARL and the instruction-tuned model without fine-tuning as a zero-shot baseline. Hyperparameter settings for P EARL are provided in Appendix A. 
+
+## 5 Results 
+
+5.1 How Does P EARL Compare to Reconstruction-based Methods? 
+
+Table 1 compares P EARL against various Qwen2.5-VL-7B-Instruct baselines and comparison systems (across three training settings). As can be seen, P EARL consistently matches or outperforms its respective baselines while requiring no tool calls at inference, an advantage none of the reconstruction-based or tool-augmented methods share. 
+
+Single-type, single tool call. PEARL trained on LVR data outperforms both the SFT baseline and LVR (Li et al., 2025) (4 steps) on V ∗ (81.5 vs. 79.1 and 80.1) and MMVP (73.5 vs. 65.7 and 72.0), while matching LVR on Spatial Rel (89.5) and improving on Jigsaw (53.1 vs. 51.3). Notably, LVR finetunes the entire decoder whereas P EARL uses only LoRA adapters, making these gains more parameter-efficient. CoVT (Qin et al., 2025) underperforms even the zero-shot baseline on MMVP (58.7 vs. 66.7), suggesting its fixed-sequence design is poorly suited to this benchmark. 
+
+Multiple-type, single tool call. The ThinkMorph results are the most striking in the table. PEARL outperforms the SFT baseline by over 31 points on V ∗ (73.8 vs. 42.4) and more than doubles it on MMVP (75.3 vs. 36.7). The SFT baseline collapses under the heterogeneity of four qualitatively different tool types, whereas P EARL ’s trajectory-level embedding target is agnostic to tool type, explaining its robustness across the full ThinkMorph benchmark. 
+
+Single-type, multiple tool calls. PEARL is competitive with PixelReasoner (Su et al., 2024), which explicitly invokes tools at inference time. P EARL outperforms it on MMVP (70.0 vs. 67.0), Counting (70.0 vs. 66.7), Jigsaw (53.3 vs. 52.7), IQ (28.7 vs. 25.3), and Spatial Rel (89.5 vs. 88.1), while PixelReasoner leads on V ∗ 
+
+> RP
+
+(77.6 vs. 75.0) and Rel. Ref (42.5 vs. 40.3). The fact that P EARL matches an inference-time tool-use system while operating as a standard image-to-text model demonstrates that the tool-use signal can be effectively internalized during training through predictive embedding alignment. Ablations in Appendix A confirm that encouraging hidden states to act as belief states meaningfully improves the quality of the learned trajectory embeddings. Figure 4 provides further support: t-SNE visualizations show that P EARL induces coherent clusters that align the two views ( ⟨I 0, Q⟩ and R) across tasks, whereas SFT produces fragmented clusters, confirming that predictive embedding alignment learns more structured representations. 7Preprint. Under review.                                                                                                 
+
+> Model V∗V∗
+> DA V∗
+> RP MMVP Counting IQ Jigsaw Rel. Ref Spatial Rel
+> Qwen2.5-VL-3B-Instruct
+> No fine-tuning 56.0 53.0 60.5 59.3 65.8 26.0 45.3 44.8 80.4 LVR (Li et al., 2025) (4 steps) 64.9 69.6 60.5 54.7 —29.3 52.7 ——PEARL (LVR data) 73.8 82.6 60.5 68.7 66.7 29.3 51.3 41.8 84.6
+> PEARL (PixelReasoner data) 69.6 78.3 56.6 63.7 67.5 30.7 49.3 43.3 81.8 PEARL (ThinkMorph data) 62.8 69.6 52.6 60.0 61.7 29.3 43.3 35.1 78.3
+> Qwen3-VL-4B-Instruct
+> No fine-tuning 81.2 86.1 73.7 75.7 65.8 24.0 68.0 62.7 83.9 PEARL (LVR data) 81.7 85.2 76.3 80.0 67.5 27.3 70.0 53.7 85.3 PEARL (PixelReasoner data) 79.6 82.6 75.0 77.3 70.8 25.3 68.0 57.5 87.4
+> PEARL (ThinkMorph data) 75.4 81.7 65.8 76.3 66.7 26.7 75.3 66.4 81.8
+
+Table 2: Results for smaller model variants (Qwen2.5-VL-3B-Instruct and Qwen3-VL-4B-Instruct) across three training regimes. Bold denotes best result per block. 
+
+5.2 What is the Effect of Training Regime on P EARL ?
+
+Although no single training regime dominates uniformly across all benchmarks, clear pat-terns emerge. The LVR regime (single-type, single tool call) is strongest on visual search 
+
+tasks, yielding the highest scores on V ∗ (81.5) and V ∗ 
+
+> DA
+
+(86.1). The PixelReasoner regime (single-type, multiple tool calls) performs best on tasks requiring counting and spatial rea-soning , leading on Counting (70.0) and matching the best result on Spatial Rel (89.5). The ThinkMorph regime (multiple-type, single tool call) stands out on perceptual robustness 
+
+benchmarks, leading clearly on MMVP (75.3) and Rel. Ref (46.3), suggesting that exposure to diverse tool types improves fine-grained perceptual discrimination. Taken together, these results indicate that the three regimes are complementary rather than competing.A natural direction for future work is a combined training strategy that draws on all three regimes simultaneously, which we would expect to yield stronger across-the-board performance. 
+
+5.3 Does P EARL Generalise Across Model Sizes and Architectures? 
+
+Table 2 reports results for smaller model variants, demonstrating that P EARL ’s gains are not specific to the 7B scale or to the Qwen2.5 architecture. PEARL trained on LVR data substantially outperforms the 3B LVR baseline across nearly all benchmarks — most strikingly on V ∗ (73.8 vs. 64.9) and MMVP (68.7 vs. 54.7) — despite using only LoRA adapters. This mirrors the pattern observed at 7B and confirms that predictive embedding learning scales down gracefully. The PixelReasoner-trained variant performs slightly lower overall but remains competitive on Counting and Rel. Ref, consistent with the regime-specific patterns observed in Table 1. The zero-shot Qwen3-VL-4B baseline is already strong, particularly on Jigsaw (68.0) and Rel. Ref (62.7), which substantially exceed the corresponding 7B zero-shot scores, reflecting the stronger perceptual capabilities of the Qwen3 architecture. P EARL trained on LVR data improves further on V ∗ (81.7 vs. 81.2) and MMVP (80.0 vs. 75.7), while the PixelReasoner-trained variant gains on Spatial Rel (87.4 vs. 83.9). Both variants show some regression on Rel. Ref relative to the zero-shot baseline, which we leave to future investigation. For the 3B variant, P EARL trained on ThinkMorph underperforms the LVR-trained variant across most benchmarks (V ∗: 62.8 vs. 73.8; MMVP: 60.0 vs. 68.7). This is likely due to two compounding factors: the diverse tool-type signal may require greater model capacity, and ThinkMorph’s verbose, open-ended reasoning steps introduce a training–test format mismatch that smaller models struggle to overcome when producing multiple-choice an-swers. By contrast, the 4B Qwen3-VL variant benefits strongly from the ThinkMorph regime, achieving 75.3 on Jigsaw (vs. 68.0 zero-shot) and 66.4 on Rel. Ref (vs. 62.7 zero-shot), surpass-ing both the LVR- and PixelReasoner-trained variants on these benchmarks — consistent with the 7B finding that diverse tool exposure improves perceptual discrimination. 8Preprint. Under review.       
+
+> 1 2 4 816 32 64
+> 128
+> 54
+> 55
+> 56
+> 57 r=−0.35, R2=0.12
+> steps (log 2)
+> accuracy (%)
+
+BLINK       
+
+> 1 2 4 816 32 64
+> 128
+> 78
+> 80
+> 82 r=0.72, R2=0.51
+> steps (log 2)
+
+V∗      
+
+> 1 2 4 816 32 64
+> 128
+> 70
+> 71
+> 72
+> 73 r=−0.56, R2=0.32
+> steps (log 2)
+
+MMVP       
+
+> 1 2 4 816 32 64
+> 128
+> 62
+> 63
+> 64
+> 65 r=−0.12, R2=0.02
+> steps (log 2)
+
+Average 
+
+Figure 3: Correlation between the number of reasoning steps and accuracy across BLINK (n=697), V ∗(n=191), MMVP ( n=300), and on average ( n=1 , 188). The x-axis uses a log 2 scale; dashed lines show the log-linear trend. Near-zero r and R2 values confirm that embedding quality is stable across reasoning steps. The red line is P EARL trained on LVR. Across both a smaller and a newer model architecture, P EARL consistently matches or improves over its respective fine-tuning baselines without any architecture-specific modifi-cations, confirming its model-agnostic nature. The complementary strengths of the three training regimes identified at 7B (visual search (LVR), spatial and counting abilities (Pixel-Reasoner), and perceptual robustness (ThinkMorph)) generalise across scales, although the ThinkMorph gains appear sensitive to base model capacity. 
+
+5.4 Do Reconstruction-based Methods Actually “Imagine” Images? 
+
+A central motivation for P EARL is the observation that reconstruction-based latent rea-soning methods (Li et al., 2025; Yang et al., 2025; Qin et al., 2025) may not be doing what they claim. These methods assume that autoregressively generating latent to-kens allows a model to “imagine” intermediate image edits in the latent space, and that more tokens should correspond to a more complete imagined transformation. 0 200 400 600 800 1000 
+
+> Number of Latent tokens (Steps) in training
+> 0%
+> 20%
+> 40%
+> 60%
+> 80%
+> 100%
+> Cumulative % of Samples
+> p25=9
+> p50=24
+> p75=65
+> p90=148
+> p99=899
+> 4 idx
+> (12.4%)
+> 8 idx
+> (24.2%)
+> 16 idx
+> (40.7%)
+
+Figure 2: Cumulative distribution func-tion (CDF) of the number of latent tokens per training example (x-axis) over a sam-ple of ∼19k examples used to train LVR. Figure 2 shows that over 75% of the edited im-ages used to supervise LVR contain more than 8 latent tokens during training, as a direct con-sequence of the token count scaling with the number of image patch tokens in each example, yet LVR fixes this to just 4 or 8 tokens at infer-ence. Figure 3 further reveals that model quality does not improve as the number of latent tokens increases, and in some cases slightly degrades, with a weakly negative correlation across BLINK and MMVP. In fact, using just 1 or 2 latent to-kens achieves parity with much higher token counts. This training–inference mismatch, com-bined with the insensitivity of performance to token count, suggests that reconstruction-based methods are not genuinely simulating visual transformations in latent space. Instead, they appear to learn useful embeddings : compact representations that improve answer quality regardless of how many latent tokens are de-coded. This finding directly motivates P EARL : if reconstruction-based methods are learning embeddings anyway, it is more principled to learn these directly via a predictive objective, without the added complexity of autoregressive latent generation and the practical burden of switching between continuous and discrete tokens at inference. 
+
+## 6 Conclusion 
+
+We presented P EARL , a JEPA-inspired framework that learns from expert tool-use trajec-tories in the latent space without requiring explicit tool invocation at inference. Rather than reconstructing intermediate image edits autoregressively, P EARL directly predicts a trajectory-level embedding from the image-question pair, preserving the standard VLM in-ference pipeline. Across three training regimes and multiple perception benchmarks, P EARL 
+
+consistently matches or outperforms reconstruction-based methods and SFT baselines using 9Preprint. Under review. only LoRA adapters, with gains that generalise across model sizes and architectures. Our analysis further challenges the premise of reconstruction-based latent reasoning: perfor-mance is largely insensitive to the number of latent tokens decoded at inference, suggesting these methods learn useful embeddings rather than genuinely imagining image edits. A natural direction for future work is a combined training strategy that draws on all three regimes simultaneously, as well as extending P EARL to settings with diverse, multi-step tool use and explicit latent planning at inference (see Appendix C for further discussion). 
+
+## Ethics Statement 
+
+This work presents P EARL , a framework for training vision-language models to internalize the effects of visual tool use in the latent space. We discuss the ethical considerations most relevant to this research. 
+
+Intended Use and Misuse. PEARL is designed to improve the efficiency and accuracy of multimodal reasoning in VLMs for perception-intensive tasks. As with any method that improves the capability of language models, there is potential for misuse in applications that generate misleading visual interpretations or automate harmful decision-making. We encourage practitioners to apply appropriate safeguards when deploying systems built on this work in high-stakes settings. 
+
+Data and Bias. Our experiments rely on publicly available datasets (LVR, ThinkMorph, PixelReasoner) and pre-trained models (Qwen2.5-VL, Qwen3-VL). Any biases present in these data sources or base models may be inherited or amplified by P EARL . We did not conduct a systematic bias audit and caution against deployment in sensitive domains without further evaluation. 
+
+Environmental Cost. Training P EARL requires two forward passes per example, roughly doubling compute relative to standard fine-tuning. All experiments were conducted on H100 and H200 GPUs. We partially mitigate this cost by using LoRA adapters rather than full fine-tuning, and by training for a limited number of steps or epochs per regime. 
+
+Broader Impact. By eliminating the need for explicit tool invocation at inference, P EARL 
+
+reduces the latency and resource cost of deploying tool-augmented VLMs, which may make capable multimodal reasoning more accessible. We release model weights and code to support reproducibility and further research. 
+
+## References 
+
+Stanislaw Antol, Aishwarya Agrawal, Jiasen Lu, Margaret Mitchell, Dhruv Batra, C Lawrence Zitnick, and Devi Parikh. Vqa: Visual question answering. In Proceedings of the IEEE international conference on computer vision , pp. 2425–2433, 2015. Mido Assran, Adrien Bardes, David Fan, Quentin Garrido, Russell Howes, Mojtaba, Komeili, Matthew Muckley, Ammar Rizvi, Claire Roberts, Koustuv Sinha, Artem Zholus, Sergio Arnaud, Abha Gejji, Ada Martin, Francois Robert Hogan, Daniel Dugas, Piotr Bojanowski, Vasil Khalidov, Patrick Labatut, Francisco Massa, Marc Szafraniec, Kapil Krishnakumar, Yong Li, Xiaodong Ma, Sarath Chandar, Franziska Meier, Yann LeCun, Michael Rab-bat, and Nicolas Ballas. V-jepa 2: Self-supervised video models enable understanding, prediction and planning, 2025. URL https://arxiv.org/abs/2506.09985 .Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-vl technical report, 2025. URL 
+
+https://arxiv.org/abs/2511.21631 .10 Preprint. Under review. Delong Chen, Mustafa Shukor, Theo Moutakanni, Willy Chung, Jade Yu, Tejaswi Kasarla, Yejin Bang, Allen Bolourchi, Yann LeCun, and Pascale Fung. Vl-jepa: Joint embedding predictive architecture for vision-language, 2026. URL https://arxiv.org/abs/2512. 10942 .Jiwan Chung, Junhyeok Kim, Siyeol Kim, Jaeyoung Lee, Min Soo Kim, and Youngjae Yu. v1: Learning to point visual tokens for multimodal grounded reasoning, 2026. URL 
+
+https://arxiv.org/abs/2505.18842 .Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A. Smith, Wei-Chiu Ma, and Ranjay Krishna. Blink: Multimodal large language models can see but not perceive. In Ale ˇs Leonardis, Elisa Ricci, Stefan Roth, Olga Russakovsky, Torsten Sattler, and G ¨ul Varol (eds.), Computer Vision – ECCV 2024 , pp. 148–166, Cham, 2025. Springer Nature Switzerland. ISBN 978-3-031-73337-6. Xinyu Geng, Peng Xia, Zhen Zhang, Xinyu Wang, Qiuchen Wang, Ruixue Ding, Chenxi Wang, Jialong Wu, Kuan Li, Yida Zhao, Huifeng Yin, Yong Jiang, Pengjun Xie, Fei Huang, Huaxiu Yao, Yi R. Fung, and Jingren Zhou. Webwatcher: Breaking new frontiers of vision-language deep research agent. In The Fourteenth International Conference on Learning Representations , 2026. URL https://openreview.net/forum?id=8jsaazdAb3 .Halil Alperen Gozeten, Muhammed Emrullah Ildiz, Xuechen Zhang, Hrayr Harutyunyan, Ankit Singh Rawat, and Samet Oymak. Continuous chain of thought enables parallel exploration and reasoning. In The Fourteenth International Conference on Learning Represen-tations , 2026. URL https://openreview.net/forum?id=sTPKDKn5ig .Jiawei Gu, Yunzhuo Hao, Huichen Will Wang, Linjie Li, Michael Qizhe Shieh, Yejin Choi, Ranjay Krishna, and Yu Cheng. Thinkmorph: Emergent properties in multimodal inter-leaved chain-of-thought reasoning, 2025. URL https://arxiv.org/abs/2510.27492 .Shibo Hao, Sainbayar Sukhbaatar, DiJia Su, Xian Li, Zhiting Hu, Jason Weston, and Yuan-dong Tian. Training large language models to reason in a continuous latent space, 2024. URL https://arxiv.org/abs/2412.06769 .Yunzhuo Hao, Jiawei Gu, Huichen Will Wang, Linjie Li, Zhengyuan Yang, Lijuan Wang, and Yu Cheng. Can mllms reason in multimodality? emma: An enhanced multimodal reasoning benchmark. arXiv preprint arXiv:2501.05444 , 2025. Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language models. CoRR ,abs/2106.09685, 2021. URL https://arxiv.org/abs/2106.09685 .Hai Huang, Yann LeCun, and Randall Balestriero. Llm-jepa: Large language models meet joint embedding predictive architectures, 2025a. URL https://arxiv.org/abs/2509. 14252 .Zeyi Huang, Yuyang Ji, Anirudh Sundara Rajan, Zefan Cai, Wen Xiao, Junjie Hu, and Yong Jae Lee. Visualtoolagent (VisTA): A reinforcement learning framework for visual tool selection, 2025b. URL https://arxiv.org/abs/2505.20289 .Leslie Pack Kaelbling, Michael L. Littman, and Anthony R. Cassandra. Planning and acting in partially observable stochastic domains. Artificial Intelligence , 101(1):99–134, 1998. ISSN 0004-3702. doi: https://doi.org/10.1016/S0004-3702(98)00023-X. URL https: //www.sciencedirect.com/science/article/pii/S000437029800023X .Bangzheng Li, Ximeng Sun, Jiang Liu, Ze Wang, Jialian Wu, Xiaodong Yu, Hao Chen, Emad Barsoum, Muhao Chen, and Zicheng Liu. Latent visual reasoning, 2025. URL 
+
+https://arxiv.org/abs/2509.24251 .Daniel Nichols, Prajwal Singhania, Charles Jekel, Abhinav Bhatele, and Harshitha Menon. Optimizing agentic language model inference via speculative tool calls, 2025. URL 
+
+https://arxiv.org/abs/2512.15834 .11 Preprint. Under review. Yiming Qin, Bomin Wei, Jiaxin Ge, Konstantinos Kallidromitis, Stephanie Fu, Trevor Darrell, and Xudong Wang. Chain-of-visual-thought: Teaching vlms to see and think better with continuous visual tokens. arXiv preprint arXiv:2511.19418 , 2025. Hao Shao, Shengju Qian, Han Xiao, Guanglu Song, Zhuofan Zong, Letian Wang, Yu Liu, and Hongsheng Li. Visual cot: Unleashing chain-of-thought reasoning in multi-modal language models, 2024. Alex Su, Haozhe Wang, Weiming Ren, Fangzhen Lin, and Wenhu Chen. Pixel reasoner: Incentivizing pixel-space reasoning with curiosity-driven reinforcement learning. arXiv preprint arXiv:2505.15966 , 2024. Zhao Yu Su, Linjie Li, Mingyang Song, Yunzhuo Hao, Zhengyuan Yang, Jun Zhang, Guanjie Chen, Jiawei Gu, Juntao Li, Xiaoye Qu, and Yu Cheng. Openthinkimg: Learning to think with images via visual tool reinforcement learning. ArXiv , abs/2505.08617, 2025. URL 
+
+https://api.semanticscholar.org/CorpusID:278534476 .Wenhui Tan, Jiaze Li, Jianzhong Ju, Zhenbo Luo, Ruihua Song, and Jian Luan. Think silently, think fast: Dynamic latent compression of LLM reasoning chains. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL https:// openreview.net/forum?id=AQsko3PPUe .Qwen Team. Qwen2.5-vl, January 2025. URL https://qwenlm.github.io/blog/qwen2. 5-vl/ .Jayden Teoh, Manan Tomar, Kwangjun Ahn, Edward S. Hu, Pratyusha Sharma, Riashat Islam, Alex Lamb, and John Langford. Next-latent prediction transformers learn compact world models, 2025. URL https://arxiv.org/abs/2511.05963 .Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide shut? exploring the visual shortcomings of multimodal llms. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pp. 9568–9578, June 2024. Bin Wu, Edgar Meij, and Emine Yilmaz. A joint optimization framework for enhancing efficiency of tool utilization in LLM agents. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (eds.), Findings of the Association for Computational Linguistics: ACL 2025 , pp. 22361–22373, Vienna, Austria, July 2025a. Association for Computational Linguistics. ISBN 979-8-89176-256-5. doi: 10.18653/v1/2025.findings-acl. 1149. URL https://aclanthology.org/2025.findings-acl.1149/ .Mingyuan Wu, Jingcheng Yang, Jize Jiang, Meitang Li, Kaizhuo Yan, Hanchao Yu, Minjia Zhang, Chengxiang Zhai, and Klara Nahrstedt. Vtool-r1: Vlms learn to think with images via reinforcement learning on multimodal tool use. 2025b. URL https://api. semanticscholar.org/CorpusID:278904571 .Penghao Wu and Saining Xie. V*: Guided visual search as a core mechanism in multimodal llms. arXiv preprint arXiv:2312.14135 , 2023. Zeyuan Yang, Xueyang Yu, Delin Chen, Maohao Shen, and Chuang Gan. Machine mental imagery: Empower multimodal reasoning with latent visual tokens, 2025. URL https: //arxiv.org/abs/2506.17218 .Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, Cong Wei, Botao Yu, Ruibin Yuan, Renliang Sun, Ming Yin, Boyuan Zheng, Zhenzhu Yang, Yibo Liu, Wenhao Huang, Huan Sun, Yu Su, and Wenhu Chen. Mmmu: A massive multi-discipline multimodal understanding and reasoning benchmark for expert agi. In Proceedings of CVPR , 2024. Jiyang Zheng, Jialiang Shen, Yu Yao, Min Wang, Yang Yang, Dadong Wang, and Tongliang Liu. Chain-of-focus prompting: Leveraging sequential visual cues to prompt large autore-gressive vision models. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum?id=noidywkBba .12 Preprint. Under review. 80 60 40 20 0 20 40 60      
+
+> t-SNE dim 1
+> 10
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> t-SNE dim 2
+> ThinkMorph PEARL
+> Jigsaw Assembly
+> Spatial Navigation
+> View 1: I, Q
+> View 2: R
+> 40 20 020 40 60
+> t-SNE dim 1
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> t-SNE dim 2
+> ThinkMorph SFT
+
+Figure 4: T-SNE visualization of the views I0, Q and R across tasks for Qwen2.5-VL-7B-Instruct trained with P EARL on the left, compared with simple fine-tuning with next-token prediction on the right. 
+
+## A Additional Results and Hyperparameter Settings 
+
+A.1 Hyperparameter Settings 
+
+We set λ in Equation (4) to 0.2 and the number of [PRED] tokens to 4 across all training settings. All experiments are conducted on either 4 NVIDIA H200 or 6 NVIDIA H100 GPUs. We train on LVR data for 2,500 steps, on PixelReasoner data for 4 epochs, and on ThinkMorph data for 1 epoch, selecting the best checkpoint based on validation loss. On H200s, we use a per-device batch size of 4 with gradient accumulation of 4; on H100s, we reduce the per-device batch size to 2 to fit within memory. For all runs, LoRA adapters are configured with rank r = 64 and α = 128. At inference, we constrain model outputs to the option letter using a maximum of 4 tokens, enabling straightforward answer parsing and ensuring fair, direct comparison with LVR (Li et al., 2025). 
+
+A.2 Embedding Visualisation 
+
+Figure 4 visualizes t-SNE projections of the embeddings learned by P EARL and a LoRA SFT baseline, both trained on ThinkMorph data. For P EARL , the two views, i.e., ⟨I 0, Q⟩ 
+
+and R, form coherent, well-separated clusters that align across tasks (Jigsaw and Spatial Navigation), indicating that the predictive embedding objective encourages the model to develop shared, task-discriminative representations of the input and trajectory. By contrast, the SFT baseline produces fragmented clusters in which the two views are not consistently aligned, suggesting that next-token prediction alone does not induce the same degree of structured latent organisation. This qualitative difference is consistent with PEARL ’s quantitative gains and supports the view that the JEPA objective encourages more semantically meaningful representations than standard fine-tuning. 
+
+A.3 Ablation for Next-Latent Prediction 
+
+In this section, we show that using next latent predictions for training the hidden states ht
+
+to be the belief states for representing views, aids model quality. Table 1 ablates the contribution of LNextLat by comparing P EARL against a variant trained without this objective. Removing LNextLat leads to consistent degradation across most benchmarks, with the most notable drops on V ∗ (80.1 vs. 81.5), V ∗ 
+
+> DA
+
+(83.5 vs. 86.1), MMVP (69.3 vs. 73.5), and IQ (24.0 vs. 28.2). The only benchmark where the ablated variant is competitive is V ∗ 
+
+> RP
+
+(75.0 vs. 74.5), suggesting that the next-latent objective is most beneficial for tasks requiring holistic visual understanding rather than simple relative positioning. 13 Preprint. Under review. 
+
+Model V∗ V∗ 
+
+> DA
+
+V∗ 
+
+> RP
+
+MMVP Counting IQ Jigsaw Rel. Ref Spatial Rel 
+
+> Single-type, single tool call
+
+PEARL 81.5 86.1 74.5 73.5 68.3 28.2 53.1 39.6 89.5 
+
+PEARL w/o LNextLat 80.1 83.5 75.0 69.3 65.0 24.0 52.7 42.5 89.5 PEARL w/o LNextLat , LJEPA 79.1 82.6 73.7 65.7 67.5 26.7 45.3 33.6 88.8 Table 3: Ablation of LNextLat on the single-type, single tool call setting (LVR data, Qwen2.5-VL-7B-Instruct). Removing the next-latent prediction objective consistently degrades per-formance, confirming that encouraging hidden states to act as belief states improves the trajectory embeddings learned by LJEPA . Bold denotes best result per column.  
+
+> Input Image ximg
+
+Transformer Backbone             
+
+> · · ·
+> <lat> </lat>
+> image embeddings text query latent reasoning tokens text answer
+> Tool Output ztool
+> (depth / segm.)
+> Llatent
+> supervise
+> continuous supervision
+> Ltext
+> discrete supervision
+> Ground-Truth Text ytext
+> Image Encoder
+> predicted latent states predicted text
+> · · · · · ·
+> Legend: Image Embedding Text Token Latent Token (continuous) Special Delimiter
+
+Figure 5: Training architecture for latent-augmented multimodal reasoning. The input image ximg is encoded into image embeddings and concatenated with text query tokens. The model autoregressively generates a sequence of continuous latent reasoning tokens (delimited by <lat> . . . </lat> ), followed by discrete text answer tokens. Latent tokens are supervised with a continuous regression loss Llatent against a visual tool output ztool (e.g. a depth map or segmentation mask), while text tokens are supervised with a standard cross-entropy loss 
+
+Ltext against ground-truth text ytext .These results support the theoretical motivation for LNextLat : by encouraging hidden states to converge to belief states (sufficient summaries of past context), the objective produces more informative encoding targets for LJEPA . Without this regularizer, the final hidden state of the decoder is a less reliable sequence representation, which in turn weakens the predictive embedding alignment signal. LNextLat therefore acts as a necessary complement to LJEPA rather than a redundant auxiliary objective. 14 Preprint. Under review. 
+
+## B Examples and Dataset Statistics 
+
+B.1 Reconstruction-based Multimodal Latent Reasoning 
+
+Figure 5 illustrates the general training architecture shared by reconstruction-based latent reasoning methods. The input image is first passed through an image encoder to produce a sequence of image embeddings, which are concatenated with text query tokens and fed into a transformer backbone. The model is then trained to autoregressively generate a sequence of continuous latent reasoning tokens, delimited by special <lat> . . . </lat> 
+
+markers, before switching to discrete text generation to produce the final answer. The latent tokens are supervised with a continuous regression loss Llatent against the output of an external visual tool (e.g., a depth map or segmentation mask), while the text answer tokens are supervised with a standard cross-entropy loss Ltext against ground-truth text. A key characteristic of this design is the autoregressive dependency among latent tokens: each generated latent token is fed back as input to predict the next, effectively requiring the model to “imagine” the tool output token-by-token before transitioning back to discrete generation. This training-inference asymmetry — where many latent tokens are used during training but only a small fixed number are decoded at test time — is a central limitation that PEARL is designed to avoid. 
+
+B.2 Training Data 
+
+The LVR dataset (Li et al., 2025) contains over 450k training samples; however, we find that loss curves plateau well before exhausting the data, and therefore train for at most 2,500 steps, reporting results on the best checkpoint. The ThinkMorph dataset (Gu et al., 2025) comprises 6k samples per subset across four tool types, yielding 24k training samples in total. Its reasoning steps are notably more verbose than those in LVR or PixelReasoner, which contributes to the training–test distribution mismatch observed for smaller models in Section 5. We utilize the SFT dataset from PixelReasoner (Su et al., 2024), which contains 
+
+∼ 4k samples with sequential image transformations over I0, comprising between 0 and 3 sequential crops of the original image. Below, we provide examples of training samples from Thinkmorph (Gu et al., 2025), Viscot (Shao et al., 2024)–which was used by LVR (Li et al., 2025), and PixelReasoner’s (Su et al., 2024) finetuning dataset. 
+
+> PixelReasoner Example #13: Visual Question Answering with Tool Use
+> System
+
+You are a helpful assistant. You may call one or more functions to assist with the user query. Available tools: • crop image normalized(bbox 2d, target image) — zoom into abounding-box region of an image. • select frames(target frames) — select frames from a video. For each function call, return a JSON object inside <tool call>...</tool call> 
+
+tags. 15 Preprint. Under review. 
+
+User 
+
+What does the text on the pink lantern say? A: Sakura Festival B: Cherry Blossom Viewing 
+
+C: Hanami Celebration D: Spring Lanterns 
+
+Guidelines: Understand the visual information and the query. Determine whether to use the provided tools. Reason step by step and put your final answer inside {} .
+
+Assistant 
+
+The image shows a serene outdoor scene with cherry blossoms in full bloom. A person holding an umbrella walks across a bridge. Pink lanterns with text are strung along the area, likely part of a festival. I will zoom in to read the text on the pink lantern more clearly.   
+
+> åtool call
+> {"name": "crop image normalized", "arguments": {"bbox 2d": [0.0, 0.3, 0.4, 0.6], "target image": 1 }}
+
+16 Preprint. Under review. 
+
+Tool Result 
+
+Here is the cropped image: 
+
+Assistant 
+
+I can see the lanterns more clearly now, but the text needs a closer look.   
+
+> åtool call
+> {"name": "crop image normalized", "arguments": {"bbox 2d": [0.1, 0.1, 0.2, 0.2], "target image": 2 }}
+
+Tool Result 
+
+Here is the cropped image: 
+
+17 Preprint. Under review. 
+
+> Assistant
+
+The close-up clearly shows the text on the pink lantern reads “Sakura Festival” .
+
+{A}
+
+> Viscot (LVR) Example
+> System
+
+You are a helpful assistant. 
+
+> User
+
+What are the young men doing with their hands? Provide a short and direct response. 
+
+18 Preprint. Under review. 
+
+> Assistant
+
+To determine what the young men are doing with their hands, I will focus on the hand region of the individuals visible in the image. I will draw a red bounding box around that region at coordinates [0.482, 0.396, 0.548, 0.45] .
+
+> Tool Result
+> Assistant
+
+They are looking at their hands. 
+
+> ThinkMorph Example: Chart Refocus
+> System
+
+You are a helpful assistant. 19 Preprint. Under review. 
+
+> User
+
+What was the total amount of towns, cities, and villages in the US in 2019 with population less than 25000? 
+
+> Assistant
+
+To answer the question about the total number of towns, cities, and villages in the US in 2019 with a population less than 25,000, I need to identify the relevant segments in the chart that correspond to this population range. The visualization displays the number of incorporated places grouped by population brackets. Specifically, I should look for the bars labeled ’Under 10,000’ and ’10,000 to 24,999’, since both categories fall under the threshold of 25,000 residents. No other category applies, as the next smallest bracket, ’25,000 to 49,999’, exceeds the limit set by the query. By highlighting these two horizontal bars, I can clearly indicate the areas that collectively represent all places with populations below 25,000. This focus directly connects to the population constraint in the question and isolates the relevant data needed to compute the total. Therefore, the manipulation involves drawing a red bounding box around both the ’Under 10,000’ and the ’10,000 to 24,999’ rows in the chart. 
+
+> Tool Result
+
+20 Preprint. Under review. 
+
+> Assistant
+
+To determine the total number of towns, cities, and villages in the US in 2019 with a population less than 25,000, I first identify the relevant population categories in the chart. The two categories that fit this criterion are ’Under 10,000’ and ’10,000 to 24,999’, which are highlighted with red boxes in the edited visualization. The numbers associated with these categories are 16,410 for ’Under 10,000’ and 1,572 for ’10,000 to 24,999’. Summing these two values gives the total number of incorporated places with populations below 25,000: 16,410 + 1,572 = 17,982. Therefore, the total amount of towns, cities, and villages in the US in 2019 with population less than 25,000 is 17,982. 
+
+> ThinkMorph Example: Visual Search
+> System
+
+You are a helpful assistant. 
+
+> User
+
+What is the fruit that is on the plate called? 
+
+> Assistant
+
+To answer the question about the fruit on the plate, begin by visually scanning the image for a plate. The plate is located in the lower right portion of the image, on the tabletop in front of the child. Next, look closely at what is placed on the plate. There is a pale yellow, curved object with a thick peel partially removed, exposing the inner fruit. The shape, color, and partially peeled nature are strong visual cues that this is a fruit. The red bounding box should be drawn around this item on the plate to highlight it as the focal point for identifying the fruit. 21 Preprint. Under review. 
+
+> Tool Result
+> Assistant
+
+With the fruit on the plate now highlighted by the red bounding box, it’s easy to closely examine its characteristics. The fruit has a distinctive elongated, curved shape and a pale yellow peel that is partially removed, revealing the soft, creamy flesh inside. These visual details—such as the color, the way the peel splits away from the fruit, and the overall shape—are classic identifiers for a banana. By focusing on the region inside the red bounding box, we can confidently determine that the fruit on the plate is a banana. 
+
+> ThinkMorph Example: Spatial Navigation
+> System
+
+You are a maze solver. Your goal is to guide a player from the start to the goal on a grid map while avoiding holes. The player can move one square at a time in the directions left (L), right (R), up (U), or down (D). The frozen lake is not slippery; the player will always move in the intended direction. Moving off the edge or falling into a hole results in failure. Reaching the goal means success. 22 Preprint. Under review. 
+
+> User
+
+Provide your solution as a sequence of moves wrapped in boxed {} , such as 
+
+{L,R,U,D }. The moves should be comma-separated. 
+
+> Assistant
+
+To get a clear sense of the challenge, I should first lay out the details of the maze. The grid is 6 rows by 6 columns. The starting point is in the bottom right corner, specifically at row 5, column 5 if counting from the top-left as (0,0). The goal is near the top left, at row 1, column 1. There are several ice holes scattered around the grid: •• The first row has holes at positions (0,0) and (0,2). • The second row contains two holes: one at (1,0) and another at (1,5). • The fourth row has a hole at (4,3). • The last row (row 5) has a hole at (5,0). All other squares are safe frozen surfaces. Time to move on to plotting the solution and finding the optimal path. 23 Preprint. Under review. 
+
+> Tool Result
+> Assistant
+
+Reviewing my solution, the red path begins at the starting square in the bottom right and follows the moves: Left, Up, Left, Left, Left, Up, Up. Step by step: • First, move left to avoid the edge. • Then, up to stay clear of the hole below. • Continue left three times, traversing safe frozen squares and bypassing the hole above. • Go up twice to reach the goal square near the top left, successfully avoid-ing all holes and edges. Each move lands on a safe frozen surface, and the path finishes directly on the goal. This confirms the route is valid and optimal. Final solution: {L,U,L,L,L,U,U }
+
+B.3 Evaluation Data 
+
+We draw our evaluation tasks from MMVP (Tong et al., 2024), V* (Wu & Xie, 2023), and subsets of the Blink dataset (Fu et al., 2025). Table 4 provides a brief description of each dataset along with the number of evaluation samples. 
+
+Dataset Description No. Samples 
+
+V* Object attributes 191 MMVP Perception Robustness 300 Counting Counting objects 120 IQ Pattern Matching 150 Jigsaw Multi-image jigsaw resolution 150 Relative Reflectance Perception 134 Spatial Relation Relation between objects 143 Table 4: Overview of datasets and number of evaluation samples. 24 Preprint. Under review. 
+
+## C Limitations and Future Work 
+
+While P EARL demonstrates strong performance across three training regimes and multiple model scales, several limitations remain. 
+
+Planning over Learned Embeddings. PEARL internalizes the effects of tool use in the latent space but does not explicitly plan sequences of actions at inference. The predictive embeddings learned by LJEPA encode a holistic representation of the full expert trajectory, which implicitly captures planning structure, but the model does not reason step-by-step over these representations at test time. A natural extension would be to use the learned embeddings as a latent world model for explicit multi-step planning, enabling the model to reason about longer action horizons without invoking external tools. 
+
+Interpretability. Because P EARL operates entirely in a continuous embedding space, the learned trajectory representations are not directly interpretable. Unlike reconstruction-based methods, which at least nominally produce latent tokens aligned with intermediate image edits, P EARL makes no claim about what individual dimensions of the embedding encode. While the t-SNE visualizations in Figure 4 confirm that the representations are structured and task-discriminative, understanding what the model has internalized about tool use remains an open question. Developing probing methods or disentangled representations that make the learned latent structure more transparent is an important direction for future work. 
+
+Training Data Coverage. Our experiments are limited to settings for which open-source expert trajectory data exists. In particular, we do not evaluate the multiple-type, multiple tool call setting due to the absence of suitable training data. As more diverse trajectory datasets become available, we expect P EARL ’s trajectory-level embedding objective to generalize naturally to richer tool-use settings, given that it places no constraints on the number or type of tools present in R.
+
+Training Cost. PEARL requires two separate forward passes per training example to encode the input view and the trajectory view independently, which roughly doubles the training-time compute relative to standard SFT. While this overhead does not affect inference, it may be prohibitive at very large scale. Exploring more efficient encoding strategies, such as shared encoders with cross-view masking or cached trajectory embeddings, is a promising avenue for reducing this cost. 25

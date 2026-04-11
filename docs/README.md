@@ -6,119 +6,113 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-10
-- 运行时间：2026-04-10 20:39:25 UTC
+- 最新运行日期：2026-04-11
+- 运行时间：2026-04-11 19:57:32 UTC
 - 运行状态：成功
-- 本次总论文数：33
-- 精读区：22
+- 本次总论文数：31
+- 精读区：20
 - 速读区：11
 
 ### 今日简报（AI）
-今日精读22篇，速读11篇，聚焦世界模型与规划算法。最值得关注的是几何基础的世界-动作统一模型及利用正逆不对称性的自改进方法。建议读者优先了解世界模型如何通过几何与不对称性实现更智能的自主决策。
-- 详情：[/202604/10/README](/202604/10/README)
+今日精读20篇、速读11篇，重点关注机器人任务泛化与分层规划。最值得关注的是通过梦境学习实现四足机器人高效策略迁移，以及利用潜在世界模型进行分层规划的方法。建议读者优先了解如何将世界模型应用于机器人控制以提升适应能力。
+- 详情：[/202604/11/README](/202604/11/README)
 
 ### 精读区论文标签
-1. [DriveDreamer-Policy: A Geometry-Grounded World-Action Model for Unified Generation and Planning](/202604/10/2604.01765v1-drivedreamer-policy-a-geometry-grounded-world-action-model-for-unified-generation-and-planning)  
-   标签：评分：10.0/10、query:profile-4
-   evidence：用于生成和规划的统一驾驶世界动作模型
-2. [World Action Verifier: Self-Improving World Models via Forward-Inverse Asymmetry](/202604/10/2604.01985v1-world-action-verifier-self-improving-world-models-via-forward-inverse-asymmetry)  
-   标签：评分：10.0/10、query:q1
-   evidence：通过正逆不对称性实现自改进的世界模型
-3. [Learning Task-Invariant Properties via Dreamer: Enabling Efficient Policy Transfer for Quadruped Robots](/202604/10/2604.02911v1-learning-task-invariant-properties-via-dreamer-enabling-efficient-policy-transfer-for-quadruped-robots)  
+1. [Learning Task-Invariant Properties via Dreamer: Enabling Efficient Policy Transfer for Quadruped Robots](/202604/11/2604.02911v1-learning-task-invariant-properties-via-dreamer-enabling-efficient-policy-transfer-for-quadruped-robots)  
    标签：评分：10.0/10、query:q4
    evidence：用于四足机器人的Dreamer世界模型架构
-4. [Hierarchical Planning with Latent World Models](/202604/10/2604.03208v1-hierarchical-planning-with-latent-world-models)  
+2. [Hierarchical Planning with Latent World Models](/202604/11/2604.03208v1-hierarchical-planning-with-latent-world-models)  
    标签：评分：10.0/10、query:q10
-   evidence：利用潜空间世界模型进行分层规划以实现长程控制
-5. [OpenWorldLib: A Unified Codebase and Definition of Advanced World Models](/202604/10/2604.04707v1-openworldlib-a-unified-codebase-and-definition-of-advanced-world-models)  
+   evidence：利用潜世界模型进行分层规划
+3. [DriveVA: Video Action Models are Zero-Shot Drivers](/202604/11/2604.04198v1-driveva-video-action-models-are-zero-shot-drivers)  
    标签：评分：10.0/10、query:profile-4
-   evidence：高级世界模型的统一代码库和定义
-6. [A Frame is Worth One Token: Efficient Generative World Modeling with Delta Tokens](/202604/10/2604.04913v1-a-frame-is-worth-one-token-efficient-generative-world-modeling-with-delta-tokens)  
-   标签：评分：10.0/10、query:q8
-   evidence：利用高维视频的增量标记进行生成式世界建模
-7. [Toward Consistent World Models with Multi-Token Prediction and Latent Semantic Enhancement](/202604/10/2604.06155v1-toward-consistent-world-models-with-multi-token-prediction-and-latent-semantic-enhancement)  
-   标签：评分：10.0/10、query:q1
-   evidence：大语言模型中的内部世界模型与潜空间约束
-8. [INSPATIO-WORLD: A Real-Time 4D World Simulator via Spatiotemporal Autoregressive Modeling](/202604/10/2604.07209v1-inspatio-world-a-real-time-4d-world-simulator-via-spatiotemporal-autoregressive-modeling)  
-   标签：评分：10.0/10、query:profile-4
-   evidence：INSPATIO-WORLD：一种构建具有空间一致性的世界模型的新型实时框架
-9. [Event-Centric World Modeling with Memory-Augmented Retrieval for Embodied Decision-Making](/202604/10/2604.07392v1-event-centric-world-modeling-with-memory-augmented-retrieval-for-embodied-decision-making)  
-   标签：评分：10.0/10、query:profile-4
-   evidence：具身决策的以事件为中心的世界建模
-10. [GIRL: Generative Imagination Reinforcement Learning via Information-Theoretic Hallucination Control](/202604/10/2604.07426v1-girl-generative-imagination-reinforcement-learning-via-information-theoretic-hallucination-control)  
-   标签：评分：10.0/10、query:profile-4
-   evidence：强化学习的潜空间世界模型框架
-11. [MotionScape: A Large-Scale Real-World Highly Dynamic UAV Video Dataset for World Models](/202604/10/2604.07991v1-motionscape-a-large-scale-real-world-highly-dynamic-uav-video-dataset-for-world-models)  
-   标签：评分：10.0/10、query:profile-4
-   evidence：用于世界模型和物理现实模拟的大规模视频数据集
-12. [Multimodal Latent Reasoning via Predictive Embeddings](/202604/10/2604.08065v1-multimodal-latent-reasoning-via-predictive-embeddings)  
-   标签：评分：10.0/10、query:q9
-   evidence：受JEPA启发的潜空间推理框架
-13. [Stop Wandering: Efficient Vision-Language Navigation via Metacognitive Reasoning](/202604/10/2604.02318v1-stop-wandering-efficient-vision-language-navigation-via-metacognitive-reasoning)  
-   标签：评分：9.0/10、query:vlm
-   evidence：基于基础模型的视觉语言导航代理
-14. [Learning Structured Robot Policies from Vision-Language Models via Synthetic Neuro-Symbolic Supervision](/202604/10/2604.02812v1-learning-structured-robot-policies-from-vision-language-models-via-synthetic-neuro-symbolic-supervision)  
-   标签：评分：9.0/10、query:vlm
-   evidence：用于机器人行为的视觉语言模型
-15. [Gram-Anchored Prompt Learning for Vision-Language Models via Second-Order Statistics](/202604/10/2604.03980v1-gram-anchored-prompt-learning-for-vision-language-models-via-second-order-statistics)  
-   标签：评分：9.0/10、query:vlm
-   evidence：通过二阶统计和提示学习适配视觉语言模型 (VLM)
-16. [DriveVA: Video Action Models are Zero-Shot Drivers](/202604/10/2604.04198v1-driveva-video-action-models-are-zero-shot-drivers)  
-   标签：评分：9.0/10、query:q7
    evidence：用于未来视觉预测和动作序列的自动驾驶世界模型
-17. [Veo-Act: How Far Can Frontier Video Models Advance Generalizable Robot Manipulation?](/202604/10/2604.04502v1-veo-act-how-far-can-frontier-video-models-advance-generalizable-robot-manipulation)  
-   标签：评分：9.0/10、query:profile-4
-   evidence：用于理解物理动力学和机器人规划的视频生成模型
-18. [Rethinking Model Efficiency: Multi-Agent Inference with Large Models](/202604/10/2604.04929v1-rethinking-model-efficiency-multi-agent-inference-with-large-models)  
-   标签：评分：9.0/10、query:vlm
-   evidence：对视觉语言模型（VLM）不同组件延迟的全面分析
-19. [MMEmb-R1: Reasoning-Enhanced Multimodal Embedding with Pair-Aware Selection and Adaptive Control](/202604/10/2604.06156v1-mmemb-r1-reasoning-enhanced-multimodal-embedding-with-pair-aware-selection-and-adaptive-control)  
-   标签：评分：9.0/10、query:vlm
-   evidence：利用多模态大语言模型增强推理的多模态嵌入
-20. [Vision-Language Navigation for Aerial Robots: Towards the Era of Large Language Models](/202604/10/2604.07705v1-vision-language-navigation-for-aerial-robots-towards-the-era-of-large-language-models)  
-   标签：评分：9.0/10、query:vlm
-   evidence：空中机器人导航的视觉语言模型综述
-21. [WorldMAP: Bootstrapping Vision-Language Navigation Trajectory Prediction with Generative World Models](/202604/10/2604.07957v1-worldmap-bootstrapping-vision-language-navigation-trajectory-prediction-with-generative-world-models)  
-   标签：评分：9.0/10、query:profile-4
-   evidence：用于视觉语言导航轨迹预测的生成式世界模型
-22. [From nucleotides to semantics: genomic representation learning via joint-embedding predictive architecture](/202604/10/biorxiv-10-64898-2026-04-02-716255-v1-from-nucleotides-to-semantics-genomic-representation-learning-via-joint-embedding-predictive-architecture)  
-   标签：评分：9.0/10、query:q2
+4. [OpenWorldLib: A Unified Codebase and Definition of Advanced World Models](/202604/11/2604.04707v1-openworldlib-a-unified-codebase-and-definition-of-advanced-world-models)  
+   标签：评分：10.0/10、query:q7
+   evidence：高级世界模型的统一代码库和定义
+5. [A Frame is Worth One Token: Efficient Generative World Modeling with Delta Tokens](/202604/11/2604.04913v1-a-frame-is-worth-one-token-efficient-generative-world-modeling-with-delta-tokens)  
+   标签：评分：10.0/10、query:profile-4
+   evidence：在视觉基础模型特征空间中使用增量标记的生成式世界模型
+6. [Toward Consistent World Models with Multi-Token Prediction and Latent Semantic Enhancement](/202604/11/2604.06155v1-toward-consistent-world-models-with-multi-token-prediction-and-latent-semantic-enhancement)  
+   标签：评分：10.0/10、query:profile-4
+   evidence：通过多标记预测和潜语义增强构建一致的世界模型
+7. [INSPATIO-WORLD: A Real-Time 4D World Simulator via Spatiotemporal Autoregressive Modeling](/202604/11/2604.07209v1-inspatio-world-a-real-time-4d-world-simulator-via-spatiotemporal-autoregressive-modeling)  
+   标签：评分：10.0/10、query:profile-4
+   evidence：通过时空自回归建模实现的实时4D世界模拟器
+8. [Event-Centric World Modeling with Memory-Augmented Retrieval for Embodied Decision-Making](/202604/11/2604.07392v1-event-centric-world-modeling-with-memory-augmented-retrieval-for-embodied-decision-making)  
+   标签：评分：10.0/10、query:q1
+   evidence：用于具身决策的以事件为中心的世界模型框架
+9. [GIRL: Generative Imagination Reinforcement Learning via Information-Theoretic Hallucination Control](/202604/11/2604.07426v1-girl-generative-imagination-reinforcement-learning-via-information-theoretic-hallucination-control)  
+   标签：评分：10.0/10、query:profile-4
+   evidence：用于基于模型的强化学习和规划的潜空间世界模型框架
+10. [Multimodal Latent Reasoning via Predictive Embeddings](/202604/11/2604.08065v1-multimodal-latent-reasoning-via-predictive-embeddings)  
+   标签：评分：10.0/10、query:q2
+   evidence：受 JEPA 启发的框架，完全在潜空间中从轨迹学习以进行多模态推理。
+11. [From nucleotides to semantics: genomic representation learning via joint-embedding predictive architecture](/202604/11/biorxiv-10-64898-2026-04-02-716255-v1-from-nucleotides-to-semantics-genomic-representation-learning-via-joint-embedding-predictive-architecture)  
+   标签：评分：10.0/10、query:q2
    evidence：通过联合嵌入预测架构进行基因组表示学习
+12. [Veo-Act: How Far Can Frontier Video Models Advance Generalizable Robot Manipulation?](/202604/11/2604.04502v1-veo-act-how-far-can-frontier-video-models-advance-generalizable-robot-manipulation)  
+   标签：评分：9.0/10、query:q1
+   evidence：视频生成模型理解物理动力学以用于机器人操控
+13. [Task Ecologies and the Evolution of World-Tracking Representations in Large Language Models](/202604/11/2604.05469v1-task-ecologies-and-the-evolution-of-world-tracking-representations-in-large-language-models)  
+   标签：评分：9.0/10、query:profile-4
+   evidence：大语言模型中世界追踪表示的演化与潜世界状态
+14. [MMEmb-R1: Reasoning-Enhanced Multimodal Embedding with Pair-Aware Selection and Adaptive Control](/202604/11/2604.06156v1-mmemb-r1-reasoning-enhanced-multimodal-embedding-with-pair-aware-selection-and-adaptive-control)  
+   标签：评分：9.0/10、query:vlm
+   evidence：多模态大语言模型与多模态嵌入任务
+15. [Spatio-Temporal Grounding of Large Language Models from Perception Streams](/202604/11/2604.07592v1-spatio-temporal-grounding-of-large-language-models-from-perception-streams)  
+   标签：评分：9.0/10、query:vlm
+   evidence：大语言模型在感知流中的时空定位与视觉定位
+16. [Vision-Language Navigation for Aerial Robots: Towards the Era of Large Language Models](/202604/11/2604.07705v1-vision-language-navigation-for-aerial-robots-towards-the-era-of-large-language-models)  
+   标签：评分：9.0/10、query:vlm
+   evidence：无人机视觉语言导航综述及大语言模型与视觉语言模型的集成
+17. [RoboAgent: Chaining Basic Capabilities for Embodied Task Planning](/202604/11/2604.07774v1-roboagent-chaining-basic-capabilities-for-embodied-task-planning)  
+   标签：评分：9.0/10、query:vlm
+   evidence：用于具身任务规划的视觉语言模型 (VLM)
+18. [WorldMAP: Bootstrapping Vision-Language Navigation Trajectory Prediction with Generative World Models](/202604/11/2604.07957v1-worldmap-bootstrapping-vision-language-navigation-trajectory-prediction-with-generative-world-models)  
+   标签：评分：9.0/10、query:profile-4
+   evidence：使用生成式世界模型来支持导航的前瞻性推理和轨迹预测。
+19. [MotionScape: A Large-Scale Real-World Highly Dynamic UAV Video Dataset for World Models](/202604/11/2604.07991v1-motionscape-a-large-scale-real-world-highly-dynamic-uav-video-dataset-for-world-models)  
+   标签：评分：9.0/10、query:q1
+   evidence：专门用于在动态无人机环境中训练和评估世界模型的大规模真实世界视频数据集。
+20. [PriPG-RL: Privileged Planner-Guided Reinforcement Learning for Partially Observable Systems with Anytime-Feasible MPC](/202604/11/2604.08036v1-pripg-rl-privileged-planner-guided-reinforcement-learning-for-partially-observable-systems-with-anytime-feasible-mpc)  
+   标签：评分：9.0/10、query:q5
+   evidence：基于动力学模型的规划器引导强化学习
 
 ### 速读区论文标签
-1. [Leveraging the Value of Information in POMDP Planning](/202604/10/2604.01434v1-leveraging-the-value-of-information-in-pomdp-planning)  
-   标签：评分：8.0/10、query:q5
-   evidence：POMDP 规划与蒙特卡洛树搜索
-2. [Soft MPCritic: Amortized Model Predictive Value Iteration](/202604/10/2604.01477v1-soft-mpcritic-amortized-model-predictive-value-iteration)  
-   标签：评分：8.0/10、query:q5
-   evidence：结合采样规划和价值迭代的强化学习-模型预测控制框架
-3. [Thinking While Listening: Fast-Slow Recurrence for Long-Horizon Sequential Modeling](/202604/10/2604.01577v1-thinking-while-listening-fast-slow-recurrence-for-long-horizon-sequential-modeling)  
-   标签：评分：8.0/10、query:q3
-   evidence：针对序列输入流的潜递归建模
-4. [PLUME: Latent Reasoning Based Universal Multimodal Embedding](/202604/10/2604.02073v1-plume-latent-reasoning-based-universal-multimodal-embedding)  
+1. [Risk-Constrained Belief-Space Optimization for Safe Control under Latent Uncertainty](/202604/11/2604.03868v1-risk-constrained-belief-space-optimization-for-safe-control-under-latent-uncertainty)  
+   标签：评分：8.5/10、query:q10
+   evidence：潜在不确定性下的信念空间优化安全控制
+2. [Cognitive Flexibility as a Latent Structural Operator for Bayesian State Estimation](/202604/11/2604.08130v1-cognitive-flexibility-as-a-latent-structural-operator-for-bayesian-state-estimation)  
+   标签：评分：8.5/10、query:q3
+   evidence：状态空间模型中贝叶斯状态估计的潜在结构算子
+3. [Learning Structured Robot Policies from Vision-Language Models via Synthetic Neuro-Symbolic Supervision](/202604/11/2604.02812v1-learning-structured-robot-policies-from-vision-language-models-via-synthetic-neuro-symbolic-supervision)  
    标签：评分：8.0/10、query:vlm
-   evidence：用于通用多模态嵌入的潜推理框架
-5. [RAE-AR: Taming Autoregressive Models with Representation Autoencoders](/202604/10/2604.01545v1-rae-ar-taming-autoregressive-models-with-representation-autoencoders)  
-   标签：评分：7.0/10、query:q10
-   evidence：研究在自回归范式中使用高维表示自动编码器的挑战
-6. [Bridging Large-Model Reasoning and Real-Time Control via Agentic Fast-Slow Planning](/202604/10/2604.01681v1-bridging-large-model-reasoning-and-real-time-control-via-agentic-fast-slow-planning)  
+   evidence：专门化视觉语言模型，以生成基于多模态感知的结构化机器人策略。
+4. [Contextual Control without Memory Growth in a Context-Switching Task](/202604/11/2604.03479v1-contextual-control-without-memory-growth-in-a-context-switching-task)  
+   标签：评分：8.0/10、query:q6
+   evidence：通过共享循环潜状态进行上下文相关的序列决策
+5. [Latent brain state dynamics predict early amyloid accumulation and cognitive impairment](/202604/11/biorxiv-10-64898-2026-03-31-715655-v1-latent-brain-state-dynamics-predict-early-amyloid-accumulation-and-cognitive-impairment)  
+   标签：评分：7.5/10、query:q3
+   evidence：用于识别潜在脑状态的贝叶斯切换动态系统
+6. [VA-FastNavi-MARL: Real-Time Robot Control with Multimedia-Driven Meta-Reinforcement Learning](/202604/11/2604.03998v1-va-fastnavi-marl-real-time-robot-control-with-multimedia-driven-meta-reinforcement-learning)  
    标签：评分：7.0/10、query:vlm
-   evidence：用于感知和规划的车载视觉语言模型 (VLM)
-7. [A3R: Agentic Affordance Reasoning via Cross-Dimensional Evidence in 3D Gaussian Scenes](/202604/10/2604.01882v1-a3r-agentic-affordance-reasoning-via-cross-dimensional-evidence-in-3d-gaussian-scenes)  
-   标签：评分：7.0/10、query:vlm
-   evidence：针对文本指令动作在 3D 场景中进行序列证据获取和语义推理
-8. [The Latent Space: Foundation, Evolution, Mechanism, Ability, and Outlook](/202604/10/2604.02029v1-the-latent-space-foundation-evolution-mechanism-ability-and-outlook)  
-   标签：评分：7.0/10、query:q10
-   evidence：语言模型中潜空间及其内部过程的综述
-9. [Memory Intelligence Agent](/202604/10/2604.04503v1-memory-intelligence-agent)  
-   标签：评分：6.5/10、query:q5
-   evidence：用于自主推理和规划的Manager-Planner-Executor架构
-10. [Physics Informed Reinforcement Learning with Gibbs Priors for Topology Control in Power Grids](/202604/10/2604.01830v1-physics-informed-reinforcement-learning-with-gibbs-priors-for-topology-control-in-power-grids)  
-   标签：评分：6.0/10、query:q6
-   evidence：基于物理信息强化学习的顺序决策
-11. [ProCeedRL: Process Critic with Exploratory Demonstration Reinforcement Learning for LLM Agentic Reasoning](/202604/10/2604.02006v1-proceedrl-process-critic-with-exploratory-demonstration-reinforcement-learning-for-llm-agentic-reasoning)  
-   标签：评分：6.0/10、query:q6
-   evidence：多轮智能体任务中带有环境反馈的序列决策
+   evidence：将异步视听输入对齐到统一的潜空间表示中
+7. [Generative models for decision-making under distributional shift](/202604/11/2604.04342v1-generative-models-for-decision-making-under-distributional-shift)  
+   标签：评分：7.0/10、query:q6
+   evidence：用于决策和引导随机动力学的生成模型
+8. [Selecting Decision-Relevant Concepts in Reinforcement Learning](/202604/11/2604.04808v1-selecting-decision-relevant-concepts-in-reinforcement-learning)  
+   标签：评分：7.0/10、query:q6
+   evidence：顺序决策中的自动概念选择
+9. [Networking-Aware Energy Efficiency in Agentic AI Inference: A Survey](/202604/11/2604.07857v1-networking-aware-energy-efficiency-in-agentic-ai-inference-a-survey)  
+   标签：评分：6.5/10、query:q7
+   evidence：集成感知、推理和行动的代理AI综述
+10. [Quotient-Based Posterior Analysis for Euclidean Latent Space Models](/202604/11/2604.02739v1-quotient-based-posterior-analysis-for-euclidean-latent-space-models)  
+   标签：评分：6.0/10、query:q3
+   evidence：欧几里得潜空间模型的后验分析
+11. [Analysis of Optimality of Large Language Models on Planning Problems](/202604/11/2604.02910v1-analysis-of-optimality-of-large-language-models-on-planning-problems)  
+   标签：评分：6.0/10、query:q5
+   evidence：大语言模型在经典AI规划问题上的推理
 
 
 <div class="dpr-home-promo-card">
