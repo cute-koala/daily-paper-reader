@@ -1,0 +1,769 @@
+Title: Generative models for decision-making under distributional shift
+
+URL Source: https://arxiv.org/pdf/2604.04342v1
+
+Published Time: Tue, 07 Apr 2026 01:20:03 GMT
+
+Number of Pages: 33
+
+Markdown Content:
+# Generative Models for Decision-Making under Distributional Shift 
+
+Xiuyuan Cheng 1, Yunqin Zhu 2, and Yao Xie ∗21Department of Mathematics, Duke University 
+
+> 2
+
+H. Milton Stewart School of Industrial and Systems Engineering, Georgia Institute of Technology 
+
+April 7, 2026 
+
+Abstract 
+
+Many data-driven decision problems are formulated using a nominal distribution estimated from historical data, while performance is ultimately determined by a deployment distribu-tion that may be shifted, context-dependent, partially observed, or stress-induced. This tutorial presents modern generative models, particularly flow- and score-based methods, as mathematical tools for constructing decision-relevant distributions. From an operations research perspective, their primary value lies not in unconstrained sample synthesis but in representing and trans-forming distributions through transport maps, velocity fields, score fields, and guided stochastic dynamics. We present a unified framework based on pushforward maps, continuity, Fokker– Planck equations, Wasserstein geometry, and optimization in probability space. Within this framework, generative models can be used to learn nominal uncertainty, construct stressed or least-favorable distributions for robustness, and produce conditional or posterior distributions under side information and partial observation. We also highlight representative theoretical guarantees, including forward–reverse convergence for iterative flow models, first-order mini-max analysis in transport-map space, and error-transfer bounds for posterior sampling with generative priors. The tutorial provides a principled introduction to using generative models for scenario generation, robust decision-making, uncertainty quantification, and related problems under distributional shift. 
+
+Keywords: Generative models; distributional shift; decision-making under uncertainty 
+
+# 1 Introduction 
+
+Modern data-driven decision problems are built around forecasts, yet decisions rarely depend only on a point prediction. They depend on an uncertainty distribution: its dependence structure, tail behavior, and the way it shifts across contexts, observations, or regimes. This is where generative models become relevant to operations research. 
+
+> ∗
+
+Corresponding author: yao.xie@isye.gatech.edu. The paper is under review for INFORMS TutORials in Opera-tions Research, 2026. 
+
+1
+
+> arXiv:2604.04342v1 [cs.LG] 6 Apr 2026
+
+In standard predictive tasks in machine learning, one typically seeks to learn a mapping from covariates X to a target Y . A familiar special case is the regression model Y = f (X) + ε, where f
+
+is the unknown function and ε denotes a noise term, but more generally, the goal is to estimate a low-dimensional functional of the conditional law of Y | X, such as a conditional mean, quantile, or class label. In this sense, much of conventional learning is discriminative : its goal is accurate prediction of a specified target, rather than construction of a full data-generating mechanism. By contrast, a generative model aims to represent an entire probability distribution, either joint or conditional. A common formulation is 
+
+Y = gϕ(X, Z ), Z ∼ π0,
+
+where π0 is a simple reference distribution. The learned object is therefore not merely a predictor, but a mechanism for constructing and sampling from a distribution. This distinction is especially important in OR. Decisions under uncertainty are often sensitive not only to the center of a distribution, but also to dependence, tails, and regime variation. In many applications, historical data identify at best a nominal distribution P , while the distribution relevant for planning, robustness, inference, or deployment is a different distribution Q that must be constructed, updated, or perturbed in a principled way. From this perspective, the value of generative models lies not only in their ability to reproduce observed data, but also in providing flexible tools for constructing the decision-relevant distributions that OR problems actually require. 
+
+1.1 Why OR should care 
+
+A large class of OR problems can be written as min θ∈Θ EY ∼Q[ℓ(θ, Y )] , where θ is a decision, Y is a random input, and Q is the uncertainty distribution at deployment. In principle, the problem is clear: choose a feasible decision that performs well under Q. In practice, however, the main challenge is often not only how to solve the optimization problem once Q is specified, but how to specify, estimate, or construct a distribution that meaningfully reflects the uncertainty the decision will actually face. This gap between a nominal data-generating distribution and a decision-relevant deployment distribution appears throughout OR. In stochastic optimization, one needs scenario distributions that preserve dependence, tail behavior, and regime structure rather than merely matching marginal statistics. In robust planning, one needs adverse but plausible distributions that expose operational vulnerabilities without collapsing into arbitrary worst-case perturbations. In partially observed systems, one needs conditional or posterior distributions that update as new information arrives and support adaptive decisions over time. In all of these settings, the bottleneck is fundamentally distributional: decision quality depends on whether the model captures the right uncertainty law, not only on whether the downstream optimization problem is solved accurately. Viewed this way, generative models enlarge the OR toolkit in three related ways. First, they support representation : learning nominal uncertainty in settings where classical parametric models 2may fail to capture multimodality, nonlinear dependence, or structural constraints. Second, they support robustness : generating stress scenarios or least-favorable plausible distributions through guided or adversarial modifications of a nominal law. Third, they support inference : producing con-ditional or posterior distributions under side information, partial observation, or repeated updates. These three roles show that generative modeling is not peripheral to OR but directly connected to its core concerns of uncertainty representation, robust decision-making, and inference. 
+
+1.2 Scope and roadmap 
+
+This tutorial is about constructing decision-relevant distributions under distributional shift . Its focus is not unconstrained sample synthesis, nor the use of generative models as generic tools for reproducing observed data. Instead, we study settings in which historical data provide a nominal distribution P , while the distribution relevant for planning, robustness, inference, or deployment is a different distribution Q that must be constructed, updated, or perturbed in a principled way. Our central viewpoint is that many such constructions can be understood as iterative algorithms in probability space . At the intrinsic level, one may view distribution learning and distributional perturbation as optimization or evolution over probability distributions. At the constructive level, these updates are realized through transport maps, velocity fields, particle systems, or guided stochastic dynamics. This viewpoint provides the mathematical backbone of the tutorial, but the guiding question throughout is operational: what distribution does the decision need, and how should that distribution be constructed? 
+
+The tutorial is organized around three visible OR roles for generative models: representation, robustness, and inference. We first formalize decision-making under distributional shift and intro-duce the mathematical tools needed to describe distribution evolution. We then present modern generative models as computational realizations of such distributions, develop representative theo-retical guarantees, and turn to OR tasks under shift, including scenario generation, stress testing, conditional and posterior updating, and transport across regimes. We close with evaluation prin-ciples and a concluding discussion. This chapter is not intended as a survey of generative modeling. Rather, it provides an OR-facing treatment of the subset most relevant to constructing uncertainty distributions for planning, robustness, and inference under distributional shift. 
+
+1.3 Notation 
+
+We work on X = Rd. Let P2 = P2(Rd) denote the set of probability distributions on Rd with finite second moment, and let Pr 
+
+> 2
+
+:= {P ∈ P 2 : P ≪ dx } denote those that admit densities. When 
+
+P ∈ P r 
+
+> 2
+
+has density p, we write dP (x) = p(x) dx ; when there is no ambiguity, we use p to denote both the density and the corresponding distribution. For a distribution P , let L2(P ) denote the space of measurable vector fields v : Rd → Rd such that ∥v∥P := (∫  
+
+> Rd
+
+∥v(x)∥2 dP (x))1/2 < ∞. For 
+
+u, v ∈ L2(P ), define ⟨u, v ⟩P := ∫ 
+
+> Rd
+
+u(x)T v(x) dP (x). For a measurable map T : Rd → Rd, the 3pushforward of P is denoted by T#P , defined by T#P (A) = P (T −1(A)) for measurable sets A.Equivalently, if Y ∼ P , then T (Y ) ∼ T#P .
+
+# 2 Decision-making under distributional shift 
+
+We now formalize the basic setup behind the tutorial: decisions are made under a deployment distribution Q, while data typically identify only a nominal distribution P . The central modeling question is how Q should be constructed from P .
+
+2.1 Canonical setup: nominal P , deployment Q
+
+We consider decision-making problems under uncertainty of the form 
+
+min  
+
+> θ∈Θ
+
+RQ(θ), RQ(θ) := EY ∼Q[ℓ(θ, Y )] , (1) where θ ∈ Θ is the decision variable, Y is a random input, ℓ(θ, Y ) is the loss incurred by decision θ
+
+under realization Y , and Q is the probability distribution governing the uncertainty at deployment. Given observed samples Y1, . . . , Y n, one typically replaces RQ(θ) by the empirical average ̂
+
+R(θ) = 1
+
+n
+
+> n∑
+> i=1
+
+ℓ(θ, Y i),
+
+yielding the sample average approximation (SAA) in operations research, equivalently, the empirical risk minimization (ERM) problem in statistics and machine learning. Depending on the application, 
+
+θ may represent an inventory level, reserve allocation, portfolio, or intervention policy, while Y may encode demand, renewable generation, market returns, latent states, or future trajectories. The quantity RQ(θ) is the deployment risk: it measures performance under the distribution that is operationally relevant when the decision is actually used. The central difficulty is that Q is rarely known directly. Historical data typically provide samples from a nominal distribution P , reflecting past operating conditions, observed contexts, or a baseline data-generating regime. If one ignores the distinction between P and Q, then one optimizes as though the historical distribution were also the relevant deployment distribution. In many applications, however, this is exactly where the model fails. The relevant distribution may differ from the nominal one for several reasons: deployment may occur under a shifted regime; the decision-maker may wish to evaluate adverse but plausible scenarios rather than historical ones; new side information or partial observations may induce conditional or posterior updates; or transfer across populations, policies, or sensing environments may require correction of the baseline distribution. Thus, the modeling problem is not only to estimate a nominal distribution P , but also to determine what distribution Q should govern the decision problem at hand. 4This distinction between nominal and deployment distributions will serve as a recurring orga-nizing principle throughout the tutorial. From this viewpoint, the role of modern generative models is not merely to reproduce samples from P , but to provide constructive ways of representing, up-dating, perturbing, and sampling from decision-relevant distributions Q. The central question is therefore: given historical information encoded by P , what distribution does the decision actually need? 
+
+2.2 Wasserstein space and optimal transport 
+
+We now introduce the Wasserstein-2 distance and the associated optimal transport map. For 
+
+μ, ν ∈ P 2, let Π( μ, ν ) denote the set of couplings of μ and ν. The Wasserstein-2 distance is defined by 
+
+W 22 (μ, ν ) := inf 
+
+> π∈Π( μ,ν )
+> ∫
+> Rd×Rd
+
+∥x − y∥2 dπ (x, y ). (2) When P, Q ∈ P r 
+
+> 2
+
+have densities p and q, we also write W2(p, q ) for W2(P, Q ).When μ ∈ P r 
+
+> 2
+
+, Brenier’s theorem (see, e.g., [Ambrosio et al., 2005, Section 6.2.3]) implies that the infimum in (2) is attained by a deterministic map. More precisely, there exists a μ-a.e. defined map T νμ : Rd → Rd such that the optimal coupling is given by π = (Id , T νμ )#μ. Equivalently, the Kantorovich formulation (2) agrees with the Monge formulation 
+
+W 22 (μ, ν ) = inf  
+
+> T:Rd→Rd, T #μ=ν
+> ∫
+> Rd
+
+∥x − T (x)∥2 dμ (x). (3) The map T νμ is called the optimal transport map from μ to ν.
+
+2.3 Representing Q via transport 
+
+The deployment distribution is often constructed from a nominal baseline through transport. Let P
+
+denote a baseline distribution on Rd, identified from historical data, and let U ∼ P . In this tutorial, we focus on transport-based constructions of decision-relevant distributions, namely distributions of the form 
+
+Q = T#P, 
+
+where T is a mapping from Rd to Rd. Equivalently, if U ∼ P , then T (U ) ∼ Q.This viewpoint is useful when the deployment distribution should differ from the nominal one in a structured way while preserving aspects of the original geometry, such as dependence, temporal coherence, or spatial organization. It is also constructive: once a transport map T is specified or learned, the shifted distribution Q is immediately sampleable by drawing U ∼ P and mapping it to 
+
+T (U ). The question is therefore not only which distributions are plausible, but how decision-relevant distributions can be generated from P through well-defined transformations. This viewpoint is somewhat different from the one commonly emphasized in the Wasserstein DRO literature, where the Wasserstein distance is typically introduced through the Kantorovich coupling formulation and uncertainty is modeled through an ambiguity set around a nominal distribution; see, for example, 5Kuhn et al. [2019]. Here, the emphasis is instead on constructive distribution shift through transport maps, which is the perspective most natural for generative modeling. This perspective is broad enough to cover several types of distributional operations that arise in OR. A transport map may encode regime shift, adversarial perturbation, conditional updating, or posterior correction, depending on how T is constructed and constrained. In this sense, transport provides both a mathematical representation of distributional shift and a direct link to tractable algorithmic implementations through generative models. The later sections develop this viewpoint further through dynamic formulations based on ODEs, SDEs, particle systems, and optimization in probability space. 
+
+# 3 Mathematical background 
+
+This section collects the basic mathematical facts used throughout the tutorial. 
+
+3.1 ODE and continuity equation 
+
+We use x ∈ Rd to denote a generic spatial variable; this should not be confused with the random variable X used earlier for context or predictors. An ordinary differential equation (ODE) describes deterministic evolution in Rd through 
+
+˙x(t) = v(x(t), t ), t ∈ [0 , T ], (4) where v : Rd × [0 , T ] → Rd is a time-dependent velocity field, and we also write vt(·) = v(·, t ).Under standard regularity assumptions on v, such as Lipschitz continuity in the spatial variable, the ODE is well posed: for every initial value x(0) , there exists a unique trajectory x(t), and the solution depends continuously on the initial value. If the initial position is random, then the induced distribution evolves with time. Suppose 
+
+x(0) ∼ P , and P has density p. We denote by ρt the density of x(t). Then, under sufficient regularity, ρt satisfies the continuity equation 
+
+∂tρt + ∇ · (ρtvt) = 0 , ρ0 = p. (5) Here ∇ · u = ∑dj=1 ∂xj uj denotes the divergence of a vector field u = ( u1, . . . , u d). Equation (5) expresses conservation of mass: probability is transported by the velocity field vt, but neither created nor destroyed. The continuity equation provides the basic link between particle dynamics and distribution evolution. In particular, if one can construct a velocity field vt such that the solution ρT at time T
+
+is close to a target density q, then the induced flow transports the initial distribution toward the target distribution. This is the basic mechanism underlying continuous-time flow-based generative models. 63.2 SDE and Fokker–Planck equation 
+
+A stochastic differential equation (SDE) augments deterministic dynamics with random noise. A standard example is the Ornstein–Uhlenbeck (OU) process 
+
+dX t = −Xt dt + √2 dW t, (6) where Wt is standard Brownian motion in Rd. More generally, we consider the diffusion 
+
+dX t = −∇ V (Xt) dt + √2 dW t, X0 ∼ P, (7) where V : Rd → R is a potential function. The OU process (6) corresponds to the special case 
+
+V (x) = ∥x∥2/2.Let ρt denote the density of Xt. Then ρt evolves according to the Fokker–Planck equation 
+
+∂tρt = ∇ · (ρt∇V + ∇ρt). (8) Equation (8) is the stochastic analog of the continuity equation: it describes how probability mass evolves under both drift and diffusion. The continuity equation (5) and the Fokker–Planck equation (8) are closely related. By com-paring the two, we see that (8) can be rewritten as a continuity equation with a velocity field 
+
+v(x, t ) = −∇ V (x) − ∇ log ρt(x). (9) Thus, the same marginal evolution of distributions may be represented either through stochastic particle dynamics or through a deterministic probability flow. This relation was leveraged in the deterministic sampling method, namely DDIM [Song et al., 2021a] and probability flow ODE [Song et al., 2021b] in score-based diffusion models. Specifically, once the score field ∇ log ρt is learned in the forward time diffusion process (training), the reverse time process (sampling) can be computed via integrating the ODE associated with the velocity field v as in (9), and it induces the same marginal distributions of the particles as a stochastic (SDE-based) sampler. 
+
+3.3 Dynamic optimal transport (Benamou–Brenier) 
+
+Among all transport maps that push from a source distribution P to a target Q, the optimal transport (OT) minimizes the transport cost under the Monge formulation of Wasserstein distance. An alternative dynamic formulation of OT is given by the Benamou–Brenier representation [Benamou and Brenier, 2000, Villani et al., 2009]. Instead of constructing transport through a single map, one may represent it through a time-dependent density ρ(x, t ) and velocity field v(x, t ):
+
+inf  
+
+> ρ,v
+
+T :=  
+
+> ∫10
+
+Ex∼ρ(·,t )∥v(x, t )∥2 dt (10) s.t. ∂tρ + ∇ · (ρv ) = 0 , ρ(·, 0) = p, ρ(·, 1) = q. 
+
+7Here ρ(·, t ) is the density at time t, and the continuity equation enforces that ρ evolves under the velocity field v. The quantity T is the action or transport cost. Under suitable regularity conditions on p and q, the minimum value of T in (10) equals the squared Wasserstein-2 distance between p and q, and the minimizing velocity field can be interpreted as the optimal control of the transport problem. This dynamic viewpoint will be important later: many generative models construct distributions by learning a time-dependent velocity field vt, thereby realizing transport through continuous-time evolution rather than through a single map. 
+
+# 4 Algorithm basics 
+
+The previous sections introduced the main distribution-construction operations that arise in decision-making under distributional shift, namely transport, conditioning, and guidance. We now turn to the computational question: how can such distributional updates be realized in practice? Modern generative models provide one answer. Rather than viewing them primarily as tools for unconstrained sample synthesis, we treat them here as computational realizations of probability distributions . Depending on the model class, a distribution may be represented through an invertible map, a time-dependent velocity field, a score field, or stochastic dynamics. The goal of this section is not to survey architectures exhaustively, but to present the algorithmic primitives that will later connect generative modeling to optimization in probability space. Generative models, from generative adversarial networks (GANs) [Goodfellow et al., 2014, Gul-rajani et al., 2017, Isola et al., 2017] and variational autoencoders (VAEs) [Kingma and Welling, 2013, 2019] to normalizing flows [Kobyzev et al., 2020], have achieved broad empirical success and become central tools in modern machine learning. More recently, diffusion models [Ho et al., 2020, Song and Ermon, 2019, Song et al., 2021b] and closely related flow-based models [Albergo et al., 2023, Albergo and Vanden-Eijnden, 2023, Fan et al., 2022, Lipman et al., 2023, Xu et al., 2023] have attracted particular attention because of their high-quality generation in complex high-dimensional settings. Compared with score-based diffusion models, which are primarily designed for sampling, flow models have the additional advantage of direct likelihood evaluation, which is useful for sta-tistical inference. At the same time, despite their empirical success, the theoretical understanding of these models remains incomplete. For the purposes of this tutorial, the most relevant point is that these methods provide concrete algorithmic mechanisms for constructing and transforming distributions. 
+
+4.1 Score-based diffusion models 
+
+Score-based diffusion models construct a generative model in two stages: a fixed forward diffusion that gradually perturbs data toward a simple reference distribution, and a learned reverse-time dynamics driven by an approximation of the score function. 8Forward diffusion. A standard example is the variance-preserving DDPM process [Ho et al., 2020, Song et al., 2021b], which generates a sequence {Xn}Nn=0 by 
+
+Xn = √1 − βn Xn−1 + √βn Zn−1, n = 1 , · · · , N, (11) where Zn ∼ N (0 , I d) are i.i.d. and X0 ∼ P is drawn from the data distribution. As N → ∞ , (11) converges to the SDE 
+
+dX t = − 12 β(t)Xt dt +
+
+> √
+
+β(t) dW t, t ∈ [0 , T ], (12) where β(t) > 0 is a variance schedule and Wt is standard Brownian motion in Rd.After a time reparametrization, (12) reduces to the Ornstein–Uhlenbeck process (6). Let ρt
+
+denote the density of Xt. Then ρt evolves according to the Fokker–Planck equation (8). 
+
+Score learning and reverse dynamics. Diffusion models learn the score function st(x) := 
+
+∇ log ρt(x) by score matching [Hyvärinen and Dayan, 2005, Vincent, 2011], typically through the mean-squared objective ∫ T
+
+> 0
+> ∫
+
+∥ˆst(x) − st(x)∥2ρt(x) dx dt. 
+
+This objective scales well in high dimensions and is one of the main computational advantages of diffusion models. Once the score model ˆst is learned, sampling is performed through a reverse-time dynamics starting from a simple reference distribution, typically ˜XT ∼ N (0 , I d), with the goal that the terminal distribution of ˜X0 is close to P . Besides the reverse-time SDE, one may also use the deterministic probability flow ODE [Song et al., 2021b]. Its validity follows from the fact that the Fokker–Planck equation (8) can be rewritten as the continuity equation (5) with velocity field (9). Under suitable regularity, the stochastic diffusion and the deterministic probability flow induce the same family of marginal distributions. This relation underlies the close connection between diffusion models and flow-based generative models. 
+
+4.2 Flow models 
+
+Normalizing flows are a class of deep generative models that enable both efficient sampling and likelihood evaluation. Historically, flow-based models appeared earlier than diffusion models in the modern generative-modeling literature. Broadly speaking, normalizing flows can be divided into two categories: discrete-time flows and continuous-time flows. 
+
+Discrete-time flow models. Discrete-time flow models are based on compositions of invertible maps, often implemented through residual or coupling architectures [He et al., 2016]. A typical prototype is 
+
+xl = xl−1 + fl(xl−1), l = 1 , · · · , L, (13) 9where fl is the neural network map parameterized by the l-th residual block, and xl is the output of the l-th block. As written, (13) is not automatically invertible; invertibility must be enforced either by architecture design or by additional regularity conditions. When this is done, the overall model defines a transport map between distributions. 
+
+Continuous-time flows. Continuous-time flows, also called continuous normalizing flows (CNFs), are formulated under the neural ODE framework [Chen et al., 2018]. In this case, the state x(t)
+
+evolves according to the ODE (4), where the time-dependent vector field is parameterized by a neural network. The discrete-time update (13) may be viewed as a forward Euler discretization of (4) on a sequence of time points. In both cases, the model defines a deterministic transport between a data distribution and a reference distribution, often chosen to be a standard Gaussian Q = N (0 , I d), hence the name “normalizing.” Taking the continuous-time formulation (4), let P be the data distribution with density p, let X(0) ∼ P , and denote by pt the density of X(t). Then pt satisfies the continuity equation (5) with initial condition p0 = p. If one can construct a vector field vt such that pT is close to the reference density q, then the reverse-time flow transports samples from Q to a distribution close to P .A key issue is invertibility. In the continuous-time setting, invertibility is induced naturally by the ODE flow under standard regularity conditions, since the dynamics can be solved forward and backward in time. In the discrete-time setting (13), invertibility must be enforced either through special layer constructions, such as NICE, Real NVP, and Glow [Dinh et al., 2015, 2017, Kingma and Dhariwal, 2018], or through regularization mechanisms such as spectral normalization [Behrmann et al., 2019] or transport-cost regularization [Makkuva et al., 2020, Onken et al., 2021, Xu et al., 2022]. A notable advantage of flow models is that they admit likelihood evaluation. Although these computations may become challenging in high dimensions, the ability to evaluate log-likelihood is fundamentally useful, especially for maximum-likelihood training and statistical inference. Arelated idea also appears in diffusion models through the deterministic reverse dynamics given by the probability flow ODE [Song et al., 2021b]; once a diffusion model is trained, the corresponding likelihood can be evaluated through that representation as well. 
+
+Flow matching. Flow matching (FM) is a class of continuous-time flow models that avoids the simulation-dependent likelihood training used in continuous normalizing flows [Grathwohl et al., 2018]. Instead of optimizing a log-likelihood objective involving the divergence ∇ · vθ along ODE trajectories, FM trains a neural velocity field by a simulation-free L2-type matching loss. This greatly reduces computational cost in high dimensions and has made FM a competitive alternative to both likelihood-based flows and diffusion models [Albergo and Vanden-Eijnden, 2023, Lipman et al., 2023, 2024, Liu, 2022]. FM still adopts the continuous-time neural ODE framework on a time interval [0 , 1] . Let p
+
+10 denote the data distribution and q a reference distribution. One specifies an interpolation path 
+
+ψ(t) := It(x0, x 1), t ∈ [0 , 1] , (14) where x0 ∼ p and x1 ∼ q. A common choice is linear interpolation between x0 and x1. The interpolation induces a family of intermediate distributions ρt, namely the distributions of ψ(t).The model trains a neural vector field ˆv(x, t ) to match the instantaneous velocity of the inter-polation path by minimizing 
+
+L(ˆ v) :=  
+
+> ∫10
+
+Ex0,x 1
+
+> ∥∥∥∥
+
+ˆv(ψ(t), t ) − ddt ψ(t)
+
+> ∥∥∥∥
+> 2
+
+dt. (15) Here we suppress the network parameterization for simplicity and view ˆv as an unconstrained vector field. Although (15) is defined through endpoint couplings and interpolation paths, its minimizer corresponds to a valid transport field. More precisely, call a velocity field v(x, t ) valid if the conti-nuity equation with initial distribution p yields terminal distribution q. Under suitable regularity assumptions on the interpolation family, there exists such a valid field v for which, up to an additive constant, the objective (15) is equivalent to the weighted L2 loss  
+
+> ∫10
+> ∫
+> Rd
+
+∥ˆv(x, t ) − v(x, t )∥2ρt(x) dx dt, 
+
+where ρt is the marginal distribution induced by the interpolation path. Thus minimizing (15) recovers a vector field whose continuity equation transports p to q; see Albergo and Vanden-Eijnden [2023], Lipman et al. [2023]. An important feature of FM is that the prescribed path need not come from a diffusion process. Diffusion paths form one important class, in which case the induced distribution evolution coincides with that of a forward SDE. However, FM also allows non-diffusive probability paths, which can lead to simpler training and faster sampling. Related formulations include stochastic interpolants [Albergo and Vanden-Eijnden, 2023], where the terminal distribution q may be arbitrary and ac-cessible only through samples, and rectified flows [Liu, 2022]. In this sense, FM provides a flexible transport-based framework for training continuous-time generative models without likelihood eval-uation. 
+
+Consistency models (CMs). To improve the sampling efficiency of diffusion models, score-distillation approaches such as consistency models enable few-step or even one-step generation [Song et al., 2023]. The basic idea is to learn a map fθ directly that sends a point xt on the probability-flow ODE trajectory back to the corresponding clean sample x0, namely x0 = fθ(xt, t ),where x0 ∼ pdata . Once trained, the model can generate samples in a single step by drawing x1 ∼ π0
+
+from the reference distribution and applying fθ, or in a small number of steps to trade off speed and fidelity. In this sense, consistency models may be viewed as a distillation of diffusion dynamics 11 into a direct transport map from the reference distribution back to the data distribution. 
+
+4.3 Connection to map representation 
+
+Once a velocity field is learned, the associated ODE induces a transport map from a reference dis-tribution to a target distribution. More precisely, integrating (4) from t = 1 to t = 0 defines a map 
+
+T : Rd → Rd such that T#Q ≈ P . A similar interpretation applies to diffusion models. Although the forward particle dynamics are stochastic, the induced evolution of densities is deterministic and governed by the Fokker–Planck equation. When the score field st(x) = ∇ log ρt(x) is known, the same marginal evolution can be represented by the probability flow ODE, which in turn defines an associated transport map. Thus, flow-based and diffusion-based models may both be viewed as constructing maps from a simple reference distribution to a target distribution: the former directly through deterministic transport, and the latter either through stochastic dynamics or through an equivalent deterministic probability flow. Transport maps, velocity fields, and stochastic dynamics should therefore be understood as different but closely related representations of the same basic problem of transforming one distribution into another. 
+
+# 5 Extended algorithms for distribution shift 
+
+The previous section focused on basic generative mechanisms for representing and transporting probability distributions. We now turn to more structured settings in which the target distribution is determined by the task rather than fixed in advance. These include transport between empirical distributions, robust generation, conditional and posterior updating, and equilibrium distributions arising from interacting-agent systems. We also describe a common particle-based implementation template that applies across several of these constructions. The following subsections are not intended as a comprehensive survey. Rather, they present representative formulations showing how generative models can be used to construct decision-relevant distributions under different operational requirements. 
+
+5.1 Distribution-to-distribution transport and domain-shift matching 
+
+We begin with a basic generalization beyond standard generative modeling. In classical flow and diffusion models, one of the endpoint distributions is usually taken to be a simple reference distribu-tion, such as a Gaussian. In many applications, however, the target distribution is itself nontrivial and need not admit a closed-form density; instead, it may only be accessible through samples. This leads to the problem of distribution-to-distribution transport : given a source distribution P and a target distribution Q on Rd, construct a transport map that pushes P toward Q. This setting is important in applications such as domain adaptation and transfer learning, where one seeks to adapt a model trained on a source domain to a target domain at lower cost by transporting source samples toward the target distribution [Courty et al., 2014, 2017]. Related ideas have also been 12 used in fairness, where transport is employed to adjust distributions across groups in a controlled manner [Silvia et al., 2020]. Suppose we are given two sample sets {Xi}Ni=1 and { ˜Xj }Mj=1 , drawn i.i.d. from P and Q, respec-tively. As one example, one may use a flow-based model to learn a continuous invertible transport between P and Q from these two datasets. The model is based on the neural ODE (4), with velocity field v(x, t ; θ), which induces a time-dependent flow of distributions ρt, with ρ0 = P and ρ1 ≈ Q.Equivalently, the ODE induces a terminal transport map T : Rd → Rd such that T#P ≈ Q. From the optimal-transport viewpoint, this may be interpreted as learning a dynamic transport path between the two endpoint distributions. Since in practice both P and Q are observed only through samples, the endpoint constraints in the dynamic OT formulation (10) are enforced only empiri-cally, for example through KL-based matching losses; see Makkuva et al. [2020], Ruthotto et al. [2020], Xu et al. [2025]. In this way, the usual generative-model setting involving a simple Gaus-sian reference distribution is extended to transport between an arbitrary pair of sample-defined distributions. In the distribution-to-distribution setting, the target distribution Q is specified, at least through samples. We next consider a more implicit setting, in which the target distribution is not given in advance but is defined adversarially through a worst-case objective. 
+
+5.2 Worst-case generation and robust distribution construction 
+
+In many engineering and operational settings, the scenarios that matter most for reliability are not the typical ones but rare, high-impact events at the edge of the nominal data distribution. Examples include unusual road conditions in autonomous driving, extreme contingencies in power systems, and atypical but consequential cases in healthcare. Such events are often poorly represented in historical data, yet they are precisely the cases that drive stress testing, robustness evaluation, and risk-sensitive decision-making. This motivates the problem of worst-case generation : rather than sampling from a nominal distribution, one seeks a perturbed distribution that emphasizes adverse but plausible outcomes. A natural framework for this task is distributionally robust optimization (DRO), in which one evaluates performance against distributions lying in an ambiguity set around a reference distribution 
+
+P . Among the many DRO formulations, Wasserstein DRO is especially attractive because the Wasserstein metric encodes a geometry on the sample space and leads to uncertainty sets that reflect structured perturbations of the data-generating distribution. While much of the DRO literature focuses on worst-case values and robust decisions, our emphasis here is slightly different: we view the inner maximization as a mechanism for constructing a worst-case distribution. This interpretation connects robust optimization to generative modeling. Wasserstein DRO provides a classical framework for such robust distribution construction; see, e.g., Blanchet and Murthy [2019], Gao and Kleywegt [2023], Mohajerin Esfahani and Kuhn [2018]. Let ℓ(θ, x ) be a loss function, where θ ∈ Rp denotes the decision variable or model parameter and 
+
+x ∈ Rd the uncertain input. The Wasserstein DRO problem takes the form (see, e.g., [Cheng et al., 13 2025, Wen and Yang, 2026, Xu et al., 2024, Zhu and Xie, 2024]), 
+
+min  
+
+> θ∈Rp
+
+max 
+
+> Q∈B δ
+
+Ex∼Q ℓ(θ, x ), (16) 
+
+Bδ := {Q ∈ P 2 : W2(Q, P ) ≤ δ},
+
+where P is the reference (nominal) distribution and P2 denotes the set of probability measures on 
+
+Rd with finite second moment. A convenient penalized form is 
+
+min  
+
+> θ∈Rp
+
+max 
+
+> Q∈P 2
+> {
+
+Ex∼Q ℓ(θ, x ) − 12λ W22 (P, Q )
+
+> }
+
+, (17) where λ > 0 controls the effective size of the perturbation. This formulation makes explicit the tradeoff between adversarial loss and transport cost: the worst-case distribution should increase the loss, but only through a geometrically plausible shift away from P .When the reference distribution P has a density, the inner maximization admits an equivalent transport-map formulation. Writing Q = T#P for a measurable map T : Rd → Rd, one obtains 
+
+max 
+
+> Q∈P 2
+> {
+
+Ex∼Q ℓ(θ, x ) − 12λ W22 (P, Q )
+
+> }
+
+(18) 
+
+= max    
+
+> T∈L2(P)
+
+Ex∼P
+
+> [
+
+ℓ(θ, T (x)) − 12λ ∥T (x) − x∥2
+
+> ]
+
+, (19) where 
+
+L2(P ) := 
+
+> {
+
+T : Rd → Rd : Ex∼P ∥T (x)∥2 < ∞
+
+> }
+
+.
+
+Hence, the robust distribution-construction problem may be written as the minimax problem 
+
+min  
+
+> θ∈Rp
+
+max    
+
+> T∈L2(P)
+
+L(θ, T ), (20) 
+
+L(θ, T ) := Ex∼P
+
+> [
+
+ℓ(θ, T (x)) − 12λ ∥T (x) − x∥2
+
+> ]
+
+.
+
+Here λ > 0 is a regularization parameter that controls the size of the adversarial perturbation: larger λ permits more aggressive shifts away from the reference distribution P , while smaller λ
+
+keeps T (x) closer to x. This representation is especially useful from a generative viewpoint: the worst-case distribution is no longer an abstract optimizer Q, but the pushforward of the nominal distribution under an adversarial transport map T . In this way, Wasserstein DRO can be interpreted as a problem of robust distribution construction, with the map T generating informative worst-case samples from the reference distribution. 
+
+5.3 Conditional generation with observed context 
+
+A different but related form of distribution construction arises when one seeks to generate Y given observed context X = x, that is, to model the conditional distribution P (Y | X = x). This setting appears naturally in probabilistic prediction, contextual decision-making, and time-series forecast-14 ing. As in the unconditional case, the generative mechanism may be made context-dependent. In a flow-based formulation, one introduces a transport map T0(·; x) such that T0(·; x)#π0 approximates 
+
+P (Y | X = x), where π0 is a simple reference distribution. In a continuous-time formulation, one instead uses a context-dependent velocity field vt(·; x), or, in the diffusion setting, a score field 
+
+st(·; x), so that the induced distribution evolution ρt(· | x) connects a reference distribution to 
+
+P (Y | X = x). Representative examples include conditional normalizing flows, conditional diffu-sion models, and conditional flow matching [Generale et al., 2024, Ho and Salimans, 2022, Trippe and Turner, 2018]. This should be distinguished from posterior updating in inverse problems and Bayesian inference: here one learns a predictive family of conditional distributions indexed by x,whereas posterior conditioning updates a prior distribution through an observation model. 
+
+5.4 Posterior sampling with generative priors and inverse problems 
+
+Posterior sampling with generative priors has been studied in several forms, including invertible-model approaches and score-based or diffusion approaches to inverse problems; see, e.g., Ardizzone et al. [2018], Chung et al. [2023], Song et al. [2021b, 2022]. Let P be a prior distribution on Rd, let x ∼ P denote the unknown state, and let y be an observation generated from a known likelihood p(y | x), assumed differentiable in x. Condition-ing updates the baseline distribution P to the posterior distribution P (· | y), which reweights P
+
+according to the data-fidelity term induced by the observation model. A standard example is an inverse problem, where y = A(x) + n with A : Rd → Rm a possibly nonlinear forward operator and n observation noise. Writing Ly(x) := − log p(y | x), the posterior density, when it exists, is proportional to e−L y (x)p(x), where p denotes the density of P .When the prior distribution is represented by a pre-trained invertible generative model, con-ditioning can be transferred to the latent space. Let T0 : Rd → Rd be an invertible transport map such that P = ( T0)#π0, where π0 is a simple reference distribution, such as N (0 , I ). Writing 
+
+x = T0(z) with z ∼ π0, the induced posterior distribution on the latent variable z has density proportional to p(y | T0(z)) π0(z). Hence, posterior sampling may be carried out in latent space and then pushed forward through T0. In the Gaussian-reference case, one may sample the latent posterior by Langevin dynamics 
+
+dz t = −(zt + ∇z Ly(T0(zt)) ) dt + √2 dW t,
+
+and then recover posterior samples in data space through xt = T0(zt). In this way, a generative model trained to realize transport between distributions can also be used to construct posterior distributions under partial observation. Unlike the conditional-generation setting above, the target distribution here is not a predictive family indexed by context, but a posterior law obtained by updating a prior through an observation model. 15 5.5 Mean-field game formulations 
+
+A further extension arises when the distributional shift is generated endogenously by a continuum of interacting agents, as in mean field games (MFGs). MFGs were introduced by Lasry and Lions [2007] and independently by Huang et al. [2006]; for a broad modern treatment, see Carmona et al. [2018], and for computational approaches in high-dimensional settings, see Ruthotto et al. [2020]. In a first-order deterministic MFG, a candidate population trajectory ρ = ( ρt)t∈[0 ,1] enters each agent’s objective, while each agent chooses a velocity field ˜vt and induced distribution trajectory 
+
+˜ρ = (˜ ρt)t∈[0 ,1] . Starting from an initial distribution P , admissible pairs (˜ ρ, ˜v) satisfy the continuity equation (5), with ˜ρ0 = P . Given ρ, the representative-agent cost is 
+
+J (˜ ρ, ˜v; ρ) (21) 
+
+=   
+
+> ∫10
+> ∫(
+
+12 ∥˜vt(x)∥2 + F [ρt]( x)
+
+> )
+
+d˜ρt(x) dt +
+
+> ∫
+
+G[ρ1]( x) d˜ρ1(x),
+
+where F and G denote running and terminal couplings. A best response to ρ is a minimizer of 
+
+J (˜ ρ, ˜v; ρ) over the admissible class. A mean-field Nash equilibrium is then a fixed point (ˆ ρ, ˆv) such that (ˆ ρ, ˆv) is a best response to the population trajectory ˆρ.This extends the earlier transport constructions by allowing the objective to depend on the full trajectory, a terminal cost, and interactions through the evolving population distribution. Under special choices of F and G, closely related formulations reduce to dynamic optimal transport or mean-field control. From an algorithmic viewpoint, one may parameterize the velocity field by a neural ODE or flow-matching network and compute equilibria by iterating between particle evolution in Lagrangian coordinates and updates of the population distribution; see, e.g., Min and Hu [2021], Yu et al. [2026]. 
+
+5.6 A common particle-based implementation scheme 
+
+The distributional problems considered above are often formulated in terms of probability distri-butions, transport maps, or velocity fields. In practice, however, they can often be approached through a common particle-based scheme. Starting from particles {xi}Ni=1 sampled from an initial distribution P , one approximates the relevant objective by sample averages and solves the resulting finite-dimensional optimization problem over the particle system. Depending on the application, this optimization may represent transport toward a target distribution, adversarial perturbation for robust generation, posterior adjustment under an observation model, or a best-response update in a mean-field game. In each case, the output is a collection of updated particle positions, or more generally, particle trajectories, that represent the optimized distributional shift. Once these particle trajectories are obtained, one may interpolate them in time and fit a con-tinuous velocity field vt by flow matching. In this way, the empirical particle evolution is lifted to an Eulerian description, yielding a continuous-time generative model whose induced distribu-tion flow approximates the optimized particle system. The learned velocity field can then be used 16 to transport new samples generated from the updated distribution, thereby providing a reusable representation of the distributional transformation beyond the original finite particle set. Viewed in this way, flow matching becomes more than a standalone generative model: it serves as a general implementation mechanism for sample-based optimization in probability space. The optimization is carried out on particles, with objectives estimated via sample averages, while flow matching converts the resulting particle evolution into a continuous transport representation. This provides a common computational template for a broad class of distribution-construction problems under distributional shift. 
+
+Toy example: worst-case generation. Let P = N (0 , I 2) on R2, and let x1, . . . , x N ∼ P .Suppose failure is associated with large values of the first coordinate, so take ℓ(x) = x(1) . The robust particle update solves 
+
+max 
+
+> x′
+> 1,...,x ′
+> N
+
+1
+
+N
+
+> N∑
+> i=1
+> [
+
+ℓ(x′
+
+> i
+
+) − 12λ ∥x′ 
+
+> i
+
+− xi∥2
+
+> ]
+
+.
+
+For this linear loss, the optimizer is explicit: x′ 
+
+> i
+
+= xi + λe 1, where e1 = (1 , 0) . Thus, the worst-case particle cloud is a shifted version of the nominal one. Interpolating each pair (xi, x ′
+
+> i
+
+) and fitting a velocity field by flow matching yields a continuous transport from the nominal distribution to the worst-case distribution. This illustrates the general scheme: optimize particles by a sample-average objective, then lift the resulting particle system to a continuous-time generative model. This simple construction is also reminiscent of adversarial robustness formulations based on worst-case perturbations of observed samples; see, e.g., Sinha et al. [2017]. 
+
+# 6 Theory: Guarantees for distribution construction 
+
+A useful way to analyze generative procedures for distribution construction is to view them as optimization algorithms in the space of probability distributions. This perspective is especially natural for an OR audience: rather than treating the model as a black-box generator, one inter-prets each layer, time step, or iterative update as moving a distribution toward a task-dependent objective in probability space. Optimization over distributions has deep geometric roots. Early work on information geometry established a differential-geometric view of families of probability distributions and their associated optimization principles [Amari, 2008, 2016]. A complementary line of work, based on Wasserstein geometry and gradient flows in metric spaces, led to variational formulations of evolution equations and their discrete-time approximations via proximal schemes such as JKO [Ambrosio et al., 2005, Jordan et al., 1998]. More recently, these ideas have been con-nected to modern optimization and sampling algorithms on spaces of measures, with applications ranging from variational inference and sampling to generative modeling and distributionally robust optimization [Kent et al., 2021, Wibisono, 2018, Xu et al., 2024, ?]. The purpose of this section is not to present a single unified theorem for all constructions in 17 Table 1: Representative theory templates for different distribution-construction tasks. Task Source of distribution shift Representative guarantee Data imitation Transport from data distri-bution P toward reference distribution Q
+
+Contraction / forward–reverse con-vergence in Wasserstein space Robust generation Adversarial perturbation of a nominal distribution First-order convergence of min– max optimization in transport-map space Posterior updating Partial observation through a prior–likelihood update Error-transfer bounds from prior approximation and sampling error to posterior error Section 5, but to highlight three representative theoretical templates for distribution construction. Different tasks specify the target distribution in different ways, which naturally leads to different types of guarantees. For data imitation, the representative result is a contraction-type guarantee in Wasserstein space. For robust generation, it is first-order convergence of a min–max optimization in transport-map space. For posterior updating under partial observation, it is an error-transfer bound from prior approximation and numerical sampling to posterior error. Table 1 summarizes these three cases. More broadly, these examples illustrate that different distribution-construction tasks lead naturally to different analytical templates, rather than to a single universal theory. 
+
+6.1 Iterative flow models as optimization in Wasserstein space 
+
+We begin with the basic data-imitation setting, in which the goal is to generate from a data distribution P by transporting it toward a simple reference distribution Q, and then reversing the learned transport. Let p and q denote the densities of P and Q, respectively. The key insight is that the forward flow may be viewed as a discretization of a gradient flow in probability space. In regimes where this forward process converges linearly to Q, the number of iterations needed to achieve error O(ε) is of order log(1 /ε ). For iterative flow models, this translates into a logarithmic bound on the required depth N , namely the number of flow steps or residual blocks. Consider a sequence of invertible maps F1, . . . , F N . Here Fn denotes the n-th invertible update in the iterative flow model, and the overall transport map is given by the composition of these updates. Starting from the data distribution P , define the forward iterates ρ0 = P and ρn = ( Fn)#ρn−1, so that (forward) ρ0 = P F1
+
+−→ ρ1 F2
+
+−→ · · · FN
+
+−−→ ρN ≈ Q, (22) (reverse) P ≈ ˜ρ0 
+
+> F−11
+
+←−− ˜ρ1 
+
+> F−12
+
+←−− · · · F −1
+
+> N
+
+←−− ˜ρN = Q. (23) Here ˜ρn denotes the reverse iterates starting from ˜ρN = Q, and ˜ρ0 is the generated distribution. If densities exist, we write pn and ˜pn for the densities of ρn and ˜ρn. Thus, the analysis separates 18 naturally into two parts: first, show that the forward process drives ρn toward Q; second, transfer this guarantee to the reverse process, which produces the generated distribution ˜ρ0.To analyze this forward process, we compare it with the idealized Wasserstein proximal iteration. We work in Wasserstein space and consider the objective G(ρ) := KL( ρ∥Q), defined for distributions 
+
+ρ ∈ P 2 that are absolutely continuous with respect to Q. When ρ admits a density, also denoted by ρ, and Q has density q(x) ∝ e−V (x), this may be written as 
+
+G(ρ) = H(ρ) + E(ρ), (24) 
+
+H(ρ) = 
+
+> ∫
+
+ρ(x) log ρ(x) dx, E(ρ) = c +
+
+> ∫
+
+V (x) dρ (x), (25) for a constant c. This decomposition is useful because the generalized convexity properties of G can be studied through the entropy term H and the potential-energy term E. The Jordan–Kinderlehrer– Otto (JKO) scheme [Jordan et al., 1998] defines an iterative update by 
+
+ρn+1 ∈ arg min 
+
+> ρ∈P 2
+> {
+
+G(ρ) + 12γ W 22 (ρn, ρ )
+
+> }
+
+, (26) where γ > 0 is the step size. This is the Wasserstein analog of a proximal step in Euclidean optimization: it balances a decrease in the objective G against the transport cost of moving away from the current iterate ρn.The convergence of (26) depends on the appropriate notion of convexity in Wasserstein space. For the results used here, one requires convexity along generalized geodesics, a standard strength-ening of displacement convexity. Many functionals arising in applications satisfy this condition, including entropy, potential energy, interaction energy, and, in particular, the KL divergence under suitable regularity assumptions. Under such conditions, the JKO iteration converges toward the minimizer Q, and under a suitable strong-convexity condition, this convergence is linear. Conse-quently, after N iterations, 
+
+KL( ρN ∥Q) = O(ε2) for N ≍ log(1 /ε ).
+
+Thus, optimization theory in Wasserstein space yields a depth bound for iterative flow models: logarithmically many steps suffice to drive the forward process close to the reference distribution. The reverse guarantee follows from invertibility. Because each Fn is invertible, the reverse process is obtained by pushing Q backward through the inverse maps, so the forward and reverse terminal distributions are related by bijective transport. A key fact is that f -divergences are invariant under invertible measurable transformations. Since KL divergence is an f -divergence, control of the forward error at the terminal time transfers directly to the generated distribution: 
+
+KL( ρN ∥Q) = KL( P ∥˜ρ0), or equivalently, at the density level, KL( pN ∥q) = KL( p∥˜p0). Therefore, the O(ε2) control for the forward process implies the same O(ε2) control for the reverse process. By Pinsker’s inequality, this further yields an O(ε) bound in total variation. In this way, convergence of the optimization scheme in probability space translates directly into a quantitative density-learning 19 guarantee for the generative model. Thus, the guarantee quantifies how well iterative transport toward a reference distribution approximates the desired data distribution. On the computational side, related Wasserstein-gradient-flow constructions for generative mod-eling and inference include sliced Wasserstein flows, large-scale JKO-type methods, and continuous function approximations; see, e.g., Liutkus et al. [2019], Mokrov et al. [2021], Xu et al. [2023]. 
+
+6.2 Robust generation as optimization in transport-map space 
+
+The previous subsection studied iterative generative models through a minimization problem in the space of distributions, using Wasserstein geometry and the JKO scheme to analyze convergence of the forward and reverse processes. Robust generation leads to a different, but closely related, optimization viewpoint. Here, the problem is no longer a single-objective minimization over dis-tributions, but a min–max problem in which an adversary selects a worst-case distribution. When the nominal distribution P is absolutely continuous, Brenier’s theorem implies that each candidate adversarial distribution Q can be represented as the pushforward Q = T#P of P under a transport map T . Thus, the inner maximization over distributions is converted into an optimization over transport maps. Recall that the robust objective is 
+
+min  
+
+> θ∈Θ
+
+max 
+
+> Q∈P 2
+> {
+
+RQ(θ) − 12λ W 22 (P, Q )
+
+> }
+
+,
+
+where RQ(θ) := EY ∼Q[ℓ(θ, Y )] , and λ > 0 controls the strength of the adversarial perturbation. Writing Q = T#P , and equivalently Y = T (U ) with U ∼ P , the inner objective becomes 
+
+L(θ, T ) = EU ∼P
+
+> [
+
+ℓ(θ, T (U )) − 12λ ∥T (U ) − U ∥2
+
+> ]
+
+.
+
+Unlike the previous subsection, where the iterate is a distribution in Wasserstein space, the present formulation treats the transport map T as the optimization variable. The Wasserstein penalty again plays the key structural role: it induces the quadratic regularization in T (U ) − U that makes first-order analysis possible. Assuming that ℓ(θ, y ) is differentiable in both arguments, the gradients of L with respect to θ
+
+and T are 
+
+∇θL(θ, T ) = EU ∼P ∇θℓ(θ, T (U )) ,
+
+∇T L(θ, T )( u) = ∇yℓ(θ, T (u)) − 1
+
+λ (T (u) − u), P -a.s. u, 
+
+where ∇T L(θ, T ) denotes the L2(P )-gradient with respect to the transport map T . Starting from 20 an initial pair (θ(0) , T (0) ), this leads to the gradient descent–ascent iteration 
+
+> 
+
+θ(k+1) = θ(k) − τ ∇θL(θ(k), T (k)),T (k+1) = T (k) + η ∇T L(θ(k), T (k)).
+
+(27) This is the functional analog of gradient descent–ascent in Euclidean minimax optimization [Lin et al., 2020, Yang et al., 2022]. Under standard smoothness assumptions, and under a nonconvex– strongly-concave or, more generally, nonconvex–PL condition in the T -variable, one obtains the familiar O(ε−2) iteration complexity for reaching an ε-stationary point. The transport-map formulation also admits an equivalent intrinsic first-order condition at the level of distributions Xu et al. [2024]. Fix θ, and suppose the inner maximization attains a local maximizer Q⋆ ∈ P r 
+
+> 2
+
+. Then the corresponding optimality condition in Wasserstein space takes the form 
+
+∇yℓ(θ, y ) + 1
+
+λ
+
+> (
+
+T PQ⋆ (y) − y) = 0 , Q⋆-a.e. y, 
+
+where T PQ⋆ denotes the optimal transport map from Q⋆ to P . If, in addition, the forward optimal transport map T ⋆ : P → Q⋆ exists and is the a.e. inverse of T PQ⋆ , then composing with T ⋆ yields 
+
+∇yℓ(θ, T ⋆(u)) − 1
+
+λ
+
+> (
+
+T ⋆(u) − u) = 0 , P -a.s. u, 
+
+which is exactly the stationarity condition ∇T L(θ, T ⋆) = 0 in transport-map space. Thus, the ascent direction in (27) is not merely an algorithmic construction; it is the map-space representation of the Wasserstein first-order optimality condition for the worst-case distribution. The above guarantee quantifies how well first-order optimization in transport-map space constructs an adversarially generated distribution. Although the theory is formulated directly in transport-map space, practical implementations are often particle-based, as discussed in Section 5.6. One samples particles Ui ∼ P , approximates the objective and gradients by sample averages, and updates the transported particles T (k)(Ui).The resulting transported particles can be lifted to a continuous neural network representation by a matching loss, which allows efficient generalization outside the finite training samples. 
+
+6.3 Posterior sampling with generative priors: an illustrative error-transfer guarantee 
+
+Posterior sampling under partial observations leads to a different style of guarantee from the optimization-based results above. In the previous subsections, the main results took the form of contraction or first-order convergence statements for distributional dynamics. Posterior sam-pling with generative priors has also been studied extensively, particularly using score-based and diffusion models for inverse problems; see, e.g., Chung et al. [2023], Song et al. [2022]. Related theory-oriented analyses are also beginning to appear for posterior-sampling algorithms built on score-based generative priors [Sun et al., 2024]. Here we present one representative example of an 21 error-transfer guarantee : approximation error in the generative prior propagates to approximation error in the posterior, together with an additional contribution from numerical sampling. As one concrete example, let P denote the true prior of an unknown variable U , and let ˜P =(T0)#π0 be an approximate prior induced by a pre-trained invertible generator T0 from a simple reference distribution π0. Given an observation h, let P h and ˜P h denote the corresponding true and model posteriors obtained by weighting P and ˜P by the likelihood p(h | U ). Pulling ˜P y back through T0 yields a latent posterior on z, which can then be sampled numerically and mapped back to data space through U = T0(z). A result in [Purohit et al., 2024] shows that this construction admits a two-part error decomposition. First, prior approximation error transfers to posterior error: if TV( P, ˜P ) ≤ ε, then TV( P h, ˜P h) ≤ 2κhε, where κh depends on the likelihood and the true prior. Second, if the numerical sampler approximates the latent posterior with error εsamp , and ˆP h
+
+denotes the resulting sampled posterior in data space, then 
+
+TV( P h, ˆP h) ≤ 2κhε + εsamp .
+
+Thus, in this setting, posterior error separates into a prior-modeling term and a sampling term. 
+
+# 7 OR tasks under distributional shift and examples 
+
+The previous sections developed a mathematical and computational view of generative models as tools for constructing probability distributions. We now return to the OR perspective and ask a more operational question: what distribution does the downstream decision problem actually need? 
+
+Under distributional shift, the answer is rarely the raw historical distribution. Planning requires a scenario distribution, robustness requires a stress distribution, partial information requires a conditional or posterior distribution, and deployment under regime change requires a corrected distribution. This section organizes the main OR tasks under that lens. The goal is not to provide an exhaus-tive survey of applications, but to identify the distributional objects that arise most naturally in OR and to connect them to the constructions introduced earlier. The two examples below are intended as illustrative case studies of the framework, focusing on scenario generation for planning and stress testing to support robust decision-making rather than on an exhaustive empirical comparison. 
+
+7.1 Scenario generation for planning 
+
+In stochastic optimization, the decision problem is often written as (1) or approximated through a finite scenario set {ξi}mi=1 sampled from a distribution Q. The quality of the resulting decision depends not only on the number of scenarios, but also on whether Q captures the dependence structure, tail behavior, and regime variation relevant to the objective and constraints. Generative models enter naturally as scenario engines . Rather than treating Q as a fixed historical distribution, one may construct a scenario distribution adapted to the planning context, 22 0 10 0 10 1 10 2 10 3 10 4 10 5                  
+
+> # Outages
+> 0.0
+> 0.5
+> 1.0Empirical CDF
+> Fulton
+> Real Generated
+> 010 010 110 210 310 410 5
+> # Outages
+> 0.0
+> 0.5
+> 1.0
+> DeKalb
+> Real Generated
+> 010 010 110 210 310 410 5
+> # Outages
+> 0.0
+> 0.5
+> 1.0
+> Clayton
+> Real Generated
+> 010 010 110 210 310 410 5
+> # Outages
+> 0.0
+> 0.5
+> 1.0
+> Rockdale
+> Real Generated
+
+Figure 1: Empirical and generated marginal outage distributions for representative counties (Fulton, DeKalb, Clayton, and Rockdale), shown via empirical cumulative distribution functions of outage counts. The four counties illustrate both high-volume and sparse outage regimes. for example by conditioning on observed covariates, transporting a nominal distribution to a new regime, or enforcing structural constraints such as temporal, spatial, or network dependence. The point is not merely to match marginals, but to construct scenario distributions under which the downstream optimization behaves reliably. 
+
+Example: power outage scenario generation. We illustrate scenario generation for planning using county-level power outage data from the Atlanta metropolitan area. Each sample is a 10-dimensional outage-count vector observed at a 15-minute timestamp, whose coordinates correspond to Fulton, DeKalb, Cobb, Gwinnett, Clayton, Douglas, Cherokee, Forsyth, Henry, and Rockdale counties. Outage counts are transformed coordinatewise by log(1 + x) and standardized using the training sample. The dataset covers 2018–2024 and contains 245,472 timestamp-level samples. For expositional simplicity, we treat the timestamped observations as i.i.d. cross-sectional outage vectors and use the example to study spatial dependence across counties rather than temporal dynamics. Thus, the example is intended to illustrate multivariate scenario construction under a simplified setting, not to provide a full spatio-temporal outage model. We train a continuous-time flow-matching model to generate outage vectors from the empirical distribution. Evaluation focuses on two features most relevant to scenario generation: the marginal distribution at each county and the dependence structure across counties. The learned model achieves the Maximum Mean Discrepancy (MMD) value of 0.0150 between real and synthesized data in the transformed 10-dimensional space. Figure 1 reports representative marginal compar-isons for Fulton, DeKalb, Clayton, and Rockdale counties, chosen to illustrate both high-volume and sparse outage regimes, as well as modest variation in fit quality across locations. Figure 2 compares the empirical and generated cross-county correlation structure. The generated samples reproduce the county-wise marginals reasonably well and capture the main pairwise dependence patterns, suggesting that the model can provide realistic multivariate outage scenarios for down-stream planning rather than merely matching isolated low-dimensional summaries. 23 Fulton DeKalb Cobb Gwinnett Clayton Douglas Cherokee Forsyth Henry Rockdale Fulton DeKalb Cobb Gwinnett Clayton Douglas Cherokee Forsyth Henry Rockdale 
+
+> Real
+> Fulton DeKalb Cobb Gwinnett Clayton Douglas Cherokee Forsyth Henry Rockdale Fulton DeKalb Cobb Gwinnett Clayton Douglas Cherokee Forsyth Henry Rockdale
+> Generated
+> −1.0
+> −0.50.00.51.0
+
+Figure 2: Empirical and generated cross-county correlation matrices in the transformed space. 
+
+7.2 Stress testing and distributionally robust decisions 
+
+In robust decision-making, the relevant distribution is not the nominal distribution itself, but a stressed distribution constructed to expose vulnerabilities of the decision system. A standard baseline is Wasserstein distributionally robust optimization, as in (16). This formulation implicitly characterizes adverse distributions by their membership in an am-biguity set. A constructive alternative is to generate a stressed distribution directly, for example, through transport-guided distortion of P , adversarial updates in transport-map space, or risk-guided dynamics. The result is not only a worst-case value, but an explicit stressed distribution and a corresponding family of scenarios that can be sampled, inspected, and used for downstream analysis. For OR, this matters because robustness is not only about worst-case protection, but also about whether the generated adverse scenarios are operationally meaningful and diagnostically informative. 
+
+Example: robust portfolio optimization. We illustrate robust distribution construction in a portfolio-allocation problem. The uncertain input is a one-period return vector Y ∈ Rd, and the decision is a long-only portfolio w(θ) = softmax( θ) ∈ ∆d−1. We use six exchange-traded funds, {SPY , IWM , EFA , EEM , AGG , GLD }, representing U.S. equities, small-cap equities, developed in-ternational equities, emerging markets, bonds, and gold. From adjusted daily prices, we construct aligned daily returns and split them chronologically into a training period and a held-out test pe-riod. Returns are standardized using the training sample only, and the standardized return vector is denoted by x ∈ Rd.The nominal portfolio is obtained by minimizing the empirical average of a smooth shortfall loss, 
+
+ℓ(θ, x ) = β−1 log (1 + exp( β(q − w(θ)⊤x)) ), which is a differentiable approximation of the downside loss (q − w⊤x)+. For the robust version, we use the Wasserstein-penalized minimax formulation from Section 6, implemented on particles: starting from training samples xi, we jointly update 24 −0.04 −0.02 0.00 0.02                      
+
+> 0
+> 20
+> 40
+> 60 Density
+> SPY
+> −0.05 0.00 0.05
+> 0
+> 10
+> 20
+> 30
+> IWM
+> −0.04 −0.02 0.00 0.02
+> 0
+> 20
+> 40
+> EFA
+> −0.025 0.000 0.025
+> 0
+> 20
+> 40 Density
+> EEM
+> −0.02 −0.01 0.00 0.01
+> 0
+> 50
+> 100
+> AGG
+> −0.025 0.000 0.025
+> 0
+> 20
+> 40
+> GLD Empirical Nominal γ= 0 .01 γ= 0 .1γ= 1 γ= 10
+
+Figure 3: Marginal distributions of nominal and generated worst-case returns for the six assets, shown for different values of the regularization parameter. Larger perturbations produce more pronounced shifts toward adverse return regions. the portfolio parameter θ and adversarially perturbed particles x′ 
+
+> i
+
+≈ T (xi). Figure 3 shows the generated worst-case return distributions for different values of the regularization parameter. As the perturbation becomes less constrained, the stressed distribution shifts away from the nominal one and places more mass on adverse return regions. Figure 4 compares out-of-sample cumulative wealth on the test set for the nominal portfolio and portfolios optimized under the generated worst-case distributions. The robust portfolios exhibit improved performance under these stressed design distributions, illustrating the value of generative modeling here as a mechanism for constructing informative adverse distributions rather than merely reproducing historical returns. As in the outage example, the goal here is illustrative: to show how the proposed construction can generate decision-relevant stressed distributions in a concrete OR setting. 
+
+7.3 Conditional and posterior updating under partial information 
+
+Many OR problems are sequential: information arrives over time, and the relevant uncertainty distribution must be updated before each decision. In this setting, the decision-maker typically needs either a conditional distribution indexed by observed side information, or a posterior distri-bution obtained through a prior–likelihood update after observing a noisy signal. These two objects serve different roles: conditional distributions describe predictive uncertainty indexed by context, whereas posterior distributions arise from Bayesian updating under partial observation. This task is central in monitoring, filtering, anomaly detection, and sequential intervention, where decisions depend on calibrated updates rather than unconditional sample generation. The relevant uncertainty is no longer the unconditional historical distribution, but an updated distri-bution tailored to the information available at decision time. 25 Mar 2025 Jun 2025 Sep 2025 Dec 2025            
+
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+> 1.2
+> 1.3
+> 1.4Wealth
+> Non-Stress Test
+> Nominal
+> γ= 0 .01
+> γ= 0 .1
+> γ= 1
+> γ= 10
+> Mar 2025 Jun 2025 Sep 2025 Dec 2025
+> Stress Test
+> Nominal
+> γ= 0 .01
+> γ= 0 .1
+> γ= 1
+> γ= 10
+
+Figure 4: Out-of-sample cumulative wealth of the nominal portfolio and portfolios optimized under generated worst-case distributions, evaluated on a non-stress test setting (left) and a stress test setting (right). Curves correspond to different values of the regularization parameter. These ex-amples illustrate that γ = 0 .1 achieves the best performance among the choices. 
+
+7.4 Transport-based correction across regimes 
+
+A final task is correction across regimes. Here, the issue is not stress or partial observation, but deployment mismatch: the historical distribution used for training differs systematically from the distribution under which the decision will be deployed. Examples include market regime shifts, geographic transfer, policy changes, altered sensing pipelines, or new operational environments. In such settings, the central question is how to construct a corrected distribution Q from a nom-inal distribution P . When the mismatch is well described as a geometric deformation, a natural representation is Q = T#P , where T transports the nominal distribution to the deployment regime while preserving structural features that should remain stable. When the shift is largely explained by observed covariates, the same problem may instead be formulated through conditional distri-butions indexed by regime variables. From an OR standpoint, this matters because optimization under an uncorrected historical distribution may produce systematically biased or poorly calibrated decisions at deployment. These last two tasks further emphasize the central theme of this section: the key question is not only how to construct a distribution, but which distribution the decision problem actually requires. The earlier sections provided the mathematical and computational tools; the present section identifies the operational targets that those tools are meant to produce. 
+
+# 8 Evaluation 
+
+A central message of this tutorial is that, in OR, a generative model should be evaluated by the 
+
+distribution it constructs for the decision problem , not by generic sample quality alone. Once generative modeling is viewed as distribution construction rather than unconstrained synthesis, 26 evaluation becomes inherently task-dependent. Evaluation should be determined by the distributional operation of interest and the downstream decision criterion. One should first determine what distribution the decision problem requires, then assess whether the chosen representation constructs that distribution well enough for the task at hand. For scenario generation in stochastic optimization, the relevant question is whether the con-structed distribution captures the dependence structure, tail behavior, and regime variation that materially affect the decision. Appropriate diagnostics, therefore, include feasibility under held-out scenarios, service levels, reserve violations, stockouts, and out-of-sample cost, rather than only vi-sual realism or low-dimensional goodness of fit. For stress testing and robust decision-making, the target is different: the constructed distribution should reveal adverse yet plausible failure modes. Evaluation should then focus on tail loss, constraint violation under stress, decision sensitivity, and comparison with baseline adversaries such as Wasserstein DRO. For conditional generation and posterior updating, the constructed distribution should be cal-ibrated relative to the available information. Relevant diagnostics include conditional coverage, posterior uncertainty quantification, and the stability of updates as new observations arrive. In sequential settings, these translate into operational criteria such as false alarm rates, detection delay, intervention timing, and downstream utility. For transport-based correction across regimes, the key question is whether the corrected deployment distribution improves decision quality under shift; useful diagnostics include held-out deployment performance, robustness across regimes, and calibration under regime change. Across these settings, the most informative criterion is often decision regret : the loss incurred by optimizing under the constructed distribution rather than under the true deployment distribu-tion. Exact regret is rarely observable, but it can often be estimated through held-out deployment periods, common stress scenarios, or controlled perturbation experiments. This is usually the most direct test of whether distribution construction has improved the downstream decision. By con-trast, generic metrics from data-imitation tasks, such as likelihood or perceptual sample quality, are at best secondary: they may be useful for some representations, but they do not by themselves determine whether the constructed distribution is decision-relevant. 
+
+# 9 Conclusion and discussion 
+
+A main message of this tutorial is that generative models in OR should not be viewed solely as tools for imitating historical data or as black-box sample generators. Their broader value lies in providing flexible mechanisms for constructing probability distributions under structured distributional shift. This perspective is especially relevant in decision-making under uncertainty, where the distribution needed by the downstream problem is often not the nominal historical distribution itself, but a derived distribution obtained through transport, conditioning, guidance, or equilibrium effects. From this viewpoint, generative modeling becomes part of the modeling language of OR. It pro-27 vides tools for constructing scenario distributions for planning, stress distributions for robustness, updated distributions under partial information, and corrected distributions under regime change. The emphasis, therefore, shifts from data imitation alone to the broader problem of distribution construction: how to represent, compute, and validate the uncertainty distribution that is actually relevant to the decision at hand. This tutorial also highlights that these constructions admit meaningful mathematical structure. In several settings, generative procedures can be interpreted through optimization in probability space, whether through Wasserstein-space minimization, min–max optimization in transport-map space, or posterior error transfer under Bayesian updating. At the same time, the strongest cur-rent guarantees remain largely at the level of idealized distributions, transport maps, and particle systems, while the gap to finite-sample, stochastic, and neural implementations remains substantial. This leaves substantial room for future OR research. On the theoretical side, sharper foun-dations are needed for structured distribution construction, especially in settings involving partial observation, sequential updating, constraints, and interacting agents. On the algorithmic side, generative models offer a promising way to enrich modern OR methods, not only by producing samples, but by enabling new optimization, control, and decision procedures in high-dimensional and data-rich settings. More broadly, generative modeling points toward a view of uncertainty that is constructive, task-aware, and better aligned with the needs of modern decision-making in OR. 
+
+# Acknowledgement 
+
+The work of Y.Z. and Y.X. is partially supported by an NSF CMMI-2112533, and the Coca-Cola Foundation. 
+
+# References 
+
+Michael S Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions. arXiv preprint arXiv:2303.08797 , 2023. Michael Samuel Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic interpolants. In The Eleventh International Conference on Learning Representations , 2023. Shun-ichi Amari. Information geometry and its applications: Convex function and dually flat manifold. In LIX Fall Colloquium on Emerging Trends in Visual Computing , pages 75–102. Springer, 2008. Shun-ichi Amari. Information geometry and its applications , volume 194. Springer, 2016. Luigi Ambrosio, Nicola Gigli, and Giuseppe Savaré. Gradient flows: In metric spaces and in the space of probability measures . Springer Science & Business Media, 2005. 28 Lynton Ardizzone, Jakob Kruse, Sebastian Wirkert, Daniel Rahner, Eric W Pellegrini, Ralf S Klessen, Lena Maier-Hein, Carsten Rother, and Ullrich Köthe. Analyzing inverse problems with invertible neural networks. arXiv preprint arXiv:1808.04730 , 2018. Jens Behrmann, Will Grathwohl, Ricky TQ Chen, David Duvenaud, and Jörn-Henrik Jacobsen. Invertible residual networks. In International Conference on Machine Learning , pages 573–582. PMLR, 2019. Jean-David Benamou and Yann Brenier. A computational fluid mechanics solution to the monge-kantorovich mass transfer problem. Numerische Mathematik , 84(3):375–393, 2000. Jose Blanchet and Karthyek Murthy. Quantifying distributional model risk via optimal transport. 
+
+Mathematics of Operations Research , 44(2):565–600, 2019. René Carmona, François Delarue, et al. Probabilistic theory of mean field games with applications I-II , volume 3. Springer, 2018. Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. Advances in neural information processing systems , 31, 2018. Xiuyuan Cheng, Yao Xie, Linglingzhi Zhu, and Yunqin Zhu. Worst-case generation via minimax optimization in wasserstein space. arXiv preprint arXiv:2512.08176 , 2025. Hyungjin Chung, Jeongsol Kim, Michael Thompson McCann, Marc Louis Klasky, and Jong Chul Ye. Diffusion posterior sampling for general noisy inverse problems. In International Conference on Learning Representations (ICLR) , 2023. Nicolas Courty, Rémi Flamary, and Devis Tuia. Domain adaptation with regularized optimal transport. In Machine Learning and Knowledge Discovery in Databases: European Conference, ECML PKDD 2014, Nancy, France, September 15-19, 2014. Proceedings, Part I 14 , pages 274– 289. Springer, 2014. Nicolas Courty, Rémi Flamary, Amaury Habrard, and Alain Rakotomamonjy. Joint distribution op-timal transportation for domain adaptation. Advances in neural information processing systems ,30, 2017. Laurent Dinh, David Krueger, and Yoshua Bengio. NICE: Non-linear independent components estimation. International Conference on Learning Representations (ICLR) Workshop , 2015. Laurent Dinh, Jascha Sohl-Dickstein, and Samy Bengio. Density estimation using Real NVP. In 
+
+International Conference on Learning Representations (ICLR) , 2017. Jiaojiao Fan, Qinsheng Zhang, Amirhossein Taghvaei, and Yongxin Chen. Variational wasserstein gradient flow. In International Conference on Machine Learning , pages 6185–6215. PMLR, 2022. 29 Rui Gao and Anton Kleywegt. Distributionally robust stochastic optimization with wasserstein distance. Mathematics of Operations Research , 48(2):603–655, 2023. Alessandro P. Generale et al. Conditional variable flow matching: Transforming conditional densi-ties with amortized conditional optimal transport. arXiv preprint arXiv:2411.08314 , 2024. Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron C. Courville, and Yoshua Bengio. Generative adversarial nets. In NIPS , 2014. Will Grathwohl, Ricky TQ Chen, Jesse Bettencourt, Ilya Sutskever, and David Duvenaud. Ffjord: Free-form continuous dynamics for scalable reversible generative models. In International Con-ference on Learning Representations , 2018. Ishaan Gulrajani, Faruk Ahmed, Martín Arjovsky, Vincent Dumoulin, and Aaron C. Courville. Improved training of wasserstein gans. In NIPS , 2017. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pages 770–778, 2016. Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598 ,2022. Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in Neural Information Processing Systems , 33:6840–6851, 2020. Minyi Huang, Roland P Malhamé, and Peter E Caines. Large population stochastic dynamic games: closed-loop mckean-vlasov systems and the nash certainty equivalence principle. 2006. Aapo Hyvärinen and Peter Dayan. Estimation of non-normalized statistical models by score match-ing. Journal of Machine Learning Research , 6(4), 2005. Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A. Efros. Image-to-image translation with conditional adversarial networks. 2017 IEEE Conference on Computer Vision and Pattern Recog-nition (CVPR) , pages 5967–5976, 2017. Richard Jordan, David Kinderlehrer, and Felix Otto. The variational formulation of the fokker– planck equation. SIAM journal on mathematical analysis , 29(1):1–17, 1998. Carson Kent, Jiajin Li, Jose Blanchet, and Peter W Glynn. Modified frank wolfe in probability space. Advances in Neural Information Processing Systems , 34:14448–14462, 2021. Diederik P Kingma and Max Welling. Auto-encoding variational Bayes. arXiv preprint arXiv:1312.6114 , 2013. Diederik P. Kingma and Max Welling. An introduction to Variational Autoencoders. Foundations and Trends ® in Machine Learning , 12(4):307–392, 2019. doi: 10.1561/2200000056. 30 Durk P Kingma and Prafulla Dhariwal. Glow: Generative flow with invertible 1x1 convolutions. 
+
+Advances in neural information processing systems , 31, 2018. Ivan Kobyzev, Simon JD Prince, and Marcus A Brubaker. Normalizing flows: An introduction and review of current methods. IEEE transactions on pattern analysis and machine intelligence , 43 (11):3964–3979, 2020. Daniel Kuhn, Peyman Mohajerin Esfahani, Viet Anh Nguyen, and Soroosh Shafieezadeh-Abadeh. Wasserstein distributionally robust optimization: Theory and applications in machine learning. In Operations research & management science in the age of analytics , pages 130–166. Informs, 2019. Jean-Michel Lasry and Pierre-Louis Lions. Mean field games. Japanese journal of mathematics , 2 (1):229–260, 2007. Tianyi Lin, Chi Jin, and Michael Jordan. On gradient descent ascent for nonconvex-concave min-imax problems. In International Conference on Machine Learning , pages 6083–6093. PMLR, 2020. Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow matching for generative modeling. In The Eleventh International Conference on Learning Rep-resentations , 2023. Yaron Lipman, Marton Havasi, Peter Holderrieth, Neta Shaul, Matt Le, Brian Karrer, Ricky TQ Chen, David Lopez-Paz, Heli Ben-Hamu, and Itai Gat. Flow matching guide and code. arXiv preprint arXiv:2412.06264 , 2024. Qiang Liu. Rectified flow: A marginal preserving approach to optimal transport. arXiv preprint arXiv:2209.14577 , 2022. Antoine Liutkus, Umut Simsekli, Szymon Majewski, Alain Durmus, and Fabian-Robert Stöter. Sliced-wasserstein flows: Nonparametric generative modeling via optimal transport and diffu-sions. In International Conference on machine learning , pages 4104–4113. PMLR, 2019. Ashok Makkuva, Amirhossein Taghvaei, Sewoong Oh, and Jason Lee. Optimal transport mapping via input convex neural networks. In International Conference on Machine Learning , pages 6672–6681. PMLR, 2020. Ming Min and Ruimeng Hu. Signatured deep fictitious play for mean field games with common noise. arXiv preprint arXiv:2106.03272 , 2021. Peyman Mohajerin Esfahani and Daniel Kuhn. Data-driven distributionally robust optimization using the wasserstein metric: Performance guarantees and tractable reformulations. Mathematical Programming , 171(1):115–166, 2018. 31 Petr Mokrov, Alexander Korotin, Lingxiao Li, Aude Genevay, Justin M Solomon, and Evgeny Burnaev. Large-scale wasserstein gradient flows. Advances in Neural Information Processing Systems , 34:15243–15256, 2021. Derek Onken, S Wu Fung, Xingjian Li, and Lars Ruthotto. OT-flow: Fast and accurate continuous normalizing flows via optimal transport. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, 2021. Vishal Purohit, Matthew Repasky, Jianfeng Lu, Qiang Qiu, Yao Xie, and Xiuyuan Cheng. Posterior sampling via langevin dynamics based on generative priors. Conference on Computer Vision and Pattern Recognition (CVPR) , 2024. Lars Ruthotto, Stanley J Osher, Wuchen Li, Levon Nurbekyan, and Samy Wu Fung. A machine learning framework for solving high-dimensional mean field game and mean field control problems. 
+
+Proceedings of the National Academy of Sciences , 117(17):9183–9193, 2020. Chiappa Silvia, Jiang Ray, Stepleton Tom, Pacchiano Aldo, Jiang Heinrich, and Aslanides John. A general approach to fairness with optimal transport. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 34, pages 3633–3640, 2020. Aman Sinha, Hongseok Namkoong, Riccardo Volpi, and John Duchi. Certifying some distributional robustness with principled adversarial training. arXiv preprint arXiv:1710.10571 , 2017. Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In Inter-national Conference on Learning Representations , 2021a. Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribu-tion. Advances in Neural Information Processing Systems , 32, 2019. Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations (ICLR) , 2021b. Yang Song, Liyue Shen, Lei Xing, and Stefano Ermon. Solving inverse problems in medical imaging with score-based generative models. In International Conference on Learning Representations (ICLR) , 2022. Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. Consistency models. In International Conference on Machine Learning , pages 32211–32252. PMLR, 2023. Yu Sun, Zihui Wu, Yifan Chen, Berthy T. Feng, and Katherine L. Bouman. Provable probabilistic imaging using score-based generative priors. IEEE Transactions on Computational Imaging , 10: 1290–1305, 2024. doi: 10.1109/TCI.2024.3449114. Brian L. Trippe and Richard E. Turner. Conditional density estimation with bayesian normalising flows. arXiv preprint arXiv:1802.04908 , 2018. 32 Cédric Villani et al. Optimal Transport: Old and New . Springer, 2009. Pascal Vincent. A connection between score matching and denoising autoencoders. Neural compu-tation , 23(7):1661–1674, 2011. Jiaqi Wen and Jianyi Yang. Distributionally robust optimization via generative ambiguity modeling. 
+
+ICLR , 2026. Andre Wibisono. Sampling as optimization in the space of measures: The langevin dynamics as a composite optimization problem. In Conference on Learning Theory , pages 2093–3027. PMLR, 2018. Chen Xu, Xiuyuan Cheng, and Yao Xie. Invertible neural networks for graph prediction. IEEE Journal on Selected Areas in Information Theory , 3(3):454–467, 2022. Chen Xu, Xiuyuan Cheng, and Yao Xie. Normalizing flow neural networks by JKO scheme. Con-ference on Neural Information Processing Systems (NeurIPS) , 2023. Chen Xu, Jonghyeok Lee, Xiuyuan Cheng, and Yao Xie. Flow-based distributionally robust opti-mization. IEEE Journal on Selected Areas in Information Theory , 2024. Chen Xu, Xiuyuan Cheng, and Yao Xie. Computing high-dimensional optimal transport by flow neural networks. International Conference on Artificial Intelligence and Statistics (AISTATS) ,2025. Junchi Yang, Antonio Orvieto, Aurelien Lucchi, and Niao He. Faster single-loop algorithms for minimax optimization without strong concavity. In International Conference on Artificial Intel-ligence and Statistics , pages 5485–5517. PMLR, 2022. Jiajia Yu, Junghwan Lee, Yao Xie, and Xiuyuan Cheng. High-dimensional mean-field games by particle-based flow matching. International Conference on Learning Representations (ICLR) ,2026. Linglingzhi Zhu and Yao Xie. Distributionally robust optimization via iterative algorithms in continuous probability spaces. arXiv preprint arXiv:2412.20556 , 2024. 33
