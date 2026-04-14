@@ -1,0 +1,542 @@
+Title: A Robust SINDy Autoencoder for Noisy Dynamical System Identification
+
+URL Source: https://arxiv.org/pdf/2604.04829v1
+
+Published Time: Tue, 07 Apr 2026 01:56:47 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# A Robust SINDy Autoencoder for Noisy Dynamical System Identification 
+
+## Kairui Ding Department of Mathematics, Columbia University 
+
+## kd3014@columbia.edu 
+
+Abstract 
+
+Sparse identification of nonlinear dynamics (SINDy) has been widely used to discover the governing equations of a dynamical system from data. It uses sparse regression tech-niques to identify parsimonious models of unknown systems from a library of candidate functions. Therefore, it relies on the assumption that the dynamics are sparsely represented in the coordinate system used. To address this limitation, one seeks a coordinate trans-formation that provides reduced coordinates capable of reconstructing the original system. Recently, SINDy autoencoders have extended this idea by combining sparse model discovery with autoencoder architectures to learn simplified latent coordinates together with parsi-monious governing equations. A central challenge in this framework is robustness to mea-surement error. Inspired by noise-separating neural network structures, we incorporate a noise-separation module into the SINDy autoencoder architecture, thereby improving ro-bustness and enabling more reliable identification of noisy dynamical systems. Numerical experiments on the Lorenz system show that the proposed method recovers interpretable latent dynamics and accurately estimates the measurement noise from noisy observations. 
+
+Keywords: SINDy, autoencoder, dynamical systems, noise robustness, sparse regression 
+
+# 1 Introduction 
+
+The discovery of governing equations from data is a central problem in modern scientific com-puting and dynamical systems. Accurate governing models provide both mechanistic under-standing and predictive capability, and they play an important role in applications ranging from physics and engineering to biology and climate science. In classical settings, such models may be derived from first principles. In many practical situations, however, the underlying sys-tem is only partially understood, is too high-dimensional for direct analysis, or is observed only through noisy and incomplete measurements. These challenges have motivated a growing body of work on data-driven model discovery, including symbolic regression, sparse regression, operator-theoretic methods, and neural-network-based approaches [1, 2]. Among early approaches, symbolic regression demonstrated that interpretable equations can, in principle, be extracted directly from experimental measurements. More recently, sparse model discovery has emerged as a particularly attractive direction because it explicitly seeks parsimo-nious and interpretable representations of nonlinear dynamics. A prominent example is the Sparse Identification of Nonlinear Dynamics (SINDy) framework introduced by Brunton, Proc-tor, and Kutz [3], which identifies governing equations by selecting a small number of active terms from a prescribed library of candidate functions. Since its introduction, SINDy has been 1
+
+> arXiv:2604.04829v1 [stat.ME] 6 Apr 2026
+
+extended in several directions, including model selection, control, low-data regimes, and ro-bustness improvements [4–6]. These developments have established sparse regression as one of the central tools for equation discovery in nonlinear dynamical systems [7]. Despite its success, the performance of SINDy depends strongly on the choice of coordinates. Even if the underlying dynamics are simple, they may not appear sparse in the observed vari-ables. This observation motivates the search for coordinate systems in which the dynamics ad-mit a lower-dimensional and more parsimonious representation. Champion et al. [8] addressed this issue by combining SINDy with an autoencoder architecture, thereby learning reduced coordinates and sparse latent governing equations simultaneously. Related work has further explored low-dimensionalized representations and latent-coordinate discovery for complex dy-namical systems [9–11]. These approaches suggest that nonlinear coordinate discovery can substantially expand the applicability of sparse model identification beyond settings in which the governing equations are already sparse in the measured variables. A major challenge in this framework is robustness to measurement noise. Since sparse model discovery typically relies on derivative information, noisy observations can significantly degrade the stability and accuracy of the identified equations. This issue has motivated a number of recent efforts aimed at improving SINDy under uncertainty, noisy measurements, or variable ambiguity [6, 12, 13]. In particular, Rudy, Kutz, and Brunton [14] proposed a signal-noise decomposition framework based on time-stepping constraints, showing that neural-network-based denoising can be integrated with dynamical system learning in a principled way. Motivated by these developments, we propose a robust SINDy autoencoder framework that in-tegrates a noise-separating neural network into the SINDy autoencoder pipeline. The purpose of the noise-separation module is to disentangle measurement corruption from the underly-ing system dynamics before sparse latent model identification is performed. In this way, the proposed framework combines three key ingredients within a single architecture: denoising of noisy observations, nonlinear coordinate discovery through an autoencoder, and sparse recov-ery of latent governing equations. The main contribution of this paper is the development of a unified framework for noisy dynam-ical system identification that seeks parsimonious latent dynamics while explicitly accounting for measurement error. We demonstrate the method on the Lorenz system and show that it is able to recover interpretable latent equations together with an accurate estimate of the injected measurement noise. The remainder of the paper is organized as follows. Section 2 reviews the mathematical and ma-chine learning background underlying the proposed method, including center manifold theory, normal form theory, SINDy, and autoencoders. Section 3 introduces the robust SINDy autoen-coder framework and its optimization procedure. Section 4 presents the numerical experiments and implementation details. Section 5 concludes with a discussion of the main findings and possible future directions. 
+
+# 2 Background 
+
+This section reviews the mathematical and machine learning background underlying the pro-posed framework. We begin with center manifold theory and normal form theory, which moti-vate the search for reduced coordinates. We then review the SINDy methodology, autoencoder architectures, and noise-separation networks. 22.1 Center manifold theory and normal forms 
+
+This subsection introduces the mathematical preliminaries for constructing coordinate transfor-mations that yield reduced-order dynamical descriptions. 
+
+2.1.1 Center manifold theorem 
+
+When studying a dynamical system, one is often particularly interested in parameter regimes in which bifurcations occur, since these typically signal qualitative changes in stability and long-term behavior. In many applications, however, the full system is too high-dimensional or too complicated to analyze directly. Center manifold theory provides a principled way to reduce the dimensionality of the system by isolating the components that govern the local dynamics near an equilibrium. Consider a dynamical system of the form 
+
+˙x = f (x),
+
+where x ∈ Rn and f : Rn → Rn is continuously differentiable. By translating coordinates if necessary, we may assume that the equilibrium point is located at the origin, so that f (0) = 0 .We adopt this assumption throughout. Let A denote the Jacobian matrix of the system at the equilibrium point x = 0 . The eigenvalues of A can be classified into three categories: 1. eigenvalues with negative real parts (stable eigenvalues), 2. eigenvalues with positive real parts (unstable eigenvalues), 3. eigenvalues with zero real parts (center eigenvalues). Let Es, Eu, and Ec denote the stable, unstable, and center subspaces of Rn, respectively, defined as the spans of the generalized eigenvectors associated with these three classes of eigenvalues. 
+
+Definition 2.1 (Center manifold) . A center manifold is a locally defined invariant manifold having the same dimension as the center subspace Ec. Invariance means that any trajectory starting on the manifold remains on it for as long as the solution stays within the neighborhood on which the manifold is defined. Moreover, the manifold contains the origin and is tangent to Ec at the origin. 
+
+In a neighborhood of an equilibrium, the existence of a center manifold can lead to a substan-tial reduction in dimension, while still preserving the essential local dynamics. The classical existence result is stated below. 
+
+Theorem 2.1 (Center Manifold Theorem) . Let A be the Jacobian matrix of the system at the equilibrium point 0, and let Es, Eu, and Ec be the stable, unstable, and center subspaces of Rn,respectively. Then: 1. There exists a local center manifold W c(0) at the origin. This manifold is tangent to Ec at 0
+
+and has the same dimension as Ec.2. The center manifold W c(0) can be represented locally as the graph of a function 
+
+h : Ec → Es ⊕ Eu,
+
+where Es ⊕ Eu denotes the direct sum of the stable and unstable subspaces. 
+
+33. The dynamics on the center manifold are conjugate to the reduced system 
+
+˙y = Acy + gc(y),
+
+where y ∈ Ec, Ac is the restriction of A to Ec, and gc denotes the restriction of the nonlinear part of f to the center directions. 
+
+Thus, for x ∈ W c(0) , the solution of the original system ˙x = f (x) is locally conjugate to the so-lution of the reduced system on the center manifold. In particular, W c(0) contains all bounded trajectories that remain in a sufficiently small neighborhood of the equilibrium. Standard refer-ences include Carr [15] and Kuznetsov [16]. 
+
+2.1.2 Normal form theory 
+
+While the Center Manifold Theorem guarantees the existence of a low-dimensional invariant manifold, it does not by itself provide a particularly simple representation of the reduced dy-namics. Normal form theory addresses this issue by seeking a further change of variables that transforms the reduced system into a simpler canonical form. The goal is to eliminate as many nonessential nonlinear terms as possible, leaving only those terms that are dynamically mean-ingful for the local bifurcation structure . 
+
+2.1.3 Combining center manifold and normal form theories 
+
+In practice, one first applies center manifold reduction to obtain a lower-dimensional system, and then applies normal form transformations to simplify the reduced dynamics. This general procedure is summarized in Algorithm 1. 
+
+Algorithm 1: Dimensional reduction algorithm 
+
+Linearization : Linearize the system around the equilibrium point: 
+
+˙x = Ax + g(x),
+
+where A is the Jacobian matrix and g(x) contains the nonlinear terms up to a prescribed order. 
+
+Decomposition : Decompose Rn into stable, unstable, and center subspaces Es, Eu, and Ec.
+
+Center Manifold Reduction : Use center manifold theory to reduce the system to the center manifold W c. The reduced dynamics are 
+
+˙y = Acy + gc(y),
+
+where y ∈ Ec.
+
+Normal Form Transformation : Transform the reduced system into normal form by eliminating nonessential terms. The resulting system takes the form 
+
+˙y = Acy + R(y),
+
+where R(y) contains only the resonant terms that cannot be removed up to the chosen order. 4To illustrate this procedure, consider the family of ordinary differential equations on R3:
+
+˙x = y + λx + x2 − y2 − x(x2 + y2),
+
+˙y = −x + λy + 2 xy + z2 − y(x2 + y2),
+
+˙z = −z + xy, (1) where λ ∈ R. This system has an equilibrium at the origin for all values of λ. When λ = 0 , the Jacobian at the origin is 
+
+0 1 0
+
+−1 0 00 0 −1
+
+ . (2) It follows that Ec = {(x, y, 0) } and Es = {(0 , 0, z )}. Let O(|(x, y )|4) denote higher-order terms. Then center manifold reduction yields the system 
+
+˙x = y + λx + x2 − y2 − x(x2 + y2) + O(|(x, y )|4),
+
+˙y = −x + λy + 2 xy − y(x2 + y2) + O(|(x, y )|4), (3) on Ec ∼= R2. Here the system has been truncated after third-order terms. This reduced system is already simpler than the original three-dimensional dynamics, but it still contains several nonlinear terms and does not yet reveal its geometric structure. After an additional normal form transformation, the system can be rewritten as 
+
+˙u = v + λu − u(u2 + v2) + O(|(x, y )|4),
+
+˙v = −u + λv − v(u2 + v2) + O(|(x, y )|4), (4) where u = u(x, y ) and v = v(x, y ) are the transformed coordinates. In this form, it becomes immediately apparent that a stable periodic orbit emerges through a Hopf bifurcation as λ
+
+passes through 0. Moreover, the truncated system is invariant under transformations of the form 
+
+(u, v )T 7 → A(u, v )T , (5) for all A ∈ SO (2) .
+
+## 2.2 SINDy 
+
+We now review the sparse identification of nonlinear dynamics (SINDy) framework for data-driven model discovery. In many scientific applications, one observes time-resolved state data and seeks to infer the gov-erning equations directly from the data. Typical examples include climate systems, biological populations, and fluid flows. SINDy provides a principled framework for discovering parsimo-nious governing equations from such observations. Consider an unknown dynamical system of the form 
+
+ddt x(t) = f (x(t)) . (6) Given time-series data, the goal is to identify a parsimonious model for the vector field f . The central assumption underlying SINDy is that the dynamics can be represented sparsely in a suitable library of candidate functions. Following the principle of parsimony, one therefore seeks a model involving only a small number of active terms. 5Let X ∈ Rm×n denote snapshot data from the system, where n is the state dimension and m is the number of time points. Let ˙X denote the corresponding derivative data. In matrix form, 
+
+˙X =
+
+
+
+˙xT (t1)˙xT (t2)
+
+...
+
+˙xT (tm)
+
+ =
+
+
+
+˙x1(t1) ˙x2(t1) · · · ˙xn(t1)˙x1(t2) ˙x2(t2) · · · ˙xn(t2)
+
+... ... . . . ...
+
+˙x1(tm) ˙x2(tm) · · · ˙xn(tm)
+
+ .
+
+Using prior knowledge of the class of dynamics under consideration, one constructs a library of candidate basis functions 
+
+Θ(X) = θ1(X), θ 2(X), . . . , θ p(X),
+
+where each column corresponds to a candidate term in the governing equation. The SINDy regression problem is then formulated as 
+
+˙X = f (x(t)) ≈ Θ(X)Φ, (7) where Φ ∈ Rp×n is the coefficient matrix to be estimated. Although the library may contain many candidate functions, one seeks a sparse coefficient ma-trix Φ, so that only a small subset of the candidate terms remains active. When p ≪ m, the regression system is overdetermined, and sparse regression methods such as LASSO or thresh-olded least squares can be used to estimate the coefficients. The detailed optimization proce-dure used in this work is described later in the methods section. 
+
+## 2.3 Multi-layer perceptrons and autoencoders 
+
+We next review the neural network architectures used to discover reduced coordinates. Since normal forms encode the essential local dynamics near bifurcation points, the goal is to learn reduced coordinates in which the observed high-dimensional dynamics admit a simpler repre-sentation. Deep learning methods are particularly useful in this setting because of their ability to learn nonlinear low-dimensional structures from data [17]. 
+
+2.3.1 Neural networks and multi-layer perceptrons 
+
+In this work we use the multi-layer perceptron (MLP) architecture. An MLP is a fully connected feedforward neural network composed of an input layer, one or more hidden layers, and an output layer. A schematic example is shown in Figure 1. Input Layer Hidden Layer 1 Hidden Layer 2 Output Layer 
+
+Figure 1 Schematic of a simple Multi-Layer Perceptron (MLP) 6Each neuron computes a weighted sum of its inputs, adds a bias term, and applies a nonlinear activation function: 
+
+z =
+
+> n
+
+X
+
+> i=1
+
+wixi + b, a = σ(z),
+
+where xi are the inputs, wi are the weights, b is a bias term, and σ is the activation function. Common activation functions include: • sigmoid: σ(z) = 11+ e−z ,• hyperbolic tangent: σ(z) = tanh( z),• rectified linear unit: σ(z) = max(0 , z ).For an input x, forward propagation through layer l is given by 
+
+a(l) = σ W (l−1) a(l−1) + b(l−1) ,
+
+where W (l−1) and b(l−1) are the weight matrix and bias vector connecting layer l − 1 to layer l.The network parameters are learned by minimizing a prescribed loss function using backprop-agation and an optimization method such as gradient descent. The gradient-based update rule is 
+
+w(l) 
+
+> ij
+
+← w(l) 
+
+> ij
+
+− η ∂L ∂w (l)
+
+> ij
+
+, b(l) 
+
+> ij
+
+← b(l) 
+
+> ij
+
+− η ∂L ∂b (l)
+
+> ij
+
+,
+
+where η > 0 is the learning rate and L is the loss function. 
+
+2.3.2 Autoencoders 
+
+An autoencoder is a special class of neural network designed to learn efficient latent represen-tations of data. It consists of three main components: 1. an encoder , which maps the input to a lower-dimensional latent representation, 2. a latent space , which stores the compressed representation, 3. a decoder , which reconstructs the original input from the latent coordinates. A schematic is shown in Figure 2. Input Layer Encoder Latent Space Decoder Output Layer 
+
+Figure 2 Schematic of an Autoencoder In the present setting, the purpose of the autoencoder is to learn reduced coordinates that cap-ture the dominant dynamical structure of the original high-dimensional system. By minimizing 7the reconstruction error, the network is trained to encode the essential features of the observed data into a lower-dimensional latent space. The mathematical formulation is as follows. Consider a high-dimensional dynamical system 
+
+ddt x(t) = f (x(t)) , x ∈ Rn. (8) We seek reduced coordinates z ∈ Rm, with m ≪ n, from sample data U ∈ Rn×d, where d
+
+denotes the number of time points, such that the latent dynamics satisfy 
+
+ddt z(t) = g(z(t)) . (9) Let α denote the bifurcation parameter of f and β the bifurcation parameter of g. By center manifold theory and normal form theory, there exist smooth invertible transformations φ1 and 
+
+φ2 such that 
+
+z(t) = φ1x(t), β = φ2α. (10) Accordingly, φ1 and φ2 can be interpreted as encoding maps. Since these transformations are invertible, we also introduce decoding maps ψ1 and ψ2 satisfying 
+
+ψ1φ1(x) ≈ x, ψ2φ2(α) ≈ α. (11) Combining (9) and (10), we obtain 
+
+ddt z(t) = ddt 
+
+ φ1x(t) = g φ1x(t), φ 2α. (12) Expressions for the derivatives of the encoder and decoder variables used in our implementation are introduced later in Section 3.1.2. 
+
+## 2.4 Noise-separating network 
+
+The SINDy autoencoder requires derivative information at each observation time. In the pres-ence of measurement noise, direct numerical differentiation can become unstable, which in turn degrades sparse model discovery. Motivated by the signal-noise decomposition framework with time-stepping constraints proposed by Rudy, Kutz, and Brunton [14], we incorporate a noise-separating neural network into the SINDy autoencoder pipeline. The central idea is to treat the measurement error of a noisy dynamical system as a latent variable and learn it jointly with the underlying dynamics. Rather than smoothing the data as a preprocessing step, the method estimates both the clean dynamics and the noise during training. The mathematical formulation of this joint denoising objective is described in more detail in Section 3. 
+
+# 3 Methods 
+
+This section introduces the robust SINDy autoencoder framework and its computational imple-mentation. We first formulate the learning problem and the associated optimization objective. We then summarize the principal implementation modules; full code listings are deferred to Appendix A. 83.1 Problem formulation 
+
+We consider the dynamical system 
+
+ddt x(t) = f (x(t)) , x(t) ∈ Rn, (13) where the vector field f is unknown. Let the observed snapshot data be 
+
+ˆX = [ˆ x1, . . . , ˆxm],
+
+and suppose that these observations are contaminated by an unknown measurement error 
+
+N = [ n1, . . . , nm].
+
+The objective is to recover a set of reduced coordinates 
+
+z(t) = φ(x(t)) 
+
+together with an associated sparse latent dynamical model 
+
+ddt z(t) = g(z(t)) .
+
+A schematic of the proposed robust SINDy autoencoder is shown in Figure 3. 
+
+Figure 3 Schematic of the robust SINDy autoencoder. 
+
+3.1.1 Data cleansing 
+
+As discussed in the background section, the SINDy methodology depends critically on derivative information derived from the observed data ˆX. In the presence of unknown measurement error 
+
+N, however, direct differentiation of noisy observations may be unreliable. We therefore first introduce a noise-separation module to estimate N and recover a denoised trajectory. We model the underlying dynamics using a feedforward neural network of the form 
+
+ˆfθ(x) = 
+
+> l
+
+Y
+
+> i=1
+
+Cgi
+
+!
+
+(x), gi(x) = σi(Wix + ci),
+
+where Cgi denotes composition with the map gi, each σi is an activation function, and 
+
+θ = {Wi, ci}li=1 
+
+collects the trainable network parameters. 9In this work we use the exponential linear unit (ELU) activation, since in our empirical experi-ments it provided smooth activation behavior and stable training. The ELU function is defined by 
+
+σ(x) = 
+
+(
+
+ex − 1, x ≤ 0,x, x > 0,
+
+applied componentwise for σ1, . . . , σ l−1, with the identity map used in the final layer. Following the construction introduced in the background section, we approximate the discrete-time flow map using explicit Runge–Kutta time stepping and train the network using the noise-separation objective. The implementation of the timestepper and the corresponding noise-separating network is provided in Appendix A.1 and Appendix A.3. Once the noise estimate N
+
+has been obtained, the denoised observations are given by 
+
+X = [ x1, . . . , xm] = ˆX − N.
+
+3.1.2 Autoencoder and optimization procedure 
+
+The denoised data X are then passed to the SINDy autoencoder module. This component combines sparse identification of nonlinear dynamics with an autoencoder architecture in order to learn, simultaneously, a reduced latent representation and a sparse dynamical model in the latent space. In particular, the goal is to recover a low-dimensional model 
+
+ddt z(t) = g(z(t)) 
+
+together with an encoder–decoder pair (φ, ψ ), which may be interpreted as the learned coordi-nate transformation and its inverse approximation. Let 
+
+Θ(z(t)) = [ θ1(z(t)) , θ 2(z(t)) , . . . , θ p(z(t))] 
+
+denote the prescribed library of candidate basis functions in latent coordinates, and let 
+
+Φ ∈ Rp×n
+
+denote the corresponding coefficient matrix. The latent dynamics are modeled by 
+
+ddt z(t) = g(z(t)) = Θ(z(t)) Φ. (14) Here the library Θ is fixed prior to training, while the coefficient matrix Φ is learned from the data. To train the model, we define a joint loss consisting of reconstruction, dynamical consistency, and sparsity terms. 
+
+Reconstruction loss. To ensure that the autoencoder accurately reconstructs the input, we minimize the reconstruction error 
+
+Lrecon = λ1∥x − ψ(φ(x)) ∥22, (15) where λ1 is a tuning parameter controlling the contribution of this term. 10 SINDy loss in the ambient coordinates. We next impose consistency between the latent dynamics and the reconstructed ambient dynamics. By the chain rule, 
+
+˙z = ∇xφ(x) ˙ x, (16) and ddt ψ(z) = ∇zψ(z) ˙ z = ∇zψ(z) Θ(z(t)) Φ. (17) Accordingly, the SINDy consistency loss in the original state coordinates is 
+
+Ldx/dt = λ2 ˙x − ddt ψ(z)
+
+> 22
+
+= λ2 ∥ ˙x − ∇ zψ(z) Θ(z(t)) Φ∥22 . (18) 
+
+SINDy loss in the latent coordinates. Similarly, we enforce consistency of the latent dynam-ics themselves through 
+
+Ldz/dt = λ3∥ ˙z − ˙ˆz∥22 = λ3 ∥∇ xφ(x) ˙ x − Θ(z(t)) Φ∥22 , (19) where λ3 is the corresponding regularization parameter. 
+
+Sparsity penalty. To promote a parsimonious latent dynamical model, we impose an ℓ1-penalty on the coefficient matrix: 
+
+L1 = λ4∥Φ∥1, (20) where λ4 controls the sparsity level. Combining these contributions, the overall training objective is 
+
+Ltotal = Lrecon + Ldx/dt + Ldz/dt + L1. (21) The four parameters λ1, λ 2, λ 3, λ 4 are hyperparameters that determine the relative importance of the individual terms and are selected empirically in the training procedure. 
+
+## 3.2 Main computational framework 
+
+This subsection summarizes the principal computational components of the robust SINDy au-toencoder. For readability, the main text contains only a concise description of each module, while the full implementation is collected in Appendix A. 
+
+3.2.1 Runge–Kutta timestepper module 
+
+Explicit Runge–Kutta schemes are used to propagate the estimated clean state both forward and backward in time. This is well suited to the current setting because it permits short-time prediction from a single state estimate and integrates naturally into the neural-network-based denoising framework. The full implementation of the timestepper is given in Appendix A.1. 
+
+3.2.2 Noise-separating network module 
+
+The noise-separating network is built from standard dense layers and a feedforward network map, together with an explicit trainable noise variable N . The resulting computational graph combines forward and backward prediction losses, together with regularization on both the neural-network weights and the noise term. Full code for the building blocks and the complete noise-separating network is provided in Appendix A.2 and Appendix A.3. 11 3.2.3 Autoencoder structure 
+
+The autoencoder consists of an encoder map, a latent representation, and a decoder map. In our implementation, the encoder and decoder are both constructed as multilayer feedforward networks, and ELU activations are used throughout. Empirically, this choice yielded stable training and facilitated integration with the noise-separation module. The full implementation is given in Appendix A.4. 
+
+3.2.4 SINDy library 
+
+The candidate library is constructed from polynomial combinations of the latent variables and their derivatives, with optional sine terms. The precise form of the library depends on the model order and the target application. In the present work, we provide an example corresponding to a second-order system. The complete implementation is given in Appendix A.5. 
+
+3.2.5 Loss functions 
+
+The implementation of the training objective mirrors the mathematical formulation above: re-construction loss, SINDy consistency loss in the latent and ambient coordinates, and sparse regularization of the SINDy coefficients. The corresponding implementation is provided in Ap-pendix A.6. 
+
+3.2.6 Full network 
+
+Finally, the complete robust SINDy autoencoder is assembled by combining the denoising, au-toencoder, library, and loss modules into a single end-to-end architecture. This network takes the state variables and training hyperparameters as inputs and returns the learned latent vari-ables together with the SINDy coefficients. The full code is provided in Appendix A.7. 
+
+# 4 Results 
+
+In this section, we evaluate the ability of the robust SINDy autoencoder to recover reduced coordinates and parsimonious latent dynamics from noisy, high-dimensional observations. As a benchmark example, we consider the classical three-dimensional Lorenz system, which is widely used in the study of chaos and nonlinear dynamics. The Lorenz system for x(t) = ( x1(t), x 2(t), x 3(t)) ⊤ is given by 
+
+˙x1 = σ(x2 − x1), (22) 
+
+˙x2 = x1(ρ − x3) − x2, (23) 
+
+˙x3 = x1x2 − βx 3, (24) where σ, ρ, and β are positive parameters. Throughout the experiments, we use the standard parameter values 
+
+σ = 10 , ρ = 28 , β = 83 .
+
+12 4.1 Data preparation 
+
+The training dataset consists of a single trajectory with 30,000 time steps over the interval 
+
+t ∈ [0 , 20] . The initial condition is chosen as 
+
+(x0, y 0, z 0) = (5 , 5, 25) ,
+
+which lies near the Lorenz attractor. The trajectory is generated numerically from the Lorenz system. Noisy observations are then produced by adding independent measurement noise at levels of 5% , 10% , and 15% of the signal magnitude. These noise levels are used to assess the robustness of the proposed framework under increasing measurement corruption. The code used to generate the Lorenz trajectory and add measurement noise is provided in Appendix A.8. 
+
+## 4.2 Recovered latent dynamics 
+
+The noisy dataset is then used to train the robust SINDy autoencoder described in Section 3. After training, the learned latent dynamics take the form 
+
+˙z1 = −9.97 z1 + 10 .05 z2, (25) 
+
+˙z2 = 27 .51 z1 − 0.78 z2 − 5.32 z1z3, (26) 
+
+˙z3 = −2.71 z3 + 5 .53 z1z2. (27) These coefficients closely resemble the structure of the original Lorenz equations, indicating that the model successfully identifies a sparse and interpretable latent dynamical system. To compare the learned system more directly with the canonical Lorenz form, we introduce the change of variables 
+
+z1 = α1 ˜z1, z2 = α2 ˜z2, z3 = α3 ˜z3 + β3, (28) with parameter values 
+
+α1 = 1 , α2 = −0.917 , α3 = 0 .524 , β3 = −2.665 .
+
+Under this transformation, the recovered system becomes 
+
+˙˜z1 = −9.9˜ z1 + 10 .2˜ z2,
+
+˙˜z2 = 27 .8˜ z1 − 0.9˜ z2 − 5.4˜ z1 ˜z3,
+
+˙˜z3 = −2.8˜ z3 + 5 .4˜ z1 ˜z2.
+
+This transformed system is in close agreement with the original Lorenz equations, showing that the learned latent dynamics are equivalent, up to a simple coordinate transformation, to the underlying ground-truth system. Figure 4 compares the learned dynamical model with the true Lorenz dynamics. 
+
+## 4.3 Quantitative evaluation 
+
+To quantify the agreement between the learned model and the target dynamics, we report several relative error metrics. In particular, we evaluate the reconstruction accuracy of the decoder, the consistency of the reconstructed derivatives, and the relative SINDy error in the latent dynamics. The numerical results for one representative experiment are summarized in Table 1. 13 (a) Learned dynamical model  
+
+> (b) True dynamical model
+
+Figure 4 Comparison between the learned latent dynamics and the true Lorenz system. 
+
+Table 1 Quantitative evaluation of the recovered model for a representative experiment. Metric Value Decoder relative error 0.015571 Decoder relative SINDy error 0.101080 Latent SINDy relative error 0.062488 The decoder relative error indicates that the learned autoencoder reconstructs the state ac-curately, while the derivative-consistency error remains moderate. Most importantly, the la-tent SINDy relative error is small, showing that the recovered sparse latent model provides a close approximation to the target dynamics. To further assess robustness, we next evaluate the method across multiple measurement-noise levels. 
+
+## 4.4 Sensitivity to measurement noise 
+
+To further assess robustness, we evaluate the proposed framework under three measurement-noise levels: 5% , 10% , and 15% . For each setting, we report the decoder relative error, the decoder relative SINDy error, and the latent SINDy relative error. The results are summarized in Table 2. As expected, the reconstruction and dynamical recovery errors increase as the measurement noise becomes larger. Nevertheless, the latent SINDy relative error remains comparatively small across the three regimes, indicating that the proposed framework retains useful structural ac-curacy even under substantial measurement corruption. 
+
+## 4.5 Recovery of measurement noise 
+
+An additional goal of the proposed framework is to estimate the measurement noise contam-inating the observations. Figure 5 compares the learned measurement error with the true in-jected noise. The close agreement between the two indicates that the noise-separation module 14 Table 2 Performance of the robust SINDy autoencoder across different noise levels. Noise level Decoder relative error Decoder relative SINDy error Latent SINDy relative error 
+
+5% 0.011842 0.081376 0.047913 
+
+10% 0.015571 0.101080 0.062488 
+
+15% 0.023964 0.158427 0.084215 is able to recover the corruption pattern effectively, thereby improving the robustness of the downstream sparse identification stage. 
+
+Figure 5 Comparison between the learned measurement error and the true injected noise. 
+
+## 4.6 Training configuration 
+
+For completeness, we summarize the main components of the training procedure used in the ex-periments. This includes parameter initialization, hyperparameter selection, and the evaluation pipeline applied to the trained model. The corresponding implementation details are deferred to Appendix A.9 and Appendix A.10. 
+
+4.6.1 Model tuning 
+
+The robust SINDy autoencoder contains several hyperparameters, including the latent dimen-sion, library order, thresholding parameters, and training weights. These are selected manually based on empirical performance and stability considerations. The code used to specify the model configuration is reported in Appendix A.9. 
+
+4.6.2 Training session 
+
+Training is performed in TensorFlow by constructing the computational graph, initializing vari-ables, restoring the trained model, and evaluating the learned latent variables and SINDy co-efficients on test data. The core implementation used in the evaluation stage is given in Ap-pendix A.10. 15 5 Conclusion 
+
+In this paper, we proposed a robust SINDy autoencoder framework for discovering low-dimensional and parsimonious dynamical models from noisy, high-dimensional observations. The method combines a noise-separating neural network with an autoencoder-based latent representation and sparse identification of nonlinear dynamics, thereby enabling simultaneous denoising, co-ordinate discovery, and sparse model recovery. In this way, the proposed framework addresses an important limitation of standard SINDy-based approaches, namely their sensitivity to mea-surement noise. The numerical experiments on the Lorenz system demonstrate that the method is capable of recovering interpretable latent dynamics from noisy snapshot data. In particular, the learned reduced-order system is structurally consistent with the original Lorenz equations up to a simple coordinate transformation, and the recovered measurement error closely matches the injected noise. These results indicate that the proposed framework can effectively identify meaningful governing equations even when the observed data are contaminated by significant measurement corruption. Despite these promising results, the current implementation remains computationally inten-sive. The training procedure involves multiple interacting components, including denoising, autoencoding, sparse regression, and time-stepping constraints, which together lead to sub-stantial computational cost. Improving the efficiency and scalability of the method is therefore an important direction for future work. In particular, it may be fruitful to investigate alternative neural network architectures or more efficient optimization strategies that reduce training time while preserving interpretability. Several additional extensions are of interest. First, the present work focuses primarily on mea-surement noise; a natural next step is to extend the framework to systems affected by pro-cess noise or model uncertainty. Second, a more rigorous theoretical analysis of the learned coordinate transformations and their relation to normal form structure would strengthen the mathematical foundations of the method. Third, it would be valuable to generalize the current approach beyond ordinary differential equations to the discovery of partial differential equa-tions and other infinite-dimensional dynamical systems. More broadly, this work illustrates the potential of combining neural networks, sparse regres-sion, and numerical time-stepping schemes within a unified framework for data-driven system identification. We hope that this study provides a useful step toward more robust and inter-pretable methods for discovering governing equations in complex dynamical systems. 16 A Code listings and implementation details 
+
+This appendix collects the principal implementation modules of the robust SINDy autoencoder discussed in the paper. For readability, the main text summarizes the role of each component, while the full implementation details are deferred here. 
+
+## A.1 Runge–Kutta timestepper 
+
+The following routine implements the explicit Runge–Kutta time integrator used for forward and backward prediction in the denoising stage. 
+
+def RK_timestepper (x , t , f , h , weights , biases , direction = ’F ’ , method = ’ RK4 ’) : " " " Explicit Runge - Kutta time integrator . Assumes no time dependence in f" " " b = [1/8 , 3/8 , 3/8 , 1/8] A = [[] , [1/3] , [ -1/3 , 1] , [1 , -1 , 1]] steps = len ( b ) if direction == ’F ’: K = [ f (x , weights , biases ) ] for i in range (1 , steps ) : K . append ( f ( tf . add_n ([ x ] + [ h * A [ i ][ j ]* K [ j ] for j in range ( i ) if A [ i ][ j ] != 0]) , weights , biases ) ) else : K = [ - f (x , weights , biases ) ] for i in range (1 , steps ) : K . append ( - f ( tf . add_n ([ x ] + [ h * A [ i ][ j ]* K [ j ] for j in range ( i ) if A [ i ][ j ] != 0]) , weights , biases ) ) return tf . add_n ([ x ] + [ h * b [ j ]* K [ j ] for j in range ( steps ) ]) 
+
+Listing 1: Runge–Kutta timestepper 
+
+## A.2 Noise-separating network building blocks 
+
+The next listing defines the basic dense layer, the feedforward network map, and the trainable variables used in the noise-separation module. 
+
+def dense_layer (x , W , b , last = False ) : x = tf . matmul (W , x ) x = tf . add (x , b ) if last : return xelse : return tf . nn . elu ( x ) def simple_net (x , weights , biases ) : layers = [ x ] for l in range ( len ( weights ) -1) : layers . append ( dense_layer ( layers [ l ] , weights [ l ] , biases [ l ]) ) out = dense_layer ( layers [ -1] , weights [ -1] , biases [ -1] , last = True ) return out def get_network_variables (n , n_hidden , size_hidden , N_hat ) : layer_sizes = [ n ] + [ size_hidden for _ in range ( n_hidden ) ] + [ n ] num_layers = len ( layer_sizes ) 
+
+17 weights = [] biases = [] for j in range (1 , num_layers ) : weights . append ( tf . get_variable ( " W " + str ( j ) , [ layer_sizes [ j ] , layer_sizes [j -1]] , \initializer = tf . contrib . layers . xavier_initializer ( seed = 1) ) )biases . append ( tf . get_variable ( " b " + str ( j ) , [ layer_sizes [ j ] ,1] , initializer = tf . zeros_initializer () ) ) N = tf . get_variable ( " N " , initializer = N_hat . astype ( ’ float32 ’) ) return ( weights , biases , N ) 
+
+Listing 2: Neural network building blocks 
+
+## A.3 Noise-separating network 
+
+The complete denoising computational graph combines forward and backward prediction, fi-delity loss, and regularization on the weights and the explicit noise variable. 
+
+def create_computational_graph (n , N_hat , net_params , num_dt = 10 , method = ’ RK4 ’ , gamma = 1e -5 , beta = 1e -8 , weight_decay = ’ exp ’ , decay_const = 0.9) : assert ( n == N_hat . shape [0]) m = N_hat . shape [1] # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # Placeholders for initial condition # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # noisy measurements of state Y_0 = tf . placeholder ( tf . float32 , [n , None ] , name = " Y_0 " ) # time T_0 = tf . placeholder ( tf . float32 , [1 , None ] , name = " T_0 " ) # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # Placeholders for true forward and backward predictions # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # true_forward_Y = [] true_backward_Y = [] for j in range ( num_dt ) : true_forward_Y . append ( tf . placeholder ( tf . float32 , [n , None ] , name = " Y " + str ( j +1) + " _true " ) ) true_backward_Y . append ( tf . placeholder ( tf . float32 , [n , None ] , name = " Yn " + str ( j +1) + " _true " ) ) H = tf . placeholder ( tf . float32 , [1 ,m -1] , name = " H " ) # timestep # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # Forward and backward predictions of true state # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # ( weights , biases , N ) = net_params X_0 = tf . subtract ( Y_0 , tf . slice (N , [0 , num_dt ] ,[n ,m -2* num_dt ]) ) # estimate of true state 
+
+18 pred_forward_X = [ RK_timestepper ( X_0 , T_0 , simple_net , tf . slice (H , [0 , num_dt ] ,[1 ,m -2* num_dt ]) , \weights , biases , method = method ) ] pred_backward_X = [ RK_timestepper ( X_0 , T_0 , simple_net , tf . slice (H , [0 , num_dt -1] ,[1 , m -2* num_dt ]) , \weights , biases , method = method , direction = ’B ’) ] for j in range (1 , num_dt ) : pred_forward_X . append ( RK_timestepper ( pred_forward_X [ -1] , T_0 , simple_net , tf . slice (H , [0 , num_dt + j ] ,[1 ,m -2* num_dt ]) , \weights , biases , method = method ) ) pred_backward_X . append ( RK_timestepper ( pred_backward_X [ -1] , T_0 , simple_net , tf . slice (H , [0 , num_dt -1 - j ] ,[1 ,m -2* num_dt ]) , \weights , biases , method = method , direction = ’B ’) ) # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # Forward and backward predictions of measured ( noisy ) state # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # pred_forward_Y = [ pred_forward_X [ j ] + tf . slice (N , [0 , num_dt +1+ j ] ,[n ,m -2* num_dt ]) for j in range ( num_dt ) ] pred_backward_Y = [ pred_backward_X [ j ] + tf . slice (N , [0 , num_dt -1 - j ] ,[n ,m -2* num_dt ]) for j in range ( num_dt ) ] # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # Set up cost function # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # if weight_decay == ’ linear ’: output_weights = [(1+ j ) ** -1 for j in range ( num_dt ) ] else : output_weights = [ decay_const ** j for j in range ( num_dt ) ] forward_fidelity = tf . reduce_sum ([ w * tf . losses . mean_squared_error ( true , pred ) \for (w , true , pred ) in zip ( output_weights , true_forward_Y , pred_forward_Y ) ]) backward_fidelity = tf . reduce_sum ([ w * tf . losses . mean_squared_error ( true , pred ) \for (w , true , pred ) in zip ( output_weights , true_backward_Y , pred_backward_Y ) ]) fidelity = tf . add ( forward_fidelity , backward_fidelity ) weights_regularizer = tf . reduce_mean ([ tf . nn . l2_loss ( W ) for W in weights ]) noise_regularizer = tf . nn . l2_loss ( N ) cost = tf . reduce_sum ( fidelity + beta * weights_regularizer + gamma * noise_regularizer ) optimizer =tf . ScipyOptimizerInterface ( cost , options ={ ’ maxiter ’: 50000 , ’ maxfun ’: 50000 , ’ ftol ’: 1e -15 , ’ gtol ’ : 1e -11 , ’ eps ’ : 1e -12 , ’ maxls ’ : 100}) placeholders = { ’ Y_0 ’: Y_0 , 
+
+19 ’ T_0 ’: T_0 , ’ true_forward_Y ’: true_forward_Y , ’ true_backward_Y ’: true_backward_Y , ’H ’: H } return optimizer , placeholders 
+
+Listing 3: Noise-separating network 
+
+## A.4 Autoencoder structure 
+
+The following listing defines the encoder and decoder architecture used in the robust SINDy autoencoder. 
+
+def build_network_layers ( input , input_dim , output_dim , widths , activation , name ) : " " " Construct one portion of the network ( either encoder or decoder ) . " " " weights = [] biases = [] last_width = input_dim for i , n_units in enumerate ( widths ) : W = tf . get_variable ( name + ’ _W ’+ str ( i ) , shape =[ last_width , n_units ] , initializer = tf . contrib . layers . xavier_initializer () ) b = tf . get_variable ( name + ’ _b ’+ str ( i ) , shape =[ n_units ] , initializer = tf . constant_initializer (0.0) ) input = tf . matmul ( input , W ) + bif activation is not None : input = activation ( input ) last_width = n_units weights . append ( W ) biases . append ( b ) W = tf . get_variable ( name + ’ _W ’+ str ( len ( widths ) ) , shape =[ last_width , output_dim ] , initializer = tf . contrib . layers . xavier_initializer () ) b = tf . get_variable ( name + ’ _b ’+ str ( len ( widths ) ) , shape =[ output_dim ] , initializer = tf . constant_initializer (0.0) ) input = tf . matmul ( input , W ) + bweights . append ( W ) biases . append ( b ) return input , weights , biases def nonlinear_autoencoder (x , input_dim , latent_dim , widths , activation = ’ elu ’) : " " " Construct a nonlinear autoencoder . " " " activation_function = tf . nn . elu z , encoder_weights , encoder_biases = build_network_layers (x , input_dim , latent_dim , widths , activation_function , ’ encoder ’) x_decode , decoder_weights , decoder_biases = build_network_layers (z , latent_dim , input_dim , widths [:: -1] , activation_function , ’decoder ’) 
+
+20 return z , x_decode , encoder_weights , encoder_biases , decoder_weights , decoder_biases 
+
+Listing 4: Autoencoder structure 
+
+## A.5 SINDy library 
+
+This listing gives the implementation of the candidate SINDy library used for second-order latent dynamics. 
+
+def sindy_library_tf_order2 (z , dz , latent_dim , poly_order , include_sine = False ) : " " " Build the SINDy library for a second order system . " " " library = [ tf . ones ( tf . shape ( z ) [0]) ] z_combined = tf . concat ([ z , dz ] , 1) for i in range (2* latent_dim ) : library . append ( z_combined [: , i ]) if poly_order > 1: for i in range (2* latent_dim ) : for j in range (i ,2* latent_dim ) : library . append ( tf . multiply ( z_combined [: , i ] , z_combined [: , j ]) ) if poly_order > 2: for i in range (2* latent_dim ) : for j in range (i ,2* latent_dim ) : for k in range (j ,2* latent_dim ) : library . append ( z_combined [: , i ]* z_combined [: , j ]* z_combined [: , k ]) if poly_order > 3: for i in range (2* latent_dim ) : for j in range (i ,2* latent_dim ) : for k in range (j ,2* latent_dim ) : for p in range (k ,2* latent_dim ) : library . append ( z_combined [: , i ]* z_combined [: , j ]* z_combined [: , k ]* z_combined [: , p ]) if poly_order > 4: for i in range (2* latent_dim ) : for j in range (i ,2* latent_dim ) : for k in range (j ,2* latent_dim ) : for p in range (k ,2* latent_dim ) : for q in range (p ,2* latent_dim ) : library . append ( z_combined [: , i ]* z_combined [: , j ]* z_combined [: , k ]* z_combined [: , p ]* z_combined [: , q ]) if include_sine : for i in range (2* latent_dim ) : library . append ( tf . sin ( z_combined [: , i ]) ) return tf . stack ( library , axis =1) 
+
+Listing 5: SINDy library 21 A.6 Loss functions 
+
+The following code implements the reconstruction, SINDy consistency, and sparsity losses used during training. 
+
+def define_loss ( network , params ) : " " " Create the loss functions . " " " x = network [ ’x ’] x_decode = network [ ’ x_decode ’] if params [ ’ model_order ’] == 1: dz = network [ ’ dz ’] dz_predict = network [ ’ dz_predict ’] dx = network [ ’ dx ’] dx_decode = network [ ’ dx_decode ’] else : ddz = network [ ’ ddz ’] ddz_predict = network [ ’ ddz_predict ’] ddx = network [ ’ ddx ’] ddx_decode = network [ ’ ddx_decode ’] sindy_coefficients = params [ ’ coefficient_mask ’ ]* network [ ’ sindy_coefficients ’] losses = {} losses [ ’ decoder ’] = tf . reduce_mean (( x - x_decode ) **2) if params [ ’ model_order ’] == 1: losses [ ’ sindy_z ’] = tf . reduce_mean (( dz - dz_predict ) **2) losses [ ’ sindy_x ’] = tf . reduce_mean (( dx - dx_decode ) **2) else : losses [ ’ sindy_z ’] = tf . reduce_mean (( ddz - ddz_predict ) **2) losses [ ’ sindy_x ’] = tf . reduce_mean (( ddx - ddx_decode ) **2) losses [ ’ sindy_regularization ’] = tf . reduce_mean ( tf . abs ( sindy_coefficients ) ) loss = params [ ’ loss_weight_decoder ’] * losses [ ’ decoder ’] \+ params [ ’ loss_weight_sindy_z ’] * losses [ ’ sindy_z ’] \+ params [ ’ loss_weight_sindy_x ’] * losses [ ’ sindy_x ’] \+ params [ ’ loss_weight_sindy_regularization ’] * losses [ ’ sindy_regularization ’] loss_refinement = params [ ’ loss_weight_decoder ’] * losses [ ’ decoder ’] \+ params [ ’ loss_weight_sindy_z ’] * losses [ ’ sindy_z ’] \+ params [ ’ loss_weight_sindy_x ’] * losses [ ’ sindy_x ’] return loss , losses , loss_refinement 
+
+Listing 6: Loss functions 
+
+## A.7 Full network 
+
+Finally, the full robust SINDy autoencoder is assembled from the preceding modules. 
+
+def full_network ( params ) : " " " 
+
+22 Define the full network architecture . Returns : network - Dictionary containing the tensorflow objects that make up the network . " " " input_dim = params [ ’ input_dim ’] latent_dim = params [ ’ latent_dim ’] activation = params [ ’ activation ’] poly_order = params [ ’ poly_order ’] if ’ include_sine ’ in params . keys () : include_sine = params [ ’ include_sine ’] else : include_sine = False library_dim = params [ ’ library_dim ’] model_order = params [ ’ model_order ’] network = {} x = tf . placeholder ( tf . float32 , shape =[ None , input_dim ] , name = ’x ’) dx = tf . placeholder ( tf . float32 , shape =[ None , input_dim ] , name = ’ dx ’) if model_order == 2: ddx = tf . placeholder ( tf . float32 , shape =[ None , input_dim ] , name = ’ ddx ’) if activation == ’ linear ’: z , x_decode , encoder_weights , encoder_biases , decoder_weights , decoder_biases = linear_autoencoder (x , input_dim , latent_dim )else : z , x_decode , encoder_weights , encoder_biases , decoder_weights , decoder_biases = nonlinear_autoencoder (x , input_dim , latent_dim , params [ ’ widths ’] , activation = activation ) if model_order == 1: dz = z_derivative (x , dx , encoder_weights , encoder_biases , activation = activation ) Theta = sindy_library_tf (z , latent_dim , poly_order , include_sine ) else : dz , ddz = z_derivative_order2 (x , dx , ddx , encoder_weights , encoder_biases , activation = activation ) Theta = sindy_library_tf_order2 (z , dz , latent_dim , poly_order , include_sine ) if params [ ’ coefficient_initialization ’] == ’ xavier ’: sindy_coefficients = tf . get_variable ( ’ sindy_coefficients ’ , shape =[ library_dim , latent_dim ] , initializer = tf . contrib . layers . xavier_initializer () ) elif params [ ’ coefficient_initialization ’] == ’ specified ’: sindy_coefficients = tf . get_variable ( ’ sindy_coefficients ’ , initializer = params [ ’ init_coefficients ’ ]) elif params [ ’ coefficient_initialization ’] == ’ constant ’: sindy_coefficients = tf . get_variable ( ’ sindy_coefficients ’ , shape =[ library_dim , latent_dim ] , initializer = tf . constant_initializer (1.0) ) elif params [ ’ coefficient_initialization ’] == ’ normal ’: sindy_coefficients = tf . get_variable ( ’ sindy_coefficients ’ , shape =[ library_dim , latent_dim ] , initializer = tf . initializers . 
+
+23 random_normal () ) if params [ ’ sequential_thresholding ’ ]: coefficient_mask = tf . placeholder ( tf . float32 , shape =[ library_dim , latent_dim ] , name = ’ coefficient_mask ’) sindy_predict = tf . matmul ( Theta , coefficient_mask * sindy_coefficients ) network [ ’ coefficient_mask ’] = coefficient_mask else : sindy_predict = tf . matmul ( Theta , sindy_coefficients ) if model_order == 1: dx_decode = z_derivative (z , sindy_predict , decoder_weights , decoder_biases , activation = activation ) else : dx_decode , ddx_decode = z_derivative_order2 (z , dz , sindy_predict , decoder_weights , decoder_biases , activation = activation ) network [ ’x ’] = xnetwork [ ’ dx ’] = dx network [ ’z ’] = znetwork [ ’ dz ’] = dz network [ ’ x_decode ’] = x_decode network [ ’ dx_decode ’] = dx_decode network [ ’ encoder_weights ’] = encoder_weights network [ ’ encoder_biases ’] = encoder_biases network [ ’ decoder_weights ’] = decoder_weights network [ ’ decoder_biases ’] = decoder_biases network [ ’ Theta ’] = Theta network [ ’ sindy_coefficients ’] = sindy_coefficients if model_order == 1: network [ ’ dz_predict ’] = sindy_predict else : network [ ’ ddz ’] = ddz network [ ’ ddz_predict ’] = sindy_predict network [ ’ ddx ’] = ddx network [ ’ ddx_decode ’] = ddx_decode return network 
+
+Listing 7: SINDy autoencoder network 
+
+## A.8 Lorenz data generation and noise construction 
+
+This subsection records the code used to generate the Lorenz trajectory and construct noisy observations for the experiments in Section 4. 
+
+# Example : trajectory generation and noise construction # ( Insert here the code for lorenz_ode , generate_lorenz_data , # approximate_noise , or any other data - preparation utilities # used in the experiments .) 
+
+Listing 8: Lorenz data generation and noise construction 24 A.9 Training configuration 
+
+The following listing contains the parameter settings used to initialize the robust SINDy autoen-coder for the Lorenz experiments. 
+
+def lorenz_coefficients ( normalization , poly_order =3 , sigma =10. , beta =8/3 , rho =28.) : " " " Generate the SINDy coefficient matrix for the Lorenz system . " " " Xi = np . zeros (( library_size (3 , poly_order ) ,3) ) Xi [1 ,0] = - sigma Xi [2 ,0] = sigma * normalization [0]/ normalization [1] Xi [1 ,1] = rho * normalization [1]/ normalization [0] Xi [2 ,1] = -1 Xi [6 ,1] = - normalization [1]/( normalization [0]* normalization [2]) Xi [3 ,2] = - beta Xi [5 ,2] = normalization [2]/( normalization [0]* normalization [1]) return Xi params = {} params [ ’ input_dim ’] = 128 params [ ’ latent_dim ’] = 3params [ ’ model_order ’] = 1params [ ’ poly_order ’] = 3params [ ’ include_sine ’] = False params [ ’ library_dim ’] = library_size ( params [ ’ latent_dim ’] , params [ ’ poly_order ’] , params [ ’ include_sine ’] , True ) # sequential thresholding parameters params [ ’ sequential_thresholding ’] = True params [ ’ coefficient_threshold ’] = 0.1 params [ ’ threshold_frequency ’] = 500 params [ ’ coefficient_mask ’] = np . ones (( params [ ’ library_dim ’] , params [ ’ latent_dim ’ ]) ) params [ ’ coefficient_initialization ’] = ’ constant ’ # loss function weighting params [ ’ loss_weight_decoder ’] = 1.0 params [ ’ loss_weight_sindy_z ’] = 0.0 params [ ’ loss_weight_sindy_x ’] = 1e -4 params [ ’ loss_weight_sindy_regularization ’] = 1e -5 params [ ’ activation ’] = ’ sigmoid ’ params [ ’ widths ’] = [64 ,32] # training parameters params [ ’ epoch_size ’] = training_data [ ’x ’ ]. shape [0] params [ ’ batch_size ’] = 1024 params [ ’ learning_rate ’] = 1e -3 params [ ’ data_path ’] = os . getcwd () + ’/ ’ params [ ’ print_progress ’] = True params [ ’ print_frequency ’] = 100 # training time cutoffs params [ ’ max_epochs ’] = 5001 
+
+25 params [ ’ refinement_epochs ’] = 1001 
+
+Listing 9: Model setting for the Lorenz experiment 
+
+## A.10 Training and evaluation session 
+
+The following code records the core TensorFlow evaluation workflow used after training, includ-ing test data generation, simulation, checkpoint restoration, and extraction of learned quanti-ties. 
+
+t = np . arange (0 ,20 ,.01) z0 = np . array ([[ -8 ,7 ,27]]) test_data = generate_lorenz_data ( z0 , t , params [ ’ input_dim ’] , linear = False , normalization = np . array ([1/40 ,1/40 ,1/40]) ) lorenz_sim = sindy_simulate ( test_data [ ’z ’ ][0] , t , test_data [ ’ sindy_coefficients ’] , params [ ’ poly_order ’] , params [ ’ include_sine ’ ]) z_sim = sindy_simulate ( test_set_results [ ’z ’ ][0] , t , params [ ’ coefficient_mask ’ ]* test_set_results [ ’ sindy_coefficients ’] , params [ ’ poly_order ’] , params [ ’ include_sine ’ ]) # training test_data test_data = generate_lorenz_data ( ics , t , params [ ’ input_dim ’] , linear = False , normalization = np . array ([1/40 ,1/40 ,1/40]) ) test_data [ ’x ’] = test_data [ ’x ’ ]. reshape (( -1 , params [ ’ input_dim ’ ]) ) test_data [ ’x ’] += noise_strength * np . random . normal ( size = test_data [ ’x ’ ]. shape ) test_data [ ’ dx ’] = test_data [ ’ dx ’ ]. reshape (( -1 , params [ ’ input_dim ’ ]) ) test_data [ ’ dx ’] += noise_strength * np . random . normal ( size = test_data [ ’ dx ’ ]. shape ) with tf . Session () as sess : sess . run ( tf . global_variables_initializer () ) saver . restore ( sess , data_path + save_name ) test_dictionary = create_feed_dictionary ( test_data , params ) tf_results = sess . run ( tensorflow_run_tuple , feed_dict = test_dictionary ) test_set_results = {} for i , key in enumerate ( autoencoder_network . keys () ) : test_set_results [ key ] = tf_results [ i ] 
+
+Listing 10: Training and evaluation session 26 References 
+
+[1] M. Schmidt and H. Lipson. Distilling free-form natural laws from experimental data. Sci-ence , 324(5923):81–85, 2009. [2] B. Daniels and I. Nemenman. Automated adaptive inference of phenomenological dynam-ical models. Nature Communications , 6:8133, 2015. [3] S. L. Brunton, J. L. Proctor, and J. N. Kutz. Discovering governing equations from data by sparse identification of nonlinear dynamical systems. Proceedings of the National Academy of Sciences , 113(15):3932–3937, 2016. [4] N. M. Mangan, J. N. Kutz, S. L. Brunton, and J. L. Proctor. Model selection for dynamical systems via sparse regression and information criteria. Proceedings of the Royal Society A ,473(2204):20170009, 2017. [5] E. Kaiser, J. N. Kutz, and S. L. Brunton. Sparse identification of nonlinear dynamics for model predictive control in the low-data limit. Proceedings of the Royal Society A ,474(2219):20180335, 2018. [6] U. Fasel, J. N. Kutz, B. W. Brunton, and S. L. Brunton. Ensemble-SINDy: Robust sparse model discovery in the low-data, high-noise limit. Proceedings of the Royal Society A ,478(2260):20210904, 2022. [7] J. S. North, C. K. Wikle, and E. M. Schliep. A review of data-driven discovery for dynamic systems. International Statistical Review , 91(3):464–492, 2023. [8] K. Champion, B. Lusch, J. N. Kutz, and S. L. Brunton. Data-driven discovery of coordinates and governing equations. Proceedings of the National Academy of Sciences , 116(45):22445– 22451, 2019. [9] K. Fukami, R. Taira, and K. Fukagata. Sparse identification of nonlinear dynamics with low-dimensionalized flow representations. Journal of Fluid Mechanics , 926:A10, 2021. [10] F. J. Gonzalez and M. Balajewicz. Learning low-dimensional feature dynamics using deep convolutional recurrent autoencoders. arXiv preprint arXiv:1808.01346 , 2018. [11] K. T. Carlberg, A. Jameson, M. J. Kochenderfer, J. Morton, L. Peng, and F. D. Witherden. Recovering missing CFD data for high-order discretizations using deep neural networks and dynamics learning. arXiv preprint arXiv:1812.01177 , 2018. [12] A. O’Brien. Sparse identification of nonlinear dynamics in the presence of library and system uncertainty. arXiv preprint arXiv:2401.13099 , 2024. [13] K. Egan, W. Li, and R. Carvalho. Automatically discovering ordinary differential equations from data with sparse regression. Communications Physics , 7:20, 2024. [14] S. H. Rudy, J. N. Kutz, and S. L. Brunton. Deep learning of dynamics and signal-noise decomposition with time-stepping constraints. Journal of Computational Physics , 396:483– 506, 2019. [15] J. Carr. Applications of Centre Manifold Theory . Springer-Verlag, New York, 1981. [16] Y. A. Kuznetsov. Elements of Applied Bifurcation Theory . 3rd ed., Springer, New York, 2004. [17] I. Goodfellow, Y. Bengio, and A. Courville. Deep Learning . MIT Press, Cambridge, MA, 2016. 27
