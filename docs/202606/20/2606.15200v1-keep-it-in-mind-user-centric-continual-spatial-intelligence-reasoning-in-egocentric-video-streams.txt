@@ -1,0 +1,1695 @@
+Title: Keep It in Mind: User Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams
+
+URL Source: https://arxiv.org/pdf/2606.15200v1
+
+Published Time: Tue, 16 Jun 2026 00:41:21 GMT
+
+Number of Pages: 45
+
+Markdown Content:
+# Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Yun Wang 1 2 Junbin Xiao * 2 3 Han Lyu 4 Yifan Wang 5 Jing Zuo 6
+
+Zhanjie Zhang 7 Hong Huang 1 Dapeng Wu 1 Angela Yao 3
+
+Abstract 
+
+We introduce UCS-Bench, a dataset spanning 170+ hours of egocentric visual observations with 8.1K+ timestamped questions for diagnos-ing User-Centric Continual Spatial intelligence in egocentric video streams. UCS-Bench targets a new problem that emphasizes dynamic spatial reasoning, long-term memory, and their align-ment with users’ real-time locations. We pro-pose DirectMe, a framework that incrementally constructs and maintains a structured spatial mem-ory from streaming egocentric observations. Di-rectMe enables robust tracking and recall of ob-ject locations, all relative to the user’s movement over time. By tightly coupling visual perception with memory updates and spatial reasoning, our approach supports long-horizon queries that re-quire recalling interactions, resolving viewpoint-induced ambiguities, and adapting to dynamic scenes. Our experiments show that DirectMe sig-nificantly improves the spatial reasoning of lead-ing multimodal LLMs; it also surpasses many spatially aware and long-form streaming video models. We hope our benchmark and solution will advance spatial intelligence research for ego-centric AI assistants. Data and code are available at https://github.com/cocowy1/UCS-Bench. 
+
+> 1
+
+Department of Computer Science, City University of Hong Kong 2University of Science and Technology of China 3National University of Singapore 4The Chinese University of Hong Kong, Shenzhen 5University of Electronic Science and Technology of China 6Beijing University of Posts and Telecommunications 
+
+> 7
+
+Zhejiang University. Correspondence to: Junbin Xiao <junbinx-iao@ustc.edu.cn>. 
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+1. Introduction 
+
+Humans routinely solve spatial problems that go far beyond instantaneous perception: as we walk through hallways, turn into rooms, step outside, and re-enter a building, we continuously keep track of where we are and how the past world environments are oriented relative to our body, even though they are out of sight (Plizzari et al., 2025). This everyday capability relies on user-centric continual spatial intelligence : the ability to incrementally integrate streaming first-person observations to maintain and update an egocen-tric spatial reference – our heading, orientation, and relative directions to places and objects - despite frequent viewpoint changes, motion blur, and occlusions. Building AI assis-tants that operate from wearable egocentric cameras would benefit enormously from user-centric spatial understanding, for example, they can answer “ The lift is behind you. ” for the question “ Where is the lift? ”, for both robots (Anderson et al., 2018) and human users (especially those with visual impairments (Xiao et al., 2025)) when they initially faced the lift but then turned around, causing the lift to be out of view of the ego-camera at the query moment. Despite its centrality to human cognition, user-centric con-tinual spatial intelligence remains largely underexplored in modern CV and AI research. Most existing benchmarks and methods for visual spatial intelligence focus on images or offline short video clips, and the questions are from a third-person view for diagnosis purposes without sufficient in-situation engagement (Yang et al., 2025d; Zhang et al., 2025b; Yang et al., 2025b; Zheng et al., 2025; Wu et al., 2026; 2025c). In these cases, the spatial relations are largely limited to static indoor scenes, or to what is immediately visible that can be inferred using instantaneous visual cues, local geometry, or commonsense priors. More recent re-search has therefore progressed toward dynamic (Li et al., 2025c; Zhou et al., 2025a), more comprehensive (Lin et al., 2025b), and online spatial understanding (Yang et al., 2025e; Lin et al., 2025c) from continuous video streams. However, a key missing piece in these works is that they rarely address the problem of reasoning about the orientation and location of the environments (both indoor and outdoor, static and dy-namic) relative to those of the users’ real-time movements. 1
+
+> arXiv:2606.15200v1 [cs.CV] 13 Jun 2026
+
+Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Ego-centric Position & Orientation Memory: Ego-centric Position            
+
+> 00:01:21
+> Query at 00:01:21 , Answer: On your left. Query at 00:01:41 , Answer :Behind you to the left.
+> Question: Where is the vending machine relative to me?
+> 00:01:41
+> Ego-centric Position & Orientation Memory: Relative Position & Orientation Memory
+> 00:20:56
+> Query at 00:20:56 , Answer: On the counter behind you and in the fridge in front of you.
+> Query at 00:22:26 , Answer: In the fridge to your right.
+> Question: Where can I find the butter?
+> 00:22:26
+> Overall
+> Category & Quantity
+> Proximity & Reachability
+> Position & Orientation
+> Trajectory & Movement
+> Qwen3-VL-32B
+> InternVL3-38B
+> Videochat-Online
+> Cambrian-S
+> Doubao-seed-1.6V
+> DirectMe (Ours)
+
+Figure 1. UCS-Bench focuses on user-centric continual spatial reasoning in egocentric video streams, requiring models to track evolving spatial relations relative to users’ real-time locations. Existing models struggle to capture these fluid spatial evolutions, while our method DirectMe achieves significant improvements by maintaining an evolving and user-centric spatial scene graph memory. 
+
+To address this gap, we introduce UCS-Bench , an egocen-tric video question answering (QA) dataset that benchmarks U ser-centric Continual Spatial intelligence reasoning for the first time. UCS-Bench contains 532 long videos spanning over 170 hours of egocentric visual observations encompass-ing both indoor and outdoor daily activities. We manually annotate about 8.1K QA pairs from 4 aspects of 1) location & orientation , 2) path & movement , 3) distance & propor-tion , and (4) object & quantity recall , all emphasizing user-centric continual spatial intelligence reasoning. The QA pairs are timestamp-specific and follow an online, streaming QA setting (Niu et al., 2025), mirroring how users would naturally interact with wearable AI assistants in practice. Examples are presented in Figures Figure 1 and 2. By grounding questions in both past observations and the user’s current spatial state, UCS-Bench exposes new chal-lenges that are largely overlooked in existing episodic or clip-based spatial intelligence evaluations, and highlights the explicit mechanisms for maintaining and updating spa-tial memory. To this end, we propose DirectMe , a frame-work that incrementally builds and maintains a user-centric structured spatial memory from streaming egocentric obser-vations. Rather than treating long videos as discrete frame sequences for MLLMs, DirectMe dynamically organizes spatial information (object locations, depths, and camera poses) following the user’s real-time movement and main-tains an evolving spatial scene graph as a cognitive map for MLLM reasoning, enabling consistent tracking of object locations and relations as the user moves around the envi-ronment. This design allows the model to recall spatial facts acquired long ago, reconcile them with new evidence, and answer long-horizon spatial queries without catastrophic forgetting. Extensive experiments demonstrate that DirectMe substan-tially enhances the spatial reasoning capabilities of leading MLLMs ( e.g. , Qwen3-VL (Bai et al., 2025a)). It also out-performs recent spatial-aware ( e.g. , Cambrian-S (Yang et al., 2025e)) and long streaming video baselines ( e.g. , Dispider (Qian et al., 2025)). UCS-Bench and DirectMe lay a founda-tion for studying user-centric continual spatial intelligence and pave the way for wearable egocentric AI assistants. Our major contributions are: • We formulate user-centric continual spatial intelligence and contribute UCS-Bench as a benchmark for promoting related model capabilities. • We propose DirectMe , a training-free framework that highlights the construction and maintenance of a dynami-cally evolving scene graph of the world as spatial memory to enhance streaming QA about continual spatial intelli-gence. • We achieve new state-of-the-art on UCS-Bench , surpass-ing many well-established general-purpose and special-ized MLLMs. We comprehensively analyze model results and provide new insights for future research. 
+
+2. Related Work 
+
+2.1. Benchmarking Spatial Intelligence 
+
+Existing spatial intelligence benchmarks can be broadly organized along two orthogonal axes: input modality and 
+
+protocol , progressing from static, offline perception to tem-poral and online settings. Image-based benchmarks evaluate single-image spatial understanding or structured 3D reason-ing ( e.g. , SpatialRGPT-Bench (Cheng et al., 2024a), Spa-tialVLM (Chen et al., 2024), CV-Bench (Zhu et al., 2025b), BLINK (Fu et al., 2024), 3DSRBench (Ma et al., 2025)), while multi-image/multi-view benchmarks test cross-view consistency by reconciling partial observations offline ( e.g. ,2Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams What route did I take to pick up the poster just now?                                                                                                                                                                    
+
+> Query at 00 :31 :20
+> Answer :Stand up, walk around the
+> table, and go to the cabinet .
+> Query at 00 :38 :50
+> Answer :Turn right, walk three steps
+> to the table .
+> What was the path of the phone as I moved it?
+> Query at 00 :11 :30
+> Answer :It moved off and back onto
+> the counter, shifting left .
+> Query at 00 :13 :00
+> Answer :It was picked up on the left,
+> moved to the center, then put back .
+> Which is closer to me, the set square or the miter saw?
+> Query at 00 :08 :00
+> Answer :The set square .
+> Query at 00 :15 :55
+> Answer :The miter saw .
+> Can I reach the cutting machine now?
+> Query at 00 :43 :08
+> Answer :Yes, you can .It’s right
+> behind you .
+> Query at 00 :45 :01
+> Answer :No, you can’t .It’s on the
+> floor below you .
+> What did I touch after getting out of the car?
+> Query at 00 :04 :40
+> Answer :The trunk in front of you
+> and dirt behind you .
+> Query at 00 :05 :59
+> Answer :The trunk ahead, dirt behind
+> you, and potted plants underfoot .
+> Where are the magazines relative to me?
+> Query at 00 :00 :10
+> Answer :They are on the coffee table
+> behind you .
+> Query at 00 :00 :17
+> Answer :They are on the coffee table
+> in front of you .
+> How many chair shave I seen so far?
+> Query at 00 :00 :08
+> Answer :Three, with one right beside
+> you and two about two meters right .
+> Query at 00 :00 :20
+> Answer :Four, with three on your
+> left and one in front -right of you .
+> Where can I find the green spoon?
+> Query at 00 :01 :35
+> Answer :In the kitchen cabinet to
+> your back left .
+> Query at 00 :07 :50
+> Answer :Next to the sink to your
+> left .
+
+Figure 2. UCS-Bench features a comprehensive set of four major and eight minor categories of spatial cognitive tasks. Its hallmark is the evaluation of continual spatial memory , where the same query is posed at two different timestamps, requiring the model to dynamically update its spatial awareness and provide accurate, context-aware answers as the environment changes. 
+
+MultiSPA (Xu et al., 2025), MMSI-Bench (Yang et al., 2025d), All-Angles Bench (Yeh et al., 2025), ViewSpatial-Bench (Li et al., 2025a), MindCube (Yin et al., 2025)). Video benchmarks introduce temporal cues to assess mo-tion and object–camera/object–object relations, with some emphasizing egocentric or embodied spatial understanding (e.g. , VLM4D (Zhou et al., 2025b), VSI-Bench (Yang et al., 2025b), SPAR-Bench (Zhang et al., 2025b), STI-Bench (Li et al., 2025c), SpatialLadder (Li et al., 2025b), ). Several efforts focus on online/streaming protocols under sequential observations. OST-Bench (Lin et al., 2025c) for-mulates streaming understanding as egocentric exploration with multi-turn QA that integrates the current view with accumulated context. VSI-Super (Yang et al., 2025e) tar-gets arbitrarily long (and synthesized) videos and stresses long-horizon evidence accumulation for tasks such as object recall and counting. However, their core challenge is long-horizon recall and evidence accumulation, not explicitly tracking user-dependent spatial state under ego-motion (i.e., orientation-aware updates as the camera wearer moves and turns) as in our UCS-Bench. 
+
+2.2. Multimodal Large Language Models 
+
+Multimodal large language models (MLLMs) (Liu et al., 2024a; Bai et al., 2025a;b; Zhu et al., 2025a; Zhang et al., 2024; Wang et al., 2022) excel at short-horizon visual seman-tic understanding (Xiao et al., 2021), yet remain limited in coping with long streaming videos and spatial reasoning. To handle long streaming videos, recent advances highlight the importance of memory modeling, either end-to-end learned (Zhang et al., 2025a; Huang et al., 2025) or training-free (Di et al., 2025; Kim et al., 2025; Xiao et al., 2026). How-ever, their memory contents are limited to visual feature representations or KV-Cache, where spatial information, es-pecially relative to the users’ real-time locations, is largely overlooked. To improve spatial reasoning in MLLMs, prior work can be organized by where spatial knowledge is injected. (i) Data-centric supervision scaling (Chen et al., 2024; Ray et al., 2024; Cheng et al., 2024a; Cai et al., 2025b; Yang et al., 2025e;c) constructs large-scale spatial instruction data for SFT by converting simulator state (e.g., 3D object poses and camera trajectories) and pseudo-spatial cues extracted from real images (e.g., depth, detections, segmentations) into template-driven spatial QA, or by aggregating and reor-ganizing open-source VQA datasets into spatially focused training corpora. (ii) Geometry-augmented representa-tions (Wu et al., 2025a; Fan et al., 2025) instead modify the model’s internal representation, introducing explicit geomet-ric encoders, 3D tokens, or reconstruction-aligned features, which improves geometric reasoning but typically incurs ad-ditional computation and system complexity. (iii) Strategy-augmented learning and reasoning explores alternative ways to elicit spatial behaviors, including reinforcement learning (Ouyang et al., 2025), cognitive map-based men-tal modeling (Yin et al., 2025), tool-augmented (Cai et al., 2025a), or interleaved reasoning (Wu et al., 2025b), often 3Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Table 1. Video constitution of UCS-Bench. 
+
+Dataset Count QA Pairs Avg. Length (m) Percentage (%) 
+
+Egolife 189 2569 11.8 35.5 HourVideo 167 3087 42.8 31.4 ScanNet 60 612 0.3 11.3 EPIC-KITCHENS 56 1055 11.7 10.5 EgoBlind 38 588 2.2 7.1 TeleEgo 22 203 19.1 4.1 
+
+Total 532 8114 19.9 100.0 
+
+targeting specific reasoning patterns. Despite this progress, existing spatial-centric MLLMs are still trained and evaluated in static or episodic settings. How-ever, egocentric perception is inherently streaming and user-centric : models must continually update objects’ spatial states relative to the camera wearer, even when they are out of sight. This gap motivates DirectMe, which underscores a structured memory module for robust continual spatial reasoning in egocentric video streams. 
+
+3. UCS-Bench 
+
+3.1. Benchmark Construction 
+
+We select 532 videos from six video sources: HourVideo (Chandrasegaran et al., 2024), ScanNet (Dai et al., 2017), EgoLife (Yang et al., 2025a), EgoBlind (Xiao et al., 2025), EPIC-KITCHENS (Damen et al., 2018) and TeleEgo (Yan et al., 2025). We select videos spanning short clips (seconds) to long recordings (hours), covering both indoor and outdoor scenes. Other details are presented in Table 1 and Appendix § F.1. We follow a strict four-stage pipeline (see Figure 3): 1) stream preprocessing & unification → 2) taxonomy-driven QA authoring with evidence → 3) multiple-choice conver-sion → 4) quality control through bias diagnostics and hu-man auditing. These stages are designed to ensure that ques-tions are evidence-grounded while reflecting user-centric continual spatial intelligence. 
+
+Stage 1: Stream preprocessing and unification. We stan-dardize videos from all sources into a unified metadata schema ( e.g. , video_uid, duration, FPS, and timestamps) to enable data-source agnostic authoring and evaluation. Each question is anchored to a specific query timestamp. Annotators ensure that the correct answer requires integrat-ing the spatial information from earlier observations rather than relying solely on the current frame. 
+
+Stage 2: Taxonomy-driven QA authoring with evidence. 
+
+We require all questions to be centered on the users’ orien-tations and locations relative to other things in the environ-ments. Notably, the answer at a specific timestamp must recall earlier observations that may be out of sight and link them to the current observed states at the query moment. We categorize user-centric continual spatial intelligence Stage 1: Stream                                    
+
+> preprocessing
+> and unification
+> Video
+> collection
+> Query
+> requirement
+> definition
+> Metadata
+> schema
+> Standardization
+> Stage 2: Taxonomy -driven QA authoring with evidence
+> Skill families
+> •Position & Orientation
+> •Trajectory & Movement
+> •Proximity & Reachability
+> •Category & Quantity
+> Human expert annotation
+> 1. Egocentric reference
+> 2. First -person, directional
+> questions
+> 3. Verifiable temporal evidence
+> 4. Re -ask at two timestamps
+> Question –Answer Template
+> Question :q
+> Query at Timestamp 3
+> Evidence1 (Timestamp 1 -Timestamp 2): e1
+> Answer :a1
+> Question :q
+> Query at Timestamp 6
+> Evidence1 (Timestamp 1 -Timestamp 2): e1
+> Evidence2 (Timestamp 4 -Timestamp 5): e2
+> Answer :a2 (differs from a1 )
+> Timestamp 1 Timestamp 3 Timestamp 6
+> Stage 3: Multiple -choice conversion
+> Distractor
+> option
+> candidates
+> LLM -based
+> distractor
+> generator
+> NLI -based
+> filter
+> GT
+> Q
+> Option A
+> Option B
+> Option E
+> Option D
+> Option C
+> Q
+> Output :
+> Multiple -choice
+> questions
+> Input : Open -ended questions
+> Stage 4: Quality Control
+> Step 1: Model -based bias diagnostics
+> Step 2: Human auditing
+> •Verify Orientation -Update Criticality
+> •Align Timestamps with Evidence Spans
+> •Ensure Clear Perspective and Referents
+> •Exclude Non -Spatial Noise
+> •Blind -choice bias tests
+> •Prior -driven option bias detection and mitigation
+> •Near -chance accuracy enforcement
+
+Figure 3. Overview of our benchmark construction pipeline. 
+
+questions into four dimensions (see Figure 2), emphasizing egocentric reasoning under streaming observations and tem-poral updates: (1) Position & Orientation: Questions that track the user–object relative positions and facing directions from the user’s viewpoint (e.g., left/right, front/behind), staying valid as the user turns or the scene evolves. (2) Trajectory & Movement: Questions that remember how the user or objects move over time, including paths, inter-mediate landmarks, and start/end locations across multiple moments. (3) Proximity & Reachability: Questions that assess distance and practical reachability from the user’s current (or specified) viewpoint given the ongoing stream, accounting for obstacles and feasible navigation. (4) Cat-egory & Quantity: Questions that track item existence, categories, and counts from an everyday user perspective, updating as objects are moved, added, or removed. We invite 50 trained university students to watch the videos and annotate QA pairs while adopting the camera wearer’s perspective. Each answer is accompanied by one or more temporal segments serving as visual evidence. To explicitly evaluate dynamic spatial memory, we manually annotate re-peated queries at different timestamps with updated answers (see Figure 1). 
+
+Stage 3: Multiple-choice Conversion. We generate multiple-choice options via a multi-stage distractor pipeline that combines retrieval-based candidates, neural filtering, and LLM refinement. To remove low-quality distractors and ensure a unique correct answer, we apply an off-the-shelf Natural Language Inference (NLI) model, DeBERTa-v3-large-mnli (He et al., 2020), which predicts entailment rela-tions between sentence pairs, as a logical-consistency filter. After each round, we check pairwise entailment among all options, discard any logically overlapping distractors, and regenerate replacements with the pipeline. Details of this 4Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Table 2. Comparison with egocentric VQA and video spatial intelligence benchmarks. Dynamic: whether spatial relations change over time. U-Centric: User-centric spatial relations. Manual: QA pairs are manually annotated. Stream: online streaming QA setting. In&Out: Videos include both indoor and outdoor scenes. Evidence: Temporal or descriptive evidence for each QA. 
+
+Benchmark # QAs. # Vid VLen. Spatial Dynamic U-Centric Manual Stream In&Out Evidence 
+
+Egocentric VQA 
+
+QAEgo4D (Grauman et al., 2022) 1.8K 166 8m ✗ ✗ ✗ ✓ ✗ ✓ ✓
+
+EgoSchema (Mangalam et al., 2023) 5K 5K 3m ✗ ✗ ✗ ✗ ✗ ✓ ✗
+
+HourVideo (Chandrasegaran et al., 2024) 13K 500 46m ✗ ✗ ✗ ✗ ✗ ✓ ✗
+
+EgoLifeQA (Yang et al., 2025a) 6K 6 44h ✗ ✗ ✗ ✗ ✓ ✓ ✗
+
+EgoBlind (Xiao et al., 2025) 5.3K 1.3K 40s ✗ ✗ ✗ ✗ ✓ ✓ ✗
+
+Video Spatial Intelligence 
+
+VSI-Bench (Yang et al., 2025b) 5K 300 2m ✓ ✗ ✗ ✗ ✗ ✗ ✗
+
+STI-Bench (Li et al., 2025c) 2K 300 2m ✓ ✓ ✗ ✗ ✗ ✓ ✗
+
+OST-Bench (Lin et al., 2025c) 10K 1.4K 35s ✓ ✓ ✗ ✗ ✓ ✗ ✗
+
+MMSI-Video (Lin et al., 2025b) 1.1K 1.3K 72s ✓ ✓ ✗ ✓ ✗ ✓ ✗
+
+VSI-Super (Yang et al., 2025e) 700 300 92m ✓ ✗ ✗ ✗ ✓ ✗ ✗
+
+UCS-Bench (Ours) 8.1K 532 20m ✓ ✓ ✓ ✓ ✓ ✓ ✓
+
+procedure are provided in § F.4. 
+
+Stage 4: Quality control. We use a two-stage quality-control pipeline combining model-based bias checks and human auditing. First, we run blind-choice tests (answering without video) with GPT-5 (Singh et al., 2025) to detect and revise options where the correct option can be identified by language priors. Human reviewers then verify whether each QA pair (i) concerns user-centric location or orientation, (ii) has aligned timestamps and evidence spans, and (iii) uses a clear egocentric perspective with unambiguous referents. More details are given in § F.5. 
+
+3.2. Dataset Statistics. 
+
+UCS-Bench contains 8,114 QA pairs grounded in 532 di-verse egocentric videos (typical visual scenes are shown at Appendix § 16). The QA pairs are organized into four high-level categories, each with two fine-grained sub-categories (Figure 2), exhibiting a balanced yet functionally distinct distribution. Object Recall & Quantity Tracking constitutes the largest portion (34.39%), followed by Ego-centric Posi-tion & Orientation Memory (25.73%), Embodied Trajectory & Movement Memory (21.73%), and Perceived Proximity & Reachability Memory (18.15%). This distribution reflects the relative difficulty and prevalence of different spatial rea-soning demands in long-horizon egocentric settings. Other QA statistics are provided in § F.2. We further analyze the temporal distributions of the ques-tions and answer evidence from three dimensions: Evidence Question Interval measures the time gap between a question and the endpoint of its supporting evidence, i.e., the last time the queried object appears. Evidence Span measures how long an answer’s evidence spans. Repeated Question Inter-val analyzes the time gap between two repeated questions. Figure 4 shows that more than 40% of questions require evi-dence observed more than 30 seconds before the query mo-ment, indicating the need for long-term memory. Moreover, the evidence often spans long temporal intervals, indicating long-duration tracking and accumulating user movements 0-30s 30s-3mins 3-10 mins 10-30 mins > 30 mins  
+
+> Time Interval Groups
+> 10 2
+> 10 3
+> 10 4
+> Frequency (Log Scale)
+> 4834
+> 1598
+> 1040
+> 566
+> 76
+> 5967
+> 1418
+> 512
+> 185
+> 32
+> 1593
+> 1210 1025
+> 531
+> 79
+> Evidence Question Interval
+> Evidence Span
+> Repeated Question Interval
+
+Figure 4. Distribution of QA temporal characteristics, all under-scoring the importance of long-term and evolving spatial memory. 
+
+for answering. The repeated questions appear from seconds to over 30 minutes away from their corresponding original questions, enabling consistency evaluation across diverse temporal horizons. 
+
+3.3. Dataset Comparison. 
+
+Table 2 compares UCS-Bench with prior egocentric VQA and video spatial intelligence benchmarks along essential axes. Egocentric VQA targets semantic understanding and typically lacks explicit spatial focus. While video spatial in-telligence emphasizes spatial reasoning, it is often presented from a third-person perspective and focuses on offline video understanding, missing online user-centric spatial relations by engaging with camera wearers. Moreover, they often lack manual annotation, broad indoor & outdoor coverage, and answer evidence labels. In contrast, UCS-Bench is the only benchmark in Table 2 that satisfies all listed properties, enabling long-horizon evaluation of reasoning about spatial state changes relative to the user’s real-time movement. We also provide more visual comparisons in Figure 8. 
+
+4. Method 
+
+4.1. Solution Overview. 
+
+To correctly answer the questions in UCS-Bench, it is im-portant to dynamically track and link the objects to the 5Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Sink       
+
+> (b) Dynamic Spatial Cognition Mapping
+> DepthAnything 3
+> Scene Describer
+> An apartment space
+> combining a living
+> room ,kitchen …
+> Multi-object Tracking
+> Camera Extrinsics Depth Maps 3D Points
+> & Pose
+> Tracked
+> Objects
+> & Masks
+> Semantic
+> Tags
+> Ego: pose
+> (a) Video Multi-modal Processing
+> Spatial
+> Parser
+> 
+> ID 3
+> Refrigerator
+> ID 2
+> Kettle
+> ID 1
+> Cup
+> ID 4
+> Oven
+> ID 5
+> Sink
+> ID 6
+> Fire
+> Extinguisher
+> 
+> x
+> z
+> y
+> Kitchen
+> Living
+> Room
+> Node: Fridge
+> (ID: 3)
+> Node: Sink
+> (ID: 3)
+> Node:
+> Fire Extinguisher
+> (ID: 6)
+> Node: Cup
+> (ID: 1)
+> Node: Kettle
+> (ID: 2)
+> Node: Staircase
+> (ID: )
+> Query at 00:36:00
+> Question :Where
+> is the sink now?
+> Egocentric Streaming
+> Video Frames
+> 
+> 
+> 00:35:31  00:35:54  00:35:57  00:36:00
+> Node: Oven
+> (ID: 4)
+> 
+
+Sink  
+
+> Key
+> Frames Question
+> Answer:
+> The sink is on your left rear.
+> MLLM
+> Question
+> Living
+> Room
+> (d) Online Reasoning
+> (c) Evolving Scene Graph Construction
+> Current
+> Ego Position
+
+Figure 5. Overview of DirectMe. For the incoming video stream, (a) we extract multimodal cues which are then (b) fused to build a global metric-semantic map with the ego position. (c) We follow the map to construct an evolving scene graph that maintains the evolving ego pose and spatial relations among tracked objects and the user. (d) For online QA, we retrieve question-relevant key frames and a minimal subgraph as the prompt for MLLM to answer the question. 
+
+user’s real-time location/orientation. This highlights the need to construct and maintain an evolving scene graph that memorizes the objects’ relative location/orientation to the user at each timestamp. We therefore propose DirectMe , a streaming QA framework that maintains a real-time, camera pose-anchored spatial scene graph as a continually updated memory module for user-centric spatial intelligence. Unlike offline video QA, where the entire video is available for an-swering, DirectMe operates under a causal streaming setting: at any question time t, the answer can only depend on ob-servations and scene-graph states accumulated up to t. The scene-graph construction itself is question-independent and can thus be performed in the background whenever no ques-tion is triggered. Rather than building a static graph over the full video, DirectMe incrementally updates a fixed-window scene graph along the temporal stream, anchoring incom-ing observations to camera poses in a consistent reference frame. To support robust continual accumulation, the mem-ory module leverages the foundation geometry model (Lin et al., 2025a) to infer depth and camera extrinsics, making the resulting memory resilient to viewpoint rotations, blur, occlusions, and indoor–outdoor appearance shifts. As shown in Figure 5, the pipeline consists of background video-to-structured-memory processing (a–c) and online question answering (d). During background processing, Di-rectMe continuously extracts geometric, pose, and semantic signals from the incoming stream, and integrates them over time to incrementally update the scene-graph memory. This memory maintains a structured representation of the evolv-ing environment, including relevant objects, agents, and their spatial-temporal relations. When a question is asked at time t, the online QA module retrieves only from the memory available up to t, ensuring causal access to past observations. It then selects a minimal question-conditioned subgraph and a set of keyframes, which are fed into the MLLM for response generation. 
+
+4.2. Offline Spatial Scene-Graph Memory 
+
+(1) Video multi-modal processing. We process the in-put video at 1 fps , denoted as {I(t)}Tt=1 . For each frame, we estimate metric depth and camera pose using DepthAnything3 (Lin et al., 2025a), obtaining depth maps 
+
+{D(t)}Tt=1 and an ego-pose trajectory {Tw←e(t)}Tt=1 . To extract object-level observations, we first run Grounding-DINO (Liu et al., 2024b) with an Objects365 category vo-cabulary to detect candidate objects in each frame. The resulting detections are then used to initialize SAM2 (Ravi et al., 2025), which propagates object masks over time and produces temporally consistent instance tracks. This yields a set of persistent object instances I = {1, . . . , N },with per-frame masks and bounding boxes {Mi(t) ∈{0, 1}H×W }Ti∈I ,t =1 and {bi(t) ∈ R4}Ti∈I ,t =1 . Finally, a lightweight MLLM-based scene describer (Bai et al., 2025a) assigns frame-level semantic tags {y(t) ∈ Y} Tt=1 , where Y
+
+denotes the predefined scene taxonomy. Further implemen-tation details are provided in Appendix § D.1. 
+
+(2) World-aligned metric-semantic mapping. We integrate these multi-modal signals into a global metric-semantic map 
+
+M defined in a shared world coordinate frame. The map is initialized from the first observation ( t=1 ) and incremen-tally updated over time, enabling temporally consistent lo-calization, spatial reasoning, and semantic grounding across long-horizon video sequences. Such a world-aligned rep-resentation provides unified support for downstream tasks that require coherent tracking of object-level semantics and geometry under dynamic scene evolution. Further imple-6Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+mentation details are provided in Appendix § D.2. 
+
+(3) Evolving scene-graph construction. Given M (with world-frame object anchors) and the ego-pose trajectory 
+
+{Tw←e(t)}Tt=1 , we perform spatial parsing in the world coordinate system to build a scene-graph memory G =(V, E). The node set V includes persistent object nodes grounded by their global 3D locations and semantic place nodes representing map-induced regions, while edges E
+
+encode object–object and object–place relations computed from world-frame geometry. At query time t, relations are rendered in the current egocentric frame via Te←w(t) = 
+
+Tw←e(t)−1 for pose-conditioned reasoning. Construction details are provided in Appendix § D.3. 
+
+4.3. Online Video Reasoning 
+
+At query time t, we first parse the question into a struc-tured query intent, specifying target objects, semantic at-tributes, and requested reasoning primitives (e.g., counting, localization). Based on this intent, we retrieve a compact query-conditioned subgraph from the global scene graph, restricting candidate nodes to those observed before t to respect temporal causality. Candidate nodes are scored and ranked by matching the query intent against their semantic labels, visual attributes, and scene tags, retaining the top-K
+
+instances alongside their supporting keyframes. Next, we transform the world-frame coordinates of each retrieved object into the current egocentric frame via 
+
+Te←w(t) = Tw←e(t)−1, yielding camera-to-object relation edges that encode relative direction, metric distance, and reachability. Providing this egocentric, pose-aware context to the MLLM ensures that spatial predictions remain geo-metrically verifiable, enabling accurate reasoning even for out-of-view targets (e.g., “on your left rear” in Figure 5 (d)). 
+
+5. Experiments 
+
+5.1. Experimental Settings Evaluated Models. We evaluate 18 representative MLLMs (4B-38B) spanning major paradigms: (i) proprietary models (DeepSeek-V3 (Liu et al., 2024a), Doubao-seed-1.6V, GPT-5 (Singh et al., 2025), Gemini3-Flash (Google, 2025)); (ii) 
+
+strong general-purpose open models (Qwen2.5/3-VL (Bai et al., 2025b;a), InternVL3/3.5 (Zhu et al., 2025a; Wang et al., 2025a), LLaVA-Video (Zhang et al., 2025c), Intern-Video2.5 (Wang et al., 2025b)); (iii) spatial-centric models (Spatial-MLLM (Wu et al., 2025a), ViLaSR (Wu et al., 2025b), SenseNova-SI (Cai et al., 2025b)); and (iv) stream-ing/online models (Flash-VStream (Zhang et al., 2025a), VideoChat-Online (Huang et al., 2025), Dispider (Qian et al., 2025)). This selection enables a controlled comparison across parameter scales and helps diagnose whether im-provements stem from general multimodal capacity, explicit spatial priors, or streaming-specific design, rather than from model size alone. It also facilitates a more interpretable comparison across settings and helps analyze how different architectural choices influence egocentric spatial reasoning performance. 
+
+5.2. Main Results General Observations. Existing SOTA results on UCS-Bench barely reach around 50%, whereas humans achieve an accuracy of 91%, revealing a substantial performance gap of ∼40%. Surprisingly, advanced general-purpose MLLMs often outperform both spatially aware models and mod-els specifically designed for long-form streaming video QA. This indicates that strong general visual–language rea-soning and instruction-following capabilities can be more critical than specialized architectural designs for general-ized spatial modeling ( e.g. , user-centric and dynamic) or long-context processing on UCS-Bench. Our method Di-rectMeachieves the best overall accuracy and leads most spatially demanding categories, although some semantic-recognition subcategories remain stronger for large general-purpose baselines. Nevertheless, the large gap to human performance suggests that current models still struggle with sustained ego-grounded understanding, long-range tracking, and precise temporal localization and evidence accumula-tion, highlighting UCS-Bench as a challenging problem far from solved. 
+
+Object Motion vs. Ego-Motion. Models consistently per-form better on object-trajectory than on ego-trajectory ques-tions, exposing a systematic weakness in ego-motion rea-soning that is largely overlooked by existing spatial bench-marks. Rather than maintaining explicit ego-motion esti-mates, current MLLMs appear to rely on readily available pixel-level cues such as object displacement. This limitation is amplified in questions that couple object dynamics with ego-motion, especially those involving relative position and orientation, where accuracy drops markedly compared to single-factor egocentric tracking ( Trajectory & Movement ). Overall, these results indicate that existing models struggle to integrate ego-motion with long-horizon object memory into a coherent, viewpoint-conditioned spatial representa-tion for user-centric spatial reasoning. 
+
+Dynamic tracking remains highly challenging. Perfor-mance drops when tasks require maintaining a cumulative state compared to recognizing momentary visual features. For example, GPT-5 performs relatively well on Obj. Cat-egory (58.8%), which relies on semantic recognition, but suffers a significant 25.3% drop in Obj. Quantity (33.5%). Furthermore, despite being a spatial task, Position & Ori-entation (37.8%) scores notably lower than Trajectory & Movement (44.5%). This suggests that even when models can exploit motion/trajectory cues, they struggle to maintain 7Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Table 3. Performance of different models on UCS-Bench. The best , second-best , and third-best model results are highlighted. Note that Proximity & Reachability is a binary-choice task, while the others are five-way multi-choice. For fair comparison and consistency, all proprietary models are evaluated with up to 50 input images (the maximum rate of GPT-5 API).                                                                                                                                                                                                                                                                                                                                                                                                                      
+
+> Models Size # Frame Trajectory & Movement Position & Orientation Proximity & Reachability Category & Quantity Overall Overall My Traj. Obj. Traj. Overall Ego-centric Relative Overall Distance Reachability Overall Obj. Category Obj. Quantity Human --91.7 90.9 94.1 87.6 84.0 89.8 96.8 95.0 98.2 90.0 94.3 88.1 91.0 Random --19.1 20.8 14.2 22.7 24.4 21.5 49.7 51.8 48.1 19.4 20.3 19.0 25.7
+> Proprietary MLLMs
+> DeepseekV3 -50 42.0 41.0 44.8 33.2 35.4 31.6 37.7 45.9 31.2 32.3 36.8 30.3 35.6 Doubao-seed-1.6V -50 49.6 49.4 50.1 42.8 46.4 40.4 56.0 54.9 56.8 44.6 57.0 39.0 47.3 GPT-5 -50 44.5 43.3 48.1 37.8 40.2 36.3 55.4 52.9 57.5 41.4 58.8 33.5 43.7 Gemini3-Flash -50 43.8 43.2 45.5 38.0 38.7 37.6 52.9 50.2 54.9 38.9 56.2 31.1 42.2
+> Open-Source MLLMs
+> InternVideo2.5 8B 64 44.2 43.9 45.2 39.4 42.4 37.5 52.7 49.1 55.5 42.2 53.0 37.4 43.8 LLaVA-Video 7B 64 40.4 40.9 38.7 38.7 42.0 36.6 47.2 45.9 48.2 41.8 52.4 37.1 41.7 Qwen2.5-VL 7B 64 41.6 41.0 43.1 40.8 42.8 39.5 51.3 47.4 54.3 42.5 50.1 39.2 43.4 32B 64 50.3 49.4 53.0 40.9 43.1 39.5 55.4 50.4 59.3 46.0 56.4 41.4 47.3 Qwen3-VL 8B 64 44.6 43.1 48.7 40.1 43.6 37.9 50.9 49.2 52.1 42.9 52.8 38.4 44.0 32B 64 50.3 49.0 54.1 46.5 50.1 44.3 55.2 53.9 56.3 46.7 58.8 41.2 49.0 InternVL3 8B 64 44.9 44.4 46.5 39.1 42.2 37.2 52.2 48.6 55.1 42.2 53.5 37.1 43.8 38B 64 53.7 52.4 57.3 45.6 46.9 44.8 55.3 54.0 56.3 45.8 60.4 39.3 49.2 InternVL3.5 8B 64 44.0 42.3 48.8 39.8 40.6 39.2 52.9 49.3 55.7 39.2 47.9 35.2 42.9 38B 64 50.2 49.5 52.2 46.3 45.9 46.6 53.9 53.5 54.2 45.0 56.5 40.1 48.1
+> Spatial Models
+> Spatial-MLLM 3B 64 33.2 34.1 30.6 26.1 28.6 24.4 53.6 46.0 59.5 30.9 36.3 28.5 34.3 SenseNova-SI 8B 64 38.2 38.7 36.3 30.8 32.0 30.0 49.0 47.2 50.3 37.0 45.5 33.3 37.8 VG-LLM 8B 64 34.6 35.7 31.3 35.0 38.3 32.8 51.9 45.9 56.6 35.9 47.3 30.9 38.3 ViLaSR 7B 64 37.3 38.1 34.9 33.2 34.5 32.3 52.3 46.0 57.2 40.7 48.7 37.1 40.1 Cambrian-S 7B 64 44.2 44.0 44.5 35.9 36.2 35.7 52.3 43.7 59.0 40.8 50.4 36.6 42.4
+> Streaming Models
+> Flash-VStream 7B 1fps 26.1 27.3 22.1 23.0 23.7 22.5 48.8 44.4 52.2 23.4 27.2 21.8 28.5 Dispider 7B 1fps 40.2 40.6 38.7 29.1 30.1 28.4 51.6 44.9 53.5 40.2 38.7 29.4 36.7 VideoChat-Online 4B 1fps 35.7 36.3 33.7 30.3 32.2 29.0 51.9 45.7 56.8 36.4 43.1 33.5 37.5 DirectMe (w/ InternVL3) 8B 1fps 52.6 51.6 55.4 47.1 47.3 47.0 56.9 54.2 59.1 46.0 54.5 42.2 49.7 DirectMe (w/ Qwen3-VL) 8B 1fps 54.1 53.0 57.2 47.6 50.2 46.0 58.0 55.7 59.8 46.4 53.7 43.1 50.5 (a) (b)
+> VideoChat-Online
+> Qwen3-VL-32B
+> InternVL3-38B
+> Cambrian-S
+> Doubao-seed-1.6V
+> DirectMe
+
+Figure 6. (a) Accuracy trends across different time intervals be-tween Evidence Question Interval. (b) Distribution of error cat-egories. SRF: Spatial Reasoning Failure. TSTF: Temporal State Tracking Failure. VMA: Visual Memory Amnesia. 
+
+temporal coherence for downstream state updates, e.g., in-ferring final relative positions and tracking quantity changes. This reveals a fundamental weakness in updating latent spa-tial states over time. 
+
+Robustness to Question–Evidence Distance. Figure 6 (a) shows that our method consistently achieves higher accu-racy, while all models degrade as the temporal gap between the question and its answer evidence increases. Notably, our performance declines more gradually than other baselines, especially over long intervals ( >3 minutes). This indicates that our scene graph memory helps reduce model sensitivity to temporal distance, as it better preserves historical spatial evidence, which benefits long-horizon reasoning. 
+
+5.3. Error Analysis 
+
+To gain a deeper understanding, we conduct two comple-mentary studies. The first is a benchmark-level analysis that identifies common failure patterns shared by existing 
+
+Table 4. Root-cause analysis of 500 failed QA cases. Primary failure source Ratio (%) Tracking failure 40 Ego-pose relation failure 23 Retrieval failure 20 Reasoning failure on correct evidence 17 
+
+VLMs, as illustrated in Figure 6 (b). The second is a method-level root-cause analysis that diagnoses where failures arise within our proposed DirectMe pipeline, as shown in Table 4. The uncovered failure cases span all four UCS-Bench task categories, revealing systematic limitations shared by cur-rent models. Specifically, we group these failures into three dominant error types, which reflect progressively more com-plex spatial reasoning requirements. We also present visual examples of these three types in Figure 15 of the Appendix. 
+
+(i) Spatial Reasoning Failure. Errors arising from incorrect 3D geometric understanding or egocentric spatial relation judgments, such as misinterpreting relative directions or spatial layouts from the user’s perspective. 
+
+(ii) Temporal State Tracking Failure. Errors arising from the inability to consistently maintain object states over time—such as failures in trajectory reconstruction, temporal ordering, and event counting-indicate limited temporal co-herence. These errors account for over 55% of all observed failures, highlighting a substantial gap between nominal long-context capacity and effective temporal reasoning. 
+
+(iii) Visual Memory Amnesia. Errors caused by forgetting vi-sual details observed earlier in the video stream, particularly when targets exit and later re-enter the field of view. 8Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Ego -centric Position & Orientation Memory: Ego -centric Position                                                                        
+
+> Query at Timestamp 1 ( 00:14:40 )
+> Ground Truth: The phone is at the
+> edge of the grass ,about half a meter
+> behind you .
+> A. It is on the grass, roughly 0.5m
+> in front of you.
+> B. It is held in your right hand
+> during the exercise.
+> C. It is at the edge of the grass,
+> about half a meter behind you.
+> D. It is behind you.
+> E. There are no electronic devices
+> around you in the current scene.
+> InternVL3 -8B:[Answer: B, ×]
+> InternVL3 -8B+ Caption: [Answer: A, ×]
+> DirectMe :[Answer: C, √]
+> 00:06:56 00:07:30 00:07:32 00:08:00 00:14:52 00:15:06 00:14:40 00:42:07
+> Picked up the phone, turned
+> 90 °right, and walked about
+> 5m to the road -grass divider
+> and put phone on it.
+> Turned left, stepped onto
+> grass, and walked forward
+> to start workout.
+> Picked up phone,
+> returned, and put
+> it in the white bag.
+> Query at Timestamp 2 ( 00:42:07 )
+> Ground Truth: It is located in the white
+> bag ,approximately 2 meters behind you .
+> A. It is located in the white bag,
+> approximately 2 meters behind you.
+> B. It is still at the edge of the grass,
+> about half a meter behind you.
+> C. It was left at the previous exercise
+> location, a short distance to your left.
+> D. It is inside the black backpack to your
+> right, near the fence.
+> E. It is in the white bag, located directly
+> in front of you.
+> InternVL3 -8B:[Answer: D, ×]
+> InternVL3 -8B+ Caption: [Answer: D, ×]
+> DirectMe :[Answer: A, √]
+> Question: Where is my phone relative to me?
+> Embodied trajectory & Movement Memory: Object Trajectory
+> 00:39:45 00:39:49 00:48:10 00:48:18
+> Query at Timestamp 1 ( 00:42:50 )
+> Ground Truth: You should get it from the
+> countertop behind you, next to the sink .
+> A. You can find it in the cabinet under
+> the stove to your left.
+> B. You should get it from the countertop
+> behind you, next to the sink.
+> C. It is placed on the dining table in
+> front of you.
+> D. Look for it on the shelf above the
+> refrigerator to your right.
+> E. You should see it in the drawer next
+> to the microwave behind you.
+> Qwen3 -VL -8B: [Answer: A, ×]
+> Qwen3 -VL -8B + Caption: [Answer: D, ×]
+> DirectMe :[Answer: B, √]
+> 00:42:50 01:28:50 00:39:51 00:39:56
+> took the toast out
+> from the lower level
+> of the refrigerator
+> placed the toast on the countertop
+> next to the sink, opposite the
+> refrigerator.
+> put the toast back into
+> the refrigerator.
+> Query at Timestamp 2 ( 01:28:50 )
+> Ground Truth: You should get it from the
+> fridge about 4 meters ahead to your right .
+> A. You should get it from the sink about 2
+> meters behind you to your left.
+> B. You should get it from the oven about 3
+> meters ahead to your left.
+> C. You should get it from the microwave
+> about 1 meter behind you to your right.
+> D. You should get it from the fridge about
+> 4 meters ahead to your right.
+> E. You should get it from the pantry about
+> 5 meters to your left.
+> Qwen3 -VL -8B: [Answer: B, ×]
+> Qwen3 -VL -8B + Caption: [Answer: E, ×]
+> DirectMe :[Answer: D, √]
+> Question: If I want to continue to fry more toast, where should I go to get it?
+
+Figure 7. Qualitative results on UCS-Bench across indoor and outdoor scenarios, using Qwen3-VL-8B and InternVL3-8B as baselines. 
+
+Table 5. Ablation study on our method. Description denotes the MLLM-generated spatial description, while Graph denotes the retrieved results from our scene-graph memory. 
+
+Models Desc. Graph Traj. & Mov Pos & Ori Prox & Reach Rec & Qua All 
+
+Qwen3-VL (baseline) - - 44.6 40.1 50.9 42.9 44.0 
+
+✓ - 44.3 41.9 52.1 42.5 44.5 - ✓ 54.6 46.3 56.8 46.7 50.2 
+
+DirectMe ✓ ✓ 54.1 47.6 58.0 46.4 50.5 
+
+To identify the bottlenecks in our streaming memory pipeline, we analyze 500 failed QA cases from DirectMe. Each case—comprising the QA pair, time-stamped video, and retrieved subgraph text - was independently categorized into a single primary root cause by human annotators to eliminate cascading bias. As summarized in Table 4, track-ing (40%) and ego-pose relation errors (23%) constitute the main failure modes, outnumbering pure retrieval (20%) and reasoning deficits (17%). This distribution indicates that the primary challenge has shifted from information re-trieval to maintaining a temporally consistent, user-centric spatial state. Consequently, robust object persistence and viewpoint-aligned memory updates emerge as the core bot-tlenecks for streaming egocentric QA. 
+
+5.4. Model Ablation 
+
+In Table 5, we isolate the effect of Desc. versus Graph 
+
+memory. Desc. augments the Qwen3-VL-8B baseline by adding per-frame scene-level spatial descriptions generated by themselves (see § E.2) as extra context alongside the original frames and question. This yields only marginal gains, suggesting that third-person view descriptions fail to capture the explicit , viewpoint-conditioned relations needed for out-of-sight, past-to-now queries. In contrast, Graph 
+
+maintains an explicit pose-anchored scene graph of object locations, enabling direct retrieval of spatial relations at query time. Figure 7 suggests that this structured memory resolves challenging cases where the caption-based variant fails, leading to consistent improvements. 
+
+6. Conclusion 
+
+In this work, we study user-centric continual spatial intel-ligence in egocentric video streams and introduce UCS-Bench , a carefully constructed egocentric QA benchmark. We further propose DirectMe , a streaming QA framework that highlights a dynamic scene graph as spatial memory to track objects and their relations under users’ continu-ous movement. Extensive experiments show that current MLLMs remain far from solving this task, while DirectMe consistently outperforms strong baselines, with advantages that grow as the temporal gap between question and evi-dence increases. The findings demonstrate our method’s effectiveness and signal UCS-Bench as a significant chal-lenge and a new avenue for advancing future MLLMs. 
+
+Impact Statement 
+
+This work introduces a dataset and benchmark, as well as a corresponding method for advancing research on user-centric continual spatial intelligence in egocentric video streams. The primary goal of this work is to support the development and evaluation of machine learning models capable of online long-term dynamic spatial reasoning under ego-motion, which may benefit applications such as assistive technologies and embodied AI systems. As a dataset and methodology contribution, this work does not involve direct deployment in real-world decision-making systems. Potential ethical considerations mainly relate to the responsible use of egocentric visual data, including privacy and data governance. We mitigate such risks by adhering to established data collection and anonymization practices and by restricting the dataset to research purposes. We do not foresee significant negative societal impacts arising directly from this work beyond those commonly associated with advances in machine learning research. 9Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Acknowledgments 
+
+This research is supported by the Ministry of Education, Singapore, under its MOE Academic Research Fund Tier 2 (MOE-T2EP20125-0037). 
+
+References 
+
+Anderson, P., Wu, Q., Teney, D., Bruce, J., Johnson, M., Sünderhauf, N., Reid, I., Gould, S., and Van Den Hengel, A. Vision-and-language navigation: Interpreting visually-grounded navigation instructions in real environments. In 
+
+Proceedings of the Computer Vision and Pattern Recog-nition Conference (CVPR) , pp. 3674–3683, 2018. Bai, S., Cai, Y., Chen, R., Chen, K., Chen, X., Cheng, Z., Deng, L., Ding, W., Gao, C., Ge, C., Ge, W., Guo, Z., Huang, Q., Huang, J., Huang, F., Hui, B., Jiang, S., Li, Z., Li, M., Li, M., Li, K., Lin, Z., Lin, J., Liu, X., Liu, J., Liu, C., Liu, Y., Liu, D., Liu, S., Lu, D., Luo, R., Lv, C., Men, R., Meng, L., Ren, X., Ren, X., Song, S., Sun, Y., Tang, J., Tu, J., Wan, J., Wang, P., Wang, P., Wang, Q., Wang, Y., Xie, T., Xu, Y., Xu, H., Xu, J., Yang, Z., Yang, M., Yang, J., Yang, A., Yu, B., Zhang, F., Zhang, H., Zhang, X., Zheng, B., Zhong, H., Zhou, J., Zhou, F., Zhou, J., Zhu, Y., and Zhu, K. Qwen3-vl technical report. 
+
+arXiv preprint arXiv:2511.21631 , 2025a. Bai, S., Chen, K., Liu, X., Wang, J., Ge, W., Song, S., Dang, K., Wang, P., Wang, S., Tang, J., et al. Qwen2.5-vl technical report. arXiv preprint arXiv:2502.13923 ,2025b. Cai, W., Ponomarenko, I., Yuan, J., Li, X., Yang, W., Dong, H., and Zhao, B. Spatialbot: Precise spatial understanding with vision language models. In International Confer-ence on Robotics and Automation (ICRA) , pp. 9490–9498. IEEE, 2025a. Cai, Z., Wang, R., Gu, C., Pu, F., Xu, J., Wang, Y., Yin, W., Yang, Z., Wei, C., Sun, Q., Zhou, T., Li, J., Pang, H. E., Qian, O., Wei, Y., Lin, Z., Shi, X., Deng, K., Han, X., Chen, Z., Fan, X., Deng, H., Lu, L., Pan, L., Li, B., Liu, Z., Wang, Q., Lin, D., and Yang, L. Scaling spatial intelligence with multimodal foundation models. arXiv preprint arXiv:2511.13719 , 2025b. Chandrasegaran, K., Gupta, A., Hadzic, L. M., Kota, T., He, J., Eyzaguirre, C., Durante, Z., Li, M., Wu, J., and Fei-Fei, L. Hourvideo: 1-hour video-language under-standing. Advances in Neural Information Processing Systems (NeurIPS) , 37:53168–53197, 2024. Chen, B., Xu, Z., Kirmani, S., Ichter, B., Sadigh, D., Guibas, L., and Xia, F. Spatialvlm: Endowing vision-language models with spatial reasoning capabilities. In Proceed-ings of the Computer Vision and Pattern Recognition Conference (CVPR) , pp. 14455–14465, 2024. Cheng, A.-C., Yin, H., Fu, Y., Guo, Q., Yang, R., Kautz, J., Wang, X., and Liu, S. Spatialrgpt: Grounded spatial reasoning in vision-language models. Advances in Neural Information Processing Systems (NeurIPS) , 37:135062– 135093, 2024a. Cheng, T., Song, L., Ge, Y., Liu, W., Wang, X., and Shan, Y. Yolo-world: Real-time open-vocabulary object detection. In Proceedings of the IEEE Conference on Computer Vi-sion and Pattern Recognition (CVPR) , pp. 16901–16911, 2024b. Dai, A., Chang, A. X., Savva, M., Halber, M., Funkhouser, T., and Nießner, M. Scannet: Richly-annotated 3d recon-structions of indoor scenes. In Proceedings of the IEEE conference on Computer Vision and Pattern Recognition (CVPR) , pp. 5828–5839, 2017. Damen, D., Doughty, H., Farinella, G. M., Fidler, S., Furnari, A., Kazakos, E., Moltisanti, D., Munro, J., Per-rett, T., Price, W., et al. Scaling egocentric vision: The epic-kitchens dataset. In Proceedings of the European Conference on Computer Vision (ECCV) , pp. 720–736, 2018. Damen, D., Doughty, H., Farinella, G. M., Fidler, S., Furnari, A., Kazakos, E., Moltisanti, D., Munro, J., Per-rett, T., Price, W., et al. The epic-kitchens dataset: Col-lection, challenges and baselines. IEEE Transactions on Pattern Analysis and Machine Intelligence , 43(11): 4125–4141, 2020. Di, S., Yu, Z., Zhang, G., Li, H., Cheng, H., Li, B., He, W., Shu, F., Jiang, H., et al. Streaming video question-answering with in-context video kv-cache retrieval. In 
+
+The Thirteenth International Conference on Learning Representations (ICLR) , 2025. Fan, Z., Zhang, J., Li, R., Zhang, J., Chen, R., Hu, H., Wang, K., Qu, H., Wang, D., Yan, Z., et al. Vlm-3r: Vision-language models augmented with instruction-aligned 3d reconstruction. arXiv preprint arXiv:2505.20279 , 2025. Fu, X., Hu, Y., Li, B., Feng, Y., Wang, H., Lin, X., Roth, D., Smith, N. A., Ma, W.-C., and Krishna, R. Blink: Multi-modal large language models can see but not perceive. In 
+
+European Conference on Computer Vision (ECCV) , pp. 148–166. Springer, 2024. Google. Gemini 3 flash: frontier intelligence built for speed, 2025. 10 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Grauman, K., Westbury, A., Byrne, E., Chavis, Z., Furnari, A., Girdhar, R., Hamburger, J., Jiang, H., Liu, M., Liu, X., et al. Ego4d: Around the world in 3,000 hours of egocentric video. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pp. 18995– 19012, 2022. He, P., Liu, X., Gao, J., and Chen, W. Deberta: Decoding-enhanced bert with disentangled attention. arXiv preprint arXiv:2006.03654 , 2020. Huang, Z., Li, X., Li, J., Wang, J., Zeng, X., Liang, C., Wu, T., Chen, X., Li, L., and Wang, L. Online video under-standing: Ovbench and videochat-online, 2025. URL https://arxiv.org/abs/2501.00584. Kim, M., Shim, K., Choi, J., and Chang, S. Infinipot-v: Memory-constrained kv cache compression for streaming video understanding. arXiv preprint arXiv:2506.15745 ,2025. Li, D., Li, H., Wang, Z., Yan, Y., Zhang, H., Chen, S., Hou, G., Jiang, S., Zhang, W., Shen, Y., et al. Viewspatial-bench: Evaluating multi-perspective spatial localization in vision-language models. arXiv preprint arXiv:2505.21500 , 2025a. Li, H., Li, D., Wang, Z., Yan, Y., Wu, H., Zhang, W., Shen, Y., Lu, W., Xiao, J., and Zhuang, Y. Spatialladder: Pro-gressive training for spatial reasoning in vision-language models. arXiv preprint arXiv:2510.08531 , 2025b. Li, Y., Zhang, Y., Lin, T., Liu, X., Cai, W., Liu, Z., and Zhao, B. Sti-bench: Are mllms ready for precise spatial-temporal world understanding? Proceedings of the IEEE International Conference on Computer Vision (ICCV) ,2025c. Lin, H., Chen, S., Liew, J., Chen, D. Y., Li, Z., Shi, G., Feng, J., and Kang, B. Depth anything 3: Recovering the visual space from any views. arXiv preprint arXiv:2511.10647 ,2025a. Lin, J., Xu, R., Zhu, S., Yang, S., Cao, P., Ran, Y., Hu, M., Zhu, C., Xie, Y., Long, Y., et al. Mmsi-video-bench: A holistic benchmark for video-based spatial intelligence. 
+
+arXiv preprint arXiv:2512.10863 , 2025b. Lin, J., Zhu, C., Xu, R., Mao, X., Liu, X., Wang, T., and Pang, J. Ost-bench: Evaluating the capabilities of mllms in online spatio-temporal scene understanding. In Advances in Neural Information Processing Systems (NeurIPS) , 2025c. Liu, A., Feng, B., Xue, B., Wang, B., Wu, B., Lu, C., Zhao, C., Deng, C., Zhang, C., Ruan, C., et al. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 ,2024a. Liu, S., Zeng, Z., Ren, T., Li, F., Zhang, H., Yang, J., Jiang, Q., Li, C., Yang, J., Su, H., et al. Grounding dino: Marry-ing dino with grounded pre-training for open-set object detection. In European conference on computer vision (ECCV) , pp. 38–55. Springer, 2024b. Ma, W., Chen, H., Zhang, G., Chou, Y.-C., Chen, J., de Melo, C., and Yuille, A. 3dsrbench: A comprehen-sive 3d spatial reasoning benchmark. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , pp. 6924–6934, 2025. Mangalam, K., Akshulakov, R., and Malik, J. Egoschema: A diagnostic benchmark for very long-form video lan-guage understanding. Advances in Neural Information Processing Systems (NeurIPS) , 36:46212–46244, 2023. Niu, J., Li, Y., Miao, Z., Ge, C., Zhou, Y., He, Q., Dong, X., Duan, H., Ding, S., Qian, R., et al. Ovo-bench: How far is your video-llms from real-world online video un-derstanding? In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 18902–18913, 2025. Ouyang, K., Liu, Y., Wu, H., Liu, Y., Zhou, H., Zhou, J., Meng, F., and Sun, X. Spacer: Reinforcing mllms in video spatial reasoning. arXiv preprint arXiv:2504.01805 ,2025. Plizzari, C., Goel, S., Perrett, T., Chalk, J., Kanazawa, A., and Damen, D. Spatial cognition from egocentric video: Out of sight, not out of mind. In 2025 International Conference on 3D Vision (3DV) , pp. 1211–1221. IEEE, 2025. Qian, R., Ding, S., Dong, X., Zhang, P., Zang, Y., Cao, Y., Lin, D., and Wang, J. Dispider: Enabling video llms with active real-time interaction via disentangled perception, decision, and reaction. arXiv preprint arXiv:2501.03218 ,2025. Ravi, N., Gabeur, V., Hu, Y.-T., Hu, R., Ryali, C., Ma, T., Khedr, H., Rädle, R., Rolland, C., Gustafson, L., et al. Sam 2: Segment anything in images and videos. In 
+
+International Conference on Learning Representations (ICLR) , volume 2025, pp. 28085–28128, 2025. Ray, A., Duan, J., Brown, E., Tan, R., Bashkirova, D., Hen-drix, R., Ehsani, K., Kembhavi, A., Plummer, B. A., Krishna, R., et al. Sat: Dynamic spatial aptitude train-ing for multimodal language models. arXiv preprint arXiv:2412.07755 , 2024. Reimers, N. and Gurevych, I. Sentence-bert: Sentence embeddings using siamese bert-networks. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing (EMNLP) , 2019. 11 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Singh, A., Fry, A., Perelman, A., Tart, A., Ganesh, A., El-Kishky, A., McLaughlin, A., Low, A., Ostrow, A., Ananthram, A., et al. Openai gpt-5 system card. arXiv preprint arXiv:2601.03267 , 2025. Song, K., Tan, X., Qin, T., Lu, J., and Liu, T.-Y. Mpnet: Masked and permuted pre-training for language under-standing. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. Wang, W., Gao, Z., Gu, L., Pu, H., Cui, L., Wei, X., Liu, Z., Jing, L., Ye, S., Shao, J., et al. Internvl3. 5: Advancing open-source multimodal models in versatility, reasoning, and efficiency. arXiv preprint arXiv:2508.18265 , 2025a. Wang, Y., Li, K., Li, Y., He, Y., Huang, B., Zhao, Z., Zhang, H., Xu, J., Liu, Y., Wang, Z., et al. Internvideo: General video foundation models via generative and discrimina-tive learning. arXiv preprint arXiv:2212.03191 , 2022. Wang, Y., Li, X., Yan, Z., He, Y., Yu, J., Zeng, X., Wang, C., Ma, C., Huang, H., Gao, J., Dou, M., Chen, K., Wang, W., Qiao, Y., Wang, Y., and Wang, L. Internvideo2.5: Empowering video mllms with long and rich context modeling. arXiv preprint arXiv:2501.12386 , 2025b. Wang, Y., Zhang, L., Liu, J., Yan, J., Zhang, Z., Zheng, J., Yang, X., Wu, D., Chen, X., and Li, X. Episodic memory representation for long-form video understanding. arXiv preprint arXiv:2508.09486 , 2025c. Wu, D., Liu, F., Hung, Y.-H., and Duan, Y. Spatial-mllm: Boosting mllm capabilities in visual-based spatial intelli-gence. arXiv preprint arXiv:2505.23747 , 2025a. Wu, H., Huang, X., Chen, Y., Zhang, Y., Wang, Y., and Xie, W. Spatialscore: Towards comprehensive evalua-tion for spatial intelligence. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2026. Wu, J., Guan, J., Feng, K., Liu, Q., Wu, S., Wang, L., Wu, W., and Tan, T. Reinforcing spatial reasoning in vision-language models with interwoven thinking and visual drawing. arXiv preprint arXiv:2506.09965 , 2025b. Wu, M., Wang, Z., Wang, F., Yang, J., Pollefeys, M., and Zhang, T. From indoor to open world: Reveal-ing the spatial reasoning gap in mllms. arXiv preprint arXiv:2512.19683 , 2025c. Xiao, J., Shang, X., Yao, A., and Chua, T.-S. Next-qa: Next phase of question-answering to explaining temporal actions. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 9777–9786, 2021. Xiao, J., Huang, N., Qiu, H., Tao, Z., Yang, X., Hong, R., Wang, M., and Yao, A. Egoblind: Towards egocentric visual assistance for the blind. In Advances in Neural Information Processing Systems (NeurIPS) , 2025. Xiao, J., Chen, J., Sun, T., Yang, X., and Yao, A. Mukv: Multi-grained kv cache compression for long streaming video question-answering. arXiv preprint arXiv:2605.22269 , 2026. Xu, R., Wang, W., Tang, H., Chen, X., Wang, X., Chu, F.-J., Lin, D., Feiszli, M., and Liang, K. J. Multi-spatialmllm: Multi-frame spatial understanding with multi-modal large language models. arXiv preprint arXiv:2505.17015 ,2025. Yan, J., Ren, R., Liu, J., Xu, S., Wang, L., Wang, Y., Zhong, X., Wang, Y., Zhang, L., Chen, X., et al. Teleego: Benchmarking egocentric ai assistants in the wild. arXiv preprint arXiv:2510.23981 , 2025. Yang, J., Liu, S., Guo, H., Dong, Y., Zhang, X., Zhang, S., Wang, P., Zhou, Z., Xie, B., Wang, Z., et al. Egolife: Towards egocentric life assistant. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pp. 28885–28900, 2025a. Yang, J., Yang, S., Gupta, A. W., Han, R., Fei-Fei, L., and Xie, S. Thinking in space: How multimodal large lan-guage models see, remember, and recall spaces. In Pro-ceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pp. 10632–10643, 2025b. Yang, R., Zhu, Z., Li, Y., Huang, J., Yan, S., Zhou, S., Liu, Z., Li, X., Li, S., Wang, W., et al. Visual spatial tuning. 
+
+arXiv preprint arXiv:2511.05491 , 2025c. Yang, S., Xu, R., Xie, Y., Yang, S., Li, M., Lin, J., Zhu, C., Chen, X., Duan, H., Yue, X., et al. Mmsi-bench: A benchmark for multi-image spatial intelligence. arXiv preprint arXiv:2505.23764 , 2025d. Yang, S., Yang, J., Huang, P., Brown, E., Yang, Z., Yu, Y., Tong, S., Zheng, Z., Xu, Y., Wang, M., et al. Cambrian-s: Towards spatial supersensing in video. arXiv preprint arXiv:2511.04670 , 2025e. Yeh, C.-H., Wang, C., Tong, S., Cheng, T.-Y., Wang, R., Chu, T., Zhai, Y., Chen, Y., Gao, S., and Ma, Y. Seeing from another perspective: Evaluating multi-view under-standing in mllms. arXiv preprint arXiv:2504.15280 ,2025. Yin, B., Wang, Q., Zhang, P., Zhang, J., Wang, K., Wang, Z., Zhang, J., Chandrasegaran, K., Liu, H., Krishna, R., et al. Spatial mental modeling from limited views. In 
+
+Structural Priors for Vision Workshop at ICCV’25 , 2025. 12 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Zhang, H., Wang, Y., Tang, Y., Liu, Y., Feng, J., and Jin, X. Flash-vstream: Efficient real-time understanding for long video streams. arXiv preprint arXiv:2506.23825 , 2025a. Zhang, J., Chen, Y., Zhou, Y., Xu, Y., Huang, Z., Mei, J., Chen, J., Yuan, Y.-J., Cai, X., Huang, G., et al. From flatland to space: Teaching vision-language models to per-ceive and reason in 3d. arXiv preprint arXiv:2503.22976 ,2025b. Zhang, Y., Wu, J., Li, W., Li, B., Ma, Z., Liu, Z., and Li, C. Video instruction tuning with synthetic data. arXiv preprint arXiv:2410.02713 , 2024. Zhang, Y., Wu, J., Li, W., Li, B., Ma, Z., Liu, Z., and Li, C. Llava-video: Video instruction tuning with synthetic data, 2025c. URL https://arxiv.org/abs/2410.02713. Zheng, D., Huang, S., Li, Y., and Wang, L. Learning from videos for 3d world: Enhancing mllms with 3d vision geometry priors. arXiv preprint arXiv:2505.24625 , 2025. Zhou, S., Chen, Y., Ge, Y., Huang, W., Lin, J., Shan, Y., and Qi, X. Learning to reason in 4d: Dynamic spatial understanding for vision language models. arXiv preprint arXiv:2512.20557 , 2025a. Zhou, S., Vilesov, A., He, X., Wan, Z., Zhang, S., Na-gachandra, A., Chang, D., Chen, D., Wang, X. E., and Kadambi, A. Vlm4d: Towards spatiotemporal awareness in vision language models. In Proceedings of the IEEE International Conference on Computer Vision (ICCV) , pp. 8600–8612, 2025b. Zhu, J., Wang, W., Chen, Z., Liu, Z., Ye, S., Gu, L., Tian, H., Duan, Y., Su, W., Shao, J., et al. Internvl3: Exploring advanced training and test-time recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479 ,2025a. Zhu, N., Dong, Y., Wang, T., Li, X., Deng, S., Wang, Y., Hong, Z., Geng, T., Niu, G., Huang, H., et al. Cvbench: Benchmarking cross-video synergies for complex mul-timodal reasoning. arXiv preprint arXiv:2508.19542 ,2025b. 13 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Supplementary Material for UCS-Bench A. Overview 
+
+This supplementary material provides additional details and analyses to complement the main paper. We include: 1. Spatial Intelligence Benchmark Comparison (§B) presents a high-level comparison of spatial intelligence evalua-tion along three dimensions: Static Spatial Relation , Dynamic Spatial Relation , and User-Centric Spatial Relation 
+
+(Figure. 8). Representative benchmarks for each dimension are respectively VSI-Bench (Yang et al., 2025b), MMSI-Video-Bench (Yang et al., 2025d), and the proposed UCS-Bench, enabling a structured comparison across progressively complex spatial reasoning settings. 2. Implementation Details (§C) includes the implementation specifics for evaluation based on pre-extracted video frames at 1 fps, highlighting the comparison between Uniform Sampling (which captures global history) and Streaming Window Sampling (which focuses on recent context). Additionally, the number of sampled frames K and image resolution are treated as hyperparameters to explore performance under various configurations. 3. Processing methods (§D.1) extracts multi-modal signals from egocentric videos, including per-frame depth maps and ego poses using DepthAnything3 (Lin et al., 2025a), persistent object masks and trajectories via Grounding-DINO (Liu et al., 2024b) or YOLO-World (Cheng et al., 2024b) and SAM2 (Ravi et al., 2025), and coarse scene semantics using Qwen3-VL (Bai et al., 2025a), serving as inputs for constructing the global metric-semantic map. 4. Evaluation methods (§D.2-§D.3) describes a spatial reasoning evaluation method that integrates visual frames, camera poses, object tracking, and scene tags into a global map, supporting both offline and real-time reasoning. 5. Implementation Parameters (§D.4) describes the experimental hardware setup, the model implementation framework, and the inference parameter settings. 6. Prompt (§D.5) defines a set of prompt templates for egocentric video question answering (Video QA) tasks, used to guide the model in generating answers under different strategies (Uniform Sampling, Stream Sampling, Spatial Captions, Scene Graph, etc.). 7. Hyperparameter Comparisons (§E.1) provides a detailed analysis of the impact of key hyperparameters on model performance, including model size, spatial resolution, and temporal context length. 8. Spatial Captions (§E.2) augments visual inputs with frame-level spatial captions generated by a VLM, which explicitly describe object positions, orientations, and relative layouts. These captions are concatenated with the corresponding frames and jointly fed into the model to provide additional explicit spatial information during inference. 9. Dataset Source (§F.1) collects data from several publicly available datasets, including EgoLife (Yang et al., 2025a), HourVideo (Chandrasegaran et al., 2024), ScanNet (Dai et al., 2017), EPIC-KITCHENS (Damen et al., 2020), EgoBlind (Xiao et al., 2025), and TeleEgo (Yan et al., 2025). The collected data focuses on user-centric continual video, and covers a diverse set of categories, including egocentric daily activities, long-duration videos, indoor 3D scenes, fine-grained object interactions, assistive scenarios, and continuous streaming perception. 10. Dataset Statistics (§F.2) includes four categories of question templates—ego-centric spatial memory, trajectory & movement memory, proximity & reachability judgment, and object recall & quantity tracking—designed to evaluate models on dynamic spatial relationships and temporal reasoning. Word cloud analysis of questions and answers highlights frequent terms such as direction, relative position, distance, and temporal markers, indicating that models must handle long-term memory, precise spatial localization, and continuous reasoning over evolving scenes. 11. Annotation System (§F.3) comprises the video QA annotation tool and the QA refinement & verification workflow. It enables annotators to create temporally and spatially grounded question-answer pairs, apply perspective correction, optimize answer options (including AI-assisted distractor generation and counting question heuristics), and conduct blind-test adversarial validation to ensure high-quality, semantically accurate, and bias-resistant data through a combination of human verification and AI assistance. 14 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+12. Generation Distractor Pipeline (§F.4) includes question type categorization (binary, count, multi-choice) and a multi-stage distractor generation process. The pipeline combines retrieval-based candidate extraction, multi-criteria validation, diversity-aware selection, LLM-based refinement, and NLI-guided iterative optimization to produce high-quality, semantically plausible, and diverse distractors. 13. Quality-control Pipeline (§F.5) provides an overview of our procedure to ensure high-quality distractor options and reliable question-answer pairs. It covers automated evaluation using GPT-5 to identify and improve ineffective distractors, addresses semantic and information balance issues, and incorporates manual inspection to verify temporal evidence alignment, answer clarity, and relevance to dynamic spatial relationships. 14. Human Performance and QA (§F.6) evaluates human upper-bound performance on the benchmark. The study aligns tasks with model questions, allows full-context video access, enforces independent answering by experts and reports average accuracy as a reference for model evaluation. 15. Representative Failure Cases (§G.1) includes illustrative examples for Type I (Spatial Reasoning), Type II (Temporal State Tracking), and Type III (Visual Memory Amnesia) errors, highlighting typical failure patterns and underlying causes. 16. Insights and Implications (§G.2) includes analysis of core capability gaps in current VLMs, covering lack of 3D spatial grounding, state memory bottleneck, and long-range visual forgetting, as well as potential directions for improvement. 17. Qualitative Analysis (§G.3) includes representative visual scenes from diverse environments, demonstrating dataset breadth and ecological validity for evaluating spatial reasoning and memory in daily-life contexts. Together, these materials support reproducibility and provide deeper insight into the benchmark design and the proposed pose-anchored memory framework. 
+
+B. Spatial Intelligence Benchmark Comparison 
+
+The evaluation of spatial intelligence in multimodal models can be categorized into three progressive dimensions: Static Spatial Relation, Dynamic Spatial Relation, and User-Centric Spatial Relation, as illustrated in Figure 8. While earlier evaluations often conflated these capabilities, distinguishing between them allows for a more granular understanding of a model’s internal world model. This section delineates these dimensions and examines how current benchmarks, specifically VSI-Bench (Yang et al., 2025b), MMSI-Video-Bench (Yang et al., 2025d), and our proposed UCS-Bench, serve as evaluative frameworks for each. 
+
+Static Spatial Relation focuses on the fundamental "thinking" mechanisms of spatial awareness within fixed environments. This dimension prioritizes internal spatial simulation, requiring models to perform multi-step mental rotation, deduce hidden geometric properties, and resolve abstract relationships between stationary objects. VSI-Bench (Yang et al., 2025b) serves as a foundational representative for this category. By emphasizing cognitive bottlenecks in structured scenes, it effectively measures a model’s capacity for logical spatial deduction. However, static relations often operate within a "third-person" or "God’s eye" view, which may not fully capture the fluidity of real-world interactions. 
+
+Dynamic Spatial Relation extends these capabilities into the temporal domain, shifting the focus toward spatial consistency and perception within moving sequences. This dimension evaluates how models track objects, maintain orientation across continuous frames, and predict trajectories, demanding a sophisticated fusion of temporal reasoning and spatial localization. MMSI-Video-Bench (Yang et al., 2025d) is the primary benchmark addressing this need. While it excels at capturing motion-driven spatial intelligence, its reliance on continuous video streams often overlooks the deep structural mapping of high-resolution complex scenes or the ability to perform non-linear, cross-view synthesis. 
+
+User-Centric Spatial Relation represents the most complex dimension, requiring a holistic integration of high-fidelity scene understanding with ego-centric perspective synthesis. Unlike static logic or linear motion tracking, user-centric spatiality demands that the model builds a comprehensive global world model from disparate, non-continuous visual cues, often centered around the observer’s relative position and intent. To address this, we introduce UCS-Bench , which acts as a unifying stress test. By bridging the gap between abstract logic and embodied perception, UCS-Bench measures general-purpose spatial intelligence through tasks that require simultaneous excellence in fine-grained localization, structural mapping, and complex environment navigation from a user-oriented perspective. 15 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Q: Measuring from the closest point of each object,                                                                       
+
+> which of these objects (chair, stool, stove, sofa) is
+> the closest to the TV ?
+> A: Chair .
+> Static Spatial Relation (VSI -Bench)
+> User -Centric Spatial Relation (UCS -Bench)
+> Query at 00:00:05 , Answer: It’s on your left .Query at 00:00:08 , Answer: It’s behind you .
+> Question: Where is the sink relative to me now?
+> 00:00:08 00:00:05
+> Q:This video records the trajectory of the white car up to now .Assuming the
+> white car's future direction remains unchanged and its speed equals the average
+> speed during this period, please predict approximately how many seconds it will
+> take for the car to reach the location of the green strip sign?
+> A:9.5s.
+> Dynamic Spatial Relation (MMSI -Video -Bench)
+
+Figure 8. Comparison of Spatial Reasoning Benchmarks. This figure compares different spatial reasoning benchmarks: VSI-Bench, which focuses on static spatial relations, such as evaluating distances or relative positions between objects (e.g., a chair and a TV); MMSI-Video-Bench, which emphasizes dynamic reasoning, including trajectory tracking and time-to-arrival prediction for moving objects; and UCS-Bench, which targets egocentric, user-centric spatial understanding, where object locations (e.g., a sink) are defined relative to a moving observer’s perspective. 
+
+C. Implementation Details 
+
+In this section, we provide detailed implementation descriptions for the additional evaluation methods presented in the main paper. We compare two distinct sampling approaches, uniform sampling and sampling the most recent frames. 
+
+Implementation. This method utilizes pre-extracted video frames sampled at 1 frame per second, as same with (Wang et al., 2025c). For a given question occurring at timestamp ( tq ), we utilize the historical visual context available up to ( tq ). We implement two temporal sampling strategies to select ( K) frames as input to the Vision-Language Model: 1. Uniform Sampling: We uniformly sample K frames from the entire history range [0 , t q ]. This strategy captures the global context of the video but may lose high-frequency details needed for short-term dynamics. We employ prompt template 1 for this setting. 2. Streaming Window Sampling: We select the most recent K frames within a defined temporal window [tq − W, t q ],where W is the window size in seconds. If the number of available frames in the window is less than K, all available frames are used. This strategy focuses on the immediate temporal context relevant to the query. We employ prompt template 2 for this setting. 
+
+Hyperparameters. We treat the number of sampled frames K and image resolution as hyperparameters, exploring various configurations in our experiments. 
+
+D. Details of the proposed DirectMe 
+
+D.1. Step 1: Video multi-modal processing. 
+
+We describe the implementation details of Stage 1, which extracts multi-modal signals from an egocentric video to support the downstream global metric-semantic mapping. Given an egocentric video, we uniformly sample frames at 1 FPS, forming an image stream {I(t)}Tt=1 .
+
+Depth and ego pose. For each sampled frame, we estimate metric depth and camera motion using DepthAnything3 (Lin 16 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+et al., 2025a) using the DA3NESTED-GIANT-LARGE-1.1 model. We run the model in a streaming manner over {I(t)} to obtain per-frame depth maps {D(t)}Tt=1 and an ego-pose trajectory {Tw←e(t)}Tt=1 , where we initialize the global/world reference frame at the first frame by setting Tw←e(1) = I. This convention defines a consistent world coordinate system for the entire sequence, and all subsequent poses are expressed relative to this initial reference. 
+
+Open-vocabulary detection with named mask tracks. We obtain persistent named object tracks by combining Grounding-DINO or Yolo-world detection with SAM2 mask propagation. At each frame t, YOLO-World (Cheng et al., 2024b) is queried with an Objects365 category vocabulary and produces detections 
+
+D(t) = {(bm(t), ˆcm(t), s m(t)) }Mt
+
+> m=1
+
+, (1) where bm(t), ˆcm(t) ∈ C 365 , and sm(t) denote the bounding box, predicted object name, and confidence score, respectively. These detections are used to initialize SAM2 (Ravi et al., 2025), which propagates instance masks over time and produces persistent tracks I = {1, . . . , N } with per-frame masks Mi(t), boxes bi(t), and visible frame sets Ti. Thus, object names are inherited from YOLO-World, while temporal consistency is provided by SAM2. For each track, we obtain a stable semantic name by confidence-weighted voting over the YOLO-World labels associated with its frames: 
+
+ˆci = arg max 
+
+> c∈C 365
+
+X
+
+> t∈T i
+
+I[ˆ ci(t) = c] · wi(t), (2) where wi(t) is the detection confidence, optionally combined with mask quality. The resulting named mask tracks are used for world-frame anchoring and metric-semantic scene-graph construction. 
+
+Scene semantics. In parallel, we attach coarse semantic context by running a lightweight MLLM-based scene describer, Qwen3-VL-1B (Bai et al., 2025a), on each frame to generate a scene-level tag y(t) ∈ Y (e.g., kitchen, living room, street), producing {y(t)}Tt=1 . Collectively, these extracted signals-{D(t)}, {Tw←e(t)}, {Mi(t), bi(t)}, and {y(t)}, serve as the inputs to the subsequent Stage 2 for constructing the global metric-semantic map M.
+
+D.2. Step 2: Global Metric–Semantic Map Fusion 
+
+Given the 1 FPS egocentric stream {I(t)}Tt=1 and the multi-modal outputs from Step 1: metric depth maps {D(t)}Tt=1 , ego poses {Tw←e(t)}Tt=1 ∈ SE (3) (with the world frame initialized at t=1 ), tracked instances I = {1, . . . , N } with masks 
+
+{Mi(t)} and boxes {bi(t)}, and frame-level scene tags {y(t) ∈ Y} , we fuse them into a global metric-semantic map M
+
+in a consistent world coordinate system. Let π−1(·) denote back-projection using camera intrinsics K. For each pixel 
+
+u = ( u, v ) with depth d = D(t)[ u], we recover an ego-frame 3D point 
+
+xe(t, u) = π−1(u, d ; K) ∈ R3, (3) and transform it to the world frame via the estimated pose 
+
+xw(t, u) = Tw←e(t) ˜ xe(t, u), (4) where ˜x = [ x⊤, 1] ⊤ is the homogeneous coordinate and Tw←e(1) = I under our initialization convention. Aggregating over time yields a global point set 
+
+Pw =
+
+> T
+
+[
+
+> t=1
+
+{xw(t, u)}, (5) which provides a metric world reference frame consistent across viewpoint changes within the trajectory. 
+
+Object anchoring in the world frame. To obtain persistent object geometry aligned with tracking identities, for each instance i ∈ I we define the mask support 
+
+Ωi(t) = {u : Mi(t)[ u] = 1 }, (6) lift the masked pixels to 3D, and compute a world-frame anchor (centroid) as 
+
+oi(t) = 1
+
+|Ωi(t)|
+
+X
+
+> u∈Ωi(t)
+
+xw(t, u) ∈ R3. (7) 17 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+This yields a persistent 3D trajectory {oi(t)}t∈T i aligned with the tracker identity i, where Ti denotes the time indices at which instance i is observed. 
+
+Semantic attachment and map representation. We attach semantics to the global map by associating each mapped point (or its local neighborhood) with an instance id when u ∈ Ωi(t) and with the frame-level scene tag y(t). Concretely, we maintain a global metric-semantic map 
+
+M = {(xj , s j , t j , i j )}Jj=1 , (8) where xj ∈ R3 is a world-frame point, ij ∈ I ∪ { ∅} denotes its associated instance (if any), tj ∈ { 1, . . . , T } is the source time index, and sj stores semantic attributes (e.g., sj = y(tj ) plus optional instance/category tags). The ego position and orientation at time t are directly given by 
+
+Tw←e(t) = [ R(t) | p(t)] , (9) enabling downstream components to reference both the user’s current pose and globally grounded object locations during pose-conditioned querying. 
+
+D.3. Stage 3: Spatial Parsing and Scene-Graph Memory Construction 
+
+We construct a scene-graph memory G = ( V, E) by spatially parsing the global metric–semantic map M built in Step 2. Recall that M is expressed in the world frame (initialized at t=1 ) and stores world-frame 3D geometry together with semantic attributes. In particular, Step 2 provides: (i) the ego-pose trajectory {Tw←e(t) ∈ SE (3) }Tt=1 with Tw←e(t) = [ R(t) | p(t)] ,and (ii) a set of persistent tracked instances I = {1, . . . , N } with per-time world-frame anchors {ok(t) ∈ R3}k∈I , t ∈T k ,where Tk = {t : Mk(t) is valid } denotes the time indices in which instance k is observed (cf. Eq. (6) in Step 2). Our goal in this stage is to convert these explicit coordinates into a compact, query-efficient memory that supports pose-conditioned spatial queries without revisiting raw frames. 
+
+Graph definition. The node set V contains three types of nodes: object nodes Vo, place nodes Vp, and a single ego-anchor node ve. Object nodes represent persistent entities grounded in world-frame 3D coordinates; place nodes represent semantic regions induced from the trajectory and map semantics; and ve exposes the time-varying ego pose for pose-conditioned reasoning. Edges in E encode object–object and object–place relations derived from world-frame geometry, which can be rendered in the current egocentric frame at query time t via Te←w(t) = Tw←e(t)−1.
+
+Object nodes (persistent entities). For each instance k ∈ I , we define the last-seen time tlast  
+
+> k
+
+= max Tk and select a keyframe t∗ 
+
+> k
+
+∈ T k for a single object-level semantic parse (e.g., tlast  
+
+> k
+
+or the highest-confidence detection), avoiding repeated parsing over the full stream. From the keyframe crop, a lightweight parser extracts semantic attributes sk (e.g., open-vocabulary label/description and optional attributes). The object geometry is obtained from the world-frame anchors stored in M. To reduce jitter, we optionally compute a stabilized canonical location by temporal pooling: 
+
+xk,w = Pool  {ok(t)}t∈T k
+
+ ∈ R3, Pool ∈ { median , mean }. (10) We then instantiate an object node vk ∈ V o that stores 
+
+vk :
+
+
+
+xk,w , sk, n k, t last  
+
+> k
+
+, Kk
+
+
+
+, (11) where nk = |T k| is the observation count and Kk ⊆ T k is a small cache of representative keyframes/timestamps for verification. The tracker identity k is used as the default association key. When identity switches are suspected, we optionally validate associations using a lightweight keyframe-based re-identification score and merge/split nodes accordingly. 
+
+Place nodes (semantic regions). We create place nodes by clustering the trajectory into spatial regions with consistent scene semantics. Let y(t) ∈ Y be the frame-level scene tag from Step 1 and p(t) ∈ R3 be the ego position from 
+
+Tw←e(t) = [ R(t) | p(t)] . For each semantic label ℓ ∈ Y , we collect 
+
+Tℓ = {t ∈ { 1, . . . , T } : y(t) = ℓ}, (12) and cluster the corresponding positions {p(t)}t∈T ℓ into regions {R p} (e.g., DBSCAN or k-means in R3). Each region yields a place node vp ∈ V p with semantic label ℓp ∈ Y and a compact region descriptor, e.g., 
+
+μp = 1
+
+|R p|
+
+X
+
+> t∈R p
+
+p(t), Σp = Cov  {p(t)}t∈R p
+
+, (13) 18 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+along with aggregated evidence (timestamps/keyframes) supporting the region. Intuitively, place nodes provide stable anchors for questions referencing semantic regions (e.g., kitchen ) even when the user has moved away. 
+
+Ego-anchor node. We include a single ego-anchor node ve that exposes the evolving pose Tw←e(t), enabling pose-conditioned queries. At query time t, we use the inverse transform Te←w(t) = Tw←e(t)−1 to express world-frame entities in the user’s current egocentric frame. 
+
+Edges (spatial relations). Edges E encode object–object and object–place relations. For object–object relations, we define the world-frame displacement and distance between canonical object locations: 
+
+∆xij,w = xj,w − xi,w , dij = ∥∆xij,w ∥2, (14) and add an edge (vi, v j ) if dij is below a threshold or if j is among the K nearest neighbors of i. To obtain egocentric directional predicates at query time t, we transform object locations into the ego frame: 
+
+xk,e (t) = Te←w(t) [ x⊤
+
+> k,w
+
+, 1] ⊤ ∈ R3, (15) and compute the relative vector 
+
+∆xij,e (t) = xj,e (t) − xi,e (t). (16) Left/right/front/behind relations are then derived from the sign and magnitude of the components of ∆xij,e (t) under the current pose. For object–place relations, we assign object k to place region Rp if xk,w falls within the spatial support of that region (or is nearest to it), yielding containment/adjacency edges, optionally with a confidence score. 
+
+Offline build, online inference. We adopt an offline–online design to decouple memory construction from reasoning. A pose-aware scene graph G is built offline from the memory buffer M and cached for efficient inference, such that online reasoning never revisits raw video frames. In addition to the graph, we store spatial captions for each sampled frame, where a VLM describes scene layouts with precise spatial details, including salient objects, relative positions, and inter-object relations. At inference time, given a query timestamp t and the current pose Tw←e(t), the model retrieves a relevant subgraph and associated captions, and performs pose-anchored reasoning by projecting world-frame entities into the current egocentric frame via Te←w(t).D.3.1. M ETHOD 2: S TREAMING EVALUATION WITH SPATIAL CAPTIONING 
+
+Implementation. This method reads the raw video file and samples frames at a fixed interval. The system maintains a fixed-size memory buffer of the most recent frames. 
+
+Two-Stage Inference. In contrast to Method 1, this approach employs a two-stage inference pipeline to improve spatial reasoning capabilities: 1. Spatial Captioning: For each sampled frame in the buffer, the VLM generates a detailed spatial caption describing the scene layout. These captions emphasize precise spatial information, including salient objects, their relative positions, inter-object relationships, and overall scene structure. Captions are generated using prompt template 3. 2. Visual-Textual Question Answering: The model receives an interleaved sequence of frames and their corresponding spatial captions as input. This design explicitly grounds the reasoning process in both visual evidence and structured spatial descriptions. We use prompt template 4 for this stage. 
+
+Hyperparameters. We set the buffer size, and image resolution as hyperparameters. We maintain a buffer of 64 frames, and resize images to 512×512 pixels. 
+
+D.4. Detailed Implementation Parameters 
+
+All experiments are conducted on a server equipped with 8× NVIDIA RTX A6000 GPUs (48GB each) and 4× NVIDIA A100 GPUs (80GB each). For all models, we perform inference using HuggingFace’s Transformers library, with model-specific adaptations following their official implementations. To ensure reproducibility and consistency, each model is evaluated within its own isolated virtual environment, strictly adhering to the corresponding official dependencies and 19 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+configurations. For video inputs, all frames are resized such that the longer side is at most 512 pixels while preserving the original aspect ratio. Unless otherwise specified, we use deterministic decoding with top-p = 1 .0 and temperature = 0 .0
+
+across all experiments. 
+
+D.5. Prompts 
+
+Prompt 1: Uniform Sampling Prompt 
+
+Role: user 
+
+Content: [
+
+// Input: Uniformly sampled frames 
+
+{ "type": "image", "image": <Frame 1> }, { "type": "image", "image": <Frame 2> }, ... { "type": "image", "image": <Frame K> }, 
+
+// System Instruction 
+
+{ "type": "text", "text": "You are an egocentric video QA assistant. This is a multiple-choice question answering task based strictly on visual content. You will see a sequence of frames sampled uniformly from the start of the video up to the question time <T> seconds. Use only the frames as evidence to answer the question. 
+
+Rules: 
+
+- Rely only on visible evidence. - Do not hallucinate unseen objects or actions. - Use temporal reasoning if helpful. - There is exactly one best answer. - Only output a single uppercase letter (A, B, C, ...). - Do not output any explanations or extra text. Your job is to choose the option that best matches the visual content. 
+
+Question: 
+
+<Question Text> 
+
+Options: 
+
+A. <Option A> 
+
+B. <Option B> 
+
+C. <Option C> 
+
+... There are <K> frames in temporal order. Only output the letter of the best option (A, B, C, ...). Note that there is only one best option. Output format: answer is :..." }]
+
+20 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 2: Stream Sampling Prompt 
+
+Role: user 
+
+Content: [
+
+// Input: Stream-selected frames from recent time window 
+
+{ "type": "image", "image": <Frame 1> }, { "type": "image", "image": <Frame 2> }, ... { "type": "image", "image": <Frame K> }, 
+
+// System Instruction 
+
+{ "type": "text", "text": "You are an egocentric video QA assistant. This is a multiple-choice question answering task based strictly on visual content. You will see a sequence of frames selected by stream within the last <K> seconds up to the question time <T> seconds. Use only the frames as evidence to answer the question. 
+
+Rules: 
+
+- Rely only on visible evidence. - Do not hallucinate unseen objects or actions. - Use temporal reasoning if helpful. - There is exactly one best answer. - Only output a single uppercase letter (A, B, C, ...). - Do not output any explanations or extra text. Your job is to choose the option that best matches the visual content. 
+
+Question: 
+
+<Question Text> 
+
+Options: 
+
+A. <Option A> 
+
+B. <Option B> 
+
+C. <Option C> 
+
+... There are <K> frames in temporal order. Only output the letter of the best option (A, B, C, ...). Note that there is only one best option. Output format: answer is :..." }]
+
+21 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 3: Spatial Caption Generation Prompt 
+
+Role: user 
+
+Content: [
+
+// Input: Single frame to be captioned 
+
+{ "type": "image", "image": <Frame> }, 
+
+// Caption Generation Instruction 
+
+{ "type": "text", "text": "You are a vision expert for egocentric frames. Describe the scene with a focus on precise spatial layout. 
+
+Include: 
+
+- All salient objects and people (with attributes if visible) - Relative positions (left/right, front/behind, above/below, near/far) - Object-to-object relations (on, under, inside, next to, touching) - Room/scene structure and landmarks (walls, doors, counters, shelves, floor) - Actions/interactions only if clearly visible Write 3-6 concise sentences. Be strictly factual. Do not guess." }]
+
+22 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 4: QA with Spatial Captions Prompt 
+
+Role: user 
+
+Content: [
+
+// Input: Retrieved frames with captions 
+
+{ "type": "text", "text": "[Frame 1/ <K> | t= <T_1> s]" }, { "type": "image", "image": <Frame 1> }, { "type": "text", "text": "Spatial caption: <Caption 1> " }, { "type": "text", "text": "[Frame 2/ <K> | t= <T_2> s]" }, { "type": "image", "image": <Frame 2> }, { "type": "text", "text": "Spatial caption: <Caption 2> " }, ... { "type": "text", "text": "[Frame <K> /<K> | t= <T_K> s]" }, { "type": "image", "image": <Frame K> }, { "type": "text", "text": "Spatial caption: <Caption K> " }, 
+
+// Final QA Instruction 
+
+{ "type": "text", "text": "You are an egocentric video QA assistant. You are given a set of frames (in temporal order) from the start of the video up to the question time. Each frame is accompanied by a spatial caption. Use ONLY the provided frames and captions as evidence. 
+
+Rules: 
+
+- Rely only on visible evidence from the frames and captions. - Do not hallucinate unseen objects, actions, or events. - Use temporal reasoning if helpful. - There is exactly ONE best answer. - Output ONLY a single uppercase letter (A, B, C, ...). No explanations. Question time: <T_question> seconds Number of selected frames: <K> 
+
+Question: 
+
+<Question Text> 
+
+Options: 
+
+A. <Option A> 
+
+B. <Option B> 
+
+C. <Option C> 
+
+... Answer (single letter only):" }]
+
+23 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 5: QA with Spatial Captions + Scene-Graph Summary Prompt 
+
+Role: user 
+
+Content: [
+
+// Frames with spatial captions (temporal order) 
+
+{ "type": "text", "text": "[Frame 1/ <K> | t= <T_1> s]" }, { "type": "image", "image": <Frame 1> }, { "type": "text", "text": "Caption: <Caption 1> " }, ... { "type": "text", "text": "[Frame <K> /<K> | t= <T_K> s]" }, { "type": "image", "image": <Frame K> }, { "type": "text", "text": "Caption: <Caption K> " }, 
+
+// Pose-anchored scene-graph summary at question time 
+
+{ "type": "text", "text": "[Graph Summary @ t= <T_question> s]" }, { "type": "text", "text": "Use the following structured summary rendered in the current egocentric frame :
+
+Orientation: front/left/right/rear (relative to the wearer), with optional distance near/far. 
+
+Objects: <Object List> 
+
+Relations: <Pose-anchored Relations> Object List format (one per line): 
+
+obj= <name> | tag= <semantic_tag> | color= <color> | count= <n> |traj= <brief_trajectory> | last= <t> s
+
+Relations format (one per line): <objA> is <orientation> (<near/far> ) of you 
+
+<objA> is near/in/on <objB> "}, 
+
+// Final QA instruction 
+
+{ "type": "text", "text": "You are an egocentric video QA assistant. Use ONLY the provided frames, captions, and graph summary. Choose exactly ONE best option. Output ONLY a single uppercase letter (A, B, C, ...). Question time: <T_question> sFrames: <K> 
+
+Question: <Question Text> 
+
+Options: A. <A> B. <B> C. <C> ..." }]
+
+24 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 6: Generate Binary Distractor Prompt 
+
+Role: system 
+
+Content: [“You are an expert test-item writer specializing in BINARY (two-choice) questions. Your job is to write ONE plausible but WRONG alternative that would be the other choice. The wrong option must be mutually exclusive with the true answer, and should look like a natural answer to the question.” ]
+
+Role: user 
+
+Content: [“Question: {question} True Answer: {gold} {existing_section} Write EXACTLY ONE wrong option for a binary (two-choice) question. CORE RULE (BINARY FLIP): - Use the question to identify the two alternatives (often connected by ‘or’). - Output the OTHER alternative, not the one selected by the true answer. COMMON Examples: - left <-> right - yes, you can <-> no, you can’t. - Dumbbells are closer to you. <-> Dumbbells are further away from you. STYLE & STRUCTURE: - Match the true answer’s tone, sentence pattern, and grammatical structure - Keep the same key subject/entities; only switch the binary choice - Keep the same perspective and tense as the true answer - Keep length similar to the true answer CONSTRAINTS: - English only, <= 18 words, end with a period - No hedging (‘probably’, ‘not sure’, ‘insufficient information’) - No ‘All/None of the above’ - Must be different from all existing wrong options Output: ONE line only. No numbering. No quotes.” ]
+
+25 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 7: Generate multiple distractors Prompt 
+
+Role: system 
+
+Content: [You are an expert test-item writer. Given a question, the TRUE answer, and possibly several seed near-miss candidates, generate EXACTLY <n_lines> plausible but WRONG options. Each option must be: 1) English-only, concise (<= 18 words), ending with a period. 2) Mutually exclusive with the true answer (not a paraphrase; not entailed). 3) Highly similar in structure/content (near-miss): change a concrete attribute like left/right, count, object name, container/surface, path step, floor level, or order. 4) Avoid generic/hedging phrases (e.g., ’Insufficient information’, ’Probably’, ’Not sure’). 5) Avoid ’All/None of the above’. 6) Keep the same answer TYPE/slot (location/quantity/trajectory etc.). 7) If seeds are provided, use them as inspiration but improve and diversify them. If seeds are few or absent, CREATE new high-quality distractors from scratch. 8) MATCH THE STYLE AND STRUCTURE of the true answer closely: - Use similar sentence patterns, phrasing, and grammatical structure. - If the question mentions a subject (e.g., ’apple’) and the true answer also includes it, ALL options must include that same subject to maintain consistency. - Mirror the level of detail and specificity in the true answer. - Keep the same perspective (first/third person) and tense as the true answer. 9) Generate diverse options covering different types of plausible errors (spatial, temporal, quantitative, categorical, etc.) while maintaining the near-miss quality. ]
+
+Role: user 
+
+Content: [“Question: {question} True Answer: {gold} seed_section IMPORTANT: Analyze the style of the true answer carefully. Generate options that: - Follow the exact same answering pattern and structure as the true answer - Include the same key subjects/entities mentioned in both question and true answer - Maintain stylistic consistency while being factually incorrect - Even if seeds are limited or missing, you MUST generate ALL n_lines unique options - Ensure variety: don’t just change one attribute; explore different plausible mistakes Write EXACTLY n_lines lines, one option per line, no numbering, end each with a period.” ]
+
+Note: seed_section is conditionally inserted as: “Seed candidates (use as inspiration, but create variations): - seed_1 - seed_2 ...” (if seeds are provided) or: “No seed candidates provided. Create distractors from scratch.” 
+
+26 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 8: Generate distractors for Multi-Choice Prompt 
+
+Role: system 
+
+Content: [“You are an expert test-item writer. Generate plausible but incorrect options for multiple-choice questions. Focus on creating near-miss distractors that are structurally similar to the correct answer but factually wrong.” ]
+
+Role: user 
+
+Content: [“Question: question True Answer: gold existing_section Generate EXACTLY ONE new wrong option that: STYLE & STRUCTURE: - Match the true answer’s sentence pattern, phrasing, and grammatical structure - Include the same key subjects/entities from the question and true answer - Mirror the level of detail and specificity - Use the same perspective and tense CONTENT REQUIREMENTS: - Change ONE concrete attribute: left/right, count, object name, location, order, etc. - Be mutually exclusive with the true answer (not a paraphrase) - Be distinctly different from all existing options - Explore a different type of error than existing options (spatial/temporal/quantitative/categorical) CONSTRAINTS: - English only, ≤ 18 words, end with a period - No hedging phrases (’probably’, ’not sure’, ’insufficient information’) - No ’All/None of the above’ Output: Write ONE line only, no numbering or formatting.” ]
+
+Note: existing_section is conditionally inserted as: “Existing wrong options (your new option MUST be different): - option_1 - option_2 ...” (if existing options are present) 
+
+27 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 9: Fix Entailment Prompt 
+
+Role: user 
+
+Content: [You are helping to fix multiple-choice question options that have entailment issues. Problem: The following options show entailment relationship (one option logically implies another), which makes the question invalid. Question: {question} Current Options: {formatted_options} Correct Answer: {correct_label}. {correct_answer} Problematic Options: - Option {label_a}: “{option_i}” - Option {label_b}: “{option_j}” (max_entailment score: {max_entailment}) Root Cause: These options likely differ only in {difference_type}, which creates a logical entailment relationship. Your Task: Generate new replacement option(s) for the problematic option(s): {problematic_labels} CRITICAL REQUIREMENTS: 1. Change CORE attributes instead of adding/removing positional information: - Change colors - Change objects - Change quantities - Change states 2. Maintain identical sentence structure as the correct answer 3. Keep length consistent (±2 words from the correct answer length) 4. Ensure mutual exclusivity with every existing option 5. Keep it plausible but clearly wrong for the question Output Format (JSON only): {json_template} ]
+
+28 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 10: Fix Length Imbalance Prompt 
+
+Role: user 
+
+Content: [You are helping to fix multiple-choice question options that have length imbalance issues. Problem: Some options are significantly longer or shorter than the correct answer, making it easy to guess. Question: {question} Current Options: {formatted_options_with_length} Correct Answer: {correct_label}. {correct_answer} ({target_length} words) Your Task: Rewrite the problematic options to match the target length ({target_length} ± 2 words): {problematic_labels} CRITICAL REQUIREMENTS: 1. Match the length: each rewritten option should be {target_length} ± 2 words 2. Keep the same grammatical structure as the correct answer 3. Maintain content diversity (no meaningless padding) 4. Preserve wrongness and avoid entailment with other options Output Format (JSON only): {json_template} ]
+
+29 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Prompt 11: Blind Test Prompt for Egocentric Video QA 
+
+Role: system 
+
+Content: [“You are a helpful assistant designed to output JSON.” ]
+
+Role: user 
+
+Content: [“You are an egocentric video QA assistant taking a ’blind test’. This implies you DO NOT have access to the visual content/video frames, but you must guess the most likely answer based on language bias, common sense, or the logical relationships between the question and options. Rules: - Analyze the question and options purely textually. - Select the best option. - **Explain WHY you chose this option without seeing the video.** (e.g., ’Option A is the most common action associated with this object’, or ’Option B is the only grammatically correct answer’, etc.) - Output your response in strictly Valid JSON format. Question: {current_q} Options: {options_text} Video context info: There are {num_frames} frames (which you cannot see). Required JSON Output Format: {"reason": "Your concise reasoning here...", "answer": "The single uppercase letter (A, B, C...)" }” ]
+
+Note: {current_q}, {options_text}, and {num_frames} are dynamically populated from the current question being evaluated. 
+
+Prompt 12: Generate distractors Prompt 
+
+Role: user 
+
+Content: [“Please generate 5 deceptive incorrect options for the following question. The options should appear reasonable but are actually incorrect. Utilize information gaps to create mutual corroboration among the confusing options, thereby leading the model to select one of them. Create at least one longer option whose information overlaps and intersects with other options. Preferably include ’you’ in the options. Respond in the tone of an assistant. Question: {question} Correct Answer: {answer} Please output the options directly, one per line.” ]
+
+30 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+E. Additional Experiments 
+
+E.1. Hyperparameter Comparisons 
+
+In this section, we provide a detailed analysis of the impact of key hyperparameters on model performance, including model size, spatial resolution, and temporal context length. All experiments in this subsection are conducted using the Qwen series as the backbone. E.1.1. I MPACT OF SPATIAL RESOLUTION      
+
+> (a) Temporal Context: The impact of input frame counts (32, 64, 128) on the 8B model’s accuracy.
+> (b) Spatial Resolution: The effect of varying input image resolutions (224, 448, 512) on the 8B model.
+> Figure 9. Effect of temporal and spatial input parameters on model accuracy: A study of Qwen3-VL-8B-Instruct and InternVL3.5-7aB-Instruct.
+
+Figure 9a shows that temporal context affects Qwen and InternVL differently. Qwen exhibits a clear resolution-dependent temporal pattern: at low resolution (Res 224), accuracy peaks at 64 frames (44.08%) and then slightly declines, suggesting that longer temporal sequences may introduce redundancy when spatial information is limited. At high resolution (Res 512), Qwen shows a non-monotonic trend, dropping at 64 frames but reaching the best result at 128 frames (45.9%), indicating that sufficient spatial detail better supports long-range temporal reasoning. In contrast, InternVL remains relatively stable across different frame counts, with only minor fluctuations, suggesting stronger temporal robustness but limited benefit from extended temporal context. Figure 9b further investigates the impact of spatial resolution. Qwen benefits more clearly from increased resolution, especially under the 32-frame and 128-frame settings, where accuracy generally improves from Res 224 to Res 512. However, the 64-frame setting peaks at Res 448 and decreases at Res 512, indicating that higher spatial resolution is not always beneficial under all temporal configurations. By comparison, InternVL is less sensitive to spatial resolution, with accuracy remaining stable around 43% across different resolutions. 
+
+Cross-Model Comparison. In terms of peak performance, Qwen3-VL-8B-Instruct achieves the highest accuracy, reaching 45.96% at Res 512 with 128 frames, surpassing InternVL3.5-7B-Instruct by roughly 2.36 percentage points. However, this advantage comes at the cost of configuration sensitivity, as Qwen exhibits larger performance variations across temporal and spatial settings, whereas InternVL maintains more stable but generally lower accuracy. From an efficiency perspective, Qwen configured at Res 448 with either 32 or 128 frames offers a favorable trade-off, achieving accuracy close to the best setting while reducing computational cost compared with Res 512. 
+
+Application Implications. These findings suggest that model selection and configuration should be guided by application characteristics. Qwen3-VL-8B-Instruct with Res 512 and 128 frames is better suited for scenarios requiring fine spatial details and long-range temporal understanding, such as continuous object tracking or long-horizon action analysis. In contrast, Qwen at Res 448 with 32 or 128 frames provides a more efficient alternative when computational resources are limited, while still preserving competitive accuracy. InternVL3.5-7B-Instruct, although less accurate overall, may be preferable for fragmented or variable-quality user-generated videos where robustness to input variation is more important than peak performance. 31 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+E.1.2. I MPACT OF TIME INTERVALS.    
+
+> Figure 10. Accuracy trends across Evidence Span. Figure 11. Accuracy trends across different time intervals from video start to question timestamp.
+
+Based interval analysis, we observe a consistent accuracy degradation pattern across all models in figure 10, with performance declining from short intervals (0-30s) to medium intervals (1-15 mins). The steepest drop occurs in the 1-5 minute window, where high-performing models like Qwen3-VL-32B and InternVL3-38B experience 6-10 percentage point decreases. Notably, some models show partial recovery at intervals exceeding 30 minutes, suggesting different reasoning mechanisms for very long temporal distances. Higher-capacity models demonstrate better absolute performance but suffer larger relative degradation (22-27%), while smaller models like Dispder-7B show more stable but consistently lower accuracy (11% relative drop). These findings indicate that current vision-language models struggle most with medium-range temporal reasoning, highlighting a critical limitation in their temporal context windows that warrants further architectural improvements. As illustrated in Figure 11, most models exhibit a notable decline in accuracy as the time interval between video start and question timestamp increases, suggesting temporal forgetting effects in long-form video understanding. Qwen3-VL-32B demonstrates the most stable performance, maintaining relatively high accuracy (above 0.55) even at intervals exceeding 30 minutes. In contrast, smaller models like Dispder-7B show more pronounced degradation, dropping from approximately 0.50 in the 0-30s interval to around 0.40 beyond 30 minutes. Interestingly, all models demonstrate relatively consistent performance in the middle intervals (5-15 mins and 15-30 mins), with accuracy variations primarily occurring at the earliest (0-30s) and latest (>30 mins) time windows. Robustness of SOTA Models: Leading models such as InternVL3-38B and Qwen3-VL-32B demonstrate remarkable stability, with average scores fluctuating by less than 0.5 points between strategies. This suggests that large-scale models possess robust long-context capabilities that are not heavily biased by the distribution of input frames. Task-Specific Impacts: • Object Memory: Uniform sampling generally benefits global retrieval tasks. For instance, Qwen2.5-VL-7B sees an improvement in the Category & Quantity category (Avg. increases from 42.5 with stream sampling to 45.5 with uniform sampling), as uniform frames provide better coverage of objects appearing earlier in the episode. • Spatial State Estimation: Conversely, tasks requiring fine-grained motion continuity, such as Ego-centric Position ,favor recent frame sampling. Notable sensitivity is observed in VG-LLM-8B, where performance drops significantly (Avg. 38.34 → 32.90) under uniform sampling, likely due to the loss of immediate temporal continuity required for its spatial reasoning mechanism. Streaming Models: As expected, streaming models (e.g., Dispider-7B, Flash-VStream) show almost identical performance across settings, validating their internal memory mechanisms’ independence from offline sampling heuristics. 
+
+E.2. Spatial Captions 
+
+To enhance the model’s understanding of spatial relationships in the video frames, we employ an alternative approach that augments visual inputs with spatial descriptions. After selecting the 64 most recent frames relative to the question timestamp, 32 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+we use a VLM to generate a detailed spatial caption for each individual frame. These captions specifically describe the spatial relationships present in each image, such as object positions, orientations, and relative arrangements. The generated spatial captions are then concatenated with their corresponding frames and fed together into the VLM for final answer inference. This approach aims to provide explicit spatial reasoning signals that complement the visual information, potentially improving the model’s ability to answer spatially-grounded questions. The prompts used for this method are provided in Prompt 3 for caption extraction and Prompt 4 for the question-answering stage. 
+
+F. Dataset and Annotations 
+
+F.1. Dataset Source 
+
+We utilize several publicly available datasets, each contributing specific subsets tailored for spatial reasoning, temporal perception, and embodied assistance tasks. EgoLife (Yang et al., 2025a): We select samples from EgoLife to evaluate the understanding of continuous daily life activities and social interactions. As a dataset capturing multi-view egocentric footage of participants living together over extended periods (up to a week), it allows us to test the model’s ability to maintain long-term consistency and interpret complex interpersonal dynamics within a shared 3D environment. HourVideo (Chandrasegaran et al., 2024): To challenge models with extremely long-context reasoning, we incorporate samples from the HourVideo dataset. With videos ranging from 20 to 120 minutes, this subset serves as a rigorous test for the model’s capacity to retrieve and synthesize information across extensive temporal windows, evaluating its episodic memory and ability to reason about events that span significant timeframes. ScanNet (Dai et al., 2017): We utilize indoor scene sequences from ScanNet to focus specifically on 3D spatial perception and scene geometry. By leveraging its rich RGB-D data and reconstructed 3D meshes of complex indoor environments, this subset assesses the model’s grasp of static spatial relationships, object placement, and volumetric understanding, which are critical for embodied navigation tasks. EPIC-KITCHENS (Damen et al., 2020): We incorporate this dataset to target fine-grained action recognition and detailed object interaction. Capturing unscripted daily activities in kitchen environments, this subset challenges models to identify rapid hand-object manipulations and subtle state changes (e.g., chopping, washing). It serves as a critical test for the model’s precision in perceiving short-term temporal dynamics and procedural understanding within object-dense settings. EgoBlind (Xiao et al., 2025): We include the EgoBlind dataset to introduce challenges related to assistive AI for the visually impaired. This subset features egocentric video captured by blind individuals, often containing unique visual constraints such as unstable motion or off-center framing. It tests the model’s robustness and its ability to perform safety-critical reasoning (e.g., obstacle detection) and navigation assistance under suboptimal visual conditions. TeleEgo (Yan et al., 2025): We introduce the TeleEgo dataset, leveraging its long-duration streaming video characteristics to evaluate models’ continuous perception capabilities for dynamic spatial relationships. Through analyzing environmental evolution from an egocentric perspective, the dataset assesses models’ robustness in capturing instantaneous spatial alignment and action causality within complex 3D scenes. 
+
+F.2. Dataset Statistics 
+
+F.2.1. Q UESTION TEMPLATE 
+
+As illustrated in Table 6, we distill the natural language queries generated by human annotators—guided by our dynamic spatiotemporal protocols—into four representative categories. This taxonomy reflects the core dimensions prioritized by annotators during the interpretation of streaming videos. Statistical analysis of the annotation corpus reveals a significant emphasis on ego-centric spatial awareness and trajectory tracking, necessitating that models comprehend the continuous relative evolution between the observer and the environment. Furthermore, interrogative patterns concerning proximity, reachability, and object quantity variations indicate that human observers engage in deep semantic reasoning regarding physical geometric attributes and event-driven state transitions within dynamic scenes. In conclusion, these templates derived from manual annotations not only preserve the inherent diversity of natural expression 33 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams                       
+
+> Table 6. Question Templates for tasks in UCS-Bench. We replace the highlighted part in the question template from scene to scene to construct our benchmark. Note that a complete example question is provided for Route Plan.
+> Task Question Template Ego-centric Position & Orientation Memory ·Ego-centric Position: When I first entered the {location}, in what direction was the {object} relative to my orientation?
+> ·Relative Position & Orientation Memory: Where in the {location} did I place the {object} after completing the {action}?
+> Embodied trajectory & Movement Memory ·My Trajectory: What path did I take while moving toward the {object}?
+> ·Object Trajectory: What was the movement trajectory of the {object} as it moved from {location} to {location}?
+> Perceived Proximity & Reachability Memory ·Distance Comparison Memory: What is the direct distance between {object} and {object} within the {location}?
+> ·Reachability Judgment: When I was positioned at the {location}, was I able to directly reach the {object}?
+> Object Recall & Quantity Tracking ·Object Category Recall: Before the {event} occurred, how many types of {category} were present at the {location}?
+> ·Quantity Change Tracking: How many {category}(s) were added or removed during the {event}?
+
+but also precisely encompass hierarchical challenges ranging from geometric localization to spatiotemporal logical reasoning. This effectively underscores the benchmark’s specificity and comprehensiveness in evaluating dynamic variations in spatial relationships. F.2.2. W ORD CLOUD       
+
+> (a) Word cloud visualization of question. (b) Word cloud visualization of answers. (c) Word cloud visualization of Q&A.
+> Figure 12. Word cloud visualization of UCS-Bench
+
+The word cloud 12a of the questions reveals the critical dimensions required for evaluating multimodal models in processing streaming videos. Prominent keywords such as "direction", "relative", "closer", and "far" occupy central positions, indicating that questions in the dataset place strong emphasis on dynamic spatial localization and relative distance perception. The frequent appearance of temporal markers such as "many times" and "now" indicates that models need to possess long-term memory capabilities to track action frequencies and instantaneous state changes in streaming videos. The answer word cloud 12b shows a complementary pattern where directional terms ("right," "left," "front"), sequential indi-cators ("first," "second," "one," "two"), and spatial descriptors ("behind," "closer," "table") are most frequent, demonstrating that responses require precise spatial localization and tracking of object positions as they evolve through the video stream. The word cloud 12c reveals a distinct focus on egocentric interaction and dynamic navigation, where directional terms ("front", "right", "left", "direction", "behind"), spatial-temporal descriptors ("closer", "far", "now"), and interaction verbs ("take", "put", "reach", "walk") are most predominant. This pattern demonstrates that the queries necessitate precise user-centric spatial perception, requiring the model to reason about dynamic scenes as they evolve through the video stream ("now") and track fine-grained object interactions and relative positions within indoor environments ("kitchen", "living room", "table"). 34 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+F.3. Annotation System 
+
+F.3.1. A NNOTATION INTERFACE AND WORKFLOW  
+
+> Figure 13. The video QA annotation tool. This tool enables annotators to view egocentric video streams and curate question-answer pairs with precise temporal grounding and spatial evidence.
+
+To facilitate high-quality data collection, we developed a specialized annotation tool, whose UI is shown in Figure 13. It provides structured fields for annotators to input question-answer pairs, question timestamps, evidence timestamps, question categories, and question types. Additionally, built-in temporal logic constraints prevent incorrect labeling of question and evidence timestamps. For example, the ’question timestamp’ is constrained to occur strictly after the ’evidence frame’, ensuring that the dataset evaluates genuine temporal reasoning. The interaction is designed to be highly efficient. Shortcuts (e.g., Ctrl+S for saving, Ctrl+T for perspective switching) streamline the manual labor. The system supports batch processing for algorithmic tasks (e.g., batch optimization for counting questions) while enforcing human verification for semantic nuances. F.3.2. D ATA REFINEMENT AND VERIFICATION PROCESS 
+
+To ensure the high quality of our dataset and mitigate language biases, we developed a specialized QA refinement and verification tool, as shown in Figure 14. The tool facilitates an iterative refinement process combining rule-based heuristics, LLM assistance, and human verification. The refinement tool consists of four primary modules: 
+
+Metadata Panel: Displays video metadata, current question-answer pairs, and automated quality assessment reports. 
+
+Editor Panel: Allows real-time modification of questions, answer choices, and question types. 
+
+AI Assistant Module: Integrated with GPT-4o, this module aids in generating challenging distractors and performing logic-based optimizations for counting-type questions. 
+
+Adversarial Validation: We employ a separate LLM agent to attempt answering questions without visual input, ensuring that options do not leak information that enables text-only reasoning. Integrated with a Large Language Model (e.g., 35 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams  
+
+> Figure 14. The QA refinement and verification tool. This interface leverages Large Language Models to automatically generate challenging distractors and conduct blind-test verification to ensure the quality of the multiple-choice dataset.
+
+GPT-4o), this module assists experts by generating “plausible but incorrect” distractors based on specific prompts. The data optimization process follows a sequential workflow for each data sample xi:
+
+Step 1: Initialization and Pre-filtering The system loads the raw dataset along with pre-computed quality reports. Annotators utilize the filter to prioritize samples marked as ’bad’ or specific question types (e.g., Count ) that require intensive correction. 
+
+Step 2: Textual Normalization and Perspective Correction Since many raw captions are egocentric, the system implements a rule-based regex module to automatically convert first-person perspectives (e.g., ’I’, ’my’) to second-person perspectives (e.g., ’you’, ’your’). This ensures the question aligns with the user’s perspective in a VQA setting. 
+
+Step 3: Option Optimization We apply distinct strategies based on the Question Type: • General Questions: The annotator invokes the AI Assistant with a prompt designed to generate five plausible but incorrect distractors. The prompt enforces information overlap among options to increase difficulty and reduce elimination shortcuts. • Counting Questions: A specialized heuristic algorithm is triggered to handle numerical counting queries. The system first parses the numerical value N from the ground truth answer. It then automatically generates a set of candidate options, such as {N, N + 1 , N + 2 , N + 3 , N + 4 }, or alternative distributions where N is not positioned at the median of the option set. And it ensures that the options are strictly numerical or consistently textual (e.g., “three” vs. “3”). 
+
+Step 4: Adversarial Blind Test Loop Before saving, the annotator executes the Blind Test .• The system sends the text-only tuple (Question, Options) to an evaluator model. The evaluator model attempts to guess the answer based on language bias or common sense, without access to video frames. 36 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+• If the blind evaluator correctly predicts the answer, the question is flagged as biased. Then, the annotator must then modify the question phrasing or the options to remove the textual leakage and re-run the blind test until the evaluator fails or provides a random guess. 
+
+Step 5: Final Quality Decision Upon passing the blind test, the annotator assigns a final quality label. Only the validated samples are saved to the persistent storage. 
+
+F.4. Generation Distractor Pipeline 
+
+F.4.1. Q UESTION TYPE 
+
+To systematically evaluate models’ capability in understanding dynamic spatial relationships from a user-centric perspective, we design a hierarchical question taxonomy that mirrors the cognitive complexity of real-world spatial reasoning tasks. Specifically, we categorize questions into three types based on the nature of user’s spatial cognition needs: binary, count, and multi-choice. 
+
+Binary questions capture the most fundamental level of spatial understanding—making definitive spatial judgments. These questions reflect scenarios where users need immediate, actionable spatial awareness, such as “Can I reach the fridge now?” or “Was the fridge on my left or right?”. This question type evaluates whether models can provide clear, binary spatial assessments that directly support user decision-making. 
+
+Count questions target quantitative spatial perception, requiring models to track and enumerate objects in dynamic environments. Questions like “How many objects are within reach?” assess models’ ability to maintain precise spatial awareness over time—a critical capability for users navigating changing environments. 
+
+Multi-choice questions encompass more complex spatial reasoning scenarios that cannot be reduced to simple binary or numerical answers. These questions evaluate models’ capacity to handle nuanced, context-dependent spatial relationships that users frequently encounter in real-world interactions. F.4.2. M ULTI -STAGE DISTRACTOR PIPELINE 
+
+To rigorously assess models’ spatial understanding capabilities, we design a distractor generation strategy that mirrors the cognitive challenges users face when interpreting dynamic spatial relationships. The number and nature of distractors vary by question type to create realistic confusion scenarios: binary questions include one distractor, while count and multi-choice questions feature four distractors each. 
+
+Binary questions. For binary spatial judgments, we generate distractors that represent the most plausible alternative interpretation. Specifically, we construct one distractor that presents the opposite conclusion to the ground-truth answer. This design directly tests whether models can make definitive spatial decisions rather than hedging between competing interpretations—a critical capability for supporting user actions in dynamic environments. The distractor is generated using LLM with Prompt 6. 
+
+Count questions. Quantitative spatial errors often manifest as off-by-one or magnitude estimation failures in human cognition. To simulate these realistic error patterns, we replace the correct count in the ground-truth answer with erroneous numbers. Crucially, we strategically select these numbers such that the correct value becomes the second largest or second smallest among the options. This design prevents trivial elimination strategies (e.g., always choosing the median) and forces models to perform genuine spatial enumeration rather than statistical guessing. 
+
+Multi-choice questions. For complex spatial reasoning questions, we employ a sophisticated five-stage pipeline that generates semantically plausible yet incorrect distractors—mirroring the nuanced misunderstandings users might have about spatial relationships in dynamic environments. This multi-stage approach ensures that our evaluation captures authentic spatial reasoning challenges rather than superficial linguistic patterns. Given a source question q and its ground-truth answer 
+
+a∗, our pipeline operates as follows: 
+
+Stage 1: Neighbor-Based Candidate Retrieval 
+
+To generate distractors that reflect realistic user confusion patterns, we retrieve answers from semantically similar spatial reasoning questions built in the same data source. This retrieval-based approach ensures that our distractors mirror genuine spatial understanding errors observed in real question-answer scenarios. 37 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Specifically, we encode question-answer pairs as: 
+
+eqa = Encoder (“Q: [q] [SEP] A: [a]”) (17) where Encoder( ·) is a pre-trained sentence transformer model, specifically all-mpnet-base-v2 (Song et al., 2020). We perform approximate nearest neighbor search within hierarchical buckets organized by category, subcategory, and question type—ensuring that retrieved candidates originate from similar spatial reasoning contexts. From the top-k neighbors 
+
+N = {(qi, a i)}ki=1 , we extract their answers as initial candidate distractors C0 = {a1, . . . , a k}.To balance relevance and discriminability, we apply a band-pass similarity filter: 
+
+C1 = {c ∈ C 0 | smin ≤ sim (ea∗ , ec) ≤ smax } (18) where ea∗ = Encoder (a∗) and ec = Encoder (c) are answer embeddings, and sim (·, ·) denotes cosine similarity. Based on preliminary experiments, we set smin = 0 .25 and smax = 0 .92 .
+
+Stage 2: Multi-Criteria Validation . We apply a cascaded filtering pipeline to ensure distractor quality: To prevent semantic equivalence between distractors and the correct answer, we employ a fine-tuned Natural Language Inference model to compute entailment scores in both directions: NLI (a∗ → c) = P (entailment | a∗, c ) (19) We reject candidates where max( NLI (a∗ → c), NLI (c → a∗)) ≥ τnli , where τnli = 0 .7 in our implementation. Each candidate is scored against the question using a BERT-based cross-encoder R(q, c ) to ensure contextual plausibility. We retain candidates with scores above a threshold τrel .To avoid redundancy among distractors, we remove candidates that mutually entail each other with score ≥ τnli . Specifically, for each candidate ci, we check: 
+
+∀cj ∈ C selected : max( NLI (ci → cj ), NLI (cj → ci)) < τ nli (20) 
+
+Stage 3: Diversity-Aware Selection 
+
+We formulate distractor selection as a Maximal Marginal Relevance optimization problem to balance relevance and diversity. Starting with an empty selected set S = ∅, we iteratively select distractors via: 
+
+c∗ = arg max 
+
+> c∈C\S
+
+
+
+λR (q, c ) − (1 − λ) max   
+
+> cj∈S
+
+sim( ec, e cj )
+
+
+
+. (21) where R(q, c ) denotes the relevance score computed by a cross-encoder model, specifically ms-marco-MiniLM-L-6-v2 (Reimers & Gurevych, 2019), which is fine-tuned on the MS MARCO dataset for passage ranking. The parameter λ ∈ [0 , 1] 
+
+controls the trade-off between relevance and diversity, and is set to 0.7 based on validation experiments. This greedy selection iteratively builds a set of k distractors. 
+
+Stage 4: LLM-Based Refinement and Augmentation 
+
+When retrieval-based methods yield insufficient candidates ( |C| < k ), we employ a two-phase large language model (LLM) strategy. We prompt GPT-4o-mini with prompt 7 to paraphrase and improve the linguistic quality of existing candidates while preserving semantic content. For insufficient candidates, we generate additional distractors to meet the requirement. This generation process employs few-shot prompting, with the specific prompt template provided in Prompt 8. 
+
+Stage 5: NLI Model Based Refinement . To ensure the rigorous quality of the answer and distractors, we implement an automated iterative optimization pipeline designed to eliminate logical loopholes and statistical artifacts. We employ a DeBERTa-v3-large-mnli model to detect textual entailment between options, ensuring mutual exclusivity. Simultaneously, we employ a rule-based approach to identify significant length imbalances relative to the correct answer. When an issue is flagged—whether it be a logical dependency or a length cue—an LLM-based agent (e.g., GPT-4o) functions as an optimizer. It receives a targeted prompt to rewrite the specific problematic distractors based on the identified error type: prompt 9 is used for logical dependency cues, while prompt 10 is applied to length problems. This refinement process operates 38 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+recursively for a maximum of K = 3 rounds; if an item fails validation, the sampling temperature is incrementally increased (e.g., by 0.2 per step) to encourage greater linguistic diversity in subsequent generations. By strictly preserving the correct answer while dynamically adjusting the distractors, this pipeline effectively minimizes the presence of trivial heuristics, resulting in a more robust and challenging evaluation benchmark. 
+
+F.5. Quality-control Pipeline 
+
+User-centric spatial understanding fundamentally requires reasoning about visual spatial relationships rather than exploiting linguistic biases or prior knowledge. To ensure our evaluation genuinely measures models’ ability to interpret dynamic spatial relationships from visual input—rather than their capacity for statistical pattern matching or commonsense reasoning alone—we implement a rigorous quality control pipeline using GPT-5. 
+
+Blind test procedure. We provide GPT-5 with only the question and options (without any visual information), asking it to select the correct option and provide reasoning. We use the prompt in § 11 for this process. If GPT-5 answers correctly, this indicates the distractor options are ineffective and need to be regenerated. This quality control addresses a critical challenge in user-centric evaluation: when users ask spatial questions about their environment (e.g., "Can I reach the cup?"), they expect models to perceive and reason about the actual spatial configuration, not merely guess based on typical scenarios. Our pipeline ensures that answering our questions requires genuine visual spatial understanding, mirroring the grounded perception users need in real-world. 
+
+Analysis of distractor failures. Through this process, we identified two primary reasons why distractors fail: (1) Semantic implausibility : distractor options are obviously unreasonable and can be easily eliminated; (2) Information imbalance :correct answers typically align better with linguistic conventions and intuitive expectations, providing richer contextual information, whereas distractors often lack such natural qualities. 
+
+Distractor regeneration strategy. To address these issues, we adopt the following strategy: rather than simply generating alternative distractors that GPT-5 cannot eliminate (prompt § 12), we have GPT-5 generate two statements with semantic richness comparable to or exceeding the original correct answer. These statements are then used to replace the original distractor options, ensuring information balance across all options. Finally, we conduct manual inspection of the dataset to verify that questions relate to dynamic spatial relationships, evidence timestamps are correct, and answers are clear. Throughout this process, we use a UI as shown in Figure 14. 
+
+F.6. Human Performance and QA 
+
+To provide an upper-bound reference for model evaluation, we conducted a controlled human study on a subset of the benchmark. The study was designed to ensure full comparability with model tasks while capturing the challenges of temporal and spatial reasoning in video-based QA. F.6.1. T ASK ALIGNMENT 
+
+Human evaluators were presented with exactly the same questions as the models, including multiple-choice format, query timestamps, and candidate answer options. The test set comprised 20 short, 20 medium, and 20 long videos , totaling 985 questions . All evidence annotations and ground-truth answers were removed to prevent prior knowledge from influencing responses. Participants were instructed to base their answers strictly on visual evidence rather than guesswork. The questions were drawn from four categories with roughly balanced proportions: Trajectory & Movement (24.1%) , Position & Orientation (22.5%) , Proximity & Reachability (27.5%) , and Category & Quantity (25.9%) .F.6.2. F ULL -CONTEXT VIDEO ACCESS 
+
+In this evaluation setting, human subjects were allowed to watch the entire video or a relevant temporal window, with the freedom to pause, replay, and revisit segments as needed. This setup reflects the practical scenario where understanding requires integrating information across multiple frames, emphasizing spatial memory and recall rather than instantaneous perception. By providing unrestricted temporal access, the evaluation captures more accurately the reasoning processes involved in complex video comprehension tasks. 39 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+F.6.3. I NDEPENDENT ANSWERING 
+
+Three human experts independently completed the full set of questions, producing responses in isolation without discussion or consultation. Each question was assigned a single final answer to maintain compatibility with model output formats. This procedure prevents mutual influence between evaluators and mitigates potential group bias, providing a more robust and objective estimate of human performance. F.6.4. I NTER -A NNOTATOR AGREEMENT 
+
+The consistency of answers between the three evaluators was carefully assessed to identify ambiguous or ill-posed questions. Items showing significant disagreement were either rephrased for clarity or excluded from the benchmark entirely. By retaining only questions with high inter-annotator agreement, the evaluation ensures both the reliability of the data and the interpretability of the results, supporting a fair and rigorous comparison with model performance. F.6.5. H UMAN PERFORMANCE METRIC 
+
+Human performance was quantified using average accuracy , calculated as the mean accuracy across the three experts for all retained questions. The human evaluators achieved an average accuracy of 91.0% , demonstrating the feasibility and solvability of the dataset based on visual evidence alone. Performance across categories and subcategories is summarized in Table 3 , providing detailed reference scores for comparison with model results. 
+
+G. Dataset Analysis 
+
+G.1. Representative Failure Cases 
+
+We present illustrative examples for each error category, highlighting typical failure patterns and their underlying causes. 
+
+Type I: Spatial Reasoning Failure. These errors reflect models’ inability to construct accurate 3D spatial representations from ego-centric viewpoints. Consider the following cases: • Q: “Can I reach the comb now?” 
+
+Model: B ( “No” ) Ground Truth: A ( “Yes” )The model fails to estimate reachability, likely due to inaccurate depth perception or inability to model the ego-centric agent’s physical constraints. • Q: “Where is the sofa relative to me?” 
+
+Model: C ( “On my right” ) Ground Truth: D ( “Behind me” )The model confuses spatial directions (front/back, left/right), suggesting reliance on 2D image features rather than true 3D scene understanding. 
+
+Type II: Temporal State Tracking Failure. These errors indicate models’ difficulty in tracking state changes and reconstructing event histories. Examples include: • Q: “How many times have I taken the stairs so far?” 
+
+Model: A ( “1 time” ) Ground Truth: B ( “2 times” )The model loses temporal context, failing to aggregate trajectory information across the video. • Q: “How many balls did my friend throw at the bowling machine just now?” 
+
+Model: B ( “3 balls” ) Ground Truth: E ( “6 balls” )The model undercounts events, suggesting it may only attend to recent frames rather than maintaining a cumulative state tracker. 
+
+Type III: Visual Memory Amnesia. These errors arise when models forget visual attributes of objects seen earlier in the video: • Q: “What color is the trash can in the room?” 
+
+Model: B ( “Blue” ) Ground Truth: D ( “Green” )The model hallucinates object attributes, possibly because the trash can appeared only in early frames and its features were lost in subsequent processing. 40 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+• Q: “Where did I just put the white cup?” 
+
+Model: D ( “On the counter” ) Ground Truth: A ( “On the table” )The model cannot recall the location of an object from earlier in the video, indicating degradation of visual memory over time. Type I : Spatial Reasoning Failure                                                                                   
+
+> Query at 00:41:03 , Answer: The refrigerator is to your right.
+> GT: The refrigerator is behind you.
+> Question: Where is the refrigerator now relative to me?
+> 00:41:03
+> Error analysis :The model fails to construct an accurate 3D
+> spatial representation and confuses relative orientations .
+> Type II: Temporal State Tracking Failure
+> Query at 00:27:35 , Answer: Cut cucumber in front of you.
+> GT: Cut loofah to your left.
+> Question: What did I do after finishing making pancakes just now?
+> 00:27:35
+> Error analysis :The model loses temporal context and is unable to
+> reconstruct acomplete motion trajectory .
+> Type III: Visual Memory Amnesia
+> Query at 00:06:00 , Answer: Two.
+> GT: Three.
+> Question: How many sections of the supermarket have I visited?
+> 00:06:00
+> Error analysis :As the video stream grows, the model forgets
+> object details or attributes that appeared earlier .
+> Type I: Spatial Reasoning Failure
+> Query at 00:01:04 , Answer: The window is to your left.
+> GT: The window is to your right.
+> Question: Where is the window in my living room relative to me?
+> 00:01:04
+> Error analysis :The model fails to construct an accurate 3D
+> spatial representation and confuses relative orientations .
+
+Figure 15. Qualitative Analysis of Typical Failure Cases. The visualization categorizes model errors into spatial reasoning failures (Type I) , temporal state tracking errors (Type II) , and visual memory amnesia (Type III). These examples highlight the current challenges in maintaining long-term spatial-temporal consistency and memory retention during extended video reasoning tasks. 
+
+G.2. Insights and Implications 
+
+Our analysis reveals three fundamental capability gaps in current VLMs: 
+
+1. Lack of 3D Spatial Grounding. The high error rate on spatial reasoning tasks (57.4%) indicates that models primarily rely on 2D image feature matching rather than explicit 3D geometric understanding. The frequent confusion of relative positions (e.g., left vs. right , front vs. back ) suggests that models lack structured representations of scene geometry and ego-centric spatial relationships. 
+
+2. State Memory Bottleneck. Despite improvements in context window length, models struggle to distinguish between 
+
+instantaneous observations (“what I see now”) and accumulated states (“what has changed over time”). The 61.2% error rate on temporal tracking questions—particularly those involving counting and trajectory reconstruction—reveals a fundamental limitation in maintaining coherent state representations across long videos. 
+
+3. Long-Range Visual Forgetting. Models exhibit significant forgetting of visual details from earlier frames, especially as video length increases. This suggests that current KV-cache compression or token pruning strategies may inadvertently discard semantically critical information. The 51.2% error rate on visual memory tasks indicates that temporal recency bias dominates over semantic importance in current architectures. 
+
+Directions for Improvement. Based on these findings, we propose three potential research directions: 41 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+1. 3D-Aware Pretraining: Incorporate depth maps or camera pose as auxiliary modalities during training to encourage learning of 3D spatial relationships. 2. Explicit State Tracking: Design dedicated memory modules (e.g., external memory banks or state trackers) that operate independently of the LLM context window to explicitly track object quantities and state transitions. 3. Temporal Logic Alignment: Curate fine-tuning data containing explicit state-change chains (e.g., object A on table → Apicked up → A in hand ) to strengthen models’ causal and temporal reasoning. These directions align with broader efforts in video understanding research and suggest that addressing egocentric video challenges requires architectural innovations beyond simply scaling context length or visual resolution. 
+
+G.3. Qualitative Analysis 
+
+Figure 16 displays representative visual scenes from our benchmark, showcasing sixteen different environment types including banks, tourist attractions, sidewalks, stairs, subway stations, warehouses, campuses, laboratories, spacious roads, workshops, wilderness areas, convenience stores, roadways, grocery stores, pathways, and kitchens. This figure demonstrates the breadth of naturally occurring everyday scenes captured in our dataset, spanning both indoor and outdoor environments. The environmental diversity highlights our dataset’s ecological validity for evaluating spatial reasoning and memory in contexts that reflect common daily-life interactions and navigation scenarios. Sidewalk Campus Wilderness Pathway  
+
+> Tourist Attraction Warehouse Workshop Grocery Store
+> Bank Subway Station Spacious Road The Roadway
+> Stair Laboratory Convenience Store Kitchen
+> Figure 16. Representative visual scenes. We showcase representative examples from our benchmark to illustrate the diversity of naturally occurring everyday scenes, reflecting common daily-life environments and interactions that are relevant for evaluating spatial reasoning and memory.
+
+Table 7 presents the eight tasks supported in our benchmark, including example questions, answer options, and ground truth labels for each task. This table demonstrates the diversity of spatial reasoning and memory tasks covered by our benchmark, ranging from egocentric position estimation to quantity change tracking. The comprehensive task taxonomy highlights our 42 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams 
+
+Table 7. Example questions and answers (QA) for the 8 tasks supported in our benchmark. 
+
+Task Example questions Example answer options GT 
+
+Ego-centric Position Where is the kitchen now relative to me? [’A. It’s now behind you.’ ’B. It’s now to your left.’ ’C. It’s now in front of you.’ ’D. It’s now on your right.’ ’E. It’s now below you.’] "D" Relative Position & Orientation Memory Where was it before I picked up your phone for the first time? [’A. The phone was on the shelf on the second floor, to the left of the television remote.’ ’B. The phone was in the drawer beside the computer on the first floor, next to a notebook.’ ’C. The phone was on the ground on the first floor, in front of the remote control instead.’ ’D. The phone was on the table on the first floor, to the left of the coffee mug.’ ’E. The phone was on the ground on the first floor, to the right of the remote control.’] "E" My Trajectory What was my path after buying ice cream? [’A. Go straight to the left.’ ’B. Go straight to the right.’ ’C. Go straight ahead to the store.’ ’D. Go straight to the left, then walk to the park.’ ’E. Go straight to the left, then walk to the café.’] "A" Object Trajectory What is the trajectory of the foam board from the moment it is picked up until it is set down? [’A. After being lifted from the sofa, it moved in a straight line to the table right in the dining room.’ ’B. After being lifted from the cushion, it moved in a straight line to the floor right in the center of the living room.’ ’C. After being picked up from the rug, it moved in a straight line to the shelf right in the hallway.’ ’D. After being lifted from the floor, it moved in a straight line to the chair right in the bedroom.’ ’E. After being picked up from the countertop, it moved in a straight line to the cabinet right in the kitchen.’] "B" Distance Comparison Memory Which is closer to me, the mirror or the dining table? [’A. Mirror.’ ’B. Dining table.’] "A" Reachability Judgment Can I reach the sink now? [’A. You cannot reach the sink now.’ ’B. You can reach the sink now.’] "B" Object Category Recall What vegetables on the table did I take to wash? [’A. You took the cucumbers on the table to wash.’ ’B. You took the carrots on the table to wash.’ ’C. You took the loofah on the table to wash.’ ’D. You took the radishes on the table to wash.’ ’E. You took the peppers on the table to wash.’ ] "C" Quantity Change Tracking How many pieces of dough are still on the kitchen table now? [’A. There are three pieces of dough left on the kitchen table in front of me because I left them there.’ ’B. There is one piece of dough left on the kitchen table to my right because I moved the rest to the oven.’ ’C. There is no dough left on the kitchen table near me because I put it in the refrigerator.’ ’D. There are two pieces of dough left on the kitchen table in front of me because I forgot to put any in the refrigerator.’ ’E. There are five pieces of dough left on the kitchen table to my left because I placed them on the countertop instead.’] "D" 
+
+dataset’s ability to evaluate multiple aspects of embodied spatial intelligence through natural language question-answering formats. Figure 17 illustrates representative examples of streaming memory annotations for object recall and quantity tracking tasks, showing video frame sequences with timestamped evidence and corresponding question-answer pairs. This figure demonstrates how our benchmark evaluates temporal reasoning by requiring models to track object states and quantities across different timestamps within continuous video streams. The evidence-based annotation structure highlights our dataset’s emphasis on grounding spatial reasoning in specific visual observations over time. Figure 18 shows qualitative results of streaming spatial reasoning in egocentric video for the "My Trajectory" task, with examples from both indoor grocery store and outdoor urban environments. This figure illustrates cases where the model performs continuous spatial transformations as the video stream unfolds. The diverse environmental contexts highlight our dataset’s coverage of real-world navigation scenarios across varied indoor and outdoor settings. 43 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Embodied trajectory & Movement Memory: My Trajectory 
+
+00:14:38  00:14:49 
+
+Evidence 1(00 :14 :38 -00 :14 :49 ): You come out of the room .
+
+Evidence 2(00 :14 :57 -00 :15 :17 ): You are going down the stairs .
+
+Evidence 3(00 :15 :33 -00 :15 :37 ): You walked into the laundry room .
+
+00:14:57  00:15:17  00:15:33  00:15:37 
+
+At Timestamp 1 ( 00:15:20 )
+
+Q: What route was I following from the room just now? 
+
+GT: You were exiting the room and going downstairs .
+
+At Timestamp 2 ( 00:20:50 )
+
+Q: What route was I following from the room just now? 
+
+GT: You were exiting the room, heading downstairs and moving towards the laundry room .
+
+00:15:20  00:20:50 
+
+Timestamp 1  Timestamp 2 
+
+Embodied trajectory & Movement Memory: Object Trajectory 
+
+00:10:29  00:10:47 
+
+Evidence 1(00:10:29 -00:10:47): The phone was taken out of the pocket, rotated 180 
+
+degrees clockwise, and placed on the left side of the countertop behind the stove. 
+
+Evidence 2(00:12:41 -00:12:53): The phone was picked up from the left side of the 
+
+countertop, held in the air for a moment, and then placed in the center of the counter. 
+
+00:12:41  00:12:53 
+
+At Timestamp 1 ( 00:11:00 )
+
+Q: What was the phone's trajectory just now? 
+
+GT: The phone was pulled out , rotated 180 ° clockwise and set on the left side of the 
+
+countertop .
+
+At Timestamp 2 (00:13:00 )
+
+Q: What was the phone's trajectory just now? 
+
+GT: The phone was lifted from the left of the countertop , held briefly , and then placed 
+
+in the center .
+
+00:11:00  00:13:00 
+
+Timestamp 1  Timestamp 2 
+
+Ego -centric Position & Orientation Memory: Ego -centric Position 
+
+00:19:11  00:19:12 
+
+Evidence 1(00:19:11 -00:19:12): The drill is on the wooden board right at your feet. 
+
+Evidence 2(00:19:21 -00:19:26): You walk away from the drill with your back to it, then 
+
+climb down the ladder to the ground. 
+
+Evidence 3(00:23:38 -00:23:44): You go upstairs and see the drill on the floor one meter 
+
+ahead of you. Then, you walk past it, moving toward your front -right. 
+
+00:19:21  00:19:26  00:23:38  00:23:44 
+
+At Timestamp 1 ( 00:19:30 )
+
+Q: Where is the electric drill relative to me right now? 
+
+GT: The drill is upstairs, positioned ahead of and above you .
+
+At Timestamp 2 ( 00:23:46 )
+
+Q: Where is the electric drill relative to me right now? 
+
+GT: The drill is to your back -left .
+
+00:19:29  00:23:46 
+
+Timestamp 1  Timestamp 2 
+
+Ego -centric Position & Orientation Memory: Relative Position & Orientation Memory 
+
+00:00:01  00:00:03 
+
+Evidence 1(00:00:01 -00:00:03): The green onions are on the dish rack next to the sink. 
+
+Evidence 2(00:04:14 -00:04:22): You took some of the green onions from the dish rack by 
+
+the sink and put them on the cutting board. 
+
+Evidence 3(00:06:10 -00:06:15): You took all the remaining green onions from the dish 
+
+rack by the sink and put them on the cutting board. 
+
+00:04:14  00:04:22  00:06:10  00:06:15 
+
+At Timestamp 1 ( 00:05:12 )
+
+Q: Where are the green onions in the kitchen? 
+
+GT: On the dish rack to your front -left and the cutting board to your front -right. 
+
+At Timestamp 2 ( 00:07:30 )
+
+Q: Where are the green onions in the kitchen? 
+
+GT: On the cutting board to your front -right .
+
+00:05:12  00:07:30 
+
+Timestamp 1  Timestamp 2 
+
+Perceived Proximity & Reachability Memory: Distance Comparison Memory 
+
+00:00:02  00:00:04 
+
+Evidence 1(00:00:02 -00:00:04): The power drill is on the cabinet next to the workbench. 
+
+Evidence 2(00:06:07 -00:06:12): You are using a socket wrench to repair the vehicle 
+
+located to the upper left of the cabinet. 
+
+Evidence 3(00:06:58 -00:07:02): The socket wrench was placed on the workbench. 
+
+00:06:07  00:06:12  00:06:58  00:07:02 
+
+At Timestamp 1 ( 00:06:40 )
+
+Q: Which is closer to me now, the socket wrench or the power drill? 
+
+GT: The socket wrench in your right hand. 
+
+At Timestamp 2 ( 00:22:46 )
+
+Q: Which is closer to me now, the socket wrench or the power drill? 
+
+GT: The power drill to your front -right. 
+
+00:06:40  00:22:46 
+
+Timestamp 1  Timestamp 2 
+
+Perceived Proximity & Reachability Memory: Reachability Judgment 
+
+00:29:28  00:29:32 
+
+Evidence 1(00:29:28 -00:29:32): You leaned the hoe against the green safety net in 
+
+front of you and then turned left. 
+
+Evidence 2(00:29:35 -00:29:57): You walked forward for a bit, then did a 180 -degree 
+
+turn to head back. As you passed the hoe, you turned right and walked for a distance. 
+
+00:29:35  00:29:57 
+
+At Timestamp 1 ( 00:29:34 )
+
+Q: At my current position, can I reach the hoe? 
+
+GT: Yes, you can. You can get it by reaching your right hand out to your back right .
+
+At Timestamp 2 ( 00:37:17 )
+
+Q: At my current position, can I reach the hoe? 
+
+GT: No, you can't reach it from there. You'll have to walk about 5 meters to the right ,
+
+by the green safety net , to pick it up. 
+
+00:29:34  00:37:17 
+
+Timestamp 1  Timestamp 2 
+
+Object Recall & Quantity Tracking: Object Category Recall 
+
+00:00:43  00:00:46 
+
+Evidence 1(00:00:43 -00:00:46): There is a bench near the steps. 
+
+Evidence 2(00:01:27 -00:01:31): There is a row of massage chairs to your right. 
+
+Evidence 3(00:01:32 -00:01:34): There are some folding chairs to your front -left. 
+
+00:01:32  00:01:34 
+
+At Timestamp 1 ( 00:01:10 )
+
+Q: I want to take a break. What are my options nearby? 
+
+GT: You can rest on the bench just behind you. 
+
+At Timestamp 2 ( 00:01:51 )
+
+Q: I want to take a break. What are my options nearby? 
+
+GT: You can rest on the folding chair to your left or the massage chair to your right .
+
+00:01:10  00:01:51 
+
+Timestamp 1  Timestamp 2 
+
+00:01:27  00:01:31 
+
+Object Recall & Quantity Tracking: Quantity Change Tracking 
+
+00:00:00  00:00:02 
+
+Evidence 1(00:00:00 -00:00:02): There is a chair in front of the computer desk in the 
+
+room. 
+
+Evidence 2(00:00:13 -00:00:15): There are two extra chairs near the bed. 
+
+00:00:13  00:00:15 
+
+At Timestamp 1 ( 00:00:07 )
+
+Q: How many chairs are there in the room? 
+
+GT: There is one chair to your back -left in the room. 
+
+At Timestamp 2 ( 00:00:17 )
+
+Q: How many chairs are there in the room? 
+
+GT: There are three chairs in the room, two of which are at your hand in front of you ,
+
+and one of which is to your front -right .
+
+00:00:07  00:00:17 
+
+Timestamp 1  Timestamp 2 
+
+Figure 17. This figure illustrates representative examples of streaming memory annotations across four major categories and eight subcategories, specifically showcasing indoor and outdoor scenarios. It details evidence-based ground truth for tasks such as Object Trajectory and Egocentric Position across multiple timestamps. 
+
+44 Keep It in Mind: User-Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams Embodied trajectory & Movement Memory: My Trajectory 
+
+00:04:06 
+
+Query at 00:04:06 :
+
+GT: Turn around and go straight. 
+
+A. Go left and then immediately stop. 
+
+B. Walk backward for a few steps. 
+
+C. Turn right and look down. 
+
+D. Walk straight but keep to your left side. 
+
+E. Turn around and go straight. 
+
+Qwen3 -VL -8B: [Answer: D, ×]
+
+Qwen3 -VL -8B + Caption: [Answer: B, ×]
+
+DirectMe : [Answer: E,  √]
+
+Query at 00:04:20 :
+
+GT: Do a U -turn, head straight, and take a left at the gap 
+
+up ahead. 
+
+A. Keep going straight and then turn right at the next gap. 
+
+B. Do a U -turn, head straight, and take a left at the gap 
+
+up ahead. 
+
+C. Turn left now and walk a few steps forward. 
+
+D. Go backward a little and then veer to your right. 
+
+E. Head straight but stay on the right side of the path. 
+
+Qwen3 -VL -8B: [Answer: C, ×]
+
+Qwen3 -VL -8B + Caption: [Answer : C, ×]
+
+DirectMe : [Answer: B,  √]
+
+Question: How can I get the bananas? 
+
+00:04:20 
+
+Embodied trajectory & Movement Memory: My Trajectory 
+
+00:02:36 
+
+Query at 00:02:36 :
+
+GT: Turn right and go into the convenience store. 
+
+A. Turn left and go into the convenience store. 
+
+B. Go straight and enter the convenience store 
+
+in front of you. 
+
+C. Turn right and go into the convenience store. 
+
+D. Turn around and go into the convenience store 
+
+behind you. 
+
+E. Turn slightly right and go past the 
+
+convenience store. 
+
+InternVL3 -8B: [Answer: B, ×]
+
+InternVL3 -8B + Caption: [Answer: D, ×]
+
+DirectMe : [Answer: C,  √]
+
+Query at 00:02:49 :
+
+GT: Go back to the convenience store on the back 
+
+right. 
+
+A. Go back to the convenience store on the back left. 
+
+B. Go to the convenience store on your right. 
+
+C. Go back to the convenience store directly behind 
+
+you. 
+
+D. Go back to the convenience store on the back 
+
+right. 
+
+E. Go to the convenience store on your front right. 
+
+InternVL3 -8B: [Answer: A, ×]
+
+InternVL3 -8B + Caption: [Answer: B, ×]
+
+DirectMe : [Answer: D,  √]
+
+Question: How can I get to buy a sandwich from my current position? 
+
+00:02:49 
+
+Figure 18. Qualitative results of streaming spatial reasoning in egocentric video . This figure illustrates our model’s capability to perform continuous spatial transformations as the video stream unfolds. By leveraging Movement Memory , the system dynamically updates the agent’s spatial orientation relative to the environment across various timestamps. 
+
+45
