@@ -6,30 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-20
-- 运行时间：2026-06-20 21:06:37 UTC
+- 最新运行日期：2026-06-21
+- 运行时间：2026-06-21 21:04:44 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：1
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日聚焦开放世界视频分割与第一人称视频持续空间推理两大方向，精读高分论文《Open-World Video Segmentation》。
-
-最值得关注的是精读论文提出的开放世界视频分割方法，该方向正突破传统固定类别限制，值得深入研究。
-
-建议普通读者可从精读论文入手，了解视频理解领域前沿挑战，后续可关注开放词汇与持续学习结合的研究动态。
-- 详情：[/202606/20/README](/202606/20/README)
+今日精读一篇高保真4D手-物捕捉论文，获8.0高分。  
+核心方向：多视角时空跟踪与物理感知高斯方法实现手物交互的高精度重建。  
+建议关注动态场景重建或手-物交互领域的读者细读此篇。
+- 详情：[/202606/21/README](/202606/21/README)
 
 ### 精读区论文标签
-1. [Open-World Video Segmentation](/202606/20/2606.15632v2-open-world-video-segmentation)  
+1. [High-Fidelity 4D Hand-Object Capture via Multi-View Spatiotemporal Tracking and Physics-Aware Gaussians](/202606/21/2606.15908v1-high-fidelity-4d-hand-object-capture-via-multi-view-spatiotemporal-tracking-and-physics-aware-gaussians)  
    标签：评分：8.0/10、query:vt
-   evidence：开放世界视频分割与目标跟踪
+   evidence：多视角时空跟踪手和物体，无需模板
 
 ### 速读区论文标签
-1. [Keep It in Mind: User Centric Continual Spatial Intelligence Reasoning in Egocentric Video Streams](/202606/20/2606.15200v1-keep-it-in-mind-user-centric-continual-spatial-intelligence-reasoning-in-egocentric-video-streams)  
-   标签：评分：7.0/10、query:vt
-   evidence：以用户为中心的持续空间智能，随时间跟踪物体位置
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
