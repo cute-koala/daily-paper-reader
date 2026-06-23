@@ -1,0 +1,549 @@
+Title: Polycepta: Object-Centric Appearance Estimation for Multi-Object Tracking
+
+URL Source: https://arxiv.org/pdf/2606.23604v1
+
+Published Time: Tue, 23 Jun 2026 03:44:23 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 1
+
+# Polycepta: Object-Centric Appearance Estimation for Multi-Object Tracking 
+
+Mohamed Nagy, Member, IEEE, Naoufel Werghi, Senior Member, IEEE, Jorge Dias, Senior Member, IEEE, Majid Khonji, Member, IEEE 
+
+Abstract —The tracking-by-detection paradigm in multi-object tracking (MOT) typically relies on static appearance descriptors to complement motion estimation. However, these descriptors are frame-independent, limiting their robustness as visual cues. Since such descriptors are often obtained from computation-ally intensive pretrained backbones, real-time MOT systems frequently abandon appearance cues altogether and rely solely on motion prediction and geometric association. In this work, we introduce Polycepta, an object-centric appearance state esti-mation framework that reformulates appearance modeling as a recursive estimation problem rather than a frame-wise matching task. Polycepta constructs and continuously updates an indepen-dent appearance state for each tracked object, enabling future appearance representations to be estimated from accumulated observations. Polycepta is encouraged to learn the appearance-state construction of object-specific representations rather than memorize them through a proposed learning strategy, enabling appearance estimation for unseen classes. A key property of Polycepta is that the quality of appearance estimation improves as object states evolve during inference. While conventional appearance descriptors remain static or degrade over time, Polycepta progressively refines appearance estimates as addi-tional observations are accumulated. Extensive experiments on KITTI, the Waymo Open Dataset, and MOT17 demonstrate consistent reductions in identity switches and improvements in tracking performance when integrated into the tracking-by-detection pipelines. Polycepta operates at 90.57 Hz and delivers state-of-the-art performance on the KITTI benchmark when integrated into the RobMOT framework, achieving a MOTA of 92.27%. 
+
+Index Terms —object-centric appearance memory, multi-object tracking, appearance tracking, temporal memory learning, cross-category generalization, autonomous systems. 
+
+I. I NTRODUCTION 
+
+# MULTI-object tracking (MOT) within the tracking-by-detection paradigm has traditionally relied on state estimation and motion prediction using the Kalman filter (KF), frequently omitting complex visual cues to minimize computa-tional overhead. While modern frameworks [1]–[5] attempt to integrate appearance modeling alongside KF motion modeling, they typically employ static feature extractors—such as Re-identification (ReID) networks [6]—pre-trained on massive datasets. Although effective, these approaches often introduce substantial computational overhead, which can limit deploy-ment in latency-constrained applications, such as self-driving 
+
+Manuscript received ...This publication is based upon work supported by the Khalifa University under Awards No. RIG-2023-117, KUCARS, and KU UB-JRP. Authors are with the Department of Computer Science, Khal-ifa University, Abu Dhabi, UAE (e-mail: mohamed.nagy@ieee.org; naoufel.werghi@ku.ac.ae; jorge.dias@ku.ac.ae; majid.khonji@ku.ac.ae). Association  ...  
+
+> Polycepta
+> ...
+> Kalman Filter
+> Appearance Estimation
+> Trajectory Estimation
+> Object Detection Tracking
+
+Fig. 1. Visual illustration of visual estimation concept of Polycepta, and its integration into the MOT pipelines along with the Kalman filter. 
+
+vehicles, due to their reliance on high-capacity, computation-ally intensive backbones (e.g., ResNet-50). Consequently, real-time online trackers [7]–[9] often omit appearance cues en-tirely, relying solely on trajectory data association to maintain low latency and high operational throughput. Furthermore, the core limitation of conventional ReID-based approaches within the tracking-by-detection paradigm lies in their rigid frame-by-frame feature extraction and matching. This formu-lation implicitly assumes that an object’s appearance remains static across time—an assumption that directly contradicts the continuous visual evolution that objects undergo in dynamic environments. Consequently, these approaches are brittle un-der partial occlusions, perspective changes, or environmental noise, all of which distort the extracted feature embeddings (Figure 1). Conceptually, this stands in stark contrast to motion model-ing; the enduring success of the KF lies precisely in its ability to recursively refine an object’s kinematic state over time, rather than relying solely on isolated, instantaneous observa-tions. Current appearance cues lack an equivalent recursive estimation mechanism, leaving a critical gap in maintaining temporal visual identity. To address these limitations, we introduce Polycepta, an object-centric appearance state estimation framework that re-formulates appearance modeling as a recursive estimation problem. Instead of associating objects using frame-wise ap-pearance descriptors alone, Polycepta constructs and continu- 
+
+> arXiv:2606.23604v1 [cs.CV] 22 Jun 2026 SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 2
+
+ously updates an independent appearance state for each tracked object. These states accumulate appearance information over time and are used to estimate future appearance representations for data association (Figure 1). To discourage memorization of object-specific appearance histories, all appearance states are reset at the end of each training epoch. This state-erasure strategy forces the model to repeatedly reconstruct appearance states from observations rather than relying on persistent training-time memories. As a result, Polycepta learns state-construction dynamics that trans-fer across object categories and support appearance estimation for previously unseen classes. More broadly, Polycepta extends the state-estimation prin-ciple that has long underpinned motion modeling in MOT to the appearance domain. While existing tracking-by-detection frameworks estimate motion recursively and treat appearance as a sequence of independent observations, Polycepta models appearance as a recursively evolving state that accumulates information over time. The contribution of this work is summarized as follows: 1) Object-Centric Appearance-State Estimation for MOT: We reformulate appearance modeling in the tracking-by-detection paradigm as a recursive state-estimation problem. Unlike conventional ReID-based ap-proaches that treat appearance as a sequence of inde-pendent frame-wise observations, Polycepta constructs, maintains, and continuously updates an appearance state for each tracked object, enabling appearance information to accumulate over time and supporting future appearance estimation for data association. 2) Polycepta Framework: We introduce Polycepta, an appearance-state estimation framework that combines structured state-space dynamics, relational appearance correlation in the Fourier domain, and adaptive appearance-state updates to model appearance evolution while maintaining real-time operation. The framework is designed to complement motion-centric tracking-by-detection systems without modifying their underlying motion-estimation pipeline (Figure 1). 3) State-Erasure Learning: We introduce a state-erasure learning strategy that resets appearance states during training to discourage memorization of object-specific appearance histories. This encourages the learning of appearance-state construction mechanisms and enables robust generalization to previously unseen object cate-gories. 4) Temporal Appearance Refinement and Generaliza-tion: We show that appearance estimation quality im-proves during inference as appearance states evolve, in contrast to conventional ReID descriptors whose quality remains fixed or gradually degrades over time. Exten-sive experiments on KITTI, MOT17, and the Waymo Open Dataset (WOD) demonstrate consistent reductions in identity switches and improvements in tracking per-formance across datasets, detector configurations, and previously unseen object classes while maintaining real-time operation at 90.57 Hz. II. R ELATED WORK 
+
+A. Tracking-by-Detection Paradigm 
+
+MOT frameworks have leaned heavily on appearance-based ReID to maintain track continuity across temporal gaps [1]– [4], [10], [11]. These methods typically employ static, high-capacity feature extractors to generate visual embeddings for frame-to-frame matching. They ultimately treat appearance as a sequence of observations that serve as visual cues for inferring associations. The appearance information in these methods is typically represented frame-by-frame and is not ex-plicitly maintained as a recursively evolving state, preventing appearance information from being accumulated and refined over time. On the other hand, to satisfy the low-latency constraints of real-time autonomous systems, 2D and 3D online trackers frequently prioritize motion-centric paradigms governed by linear state estimators such as the KF [2], [7], [9], [12], [13], thereby entirely forgoing appearance modeling. While hybrid architectures attempt to fuse appearance cues with kinematic prediction, the additional computational overhead often limits their adoption in real-time tracking systems. In these frameworks, appearance cues are typically incorporated as isolated observations rather than recursively updated repre-sentations. Consequently, appearance information accumulated across observations is not explicitly incorporated into the representation itself, making the association more sensitive to partial occlusions and observation noise. 
+
+B. Tracking-by-Propagation Paradigm 
+
+Beyond the conventional tracking-by-detection paradigm, recent work has explored tracking-by-propagation frameworks that maintain object identities through trajectory propagation and prediction [14]–[16]. These approaches leverage visual and motion cues to propagate object tracks over time, reducing the reliance on explicit frame-wise data association. Transformer-based methods such as MeMOT and MeM-OTR [14], [15] employ memory propagation through object-level attention mechanisms to maintain track continuity. More recently, Samba [16] incorporates state-space modeling based on Mamba [17] to improve computational efficiency while continuing to propagate object trajectories through time. Despite recent advances in tracking-by-propagation, tracking-by-detection remains a dominant paradigm for real-time MOT due to its favorable accuracy-efficiency tradeoff. Consequently, this work focuses on improving appearance modeling within the tracking-by-detection paradigm, where strong accuracy-efficiency tradeoffs remain particularly important for real-time MOT. Polycepta addresses these limitations by reformulating ap-pearance modeling as a recursive state-estimation problem within the tracking-by-detection paradigm. Rather than repre-senting appearance as a sequence of independent observations, Polycepta constructs and recursively updates an object-centric appearance state for each tracked object. These appearance states accumulate information over time and are used to estimate future appearance representations for data association. As a result, Polycepta provides lightweight appearance cues SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 3Inputs at time      
+
+> Feature Extractor
+> MobileNextV3
+> (small)
+> Input Embeddings
+> (Compressor)
+> 3Memory Compressor
+> 1Input Projector
+> (Projection)
+> Obj 1
+> Obj 1
+> ...
+> Obj 1
+> Visual State Memory (per object)
+> Maintains and evolves object-centric appearance states.
+> (Old States)
+> Visual
+> Relational Reasoning
+> (VRR)
+> (Frequency-Domain)
+> 2Relate current
+> appearance to history
+> (Relational Features)
+> (Selector)
+> (Updated States)
+> Appearance
+> State Update
+> 4Update
+> Appearance
+> Estimation
+> 5Estimate
+> Estimated Embeddings
+> Trainable Weights
+> Reset every epoch
+
+Fig. 2. A high-level overview of the Polycepta architecture during inference. Initially, incoming objects are cropped and grouped into a single batch for parallelism. Xt matrix is formed to hold feature embeddings of the objects obtained from a lightweight feature embedding (MobileNetV3-small). The feature embeddings are projected into a lower dimension Bt (state space d = 24 ). Visual relational reasoning (VRR) correlates with the observed feature embeddings and their historical appearance memory (state) Ht−1 in a signal frequency domain to obtain generated synthetic features St. Next, the appearance states are updated in the appearance state update module. Lastly, the updated appearance states are used to obtain the next appearance estimation ˆXt.
+
+that can be integrated into existing motion-centric tracking-by-detection frameworks without modifying their underlying motion-estimation pipeline. III. M ETHOD 
+
+A. Polycepta: Architecture Overview 
+
+The overall architecture of Polycepta comprises three in-terconnected modules: Visual Relational Reasoning (VRR), Appearance State Update, and Appearance Estimation, as illustrated in Figure 2. The framework is designed to re-cursively construct and update an appearance state for each tracked object, enabling future appearance representations to be estimated from accumulated observations. At each discrete time step t, the system receives a batch of cropped image bounding boxes corresponding to n detected objects. This batch is processed through a highly efficient, low-latency backbone, specifically MobileNetV3 small [18], to extract an instantaneous feature embedding matrix Xt =
+
+{xit}ni=1 ∈ Rn×576 , where xit represents the feature embed-dings of the i-th object. Next, the object-centric feature embeddings are projected from the high-dimensional feature space df = 576 into a state space of dimension ds = 24 through the linear projector Bt.The collective appearance states of all active tracking targets are maintained in an appearance state matrix Ht = {hit}ni=1 ,where hit ∈ Rds denotes the recursively updated appearance state of the i-th object. A time-dependent step size parameter 
+
+∆t is utilized to discretize the continuous-time matrices At and 
+
+Bt into their discrete-time counterparts, ¯At and ¯Bt, following standard state-space discretization protocols [19], as detailed in Section IV. The operational cycle of Polycepta proceeds sequentially through three distinct architectural stages: 1) Visual Relational Reasoning (VRR): The VRR module maps the current discretized appearance features ¯Bt and the historical appearance states Ht−1 into a learnable Fourier signal space. It performs frequency-domain corre-lation between recent observations and historical appear-ance states for each object (in-parallel), and generates relational features St = {sit}ni=1 (Section V). 2) Appearance State Update: Taking the current dis-cretized appearance features ¯Bt, the prior history Ht−1,and the relational features St as inputs, this module applies an adaptive gated mechanism to compute the updated object-centric appearance states Ht (Section VI). 3) Appearance Estimation: Finally, the refined appearance states Ht are passed to the estimation block to infer the anticipated next appearance descriptors for the subsequent time, yielding ˆXt+1 ∈ Rn×576 (Section VII). Collectively, this architecture allows Polycepta to recursively maintain an appearance state for each tracked object and estimate future appearance representations from accumulated observations. In contrast to frame-wise appearance descriptors, the resulting appearance states evolve throughout inference, progressively incorporating information gathered over time. IV. P ROJECTION AND DISCRETIZATION 
+
+To map instantaneous visual features into a temporal state space, the raw feature embeddings Xt are passed through a normalization layer. As formalized in Equation 1, the nor-malized representation zt is projected via learnable parameter matrix WB to obtain Bt, the time-dependent discretization step size ∆t, and the selection vector Ct used for downstream appearance estimation: 
+
+zt = LayerNorm (Xt)∆t = softplus (Wδ zt + bδ )
+
+Bt = LayerNorm (WB zt + bB )
+
+Ct = WC zt + bC
+
+(1) where Wδ , W B , W C and bδ , b B , b C denote the learnable weights and biases of their respective projection layers. The appearance state evolves according to a state transition matrix At and an input projection matrix Bt. The resulting state dynamics govern how appearance information is accu-mulated and updated over time. Following prior state-space formulations [17], [19], we construct At by combining a SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 4Visual Relational Reasoning (VRR) Module   
+
+> Circular Cross-Correlation
+> (Complex)
+> (Selective Gate)
+> Frequency-Domain Appearance Reasoning
+> Cross Appearance Fusion
+> Fig. 3. Overview of the VRR architecture.
+
+structured HiPPO transition matrix with a learnable diagonal adaptation. The HiPPO component provides a fixed state-space structure, while the learnable diagonal enables the transition dynamics to adapt during training. Specifically, let θ ∈ Rds parameterize the learnable diagonal component and let Ahippo ∈ Rds×ds denote the HiPPO tran-sition matrix. The resulting state transition matrix is defined as Adiag = exp( θ),At = Ahippo − diag (Adiag ). (2) The continuous-time matrices are subsequently discretized using the learned step size ∆t:
+
+¯At = I + ∆ tAt,
+
+¯Bt = ∆ tBt. (3) V. V ISUAL RELATIONAL REASONING 
+
+Updating appearance states using only the current observa-tion ¯Bt may fail to fully exploit information accumulated in previous appearance states. To address this, the VRR module explicitly correlates the current observation with each object’s historical appearance state before state updates are performed, demonstrated in Figure 3. The resulting relational features summarize the agreement between recent observations and accumulated appearance information, and are subsequently used to refine the evolution of appearance states. 
+
+A. Frequency-Domain Appearance Reasoning 
+
+The VRR module models the correlation between the dis-cretized observed appearances ¯Bt ∈ Rn×ds and the latest object appearance states Ht−1 ∈ Rn×ds to generate syn-thetic features St ∈ Rn×ds . While a naive construction of 
+
+ds × ds correlation matrices between each pair (¯bit, h it−1)
+
+would incur O(d2
+
+> s
+
+) cost per object i and scale poorly with the number of objects n, VRR performs this reasoning in the frequency domain. Specifically, both ¯Bt and Ht−1 are transformed using the Fast Fourier Transform (FFT) [20], and circular cross-correlation is applied, reducing the complexity to O(ds log ds) [21]. Importantly, all operations are imple-mented as batch-parallel matrix operations over all objects, avoiding any object-wise sequential processing. To make the captured correlation context learnable, VRR applies a learnable complex-valued filter Φit to each object 
+
+i in the frequency domain. For clarity, we present the formu-lation for a single object, while in practice, the operation is vectorized and applied in parallel to all objects: 
+
+Φit = θire + iθ iim , θire , θ iim ∈ R⌊ ds   
+
+> 2⌋+1
+
+(4) Given the discretized appearance matrix ¯Bt and the previous appearance state matrix Ht−1 for all objects, VRR trans-forms both into the frequency domain and applies a learnable complex-valued filter Φt to perform circular cross-correlation in a batch-parallel manner. This operation captures interactions between current observations and historical appearance states at the object level, forming the frequency-domain interaction 
+
+F(It), which is then projected back to the state space as It:
+
+F( ¯Bt) = FFT ( ¯Bt)
+
+F(Ht−1) = FFT (Ht−1)
+
+F(It) = F(Ht−1) ⊙ F ( ¯Bt) ⊙ Φt
+
+It = LayerNorm  FFT −1(F(It)) 
+
+(5) 
+
+B. Cross Appearance Fusion 
+
+The interaction tensor It encodes relational cues between recent and historical visual appearances; however, not all relational information contributes equally to appearance-state updates. To selectively retain informative interactions, a fusion gate G is constructed that integrates recent visual features 
+
+F( ¯Bt), historical appearance-state features F(Ht−1), and the relational interaction F(It) in the frequency domain (Cross Appearance Fusion in Figure 3). 
+
+Gfused = FFT −1 F( ¯Bt) + F(It) + F(Ht−1)
+
+G = σ(LayerNorm (Wg · Gfused )) (6) 
+
+C. Relational Appearance Feature Generation 
+
+To obtain compact relational (synthetic) features St from the relational interaction It, we first compress It into a lower-dimensional latent space Slatent of dimension dl < d s, where 
+
+dl = 6 denotes the latent relational dimension, using alearned projection Win ∈ Rds×dl followed by a non-linear activation. The latent representation is then projected back to the original dimensionality using Wout ∈ Rdl×ds . Finally, the fused selection gate G modulates the reconstructed features to form the final synthetic appearance features. 
+
+Slatent = tanh( LayerNorm (Win It + bin )) 
+
+St = G ⊙ (Wout Slatent + bout ) (7) The resulting relational features St provide appearance-state update cues derived from the relationship between accumu-lated appearance information and current observations. SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 5
+
+VI. O BJECT -C ENTRIC APPEARANCE STATE UPDATE 
+
+Each object i maintains its own appearance state, collected as Ht−1 = {hit−1}ni=1 . The evolution of these appearance states depends on the state transition matrix ¯At,the current appearance observations ¯Bt, and the relational appearance features St.First, the state transition matrix is applied to the previous appearance states: 
+
+˜Ht = ¯AtHt−1 (8) Next, the observed appearances and synthetic features are combined via a linear projection to form fused features: 
+
+ψt = tanh( LayerNorm (WK ( ¯Bt + St))) (9) Directly adding ψt to ˜Ht (as done in prior work [17], [19]) can limit robustness, especially under false detections or partial occlusions. To adaptively balance incoming and stored information, we introduce a gate Ut computed from the previous appearance states and the fused features: 
+
+Ut = σ(LayerNorm (Wu[Ht−1; ψt])) (10) 
+
+Ut controls the contribution of the current observation and the accumulated appearance state during state updates. When limited appearance information has been accumulated (e.g., during early observations), the gate favors the incoming features ψt; conversely, when the current observation is noisy, partially occluded, or unreliable, the gate places greater em-phasis on the accumulated appearance state ˜Ht. This element-wise selection mechanism improves robustness to observation noise while preserving appearance information accumulated over time. Finally, Ut updates the appearance state as: 
+
+Ht = LayerNorm (Ut ⊙ ψt + (1 − Ut) ⊙ ˜Ht) (11) where ⊙ denotes element-wise multiplication. The resulting state Ht serves as the updated appearance representation of the object and is subsequently used for appearance estimation in the next stage. Figure 4 visualizes the evolution of the update gate Ut for a single object over 10 consecutive frames during the orthog-onality ablation study. Each row corresponds to the gating pattern at a particular time step. As shown in Figure 4, the gate adaptively balances information from the current observation and the accumulated appearance state. Some regions primarily rely on incoming observations (red), while others favor the accumulated appearance state (purple). Intermediate regions exhibit a combination of both sources (orange). VII. A PPEARANCE ESTIMATION 
+
+After obtaining the updated object appearance state Ht =
+
+{hit}ni=1 , the selection matrix Ct, from Section IV, is applied to extract appearance-state features Yt in the state space. The selected features are then projected into the original Add new information Retain old information    
+
+> Fuse old and new information
+> Fig. 4. Visualization of the gate Utover time for a single object during the orthogonality ablation study, trained for 5 epochs.
+
+feature space via Wproj and combined with a learnable residual connection Dt to produce the next appearance estimate ˆXt+1 .
+
+Yt = LayerNorm (Ct ⊙ Ht)ˆXt+1 = ( Dt ⊙ Xt) + ( Wproj · Yt) (12) The estimated appearance ˆXt+1 is subsequently used as the appearance cue for data association in the next observation step. VIII. L EARNING STRATEGY 
+
+A. Dataset Structure and Training Pipeline 
+
+Polycepta learns object-centric appearance states from tem-porally ordered appearance observations, which naturally aligns with the sequential nature of online tracking. Ac-cordingly, the training data is organized in an object-level representation, where a sample is a sequence of consecutive appearances of a single object ( ob i) over time, as demonstrated in Figure 5. We construct a dataset from [22], [23], [24], and [25]. Using ground-truth annotations, objects are extracted and cropped frame-by-frame to form temporally ordered appearance se-quences, which are stored independently for each object. In the training pipeline, the dataset is organized as illustrated in Figure 5, where a set of n objects (batch size) is sorted sequentially, with n ⊆ {1, . . . , N } denoting a subset of the total number of objects N . Since object lifetimes vary, terminated objects are automatically replaced by selecting from the remaining objects m ∈ { 1, . . . , N } \ n. A sliding window is applied to form training batches, ensuring that each batch contains unique objects. Each batch includes a set of objects Xt and their subsequent appearance Xt+1 (i.e. t0 to 
+
+t1 as illustrated in Figure 5). Xt+1 serves as ground truth for the estimated appearance ˆXt+1 obtained from Xt.Objects Xt (i.e. Xt0 in Figure 5, marked in purple) in the batch pass through the full Polycepta architecture to obtain the estimated appearance ˆXt+1 and the updated appearance state 
+
+Ht+1 (i.e. ˆXt1 and Ht1 in Figure 5). Their subsequent appearances Xt+1 (i.e. Xt1 Figure 5, in marked in green) are processed only through the feature extractor to obtain ground-truth embeddings. As described in Section VIII-C, a contrastive learning loss is applied between the estimated appearance ˆXt+1 and the corresponding ground-truth embedding Xt+1 to pull the estimate toward its true appearance while pushing apart estimates of other objects. SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 6Feature Extractor 
+
+> MobileNetV3_small
+
+x life-time ends 
+
+> Added object
+> Polycepta
+> Contrastive Learning Loss
+> Maximize the similarity distance between semantic states of the different objects.
+> Minimize the similarity distance of the same objects, maximize the similarity distance of the different objects.
+> Orthogonality Loss
+> Single Batch
+
+Fig. 5. An overview of the training pipeline followed in Polycepta. Objects from the datasets are cropped and sampled temporally. A single batch contains 
+
+n unique objects. The batch contains the appearance times of the objects and their subsequent appearances (i.e., at t0 and t1). The initial/old appearance 
+
+(colored purple) passes through Polycepta architecture to obtain its estimated appearance embeddings ˆXt1 for the subsequent frame. The subsequent appearance (colored in green) passes through MobileNetV3-small to obtain its feature embeddings Xt1 . The cosine similarity Lf between the subsequent embeddings Xt1 and the estimated embeddings ˆXt1 is maximized. Meanwhile, deviating the visual-semantic memories (states) of the objects by minimizing the similarity between each other Lorth .
+
+Additionally, an orthogonality loss is applied to the appearance states to encourage distinct object-specific state representations and reduce state collapse across objects; an ablation study is conducted in Section XI-A. 
+
+B. State-Erasure Learning 
+
+A key objective of Polycepta is to learn to construct object-centric appearance states from observations rather than to memorize object-specific appearance histories. During train-ing, the appearance state of each object evolves recursively as consecutive observations are processed. Consequently, if appearance states are preserved across training epochs, the model may increasingly rely on object-specific information accumulated in the appearance states, reducing the pressure on the learnable parameters to capture the general dynamics of appearance-state construction. To encourage the learning of appearance-state construction dynamics, we employ a state-erasure strategy. At the beginning of every training epoch, all appearance states are reinitialized to zero: 
+
+H0 = 0n×ds . (13) The training process then proceeds normally, allowing ap-pearance states to evolve recursively as object observations are processed. Once the epoch is completed, all appearance states are discarded and reinitialized before the next epoch begins. This strategy ensures that the only information retained across epochs resides in the learnable network parameters rather than in the appearance states themselves. As a result, the model is repeatedly forced to reconstruct appearance states from observations and to learn the mechanisms governing appearance-state formation and evolution. Empirically, this strategy improves generalization to previously unseen object categories, suggesting that Polycepta learns appearance-state construction mechanisms that transfer across object classes rather than memorizing category-specific appearance patterns, as demonstrated in Section X-F, where Polycepta maintains tracking performance even when evaluated on classes not observed during training. 
+
+C. Contrastive and Orthogonality-Guided Learning 
+
+The training objective is to encourage Polycepta to structure object-centric appearance states to support accurate appear-ance estimation. To this end, we employ a contrastive feature loss Lf together with an orthogonality regularization loss 
+
+Lorth .Specifically, Lf is defined using cosine similarity between the estimated appearances ˆXt and the ground-truth embeddings 
+
+Xt, forming an n × n similarity matrix M that is scaled by a temperature parameter τf . The diagonal entries correspond to matching object pairs, while off-diagonal entries correspond to mismatched object pairs. A cross-entropy objective is used to maximize similarity along the diagonal while minimizing similarity between different objects. 
+
+M = 1
+
+τf
+
+( ˆXX ⊤)
+
+Lf = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+log exp( Mii )
+
+PNj=1 exp( Mij )
+
+! (14) To encourage Polycepta to learn well-structured and dis-entangled object-centric appearance states Ht that support accurate appearance estimation, we employ an orthogonality regularization loss Lorth , scaled by a temperature parameter 
+
+τh. This loss constructs a similarity matrix Morth from the appearance state, penalizes off-diagonal similarities while ex-cluding the diagonal elements, thereby promoting distinct, non-redundant appearance-state representations across objects. 
+
+Morth = 1
+
+τh
+
+(HH ⊤)
+
+Lorth = 1
+
+N ∥Morth ⊙ (11 ⊤ − I)∥F
+
+(15) Since the contrastive feature loss Lf operates in feature space while the orthogonality loss Lorth operates in state space, their magnitudes can differ substantially. To address this scale mismatch, we adopt a dynamic loss-balancing mechanism. The total training objective is defined as: 
+
+Ltotal = Lsim 
+
+μsim + ϵ + Lorth 
+
+μorth + ϵSUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 7
+
+where ϵ is a small constant for numerical stability. The normalization factors μsim and μorth are computed using an exponential moving average [26] of the corresponding loss magnitudes during training: 
+
+μk,t = αμ k,t −1 + (1 − α) ¯Lk,t 
+
+where ¯Lk,t denotes the mean value of the k-th loss term within the current batch and α = 0 .99 is the momentum coefficient. This normalization stabilizes the training and removes the need for manual tuning of loss weights. IX. I NTEGRATION INTO MOT B ENCHMARKS : A DAPTIVE 
+
+GATED FUSION 
+
+Polycepta is designed as a modular appearance-estimation component that can be integrated into existing tracking-by-detection pipelines, as illustrated in Figure 1. Polycepta is in-corporated in a manner analogous to the KF motion estimator: it receives matched object pairs from the association stage and recursively updates appearance states to estimate future appearance representations. This design allows Polycepta to enhance tracking and data association by providing tempo-rally structured appearance predictions without modifying the underlying motion model or association strategy. Concretely, the association cost matrix in the tracking benchmarks is augmented to fuse trajectory-based cues with Polycepta’s appearance-based similarity, while the original association mechanism remains unchanged. Given the trajectory cost matrix Ck from a tracking bench-mark, we construct an appearance-based association matrix from the cosine similarity between the current appearance features Xt ∈ Rn×df and the predicted appearance features from Polycepta ˆXt ∈ Rm×df :
+
+Mp = Xt ˆX⊤ 
+
+> t
+
+. (16) An element-wise clamp is applied to enforce a minimum appearance-similarity threshold βp on the appearance similar-ity matrix: 
+
+M′ 
+
+> p
+
+= max( Mp, β p). (17) Similarly, a trajectory threshold βk is applied to the trajectory cost matrix: 
+
+C′ 
+
+> k
+
+= min( Ck, β k). (18) In tracking benchmarks that employ KF in 3D, lower values in Ck (Euclidean distance) indicate higher correspondence between predicted trajectories and detections, whereas higher values in M′ 
+
+> p
+
+(Cosine similarity) indicate stronger appearance similarity. To make the two costs compatible, we convert the similarity matrix M′ 
+
+> p
+
+into an appearance cost matrix C′ 
+
+> p
+
+by subtracting it from an all-ones matrix: 
+
+C′ 
+
+> p
+
+= 1n1⊤ 
+
+> m
+
+− M′
+
+> p
+
+, (19) where n is the number of current detections and m is the number of active tracks. To ensure fusion compatibility, the appearance cost C′ 
+
+> p
+
+and trajectory cost C′ 
+
+> k
+
+are mapped to a common scale [0 , 1] by normalizing each matrix with respect to the bounded thresholds βp and βk, respectively: 
+
+˜Ck = C′
+
+> k
+
+βk
+
+, ˜Cp = C′
+
+> p
+
+1 − βp
+
+. (20) Since the trajectory association matrix ˜Ck and the appear-ance association matrix ˜Cp originate from different sensing modalities or detection pipelines, the availability of detections can be asymmetric. This commonly arises from differences in the field of view (FoV) between LiDAR and camera sensors, or from using different detectors. To account for this, the final association cost Cfuse is obtained via a selective fusion mechanism that dynamically weights the trajectory and appearance modalities using weight matrices Wk and Wp.For each observation i in a batch of n objects, we define a binary availability vector γi = [ γk,i , γ p,i ], where γ ∈ { 0, 1}
+
+indicates the existence of a valid trajectory estimate or ap-pearance feature, respectively. The fusion weights for the i-th observation are determined by the following gating logic: 
+
+wk,i , w p,i =
+
+
+
+α, 1 − α, if γk,i · γp,i = 1 (Bi-modal fusion) ,
+
+1, 0, if γk,i > γ p,i (Trajectory gating) ,
+
+0, 1, if γk,i < γ p,i (Appearance gating) .
+
+(21) The global fused association matrix is then computed via element-wise fusion, Hadamard product [27]: 
+
+Cfuse = Wk ⊙ ˜Ck + Wp ⊙ ˜Cp, (22) where α is a tunable prior that balances the influence of trajectory estimation and visual appearance when both modal-ities are available. This formulation allows Polycepta to pro-vide appearance-state estimates as an auxiliary association cue while preserving the original tracking framework and assignment strategy. X. R ESULTS 
+
+A. Experimental Setup 
+
+Polycepta is implemented from scratch in PyTorch. All experiments are conducted on a mobile workstation equipped with an AMD Ryzen 9 processor, 32,GB of system memory, and a single NVIDIA RTX 3080 Laptop GPU with 16,GB of VRAM. To evaluate the impact of appearance-state estimation in tracking-by-detection systems, Polycepta is integrated into our motion-based 3D tracking framework, RobMOT [7], and the external motion-based 2D tracking benchmark FastTrack [12]. Since RobMOT is implemented in C++, Polycepta is com-piled to C++17 via TorchScript. Experiments are conducted on the KITTI, WOD, and MOT17 benchmarks. Results are obtained using the official evaluation tools [28], [29] or by submitting directly to the corresponding leaderboards. Detailed benchmark-specific integration settings are described in Sec-tion X-C. 
+
+B. Appearance Estimation Improves During Inference 
+
+A central hypothesis of Polycepta is that appearance estima-tion quality should improve as appearance states accumulate information over time. To evaluate this hypothesis, we conduct both qualitative and quantitative studies comparing Polycepta against a conventional Re-ID. These experiments examine how appearance estimation evolves during inference and analyze the contribution of the proposed architecture components. SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 8Temporal evolution  
+
+> Fig. 6. A qualitative feature quality comparison between the traditional Re-ID and Polycepta for two pedestrians across consecutive frames. The similarity of the appearance embeddings to the next-frame appearance from MobileNetV3 (Re-ID) is highlighted in light and dark blue. Meanwhile, Polycepta’s appearance embeddings are highlighted in red and orange.
+
+1) Qualitative Appearance-State Evolution: The first study is conducted on the MOT17 dataset for two pedestrian objects, as shown in Figure 6. The purpose of this study is to visualize how appearance estimation evolves during inference and to compare this behavior with a conventional Re-ID formulation. Initially, the MobileNetV3 for feature embeddings is trained separately for five epochs using the contrastive learning loss function Lf (Figure 5), serving as a traditional Re-ID model. Similarly, Polycepta is trained on the same dataset for the same number of epochs. The experiment is conducted by selecting two pedestrians from the MOT17 streams and evaluating their appearance association across consecutive frames. First, the trained MobileNetV3 (Re-ID) is used to extract appearance embeddings, which are then associated with the next appearance embedding using a similarity score recorded in Figure 6, marked in dark and light blue. Second, the trained Polycepta is used to replace the Re-ID method for appearance association evaluation, as shown in Figure 6, marked in red and orange. While the similarity scores produced by the Re-ID baseline gradually decrease over time, Polycepta exhibits the opposite behavior: appearance estimates become increasingly similar to future observations as appearance states accumulate infor-mation. This qualitative result provides initial evidence that recursive appearance-state estimation can improve appearance quality during inference. 
+
+2) Quantitative Appearance-State Evolution: To quantita-tively evaluate appearance estimation during inference, we conduct a long-horizon experiment on MOT20 [25], a highly crowded benchmark, involving 148 objects observed over 1,000 consecutive frames, as shown in Figure 7. At each frame, the cosine similarity between the predicted appearance embedding of the object and its next-frame ap-pearance is computed, and the median 50th percentile across objects is used as a representative of the method’s appearance estimation quality, as shown by the dark blue line in Figure 7. The dispersion (IQR) of the similarity scores for the objects at each frame is shown as the 25th-75th percentile, highlighted in light blue in Figure 7. The challenging cases, the lowest 10th percentile similarity scores, are marked in red in Figure 7. The study involves the traditional feature extraction (Re- 
+
+> Fig. 7. A visualization of the conducted quantitative experiments for Poly-cepta on 148 objects with a lifetime of 500 frames across 1,000 frames in MOT20. The blue line shows the median (50th percentile) of the similarity scores between the next appearance estimates and the targets across objects. The red line shows the 10th percentile of the similarity scores, indicating challenging visual conditions and occlusions. The dispersion of the similarity scores is shown by the 20th to 75th percentile, highlighted in light blue.
+
+ID) as a standalone MobileNetV3, similar to the study in Section X-B1, and each module of Polycepta. Each component is trained for five epochs. The evaluation metrics used in this study are the start and end median similarity scores (50th percentile), which represent the median similarity scores at the beginning and end of the temporal horizon, as shown in Figure 7 (the blue line). In addition, the start and end similarity scores for the challenging cases (the lowest 10th percentile) are used to measure the capability to handle scenarios with frequent occlusions, as shown in the red line in Figure 7. To quantify the discrimination quality of the generated appearance embeddings and evaluate how distinct the target identity is from potential look-alikes, we introduce the dis-crimination margin (M ). Let D1 denote the highest cosine similarity corresponding to the correct appearance estimation, and let D2 denote the second-highest similarity score among all remaining candidate appearances. The margin is mathemat-ically defined as: 
+
+M = D1 − D2 (23) A larger margin ( M ↑) indicates superior discrimination capability, implying that the model confidently segregates the true identity from the closest false match, thereby mitigating the risk of identity switches (IDSw). The first comparison, as shown in Table I, evaluates a conventional Re-ID, MobileNetV3 [18], against Polycepta without the inclusion of VRR and the selective appearance-state U-Gate (From Section VI). 
+
+The 1st and 2nd row (ReID vs Polycepta): The quanti-tative results support the phenomenon visualized in Figure 6. MobileNetV3 (Re-ID) shows a downward trend in the 50th-percentile similarity score across the 148 objects (0.493 →
+
+0.472). This behavior is also observed in the worst case (the lowest 10th percentile), as shown in Table I. On the other hand, Polycepta shows a strong start, with a 50th-percentile similarity score of 0.950, which then increases over time to 0.969. Unlike the Re-ID baseline, which exhibits a SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 9                                                                
+
+> TABLE I QUANTITATIVE EVALUATION OF APPEARANCE ESTIMATION QUALITY DURING INFERENCE AND THE CONTRIBUTION OF POLYCEPTA COMPONENTS ,
+> INCLUDING THE CONVENTIONAL RE-ID M OBILE NET V3 (MV3), FOR 148 OBJECTS WITH A LIFETIME OF 500 FRAMES ACROSS 1,000 FRAMES IN A CROWDED PEDESTRIAN BIRD -EYE -VIEW CONDITION .BOLD RESULTS INDICATE THE HIGHEST PERFORMANCE ACROSS THE METRICS . T HE RED COLOR ↓
+> INDICATES A REDUCTION IN APPEARANCE SIMILARITY OVER TIME ,WHEREAS THE BLUE COLOR ↑INDICATES IMPROVEMENT .
+> Architecture P50 P10 margin ↑IDSw ↓
+> MV3 Polycepta VRR U-Gate Start End Start End
+> ✓0.493 0.472 ↓0.408 0.403 ↓0.045 9792
+> ✓✓0.950 0.969 ↑0.832 0.933 ↑0.290 247
+> ✓✓✓0.951 0.971 ↑0.798 0.939 ↑0.288 222
+> ✓✓✓0.955 0.975 ↑0.823 0.947 ↑0.250 204
+> ✓✓✓✓0.958 0.975 ↑0.850 0.949 ↑0.30 184
+
+gradual reduction in appearance quality over time, Polycepta demonstrates a consistent improvement throughout the tempo-ral horizon. Moreover, the discrimination capability between objects (margin) was enhanced by Polycepta (0.045 →0.290) with a noticeable reduction in identity switch between objects (9792 →247). 
+
+The 3rd row (VRR): The inclusion of the VRR module (Section V), which correlates current and historical appear-ances for feature generation, further reduces IDSw ( 247 →
+
+222 ) and improves final appearance quality (P50 : 0 .969 →
+
+0.971 | P10 : 0.933 → 0.939 ). However, VRR slightly degrades the initial appearance quality at the track’s start, as limited appearance information has accumulated during the early stages, which VRR relies on. 
+
+The 4th row (U-Gate): In contrast, the integration of the U-Gate (Section VI) maintains robust appearance quality at earlier times by dynamically prioritizing the incoming appear-ance over an sparsely initialized appearance state. The U-Gate yields a notable improvement in final appearance quality (P50 : 0 .969 → 0.975 | P10 : 0 .933 → 0.947 ) alongside a significant reduction in IDSw ( 247 → 204 ). However, incorporating the U-Gate alone into Polycepta reduces the system’s overall discrimination capability, compressing the margin from 0.290 to 0.250 . This narrower margin suggests a higher vulnerability to mismatches under ambiguous or closely matching conditions. 
+
+The 5th row (Full Configuration): By simultaneously incorporating both VRR and the U-Gate into Polycepta, the architecture overcomes the individual limitations of each iso-lated module. This full configuration shows consistent im-provements across all metrics, achieving the lowest IDSw (184 ) and recovering a high discrimination margin ( 0.300 ), effectively demonstrating the complementary and incremental contributions of both components. Collectively, the qualitative and quantitative experiments demonstrate that Polycepta differs fundamentally from frame-wise appearance descriptors. While the quality of Re-ID features degrades over time, Polycepta progressively improves appearance estimation quality as appearance states evolve (Figure 6). 
+
+C. Performance in Motion-Based MOT Frameworks 
+
+We evaluate Polycepta under two integration settings. In the first setting, Polycepta is integrated using a single detector (2D or 3D). For 3D detectors, detections are projected into the im-age plane prior to appearance estimation. In the second setting, Polycepta is evaluated using a 2D+3D detector configuration, where YOLOv8 is fused with the existing 3D detector. In this experiment, Polycepta is integrated into the recent benchmark RobMOT [7], [35], which employs a 3D CasA [30] detector on the KITTI [22] dataset, following the first setting (LiDAR to camera projection) described in Section X-A. The integration consistently improves tracking accuracy and association quality across all reported metrics. In particular, MOTA increases from 89.83% to 90.84%, while the number of identity switches decreases from 6 to 5, representing the lowest IDSw among the reported methods. In the second setting from Section X-A, the YOLOv8 2D detector [39] is fused with the 3D CasA [30] detector in RobMOT [7], [35]. As shown in Table II, this fused setup outperforms the reported fusion-based baselines, achieving approximately a 4% improvement in MOTA. When integrated with RobMOT using the VirConv [40] detector, Polycepta achieves state-of-the-art performance on the KITTI benchmark, reaching a MOTA of 92.27%, as summarized in Table II. These experiments demonstrate that Polycepta’s appearance-state estimates yield consistent tracking improvements when integrated into motion-tracking frameworks. The gains are observed under both single-detector and multi-detector configurations, indicating that the proposed appearance-state formulation complements existing motion-estimation pipelines without requiring modifications to the underlying tracking framework. Furthermore, the consistent improvements across integration settings suggest that the benefits of appearance-state estimation extend beyond a specific association configuration. 
+
+D. Performance Across 2D and 3D Tracking Datasets 
+
+Having established that appearance estimation quality im-proves during inference, we next evaluate whether the resulting appearance-state formulation generalizes across diverse track-ing scenarios, datasets, and sensing modalities. First, Polycepta is integrated into the FastTracker [12] benchmark (currently ranked 1st on the MOT17 [24] leader-board) using the first setting described in Section X-C. No additional detector is required, as FastTracker already employs a 2D YOLOvx [41] detector. Table III summarizes the highest-performing benchmarks for each dataset, includ-ing RobMOT [7], [35], MCTrack [9], FastTracker [12], and TrackTrack [5]. SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 10 
+
+TABLE II EVALUATION OF ONLINE MOT METHODS ON THE KITTI TEST DATASET . B OLD RED INDICATES THE HIGHEST VALUE IN EACH METRIC , AND BLUE 
+
+> INDICATES THE SECOND
+
+-HIGHEST . (*) DENOTES METHODS USING CAS A 3D DETECTOR [30]. U NDERLINED VALUES HIGHLIGHT THE BEST SCORES .
+
+Method Venue Input HOTA DetA AssA MOTA IDSw FN 
+
+3D-based Paradigms 
+
+PC3TMOT [31] T-ITS ’21 3D 77.80 74.57 81.59 88.81 225 2810 PolarMOT [32] ECCV ’22 3D 75.16 73.94 76.95 85.08 462 2668 EAFFMOT [33] Sig. Proc. ’24 3D 72.28 71.97 73.08 84.77 107 3946 UG3DMOT [34] Sig. Proc. ’24 3D 78.60 76.10 82.28 87.98 40 2993 MCTrack [9]* IROS ’25 3D 78.12 73.24 84.01 83.89 63 3364 RobMOT* [7], [35] T-ITS ’25 3D 80.83 76.99 85.50 89.83 6 1544 
+
+RobMOT* [7], [35] (w/ Polycepta) 3D 81.28 77.75 85.61 90.84 5 1543 
+
+Fusion-based Paradigms 
+
+JMODT [36] IROS ’21 2D+3D 70.73 73.45 68.76 85.35 350 3438 DeepFusionMOT [8] RA-L ’22 2D+3D 75.46 71.54 80.06 84.64 84 4601 StrongFusion [37] Sensors ’22 2D+3D 75.65 72.08 79.84 85.53 58 4658 BcMODT [38] Rem. Sens. ’23 2D+3D 71.00 73.62 69.14 85.48 381 3353 PNAS-MOT [11] RA-L ’24 2D+3D 67.32 77.69 58.99 89.59 751 2261 MMF-JDT* [10] RA-L ’25 2D+3D 79.52 75.83 84.01 88.06 37 1751 
+
+RobMOT* [7], [35] (w/ Polycepta) - 2D + 3D 81.35 78.95 84.41 91.80 76 1127 RobMOT [7], [35] (w/ Polycepta) - 2D + 3D 82.05 80.16 84.56 92.27 73 823 
+
+MOT17 Benchmark (2D) Table III: Integrating Polycepta into FastTracker [12] reduces identity switches from 567 to 382 while improving all association metrics, including AssA (+3.34%), AssP (+4.12%), and AssR (+2.22%). These gains translate into a 2.08% improvement in HOTA, indicating stronger association quality and more stable identity preser-vation. An additional experiment is conducted using the top-performing benchmarks, RobMOT [7], [35] and MCTrack [9], on the KITTI [22] and WOD [23] validation datasets. The Polycepta YOLOv8 [39] fusion settings are applied, as ex-plained in Section X-C ( second setting ), while the 3D CasA detector [30] is unified across all benchmarks in Table III. 
+
+KITTI Benchmark (2D) Table III : The integration of Polycepta to RobMOT shows systematic improvements in the tracking metric metrics HOTA and MOTA by 1.48% and 2.61%, respectively. In addition to improvement in all association quality metrics, the same behavior was observed in MOT17 with FastTracker. The increase in IDSw (by 2 objects) is due to the fusion of an additional detector (YOLOv8), leading to detections unannotated in the KITTI ground truth and false positives. 
+
+WOD Benchmark (3D Point Cloud) Table III : On WOD, Polycepta primarily improves association quality, reducing identity switches from 501 to 444 despite operating on image observations, while evaluation is performed in the 3D point-cloud domain. This result suggests that the appearance-state estimates remain beneficial even when the final tracking met-rics are evaluated on a 3D LiDAR point cloud. Across MOT17, KITTI, and WOD, Polycepta consistently improves association quality and reduces identity switches under both 2D and 3D tracking settings. 
+
+E. Detector Generalization 
+
+The previous experiments used the 3D CasA [30] detector on KITTI [22] to maintain a unified detector across bench-marks. To assess robustness to detector choice and quantify performance variance after integrating Polycepta, we conduct additional experiments with multiple 3D detectors. Table IV reports results using VirConv [40], PV-RCNN [42], CasA [30], PointRCNN [43], and Second [44] on the KITTI validation set. Since the objective is to evaluate tracking capability rather than detection quality, we additionally report Mostly Tracked (MT) and Mostly Lost (ML), which measure the number of objects that are consistently tracked throughout their lifespan or predominantly lost by the tracker, respectively. The experiment demonstrates that integrating Polycepta consistently improves tracking performance across detectors of varying quality, including weaker 3D detectors such as PointRCNN [43] and SECOND [44]. As shown in Table IV, Polycepta substantially improves MOTA under low-quality 
+
+TABLE III PERFORMANCE EVALUATION ACROSS MOT17, KITTI, AND WOD USING MOTION -CENTRIC MOT FRAMEWORKS WITH UNIFIED DETECTOR CONFIGURATIONS .                                                                                                                                                                        
+
+> Method Venue Input Tracking Accuracy Association Quality IDSw ↓
+> HOTA ↑MOTA ↑AssA ↑AssP ↑AssR ↑
+> MOT17 Benchmark (2D) – Pedestrians
+> TrackTrack [5] CVPR ’25 2D 66.90 79.36 67.83 82.42 73.19 254
+> FastTracker [12] ArXiv ’25 2D 73.04 88.34 69.97 79.93 77.30 567
+> FastTracker [12] (w/ Polycepta) 2D 75.12 (+2.08 ↑)88.69 (+0.35 ↑)73.31 (+3.34 ↑)84.05 (+4.12 ↑)79.52 (+2.22 ↑)382 (-185 ↓)
+> KITTI Benchmark (2D) – Cars
+> MCTrack [9] IROS ’25 3D 80.09 81.24 85.70 90.81 90.93 7RobMOT [7], [35] T-ITS ’25 3D 83.06 89.57 85.77 90.04 91.06 1RobMOT (w/ Polycepta) 3D + 2D 84.54 (+1.48 ↑)92.18 (+2.61 ↑)86.80 (+1.03 ↑)90.53 (+0.49 ↑)91.49 (+0.43 ↑)3 (+2 ↑)
+> Waymo Open Dataset Benchmark (3D) – Vehicles
+> MCTrack [9] IROS ’25 3D 55.48 42.61 66.88 73.37 75.68 811 RobMOT [7], [35] T-ITS ’25 3D 57.33 52.22 67.81 75.61 74.83 501
+> RobMOT [7], [35] (w/ Polycepta) 3D + 2D 57.31 (-0.02 ↓)52.46 (+0.24 ↑)68.05 (+0.24 ↑)75.72 (+0.11 ↑)74.05 (-0.78 ↓)444 (-57 ↓)SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 11
+> TABLE IV COMPARISON OF ROB MOT [7], [35] PERFORMANCE WITH AND WITHOUT POLYCEPTA ACROSS FIVE DETECTORS . B EST RESULTS FOR EACH DETECTOR ARE HIGHLIGHTED IN BOLD .Detector Config HOTA ↑MOTA ↑MT ↑ML ↓
+> VirConv [40] RobMOT [7], [35] 86.57 91.60 159 14 w/ Polycepta 86.74 (+0.17 ↑)93.05 (+1.45 ↑)174 (+15 ↑)3(-11 ↓)PV-RCNN [42] RobMOT [7], [35] 80.22 87.14 155 11 w/ Polycepta 80.96 (+0.74 ↑)90.92 (+3.78 ↑)170 (+15 ↑)6(-5 ↓)CasA [30] RobMOT [7], [35] 83.06 89.57 166 11 w/ Polycepta 84.54 (+1.48 ↑)92.18 (+2.61 ↑)174 (+8 ↑)8(-3 ↓)PointRCNN [43] RobMOT [7], [35] 78.22 86.72 153 10 w/ Polycepta 79.79 (+1.57 ↑)90.70 (+3.98 ↑)168 (+15 ↑)7(-3 ↓)Second [44] RobMOT [7], [35] 78.91 85.85 155 12 w/ Polycepta 80.40 (+1.49 ↑)90.75 (+4.90 ↑)162 (+7 ↑)12 (+0)
+
+detections, surpassing 90% when the baseline margin exceeds 5%, e.g., with the SECOND detector [44], where MOTA increases from 85.85% to 90.75%. The largest improve-ments are observed in these weaker detectors, suggesting that appearance-state estimation can compensate for noisier detection inputs and improve the robustness of association. Even when paired with a strong detector such as Vir-Conv [40], Polycepta improves long-term tracking continuity. Specifically, ML decreases from 14 to 3, while MT increases from 159 to 174. Overall, these results indicate that the appearance-state esti-mates produced by Polycepta remain effective across detector qualities, improving tracking continuity and reducing identity fragmentation even when detections are noisy or intermittent. 
+
+F. Cross-Category Generalization Evaluation 
+
+To evaluate Polycepta’s ability to generalize beyond object categories observed during training, we conduct a cross-category evaluation in which training and testing are per-formed on disjoint object classes. In this experiment, Polycepta is trained on the vehicle class in the KITTI and WOD datasets, then evaluated on the pedestrian class in the MOT17/20 dataset, with the roles reversed. 
+
+Train on vehicle class (KITTI/Waymo), test on pedes-trian class (MOT17/20); top section in Table V: The performance degradation relative to training on the target class is minimal, with a MOTA reduction of only 0.72% and negligible changes in MT and ML. 
+
+Train on pedestrian class (MOT17/20), test on vehicle class (KITTI/Waymo); bottom section in Table V: The per-formance gap remains negligible, with only a -0.06% change in MOTA and a -0.03% change in MOTP. The consistently small performance gap in both transfer directions indicates that the learned appearance-state representations are not strongly tied to any specific object category. These results indicate that Polycepta learns appearance-state construction mechanisms that transfer across object categories. The small performance gap on unseen classes suggests that the model relies on general appearance-state evolution dynamics rather than memorizing category-specific appearance patterns observed during training. This behavior is consistent with the motivation behind the proposed state-erasure learning strategy, which encourages the model to learn how appearance states are constructed rather than memorizing object-specific training instances. XI. A BLATION STUDY 
+
+A. Orthogonality-Guided Appearance-State Learning 
+
+We conduct an ablation study by removing the orthogonality loss Lorth and training the Polycepta for 5 epochs using only the contrastive loss Lf . We then trace the evolution of two distinct pedestrians over 10 consecutive frames. The analysis metrics:  
+
+> •
+
+Input Features : The cosine similarity between the ap-pearance embeddings of the two pedestrians extracted by MobileNetV3-small.  
+
+> •
+
+Appearance State : The cosine similarity between the appearance states of the two pedestrians.  
+
+> •
+
+Estimated appearance : The cosine similarity between the estimated appearances of the two pedestrians. Two key observations can be drawn from Table VI. First, the estimated appearance similarity between pedes-trians is consistently lower than the similarity of the original input feature embedding used by Polycepta. The input fea-ture similarity ranges from [0 .3256 , 0.4823] without Lorth and 
+
+[0 .4412 , 0.5960] with Lorth , while the estimated appearance                                                                                                
+
+> TABLE V GENERALIZATION OF POLYCEPTA TRAINED ON A CERTAIN OBJECT -CLASS AND EVALUATED ON AN UNSEEN DIFFERENT CLASS .
+> Train Class Test Class Method MOTA ↑MOTP ↑MT ↑ML ↓
+> Pedestrian (MOT17/20) Pedestrian (MOT17/20) FastTracker [12] 93.05 91.46 174 3Vehicle (KITTI/WOD) Pedestrian (MOT17/20) 92.33 91.68 173 4
+> Performance Gap -0.72 +0.22 -1 +1 Vehicle (KITTI/WOD) Vehicle (KITTI/WOD) RobMOT [7], [35] 88.69 87.75 399 25 Pedestrian (MOT17/20) Vehicle (KITTI/WOD) 88.63 87.72 401 26
+> Performance Gap -0.06 -0.03 +2 +1 SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 12
+> TABLE VI EFFECT OF THE ORTHOGONALITY LOSS LORTH ON APPEARANCE -STATE SEPARATION AND APPEARANCE ESTIMATION OVER 10 FRAMES
+> Feature Stage Metric w/o Lorth w/ Lorth
+> Input Features Mean ±std 0.4039 ±0.0478 0.5337 ±0.0452
+> Range [0 .3256 ,0.4823] [0 .4412 ,0.5960]
+> Similarity at 10 th 0.4288 0.5636
+> Appearance State Mean ±std 1.0000 ±0.0000 −0.5119 ±0.6351
+> Range [1 .0000 ,1.0000] [−0.9962 ,0.9720]
+> Similarity at 10 th 1.0000 −0.8051
+> Estimated Appearance Mean ±std 0.2821 ±0.0671 0.3154 ±0.0899
+> Range [0 .1570 ,0.3942] [0 .1465 ,0.4751]
+> Similarity at 10 th 0.3306 0.3280
+
+similarity ranges from [0 .1570 , 0.3942] and [0 .1465 , 0.4751] ,respectively. This confirms that Polycepta enhances feature discriminability beyond what ReID provides. Lower appear-ance similarity directly implies reduced ambiguity during data association, thereby lowering the likelihood of identity mismatches. When the orthogonality loss Lorth is removed, the appear-ance states of different objects collapse to nearly identical representations, as evidenced by a constant similarity of 1.0 across all measurements. This indicates that the appearance-state update process no longer preserves object-specific infor-mation, causing the model to rely primarily on the feature extractor rather than on the learned appearance states. In contrast, employing Lorth encourages the formation of distinct appearance states. While the input feature similarity increases, the appearance-state similarity spans a wide range of [−0.9962 , 0.9720] , with a strongly negative similarity at the last frame ( −0.8051 ). This indicates that the appearance states of different objects are actively pushed apart over time. The strongly negative similarity observed at later frames indicates that appearance states remain highly discriminative even when the underlying input features become increasingly similar. Remarkably, enforcing Lorth results in comparable or lower appearance estimation similarity at the final frame (0.3280 vs. 0.3306 ), despite higher input feature similarity. This demonstrates that orthogonality regularization prevents appearance-state collapse and enables Polycepta to construct robust and discriminative appearance states that improve iden-tity preservation during association. 
+
+B. State-Erasure Learning 
+
+To evaluate the contribution of the proposed state-erasure learning strategy, we train Polycepta with and without state erasure for five epochs and evaluate both models on seen and unseen object classes. Table VII summarizes the results of this experiment. The model trained with state erasure consistently achieves lower ID-switch counts on both seen and unseen classes, with                   
+
+> TABLE VII MEMORY ERASURE EVALUATION ON SEEN AND UNSEEN OBJECT CLASSES AFTER FIVE TRAINING EPOCHS .
+> Seen Classes Unseen Classes Method margin ↑IDSw ↓margin ↑IDSw ↓
+> w/o Erasure 0.337 224 0.169 144 w/ Erasure 0.300 184 0.188 118
+> TABLE VIII COMPUTATIONAL THROUGHPUT OF THE COMPLETE TRACKING PIPELINE .
+> Component Throughput (Hz)
+> Feature Extraction ( MobileNetV3-Small )124.78 Polycepta (Inference & State Evolution) 377.16 Object Association 2713.25
+> Full System Total 90.57
+
+the largest improvement observed on unseen categories (144 
+
+→ 118). Although the model trained without erasure attains a higher discrimination margin on seen classes (0.337), this advantage deteriorates on unseen classes, where the margin drops to 0.169. In contrast, the state-erasure model maintains a more stable margin while achieving the lowest ID-switch counts across both settings. This behavior suggests that, without state erasure, the model increasingly relies on object-specific appearance information accumulated during training. In contrast, state erasure en-courages the network parameters to learn appearance-state construction mechanisms that transfer more effectively to unseen categories. These results support the hypothesis that state erasure discourages memorization of training objects. 
+
+C. Efficiency Analysis 
+
+We evaluate Polycepta’s computational throughput on the mobile workstation described in Section X-A by integrating it into the RobMOT [7], [35] tracking framework. As reported in Table VIII, the proposed adaptive gated fusion association mechanism achieves a throughput of 2713.25 Hz, while Poly-cepta’s appearance-state estimation module operates at 377.16 Hz. When combined with feature extraction and association, the complete tracking pipeline maintains a throughput of 90.57 Hz. These results demonstrate that Polycepta can provide online appearance-state estimation while satisfying real-time operating requirements for autonomous systems. XII. C ONCLUSION 
+
+We presented Polycepta, an object-centric appearance-state estimation framework for multi-object tracking that reformu-lates appearance modeling as a recursive estimation problem rather than a frame-wise matching task. By constructing and continuously updating an appearance state for each tracked object, Polycepta enables future appearance representations to be estimated from accumulated observations, allowing appearance estimation quality to improve during inference as appearance states evolve. Extensive experiments demon-strated that this formulation consistently improves association quality and reduces identity switches when integrated into motion-based tracking-by-detection frameworks across KITTI, MOT17, and the Waymo Open Dataset, while maintaining real-time operation at 90.57 Hz. Furthermore, the proposed state-erasure learning strategy encourages the learning of category-agnostic appearance-state construction, enabling gen-eralization to previously unseen object categories with only marginal performance degradation. Collectively, these results suggest that recursive appearance-state estimation provides an SUBMITTED TO IEEE TRANSACTIONS ON IMAGE PROCESSING, 2026 13 
+
+effective complement to motion-state estimation in tracking-by-detection systems, offering a practical and lightweight approach for improving long-term identity preservation in real-time multi-object tracking. REFERENCES [1] J. Yang, M. Jiang, Z. Fan et al. , “Hybrid-sort: Weak cues matter for robust multi-object tracking,” arXiv preprint arXiv:2303.00766 , 2023. [2] Y. Zhang, P. Sun, Y. Jiang, D. Yu, F. Weng, Z. Yuan, P. Luo, W. Liu, and X. Wang, “Bytetrack: Multi-object tracking by associating every detection box,” in Proceedings of the European Conference on Computer Vision (ECCV) , 2022. [3] D. C. Bui and M. Yoo, “Afmtrack: Attention-based feature matching for multiple object tracking,” IEEE Access , vol. 12, 2024. [4] Y. Du, Z. Zhao, Y. Song, Y. Zhao, F. Su, T. Gong, and H. Meng, “Strong-sort: Make deepsort great again,” IEEE Transactions on Multimedia ,vol. 25, pp. 8725–8737, 2023. [5] K. Shim, K. Ko, Y. Yang, and C. Kim, “Focusing on tracks for online multi-object tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2025. [6] H. Luo, Y. Gu, X. Liao, S. Lai, and W. Jiang, “Bag of tricks and a strong baseline for deep person re-identification,” in 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) , 2019, pp. 1487–1495. [7] M. Nagy, N. Werghi, B. Hassan, J. Dias, and M. Khonji, “Robmot: 3d multi-object tracking enhancement through observational noise and state estimation drift mitigation in lidar point clouds,” IEEE Transactions on Intelligent Transportation Systems , vol. 26, no. 10, 2025. [8] X. Wang, C. Fu, Z. Li, Y. Lai, and J. He, “Deepfusionmot: A 3d multi-object tracking framework based on camera-lidar fusion with deep association,” IEEE Robotics and Automation Letters , vol. 7, 2022. [9] X. Wang, S. Qi, J. Zhao, H. Zhou, S. Zhang, G. Wang, K. Tu, S. Guo, J. Zhao, J. Li, and M. Yang, “Mctrack: A unified 3d multi-object tracking framework for autonomous driving,” in Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) ,2025. [10] X. Wang, C. Fu, J. He, M. Huang, T. Meng, S. Zhang, H. Zhou, Z. Xu, and C. Zhang, “A multi-modal fusion-based 3d multi-object tracking framework with joint detection,” IEEE Robotics and Automation Letters ,vol. 10, no. 1, pp. 532–539, 2025. [11] C. Peng, Z. Zeng, J. Gao, J. Zhou, M. Tomizuka, X. Wang, C. Zhou, and N. Ye, “Pnas-mot: Multi-modal object tracking with pareto neural architecture search,” IEEE Robotics and Automation Letters , vol. 9, no. 5, pp. 4377–4384, 2024. [12] H. Hashempoor and Y. D. Hwang, “Fasttracker: Real-time and accurate visual tracking,” 2025. [Online]. Available: https://arxiv.org/abs/2508. 14370 [13] R. E. Kalman, “A new approach to linear filtering and prediction problems,” Journal of Basic Engineering , vol. 82, no. 1, pp. 35–45, 1960. [14] J. Cai, M. Xu, W. Li, Y. Xiong, W. Xia, Z. Tu, and S. Soatto, “Memot: Multi-object tracking with memory,” in 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. [15] R. Gao and L. Wang, “Memotr: Long-term memory-augmented trans-former for multi-object tracking,” in 2023 IEEE/CVF International Conference on Computer Vision (ICCV) , 2023, pp. 9867–9876. [16] M. Segu, L. Piccinelli, S. Li, Y.-H. Yang, L. Van Gool, and B. Schiele, “Samba: Synchronized set-of-sequences modeling for multiple object tracking,” in International Conference on Learning Representations ,Y. Yue, A. Garg, N. Peng, F. Sha, and R. Yu, Eds., vol. 2025, 2025, pp. 30 057–30 070. [17] A. Gu and T. Dao, “Mamba: Linear-time sequence modeling with selective state spaces,” arXiv preprint arXiv:2312.00752 , 2023. [18] A. Howard, M. Sandler, B. Chen, W. Wang, L.-C. Chen, M. Tan, G. Chu, V. Vasudevan, Y. Zhu, R. Pang, H. Adam, and Q. Le, “Searching for mobilenetv3,” in 2019 IEEE/CVF International Conference on Computer Vision (ICCV) , 2019, pp. 1314–1324. [19] A. Gu, T. Dao, S. Ermon, A. Rudra, and C. R´ e, “Hippo: Recurrent memory with optimal polynomial projections,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 33, 2020. [20] M. Frigo and S. G. Johnson, “The design and implementation of FFTW3,” Proceedings of the IEEE , vol. 93, no. 2, pp. 216–231, 2005. [21] T. G. Stockham, “High-speed convolution and correlation,” AFIPS ’66 (Spring): Proceedings of the April 26-28, 1966, Spring Joint Computer Conference , pp. 229–233, 1966. [22] A. Geiger, P. Lenz, and R. Urtasun, “Are we ready for autonomous driving? the kitti vision benchmark suite,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2012. [23] P. Sun, H. Kretzschmar, X. Dotiwalla, A. Chouard, V. Gunagi, C. Chai, B. Caine, V. Vasudevan, W. Han, J. Ngiam et al. , “Scalability in percep-tion for autonomous driving: Waymo open dataset,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2020. [24] P. Dendorfer, A. Osep, A. Milan, K. Schindler, D. Cremers, I. Reid, S. Roth, and L. Leal-Taix´ e, “Motchallenge: A benchmark for single-camera multiple target tracking,” International Journal of Computer Vision , vol. 129, no. 4, pp. 845–881, 2021. [25] P. Dendorfer, H. Rezatofighi, A. Milan, J. Shi, D. Cremers, I. Reid, S. Roth, K. Schindler, and L. Leal-Taix´ e, “Mot20: A bench-mark for multi object tracking in crowded scenes,” arXiv preprint arXiv:2003.09003 , 2020. [26] D. Haynes, S. Corns, and G. K. Venayagamoorthy, “An exponential moving average algorithm,” in 2012 IEEE Congress on Evolutionary Computation , 2012, pp. 1–8. [27] K. Lee, H. Ko, D. Oh, J. Kim, and H. Oh, “Hadamard product arguments and their applications,” IEEE Access , vol. 13, pp. 79 736–79 756, 2025. [28] J. Luiten, A. Osep, P. Dendorfer, P. Torr, A. Geiger, L. Leal-Taix´ e, and B. Leibe, “Hota: A higher order metric for evaluating multi-object tracking,” International Journal of Computer Vision , pp. 1–31, 2020. [29] A. H. Jonathon Luiten, “Trackeval,” https://github.com/JonathonLuiten/ TrackEval, 2020. [30] W. et al., “Casa: A cascade attention network for 3-d object detection from lidar point clouds,” IEEE Transactions on Geoscience and Remote Sensing , 2022. [31] H. Wu, W. Han, C. Wen, X. Li, and C. Wang, “3d multi-object tracking in point clouds based on prediction confidence-guided data association,” 
+
+IEEE Transactions on Intelligent Transportation Systems , vol. 23, no. 6, pp. 5668–5677, 2022. [32] A. Kim, G. Bras´ o, A. Oˇ sep, and L. Leal-Taix´ e, “Polarmot: How far can geometric relations take us in 3d multi-object tracking?” in Proceedings of the European Conference on Computer Vision (ECCV) . Springer Nature Switzerland, 2022, pp. 41–58. [33] J. Jin, J. Zhang, K. Zhang, Y. Wang, and D. Pan, “3d multi-object track-ing with boosting data association and improved trajectory management mechanism,” Signal Processing , vol. 218, p. 109367, 2024. [34] J. He, X. Wang, C. Fu, Z. Li et al. , “3d multi-object tracking based on informatic divergence-guided data association,” Signal Processing , vol. 222, p. 109521, 2024. [35] M. Nagy, N. Werghi, B. Hassan, J. Dias, and M. Khonji, “Towards accurate state estimation: Kalman filter incorporating motion dynamics for 3d multi-object tracking,” 2025. [Online]. Available: https://arxiv.org/abs/2505.07254 [36] K. Huang and Q. Hao, “Joint multi-object detection and tracking with camera-lidar fusion for autonomous driving,” in 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) ,2021, pp. 6983–6989. [37] X. Wang, C. Fu, J. He, S. Wang, and J. Wang, “Strongfusionmot: A multi-object tracking method based on lidar-camera fusion,” IEEE Sensors Journal , vol. 23, no. 1, pp. 472–483, 2023. [38] K. Zhang, Y. Liu, F. Mei, J. Jin, and Y. Wang, “Boost correlation fea-tures with 3d-miiou-based camera-lidar fusion for modt in autonomous driving,” Remote Sensing , vol. 15, no. 4, p. 874, 2023. [39] G. Jocher, A. Chaurasia, and J. Qiu, “Ultralytics yolov8,” 2023. [Online]. Available: https://github.com/ultralytics/ultralytics [40] W. et al., “Virtual sparse convolution for multimodal 3d object detec-tion,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2023. [41] Z. Ge, S. Liu, F. Wang, Z. Li, and J. Sun, “Yolox: Exceeding yolo series in 2021,” arXiv preprint arXiv:2107.08430 , 2021. [Online]. Available: https://arxiv.org [42] S. Shi, C. Guo, L. Jiang, Z. Wang, J. Shi, X. Wang, and H. Li, “Pv-rcnn: Point-voxel feature set abstraction for 3d object detection,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , June 2020. [43] S. Shi, X. Wang, and H. Li, “Pointrcnn: 3d object proposal generation and detection from point cloud,” in The IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2019. [44] Y. Yan, Y. Mao, and B. Li, “Second: Sparsely embedded convolutional detection,” Sensors , vol. 18, no. 10, p. 3337, 2018.
