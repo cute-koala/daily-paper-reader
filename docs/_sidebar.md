@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-06-26 <!--dpr-date:20260626-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/26/2606.26455v1-active-adversarial-perturbation-driven-associative-memory-retrieval-for-rgb-event-visual-object-tracking" data-sidebar-item="{&quot;title&quot;: &quot;Active Adversarial Perturbation-driven Associative Memory Retrieval for RGB-Event Visual Object Tracking&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.26455v1-active-adversarial-perturbation-driven-associative-memory-retrieval-for-rgb-event-visual-object-tracking&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;直接处理视觉目标跟踪&quot;}">Active Adversarial Perturbation-driven Associative Memory Retrieval for RGB-Event Visual Object Tracking</a>
   * 2026-06-25 <!--dpr-date:20260625-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/25/2606.25880v1-uss-unified-spatial-semantic-prompts-for-embodied-visual-tracking-with-latent-dynamics-learning" data-sidebar-item="{&quot;title&quot;: &quot;USS: Unified Spatial-Semantic Prompts for Embodied Visual Tracking with Latent Dynamics Learning&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.25880v1-uss-unified-spatial-semantic-prompts-for-embodied-visual-tracking-with-latent-dynamics-learning&quot;, &quot;score&quot;: &quot;10.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;具身视觉跟踪结合语言和空间提示&quot;}">USS: Unified Spatial-Semantic Prompts for Embodied Visual Tracking with Latent Dynamics Learning</a>
