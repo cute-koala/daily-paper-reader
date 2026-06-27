@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-06-27 <!--dpr-date:20260627-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/27/2606.20946v1-scaling-diverse-language-generation-for-3d-visual-grounding" data-sidebar-item="{&quot;title&quot;: &quot;Scaling Diverse Language Generation for 3D Visual Grounding&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.20946v1-scaling-diverse-language-generation-for-3d-visual-grounding&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;自然语言引导的三维定位&quot;}">Scaling Diverse Language Generation for 3D Visual Grounding</a>
   * 2026-06-26 <!--dpr-date:20260626-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/26/2606.26455v1-active-adversarial-perturbation-driven-associative-memory-retrieval-for-rgb-event-visual-object-tracking" data-sidebar-item="{&quot;title&quot;: &quot;Active Adversarial Perturbation-driven Associative Memory Retrieval for RGB-Event Visual Object Tracking&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.26455v1-active-adversarial-perturbation-driven-associative-memory-retrieval-for-rgb-event-visual-object-tracking&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;直接处理视觉目标跟踪&quot;}">Active Adversarial Perturbation-driven Associative Memory Retrieval for RGB-Event Visual Object Tracking</a>
