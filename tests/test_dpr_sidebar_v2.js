@@ -237,7 +237,7 @@ function testPaperEvidenceAndActionButtonsRender() {
 
   assert.ok(html.includes('中文解释 A'));
   assert.ok(html.includes('class="dpr-sidebar-paper-actions"'));
-  assert.ok(html.includes('<span class="dpr-sidebar-unread-dot dpr-sidebar-paper-unread-dot" aria-hidden="true"></span>'));
+  assert.ok(!html.includes('dpr-sidebar-paper-unread-dot'));
   assert.ok(html.includes('data-paper-status="good"'));
   assert.ok(html.includes('data-paper-status="blue"'));
   assert.ok(html.includes('data-paper-status="orange"'));
@@ -344,12 +344,16 @@ function testSidebarPaperVisualStateCssContract() {
   assert.ok(/\.dpr-sidebar-paper\s*{[^}]*background:\s*#ffffff/i.test(css));
   assert.ok(/\.dpr-sidebar-paper\.is-active\s*{[^}]*background:\s*#e5e7eb/i.test(css));
   assert.ok(/body\.dpr-dark \.dpr-sidebar-paper\.is-active\s*{[^}]*background:\s*#334155/i.test(css));
-  assert.ok(/\.dpr-sidebar-unread-dot\s*{[^}]*display:\s*none/i.test(css));
+  assert.ok(!css.includes('dpr-sidebar-unread-dot'));
   assert.ok(!css.includes('dpr-sidebar-axis-tab-dot'));
   assert.ok(!css.includes('dpr-sidebar-axis-section-dot'));
-  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\] > \.dpr-sidebar-paper-unread-dot\s*{[^}]*background:\s*#ef4444/i.test(css));
-  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\] > \.dpr-sidebar-paper-unread-dot\s*{[^}]*right:\s*42px/i.test(css));
-  assert.ok(/\.dpr-sidebar-paper\[data-read="1"\] > \.dpr-sidebar-paper-unread-dot\s*{[^}]*display:\s*none/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*content:\s*""/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*background:\s*#ef4444/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*right:\s*8px/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*top:\s*8px/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*width:\s*8px/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*height:\s*8px/i.test(css));
+  assert.ok(/\.dpr-sidebar-paper\[data-read="0"\]::after\s*{[^}]*z-index:\s*5/i.test(css));
 
   const readRowRule = /\.dpr-sidebar-paper\[data-read-status="read"\]\s*{[^}]*background:/i;
   assert.ok(!readRowRule.test(css), 'read should not paint the whole row');

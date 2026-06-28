@@ -1352,7 +1352,6 @@
     }).join('');
     return (
       '<li class="dpr-sidebar-paper' + sectionClass + '" ' + dataAttrs + '>' +
-      '  <span class="dpr-sidebar-unread-dot dpr-sidebar-paper-unread-dot" aria-hidden="true"></span>' +
       '  <div class="dpr-sidebar-paper-main">' +
       '    <a class="dpr-sidebar-paper-link" href="' + safeAttr(p.href) + '">' +
       '      <span class="dpr-sidebar-paper-title">' + safeText(p.title) + '</span>' +
