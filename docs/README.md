@@ -6,26 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-27
-- 运行时间：2026-06-27 20:43:03 UTC
+- 最新运行日期：2026-06-28
+- 运行时间：2026-06-28 21:10:01 UTC
 - 运行状态：成功
 - 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读1篇关于3D视觉定位的论文，聚焦多样化语言生成方法。  
-该研究提出如何让模型生成更丰富的自然语言来描述3D场景，提升定位准确性与表达多样性。  
-建议关注如何将多样化语言生成技术应用到实际3D交互系统中，如机器人或增强现实。
-- 详情：[/202606/27/README](/202606/27/README)
+1. 今日仅解读一篇视频目标分割论文《FeVOS》，探索利用前瞻信息提升分割精度。  
+2. 值得关注点：论文提出通过预测未来帧表达，增强视频对象分割的时序连贯性。  
+3. 若你关注视频分割前沿，可重点研究其“预判”机制如何平衡计算开销与效果。
+- 详情：[/202606/28/README](/202606/28/README)
 
 ### 精读区论文标签
-1. [Scaling Diverse Language Generation for 3D Visual Grounding](/202606/27/2606.20946v1-scaling-diverse-language-generation-for-3d-visual-grounding)  
-   标签：评分：8.0/10、query:vt
-   evidence：自然语言引导的三维定位
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [FeVOS: Foresight Expression Video Object Segmentation](/202606/28/2606.25585v1-fevos-foresight-expression-video-object-segmentation)  
+   标签：评分：6.0/10、query:vt
+   evidence：前瞻性指代视频目标分割
 
 
 <div class="dpr-home-promo-card">

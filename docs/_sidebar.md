@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-06-28 <!--dpr-date:20260628-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/28/2606.25585v1-fevos-foresight-expression-video-object-segmentation" data-sidebar-item="{&quot;title&quot;: &quot;FeVOS: Foresight Expression Video Object Segmentation&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.25585v1-fevos-foresight-expression-video-object-segmentation&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;前瞻性指代视频目标分割&quot;}">FeVOS: Foresight Expression Video Object Segmentation</a>
   * 2026-06-27 <!--dpr-date:20260627-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202606/27/2606.20946v1-scaling-diverse-language-generation-for-3d-visual-grounding" data-sidebar-item="{&quot;title&quot;: &quot;Scaling Diverse Language Generation for 3D Visual Grounding&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.20946v1-scaling-diverse-language-generation-for-3d-visual-grounding&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;自然语言引导的三维定位&quot;}">Scaling Diverse Language Generation for 3D Visual Grounding</a>
