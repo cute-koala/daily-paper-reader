@@ -1,0 +1,653 @@
+Title: SUMO: Segment and Track Any Motion with Nonlinear State Space Models
+
+URL Source: https://arxiv.org/pdf/2606.29861v1
+
+Published Time: Tue, 30 Jun 2026 02:08:13 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# SUMO: Segment and Track Any Motion with Nonlinear State Space Models 
+
+# Kexin Tian 1* Sixu Li 1* Keshu Wu 1 Yang Zhou 1† Zhengzhong Tu 11Texas A&M University 
+
+# Abstract 
+
+Visual Object Tracking (VOT) and Moving Object Segmen-tation (MOS) are two fundamental tasks in computer vision that involve both spatial and temporal object dynamics. Ex-isting methods rely predominantly on visual cues and thus often falter in real-world scenarios where object motions are inherently complex and nonlinear. To address this limi-tation, we propose SUMO —a zero-shot, training-free, uni-fied framework integrating nonlinear dynamics with vision-based segmentation for accurate and consistent VOT and MOS. Specifically, we develop a nonlinear State Space Model (SSM) inspired by robotics principles to capture the complex object dynamics. Building on this model, we pro-pose a Selective Unscented Filter (SUF) for accurate state estimation, which features a joint scoring mechanism and dynamically fuses multi-source predictions to identify the most plausible object state over time. Furthermore, we ap-ply a memory selection mechanism to evaluate the reliabil-ity of memory frames. Our extensive experimental results show that SUMO achieves state-of-the-art performance on 
+
+both VOT and MOS tasks. The code will be released at 
+
+github.com/kxint9625/SUMO .
+
+# 1. Introduction 
+
+Visual Object Tracking (VOT) [3, 46] and Moving Object Segmentation (MOS) [6, 22] are two critical and fundamen-tal tasks in computer vision, serving as essential compo-nents in a broad range of real-world applications, including autonomous driving [16, 54] and robotics [10, 49]. VOT aims to identify and localize a target object across frames based on its initial status, using a bounding box to represent its position and scale [60], while MOS aims to precisely segment a moving object by capturing its contour through a pixel-level mask [22]. Despite the differences, both tasks face challenges in maintaining both high accu-racy and temporal consistency, particularly under challeng-ing conditions such as complex motion and occlusion. Recent advances in foundation models have substantially 
+
+> *Equal contribution.
+> †Corresponding author.
+
+Figure 1. Comprehensive experiments demonstrate that SUMO achieves state-of-the-art performance on both VOT (left) and MOS (right) tasks. The radar plots visualize the normalized performance across multiple benchmarks and evaluation metrics. 
+
+enhanced computer vision tasks. For instance, the Segment Anything Model (SAM) [27] achieves high-precision seg-mentation masks across diverse visual scenarios. Build-ing upon SAM, the more recent SAM2 [50] further extends this capability to video sequences, enabling frame-by-frame segmentation of objects in videos. However, SAM2 remains limited in its performance on VOT and MOS, as it relies solely on visual appearance with-out modeling underlying dynamics. In real-world scenarios, however, objects often exhibit complex dynamics [55], ac-companied by frequent appearance deformation and occlu-sions, leading to significant visual variation over time. As a result, purely visual cues are often insufficient for main-taining object identity across frames, especially in VOT and MOS that require consistent spatiotemporal associa-tion. These limitations underscore the need to model object dynamics as a complement to visual appearance. Object dynamics in time-series data can be modeled us-ing State Space Models (SSMs), which offer a mathematical framework for capturing the temporal evolution of underly-ing system states [8]. Recent work such as Mamba [19] demonstrates that integrating SSMs into relatively simple neural architectures achieve performance comparable to transformers with greater computational efficiency. Sub-sequent studies further validate SSMs for modeling long-range dependencies in diverse domains [38, 41, 43]. More recently, SAMURAI [63] augments the SAM2 with a Kalman Filter to improve temporal consistency in VOT. 1
+
+> arXiv:2606.29861v1 [cs.CV] 29 Jun 2026
+
+However, the SSM in Mamba and the Kalman filter in SAMURAI are both limited to linear systems. In practice, most systems are inherently nonlinear, where adopting lin-ear approaches imposes strong inductive biases. Therefore, it is essential to employ nonlinear approaches for accurate dynamics modeling [33], especially in VOT and MOS tasks, where better capturing the nonlinear object dynamics can lead to more accurate and robust performance. To address this gap, we introduce SUMO —Segment and track any motion Using nonlinear state space MO dels—a zero-shot, training-free, unified framework that integrates nonlinear dynamics with vision-based segmentation to achieve accurate and temporally consistent VOT and MOS. We first develop a nonlinear SSM to capture the object dynamics. To enable accurate state estimation in VOT and MOS, where explicit sensor measurements are unavail-able, we propose a Selective Unscented Filter (SUF) that integrates with a purely vision-based video segmentation framework, SAM2, in a plug-and-play manner. The SUF combines predictions from both the nonlinear SSM and a mask decoder, and applies a joint scoring mechanism to se-lect the most plausible mask. The selected mask is then treated as the measurement input in the SUF’s update step, allowing the filter to refine the SSM state estimate for the next video frame. Moreover, a memory selection mecha-nism is applied to evaluate the reliability of memory frames. Our main contributions are as follows: • We present a unified framework that integrates nonlinear dynamics with vision-based segmentation, enabling accu-racy and temporal consistency in both VOT and MOS. • We design a nonlinear SSM, inspired by robotics princi-ples, to capture complex and realistic object dynamics. • We propose a SUF that enables accurate state estimation in the absence of explicit sensor measurements, integrat-ing seamlessly with SAM2 in a plug-and-play manner. • SUMO achieves the state-of-the-art performance in both VOT and MOS tasks. 
+
+# 2. Related Works 
+
+2.1. VOT and MOS 
+
+Traditionally, VOT methods are broadly categorized into three paradigms. Siamese-based trackers perform tracking by comparing a fixed template from the initial frame with the current search region using similarity matching [3, 13, 30, 31]. Discriminative trackers learn a target-specific clas-sifier online to distinguish the object from the background and update it during tracking [4, 15, 67]. While Siamese-based methods often struggle with large appearance vari-ations, discriminative approaches rely on expensive on-line updates. To address these limitations, transformer-based trackers have emerged, using attention mechanisms to model rich spatial and temporal dependencies for ro-bust feature fusion [11, 14, 44, 66]. Meanwhile, existing 
+
+MOS methods can be broadly categorized into flow-based approaches [5, 6, 9, 59], which rely on optical flow to ex-tract short-term pixel-wise motion, and trajectory-based ap-proaches [1, 25, 29], which cluster point trajectories to iden-tify groups exhibiting consistent motion and capture long-range motion patterns. However, most existing methods in both tasks are purely vision-based and struggle to capture the complex, nonlinear dynamics of objects in real-world scenarios, particularly under challenging conditions such as occlusion, shape deformation, and abrupt movement. 
+
+2.2. SSMs 
+
+Recent studies have increasingly integrated SSMs into mod-ern machine learning architectures. Mamba [19] leverages input-conditioned SSMs for efficient long-range modeling, outperforming transformers on a variety of sequence mod-eling tasks with lower computational cost, thereby demon-strating the effectiveness of SSMs in neural architectures. A series of follow-up works have further extended the inte-gration of SSMs to a wide range of domains. For example, VMamba [41] adapts SSMs to visual tasks, achieving strong performance in image classification and dense prediction. U-Mamba [43] and SegMamba [61] apply SSMs to biomed-ical segmentation, enhancing the modeling of long-range dependencies in medical images. PointMamba [38] incor-porates SSMs into point cloud analysis for 3D understand-ing. These works collectively demonstrate the strong per-formance and versatility of SSM-based architectures across diverse domains. However, all of these methods are built upon linear SSMs, which can only capture linear dynam-ics or rely on simplified linear assumptions. In practice, real-world object dynamics are often complex and highly nonlinear. Therefore, relying solely on linear SSMs is in-adequate for effectively modeling the complex real-world dynamics required in VOT and MOS tasks. 
+
+# 3. Methodology 
+
+This section presents the methodology of the SUMO frame-work. We first describe the vision modules in Sec. 3.1, fol-lowed by the nonlinear State Space Model in Sec. 3.2, the Selective Unscented Filter in Sec. 3.3, and the Memory Se-lection Mechanism in Sec. 3.4. An overview of the frame-work is shown in Fig. 2. 
+
+3.1. Vision Modules 
+
+3.1.1. Image Encoder 
+
+The image encoder extracts multi-scale features once per frame, producing hierarchical feature maps for memory construction and subsequent decoding. We adopt the SAM2 [50] encoder architecture, which uses a Hiera [51] model pretrained with masked autoencoding [20]. 2Figure 2. Framework Architecture. 
+
+3.1.2. Memory Attention 
+
+This module integrates selected memory frames into the current frame via a memory selection mechanism, which will be detailed in Eq.(29), and a transformer-based atten-tion architecture that follows the SAM2[50] design, which applies self-attention to the current frame features followed by cross-attention to the memory features. 
+
+3.1.3. Prompt Encoder 
+
+In the initial frame, a bounding box specifying the tracking target is provided as the prompt. The prompt encoder pro-cesses this input, which is then passed to the mask decoder to generate the initial object mask for tracking. 
+
+3.1.4. Mask Decoder 
+
+The mask decoder takes as input the fused features from the memory attention module and high-resolution image fea-tures from the image encoder. It then decodes three mask candidates, each with an IoU score, an objectness score in-dicating the object’s presence, and an object pointer, which is a compact embedding encoding the object’s identity and appearance. All three mask candidates are retained for the subsequent SUF process. 
+
+3.2. Nonlinear SSMs 
+
+3.2.1. Brief Review of Linear SSM 
+
+Linear SSM (or more precisely, state-space representation 
+
+of linear systems [8]) provides a principled framework for representing the evolution of linear dynamical systems. In the discrete-time setting, the system state xt ∈ Rn at time step t is determined by its previous state xt−1 and a control input ut−1 ∈ Rm. The dynamics are typically described by the following first-order difference equation: 
+
+xt = Ax t−1 + Bu t−1, (1) where A ∈ Rn×n is the state matrix that characterizes the intrinsic dynamics of the system, and B ∈ Rn×m encodes how the control input influences the state evolution. In real-ity, the dynamics of nearly all systems are nonlinear. Repre-senting them with linear SSMs generally entails lineariza-tion or model simplification, possibly resulting in notable approximation errors and restricted representational ability. 
+
+3.2.2. Nonlinear SSM 
+
+Nonlinear SSM is a generalization of linear SSM and offers greater expressive power and improved accuracy in model-ing real-world dynamics [26]. For a discrete-time system, the dynamics are described as 
+
+xt = f (xt−1, ut−1), (2) where f (·) is a vector-valued (nonlinear) function. In robotics [42], a simple yet versatile way to describe planar motion is to incorporate the notion of a heading direction [17, 53]. Such models can represent various systems, including wheeled robots, ground vehicles, air-planes, bicycles, rolling robots, and even humans or animals (e.g., when walking or running in the direction they face) [2, 23, 28, 34–36]. To accommodate more agile motions, we extend the model in [53] by allowing the heading direction to be instantaneously controlled and apply the resulting for-mulation to the image plane. Additionally, we augment the state with variables describing the object’s bounding box. 
+
+State For our nonlinear SSM, we define the state vector 
+
+x ∈ R8 as 
+
+x = [ x, y, a, h, v, θ, v a, v h]T , (3) where x and y denote the center of the bounding box in pixel coordinates. h represents the height of the bounding box and a the aspect ratio of the bounding box ( a = w/h ). 
+
+v and θ denote the speed and heading direction of motion, respectively. va and vh represent the rate of change of a and 
+
+h, respectively. This formulation jointly captures the object dynamics and shape variations. 
+
+Remark 1 Note that if the sensor measurements of 
+
+v, θ, v a, v h were available, they could be grouped as the control input u in Eq. (2) . However, such data are unavail-
+
+3able in VOT and MOS. Hence, we include these variables in the state vector for estimation and set ut as zero for all t.
+
+Nonlinear State Equation To represent the temporal evolution of the state, we introduce a nonlinear state equa-tion f that predicts the state xt based on xt−1. Additionally, we introduce a process noise rt−1 for unknown effects: 
+
+xt = f (xt−1) + rt−1, (4) Let fi denote the ith row of f (·), we have 
+
+f1 = xt−1 + vt−1 · cos( θt−1) · ∆t, (5) 
+
+f2 = yt−1 + vt−1 · sin( θt−1) · ∆t, (6) 
+
+f3 = at−1 + va,t −1 · ∆t, f4 = ht−1 + vh,t −1 · ∆t, (7) 
+
+f5 = vt−1, f6 = θt−1, f7 = va,t −1, f8 = vh,t −1, (8) where ∆t denotes the time interval between two frames. This state equation introduces nonlinearity through the trigonometric dependency on θ [53], allowing the system to naturally model curved motion trajectories in the im-age plane. In addition, it explicitly accounts for temporal changes in the target’s shape via va and vh.
+
+Observation Model We define the observation vector as: 
+
+zt = [ xt, y t, a t, h t]⊤, (9) which is obtained from the selected mask generated by mask decoder. The observation model maps xt to zt:
+
+zt = h(xt) + qt = Hx t + qt, (10) where qt represents the observation noise and 
+
+H = [ I4 04×4]. (11) 
+
+3.3. Selective Unscented Filter 
+
+Accurate state estimation under nonlinear dynamics is cru-cial in real-world scenarios for recovering the state value of the target object from noisy observations. Especially in VOT and MOS, the target object often suffers from occlusions, blurriness, and deformations, making purely appearance-based decisions unreliable. Therefore, it is nec-essary to estimate the target object’s state throughout the time sequence. The Unscented Filter (UF) [24] is a powerful state es-timation method that deals with nonlinear SSMs. It offers significantly enhanced accuracy compared to linearization-based methods, while being derivative-free and well-suited for strongly nonlinear dynamics. In conventional state es-timation tasks, UF relies on measurements from physical sensors to update the system state. However, in VOT and MOS, such measurements are unavailable. To address this challenge, we propose a Selective Un-scented Filter (SUF), built upon the nonlinear SSM intro-duced in Eq. (4), which unifies joint scoring, mask selec-tion, and state estimation into a single framework. 
+
+3.3.1. Sigma Point Generation 
+
+Since a nonlinear function cannot be directly applied to a probability distribution, and computing the output distribu-tion of f (x) is often intractable, the SUF employs the Un-scented Transform [24] for approximation. It does so by deterministically generating a set of sigma points from the current state distribution, which are designed to match its mean and covariance up to second-order accuracy. This en-ables the uncertainty to be effectively propagated through nonlinear dynamics. At each timestep t − 1, given a state vector of dimen-sion n, the SUF generates a set of 2n + 1 sigma points 
+
+{χ(i)
+
+> t−1
+
+}2ni=0 from the current mean μt−1 ∈ Rn and covari-ance Σt−1 ∈ Rn×n. Each sigma point is assigned with weights w(m) 
+
+> i
+
+and w(c) 
+
+> i
+
+for the computation of the predicted mean and covariance, respectively. We have 
+
+χ(0)  
+
+> t−1
+
+= μt−1, (12) 
+
+χ(i) 
+
+> t−1
+
+= μt−1 + √n + λ · L:,i , i = 1 , . . . , n, (13) 
+
+χ(i+n) 
+
+> t−1
+
+= μt−1 − √n + λ · L:,i , i = 1 , . . . , n. (14) 
+
+w(m)0 = λn+λ , w(c)0 = λn+λ + (1 − α2 + β), (15) 
+
+w(m) 
+
+> i
+
+= w(c) 
+
+> i
+
+= 12( n+λ) , i = 1 , . . . , 2n. (16) The parameters α, κ, and β are hyperparameters that de-termine the spread and overall shape of the sigma point distribution. Here, L = Cholesky (Σt−1) in Eq. (13)-(14) denotes the lower triangular matrix obtained from the Cholesky decomposition of the covariance matrix Σt−1,and λ = α2(n + κ) − n is a scaling factor [56]. 
+
+Prediction Step Once the sigma points are generated, each sigma point χ(i) 
+
+> t−1
+
+is propagated through the nonlinear state equation f (·), as defined in Eq. (4), yielding: 
+
+χ(i) 
+
+> t
+
+= f (χ(i)
+
+> t−1
+
+). (17) Then the mean ˆμtx and covariance ˆΣtx of the predicted state ˆxt ∼ N ( ˆ μtx, ˆΣtx) at time step t are computed as: 
+
+ˆμtx =
+
+> 2n
+
+X
+
+> i=0
+
+w(m) 
+
+> i
+
+χ(i) 
+
+> t
+
+, (18) 
+
+ˆΣtx =
+
+> 2n
+
+X
+
+> i=0
+
+w(c)
+
+> i
+
+
+
+χ(i) 
+
+> t
+
+− ˆμtx
+
+  
+
+χ(i) 
+
+> t
+
+− ˆμtx
+
+⊤
+
++ Σ rr , (19) where Σrr ∈ Rn×n is a diagonal process noise covari-ance matrix, built from predefined standard deviations of the components in the state vector x.The predicted sigma points are mapped into the obser-vation space using the observation model h(·). In our case, 4the observation is a bounding box represented as [x, y, a, h ],which is a linear subset of the full state vector. Each sigma point is transformed as: 
+
+ˆz(i) 
+
+> t
+
+= h(χ(i) 
+
+> t
+
+) = Hχ(i) 
+
+> t
+
+. (20) The predicted observation mean ˆμtz is then computed as: 
+
+ˆμtz =
+
+> 2n
+
+X
+
+> i=0
+
+w(m) 
+
+> i
+
+ˆz(i) 
+
+> t
+
+. (21) 
+
+Joint Scoring Mechanism Let M = {m1, m 2, m 3} de-note the set of three mask candidates generated by the mask decoder, each accompanied by a mask decoder score IoU md ∈ R3 predicted by its IoU head. For each mask candidate mi ∈ M , we retrieve its tight bounding box bi. Separately, from the predicted observation mean ˆμtz obtained in Eq. (21), we extract the center coordi-nates (x, y ), height h, and aspect ratio a, which define the NSSM-predicted bounding box ˆbNSSM . We then compute the IoU between bi and ˆbnssm to obtain the NSSM score for each mask, denoted as IoU nssm ,i .Finally, each mask candidate is assigned a joint score combining the the NSSM score and the mask decoder score: Score i = λ · IoU nssm ,i + (1 − λ) · IoU md ,i , (22) where λ ∈ [0 , 1] . In cases where all IoU md ,i < 0.5, we interpret this as a sign of low decoder confidence, typically due to occlusion, blur, or deformation. In such cases, we fully rely on the bounding box predicted by SUF to guide selection by discarding IoU md , and instead compute: Score i = IoU nssm ,i . (23) We select the mask mi∗ with the highest final score: 
+
+i∗ = arg max  
+
+> i
+
+Score i, (24) which serves as the final output for the current frame and is further utilized in the downstream update step. 
+
+Update Step After selecting the final mask, to prevent degradation of the state estimate due to unreliable obser-vations, we introduce a mechanism to determine whether to perform the SUF update step. Specifically, we apply a stability threshold τs on appear-ance confidence. If the selected candidate’s appearance IoU does not satisfy IoU md ,i ∗ > τ s, the update step is skipped, and we directly use the predicted state as the estimate. Conversely, if IoU md ,i ∗ > τ s, we consider the mask re-liable and use it to produce an observation, zt, and proceed with the SUF update step. Specifically, we first compute the predicted observation covariance Σtzz at time step t as: 
+
+Σtzz =
+
+> 2n
+
+X
+
+> i=0
+
+w(c)
+
+> i
+
+
+
+ˆz(i) 
+
+> t
+
+− ˆμtz
+
+  
+
+ˆz(i) 
+
+> t
+
+− ˆμtz
+
+⊤
+
++ Σ qq , (25) where Σqq ∈ Rm×m is a diagonal observation noise co-variance matrix, defined from assumed noise levels in the observation’s position and scale. The cross-covariance Σt 
+
+> ˆxz
+
+between the predicted state and the predicted observation at time step t is computed as: 
+
+Σt 
+
+> ˆxz
+
+=
+
+> 2n
+
+X
+
+> i=0
+
+w(c)
+
+> i
+
+
+
+χ(i) 
+
+> t
+
+− ˆμtx
+
+  
+
+ˆz(i) 
+
+> t
+
+− ˆμtz
+
+⊤
+
+. (26) Then, the update gain is obtained by: 
+
+Kt = Σt
+
+> ˆxz
+
+ Σtzz 
+
+−1 . (27) Finally, the posterior distribution of the estimated state 
+
+xt ∼ N (μt, Σt) at time step t is updated by computing its mean μt and covariance Σt as: 
+
+μt = ˆ μtx + Kt
+
+ zt − ˆμtz
+
+ , Σt = ˆΣtx − KtΣtzz K⊤ 
+
+> t
+
+. (28) 
+
+3.4. Memory Modules and Mechanism 
+
+Memory Encoder fuses high-resolution image features with the final mask to capture appearance and location. It uses a learned no-object embedding when absent and posi-tional encodings for temporal modeling. 
+
+Memory Bank stores recent contextual features in FIFO queues for memory attention. Each entry contains spatial features, positional encodings, and object pointers for re-trieving relevant information over time. 
+
+3.4.1. Memory Selection Mechanism 
+
+Attending to low-quality memory frames can degrade the prediction of the current frame. Therefore, we applied a memory selection mechanism that selects only reliable frames from the memory bank. A past frame at timestep 
+
+t is selected for memory attention only if all the following conditions are satisfied: IoU t 
+
+> md
+
+> τ md , st 
+
+> obj
+
+> τ obj , IoU t 
+
+> nssm
+
+> τ nssm (29) Here, for the frame at the timestep t, IoU t
+
+> md
+
+, st 
+
+> obj
+
+and IoU t
+
+> nssm
+
+denote the final mask decoder score, occlusion score, and NSSM score, respectively, with the corresponding thresh-olds τmd , τ obj , τ nssm .
+
+# 4. Experiments 
+
+4.1. Experimental Settings 
+
+4.1.1. Benchmarks 
+
+We evaluate the VOT performance of SUMO on La-SOT [18], a large-scale benchmark for long-term track-ing; LaSOT-ext [18], which extends LaSOT with more challenging and longer sequences; and GOT-10k [21], which focuses on generalization with 10,000+ videos and 560+ object classes. To evaluate the MOS performance of 5Methods Source GOT-10k LaSOT LaSOT-ext                                                                                                                                                                                               
+
+> AO(%) SR 0.5(%) SR 0.75 (%) AUC(%) Pnorm (%) P(%) AUC(%) Pnorm (%) P(%) SiamRPN++ [31] CVPR’19 51.7 61.6 32.5 49.6 56.9 49.1 34.0 41.6 39.6 TransT 256 [11] CVPR’21 67.1 76.8 60.9 64.9 73.8 69.0 ---STARK 320 [62] ICCV’21 68.8 78.1 64.1 67.1 76.9 72.2 ---SwinTrack-B 384 [39] NeurIPS’22 72.4 80.5 67.8 71.4 79.4 76.5 ---MixFormer 288 [14] CVPR’22 70.7 80.0 67.8 69.2 78.7 74.7 ---OSTrack 384 [65] ECCV’22 73.7 83.2 70.8 71.1 81.1 77.6 50.5 61.3 57.6 SeqTrack-B 384 [12] CVPR’23 74.5 84.3 71.4 71.5 81.1 77.8 50.5 61.6 57.5 ROMTrack-B 256 [7] ICCV’23 72.9 82.9 70.2 69.3 78.8 75.6 47.2 53.5 52.9 EVPTrack-B 384 [52] AAAI’24 76.6 86.7 73.9 72.7 82.9 80.3 53.7 65.5 61.9 ODTrack-B 384 [68] AAAI’24 77.0 87.9 75.1 73.2 83.2 80.6 52.4 63.9 60.1 AQATrack-L 384 [60] CVPR’24 76.0 85.2 74.9 72.7 82.9 80.2 52.7 64.2 60.8 LoRAT-B 224 [40] ECCV’24 72.1 81.8 70.7 71.7 80.9 77.3 50.3 61.6 57.1 LoRAT-L 224 [40] ECCV’24 75.7 84.9 75.0 74.2 83.6 80.9 52.8 64.7 60.0 SAMURAI-L [63] ArXiv’25 82.7 94.5 83.4 70.1 78.1 75.5 59.0 71.7 70.1 SUMO-S Ours 82.5 93.2 81.2 70.9 78.3 76.1 57.3 66.8 68.5 SUMO-B Ours 82.0 93.0 80.2 72.8 81.0 78.6 56.7 65.8 68.2 SUMO-L Ours 83.5 95.5 83.9 74.4 82.8 80.5 61.2 72.2 73.9
+
+Table 1. Comparison of VOT performance across GOT-10k [21], LaSOT [18], and LaSOT-ext [18] datasets.                                                                                                                 
+
+> Methods ARC BC CM DEF FM FOC IV LR MB OV POC ROT SV VC
+> TransT [11] 63.2 57.9 67.2 67.0 51.0 55.3 65.2 56.4 63.0 58.6 62.0 64.3 64.6 62.6 SeqTrack [12] 70.9 65.9 74.6 74.9 55.1 63.0 71.4 65.2 70.5 67.2 69.7 72.4 72.4 74.9 EVPTrack [52] 71.3 64.8 75.6 73.6 61.1 65.1 72.1 66.1 71.5 67.8 70.1 72.0 72.5 74.5 ODTrack [68] 71.9 66.6 76.1 73.8 60.6 65.1 72.8 67.0 70.9 69.3 70.7 72.2 73.0 75.5
+> AQATrack [60] 71.3 64.8 75.6 73.6 61.1 65.1 72.1 66.1 71.5 67.8 70.1 72.0 72.5 74.5 SAM2.1 [50] 66.3 70.1 73.0 70.5 63.6 70.9 65.5 68.6 70.6 63.0 61.3 66.3 62.9 70.0 SUMO-L 73.5 73.2 76.3 75.1 71.7 73.0 73.0 72.1 73.9 67.4 72.7 73.8 73.7 75.3
+
+Table 2. Comparison of attribute-wise AUC(%) Results for LaSOT [18]. 
+
+SUMO, we conduct experiments on the established datasets 
+
+SegTrackv2 [32], FBMS-59 [47], DAVIS2016 [48], and 
+
+DAVIS16-MOVING [22], which is a subset of DAVIS2016 that focuses on moving objects. 
+
+4.1.2. Metrics 
+
+To evaluate VOT performance, we adopt AUC , Pnorm , P,
+
+AO , and SR metrics, as defined in [21, 46]. For MOS per-formance, we use region similarity ( J) and contour accuracy (F) metrics, as outlined in [58]. Additional implementation details are provided in the supplementary material. 
+
+4.2. VOT Performance 
+
+4.2.1. Quantitative Performance Overall VOT Performance We evaluate the quantita-tive performance of SUMO on the GOT-10k, LaSOT, and LaSOT-ext benchmarks, comparing it with several strong and widely used baselines, as shown in Tab. 1. The re-sults demonstrate that SUMO achieves state-of-the-art per-formance in VOT across multiple evaluation metrics. No-tably, on the LaSOT-ext benchmark, which serves as a chal-lenging stress test with longer sequences and more com-plex tracking scenarios, SUMO achieves the highest scores across all three metrics, outperforming the strongest base-line by +2.2% in AUC and +3.8% in precision. These re-sults further highlight SUMO’s strong performance in long-sequence tracking, its robustness in complex environments, and its ability to generalize effectively to unseen scenarios. 
+
+Attribute-wise Performance To further evaluate SUMO’s performance under challenging tracking condi-tions such as occlusion and deformation, we conduct a detailed attribute-wise analysis on the LaSOT benchmark following the protocol defined in [18]. These attributes are designed to capture various difficult scenarios commonly encountered in real-world tracking tasks. As shown in Tab. 2, SUMO consistently achieves substantial improve-ments under these complex conditions compared to strong baselines, demonstrating its superior robustness in handling difficult tracking situations. These results further highlight the effectiveness of the proposed Nonlinear SSM and SUF in modeling complex object dynamics and maintaining stable tracking performance under challenging scenarios. 
+
+4.2.2. Qualitative Performance 
+
+Figure 3 presents qualitative VOT results of SUMO in com-parison with SAM2 and SAMURAI across a variety of challenging scenarios, including complex motion, fast mo-6Figure 3. Qualitative visualization of VOT performance. 
+
+tion, long-term occlusion, blurriness, and similar appear-ance. These examples illustrate typical difficulties encoun-tered in real-world tracking tasks. Overall, SUMO demon-strates robust and accurate VOT performance, consistently maintaining tight alignment with the ground truth through-out the tracking process. It effectively handles diverse chal-lenges by reliably identifying the correct object and pre-cisely localizing it, even under severe visual disturbances. These qualitative results further highlight SUMO’s strong resilience and stability in complex real-world conditions. 
+
+4.3. MOS Performance 
+
+4.3.1. Quantitative Performance 
+
+Table 3 illustrates the quantitative MOS performance of SUMO in comparison with several strong baselines on the SegTrackv2, FBMS-59, DAVIS16-MOVING, and DAVIS2016 datasets. These benchmarks cover a variety of motion segmentation scenarios and provide a comprehen-sive evaluation of segmentation accuracy and temporal con-sistency. Notably, SUMO achieves state-of-the-art perfor-mance in MOS, consistently outperforming prior methods across all datasets in both region similarity ( J ) and con-tour accuracy ( F). Specifically, SUMO surpasses the pre-vious best by +8.8% on SegTrackv2 ( J ), +8.5% on FBMS-59 ( F), and +1.0% on DAVIS2016-MOVING ( J &F). These results clearly demonstrate SUMO’s effectiveness in achieving temporally consistent and accurate motion seg-mentation, highlighting its strong generalization capability across diverse and challenging scenarios. 
+
+4.3.2. Qualitative Performance 
+
+The qualitative results of MOS performance are presented in Fig. 4. Compared to the baselines, SUMO generates precise segmentation masks with accurate object contours, clearly separating the target object from the background and nearby distractors. In particular, SUMO preserves fine-grained object boundaries while maintaining stable segmen-tation across frames. This capability is enabled by the in-clusion of object shape in the state vector of the nonlinear SSM, as defined in Eq. (3), which jointly models both object shape and temporal dynamics during the tracking process. As a result, the model can effectively capture the evolv-ing geometry of moving objects while maintaining temporal consistency. Overall, SUMO demonstrates accurate, shape-aware, and motion-consistent segmentation of moving ob-jects across diverse challenging scenarios. 
+
+4.4. Ablation Studies 
+
+4.4.1. Effect of Core Components on VOT 
+
+As shown in Tab. 4, we ablate three key SUMO com-ponents: the nonlinear SSM, SUF, and memory selection mechanism. Replacing the nonlinear SSM with a linear variant while retaining SUF and memory (second row) re-duces AUC by 2.8%, demonstrating the importance of non-linear dynamics. Removing all three components (first row) 7Methods Source SegTrackv2 FBMS-59 DAVIS16-MOVING DAVIS2016 
+
+J ↑ J ↑ F ↑ J &F ↑ J ↑ F ↑ J &F ↑ J ↑ F ↑ 
+
+CIS [64] CVPR’19 62.0 63.6 - 66.2 67.6 64.8 68.6 70.3 66.8 OCLR-flow [57] NIPS’22 67.6 65.5 64.9 70.0 70.0 70.0 71.2 72.0 70.4 OCLR-TTA [57] NIPS’22 72.3 69.9 68.3 78.5 80.2 76.9 78.8 80.8 76.8 EM [45] PAMI’23 55.5 57.9 56.0 75.2 76.2 74.3 70.0 69.3 70.7 RCF-Stage1 [37] CVPR’23 76.7 69.9 - 77.3 78.6 76.0 78.5 80.2 76.9 RCF-All [37] CVPR’23 79.6 72.4 - 79.6 81.0 78.3 80.7 82.1 79.2 ABR [58] ECCV’24 76.6 81.9 79.6 72.0 70.2 73.7 72.5 71.8 73.2 Huang et al. [22] CVPR’25 76.3 78.3 82.8 89.5 89.2 89.7 90.9 90.6 91.0 SUMO-S Ours 84.1 89.0 89.4 85.0 83.2 86.8 87.3 86.0 88.6 SUMO-B Ours 86.7 89.5 90.5 87.8 84.7 90.8 89.5 87.1 91.9 SUMO-L Ours 88.4 90.1 91.3 90.5 89.9 91.0 91.3 90.7 92.0 
+
+Table 3. Comparison of MOS performance across SegTrackv2 [32], FBMS-59 [47], DAVIS16-MOVING [22], and DAVIS2016 [48] datasets. 
+
+Figure 4. Qualitative visualization of MOS performance. 
+
+causes a 3.5% drop, confirming their combined benefit. Adding memory selection (third vs. fourth row) improves AUC by 0.4%, indicating its complementary role in tempo-ral coherence. 
+
+4.4.2. Effect of Core Components on MOS 
+
+We perform an ablation study on the nonlinear SSM, SUF, and memory selection mechanism in MOS. Replacing the nonlinear SSM with a linear variant (second row) reduces 
+
+J &F by 3.2%, highlighting the importance of nonlinear dynamics modeling. Removing all components (first row) causes a 3.3% drop, confirming the overall benefit of the full model. Disabling memory selection (third row) results in a smaller 0.2% decline, indicating its complementary role in motion segmentation. Overall, the nonlinear SSM provides the main performance gain, while SUF and memory selec-tion offer additional improvements. 
+
+# 5. Conclusions 
+
+In this work, we introduce SUMO, a unified, zero-shot, training-free framework that combines nonlinear dynamics 
+
+Table 4. Effect of core components on VOT. Results are reported on LaSOT.                           
+
+> SSM SUF Memory AUC(%) Pnorm (%) P(%)
+> ✗✗✗70.9 (-3.5%) 78.9 (-3.9%) 76.4 (-4.1%) Linear ✓✓71.6 (-2.8%) 79.4 (-3.4%) 76.9 (-3.6%) Nonlinear ✓✗74.0 (-0.4%) 82.3 (-0.5%) 80.0 (-0.5%) Nonlinear ✓✓74.4 82.8 80.5
+
+Table 5. Effect of core components on MOS. Results are reported on DAVIS16-MOVING.                           
+
+> SSM SUF Memory J&F ↑ J ↑ F ↑
+> ✗✗✗87.2 (-3.3%) 85.1 (-4.8%) 89.2 (-0.8%) Linear ✓✓87.3 (-3.2%) 85.3 (-4.6%) 89.2 (-0.8%) Nonlinear ✓✗90.3 (-0.2%) 89.7 (-0.2%) 90.6 (-0.4%) Nonlinear ✓✓90.5 89.9 91.0
+
+modeling with vision-based segmentation to achieve accurate and temporally consistent performance on both VOT and MOS tasks. While most existing methods are vision-only, real-world objects often exhibit complex and nonlinear motion patterns. To address this, we introduced a nonlinear SSM to better capture the complex object dynamics. Building on the SSM, we proposed a SUF for accurate state estimation, which incorporates a joint scoring mechanism and adaptively fuses predictions from multiple sources to infer the most plausible object state over time. Extensive experiments demonstrate that SUMO achieves state-of-the-art performance on both tasks. On VOT, SUMO outperforms baselines by up to +3.8% in Precision, while on MOS, it surpasses the previous best by up to +8.8% in region similarity ( J ). Qualitative results further indicate that SUMO performs especially well in challenging scenarios, including occlusion, blur-riness, and complex motion, and generates fine-grained, precise masks that accurately capture object contours. 8References 
+
+[1] Daniel Barath and Jiri Matas. Progressive-x: Efficient, anytime, multi-model fitting algorithm. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 3780–3788, 2019. 2 [2] Joseph Z Ben-Asher and Elon D Rimon. Time optimal tra-jectories for a car-like mobile robot. IEEE Transactions on Robotics , 38(1):421–432, 2021. 3 [3] Luca Bertinetto, Jack Valmadre, Joao F Henriques, Andrea Vedaldi, and Philip HS Torr. Fully-convolutional siamese networks for object tracking. In Computer vision–ECCV 2016 workshops: Amsterdam, the Netherlands, October 8-10 and 15-16, 2016, proceedings, part II 14 , pages 850–865. Springer, 2016. 1, 2 [4] Goutam Bhat, Martin Danelljan, Luc Van Gool, and Radu Timofte. Learning discriminative model prediction for track-ing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 6182–6191, 2019. 2 [5] Pia Bideau and Erik Learned-Miller. It’s moving! a prob-abilistic model for causal motion segmentation in moving camera videos. In European Conference on Computer Vi-sion , pages 433–449. Springer, 2016. 2 [6] Markus Bosch. Deep learning for robust motion seg-mentation with non-static cameras. arXiv preprint arXiv:2102.10929 , 2021. 1, 2 [7] Yidong Cai, Jie Liu, Jie Tang, and Gangshan Wu. Ro-bust object modeling for visual tracking. In Proceedings of the IEEE/CVF international conference on computer vision ,pages 9589–9600, 2023. 6 [8] Frank M Callier and Charles A Desoer. Linear system theory .Springer Science & Business Media, 2012. 1, 3 [9] Zhe Cao, Abhishek Kar, Christian Hane, and Jitendra Malik. Learning independent object motion from unlabelled stereo-scopic videos. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 5594– 5603, 2019. 2 [10] Fei Che, Jie Li, Yifeng Niu, Lizhen Wu, Wenchen Yao, and Chao Yan. Linear rotate subspaee based visual tracking methods with application to uav stand-off target tracking. In 
+
+2019 IEEE International Conference on Unmanned Systems (ICUS) , pages 914–919, 2019. 1 [11] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang, and Huchuan Lu. Transformer tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8126–8135, 2021. 2, 6 [12] Xin Chen, Houwen Peng, Dong Wang, Huchuan Lu, and Han Hu. Seqtrack: Sequence to sequence learning for visual ob-ject tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 14572– 14581, 2023. 6 [13] Zedu Chen, Bineng Zhong, Guorong Li, Shengping Zhang, and Rongrong Ji. Siamese box adaptive network for visual tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 6668–6677, 2020. 2 [14] Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu. Mixformer: End-to-end tracking with iterative mixed atten-tion. In Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , pages 13608–13618, 2022. 2, 6 [15] Martin Danelljan, Goutam Bhat, Fahad Shahbaz Khan, and Michael Felsberg. Atom: Accurate tracking by overlap max-imization. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4660–4669, 2019. 2 [16] Shuxiao Ding, Lukas Schneider, Marius Cordts, and Juergen Gall. Ada-track: End-to-end multi-camera 3d multi-object tracking with alternating detection and association. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 15184–15194, 2024. 1[17] Lester E Dubins. On curves of minimal length with a con-straint on average curvature, and with prescribed initial and terminal positions and tangents. American Journal of math-ematics , 79(3):497–516, 1957. 3 [18] Heng Fan, Hexin Bai, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia Yu, Harshit, Mingzhen Huang, Juehuan Liu, et al. Lasot: A high-quality large-scale single object tracking benchmark. International Journal of Computer Vision , 129 (2):439–461, 2021. 5, 6 [19] Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. arXiv preprint arXiv:2312.00752 , 2023. 1, 2 [20] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ ar, and Ross Girshick. Masked autoencoders are scalable vision learners. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 16000– 16009, 2022. 2 [21] Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A large high-diversity benchmark for generic object tracking in the wild. IEEE transactions on pattern analysis and machine intelligence , 43(5):1562–1577, 2019. 5, 6 [22] Nan Huang, Wenzhao Zheng, Chenfeng Xu, Kurt Keutzer, Shanghang Zhang, Angjoo Kanazawa, and Qianqian Wang. Segment any motion in videos. In Proceedings of the Com-puter Vision and Pattern Recognition Conference , pages 3406–3416, 2025. 1, 6, 8 [23] Ibrahim Ibrahim, Wilm Decr´ e, and Jan Swevers. Accelerated reeds-shepp and under-specified reeds-shepp algorithms for mobile robot path planning. IEEE Transactions on Robotics ,2025. 3 [24] Simon J Julier and Jeffrey K Uhlmann. Unscented filtering and nonlinear estimation. Proceedings of the IEEE , 92(3): 401–422, 2004. 4 [25] Laurynas Karazija, Iro Laina, Christian Rupprecht, and An-drea Vedaldi. Learning segmentation from point trajecto-ries. Advances in Neural Information Processing Systems ,37:112573–112597, 2024. 2 [26] HK Khalil. Nonlinear systems. 3rd edition , 2002. 3 [27] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-thing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 4015–4026, 2023. 1 
+
+9[28] Deepak Prakash Kumar, Swaroop Darbha, Satya-narayana Gupta Manyam, and David Casbeer. The weighted markov-dubins problem. IEEE Robotics and Automation Letters , 8(3):1563–1570, 2023. 3 [29] Taotao Lai, Hanzi Wang, Yan Yan, Tat-Jun Chin, and Wan-Lei Zhao. Motion segmentation via a sparsity constraint. 
+
+IEEE Transactions on Intelligent Transportation Systems , 18 (4):973–983, 2016. 2 [30] Bo Li, Junjie Yan, Wei Wu, Zheng Zhu, and Xiaolin Hu. High performance visual tracking with siamese region pro-posal network. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 8971–8980, 2018. 2 [31] Bo Li, Wei Wu, Qiang Wang, Fangyi Zhang, Junliang Xing, and Junjie Yan. Siamrpn++: Evolution of siamese vi-sual tracking with very deep networks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4282–4291, 2019. 2, 6 [32] Fuxin Li, Taeyoung Kim, Ahmad Humayun, David Tsai, and James M Rehg. Video segmentation by tracking many figure-ground segments. In Proceedings of the IEEE international conference on computer vision , pages 2192–2199, 2013. 6, 8[33] Sixu Li and Yang Zhou. Nonlinear oscillatory response of automated vehicle car-following: Theoretical analysis with traffic state and control input limits. Transportation Research Part B: Methodological , 201:103315, 2025. 2 [34] Sixu Li, Yang Zhou, Xinyue Ye, Jiwan Jiang, and Meng Wang. Sequencing-enabled hierarchical cooperative cav on-ramp merging control with enhanced stability and feasibility. 
+
+IEEE Transactions on Intelligent Vehicles , 2024. 3 [35] Sixu Li, Deepak Prakash Kumar, Swaroop Darbha, and Yang Zhou. Closed-form generation of paths for motion planning of a convexified reeds-shepp vehicle on a sphere. Available at SSRN 5227769 , 2025. [36] Sixu Li, Deepak Prakash Kumar, Swaroop Darbha, and Yang Zhou. Time-optimal convexified reeds-shepp paths on a sphere. arXiv preprint arXiv:2504.00966 , 2025. 3 [37] Long Lian, Zhirong Wu, and Stella X Yu. Bootstrapping objectness from videos by relaxed common fate and visual grouping. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 14582– 14591, 2023. 8 [38] Dingkang Liang, Xin Zhou, Wei Xu, Xingkui Zhu, Zhikang Zou, Xiaoqing Ye, Xiao Tan, and Xiang Bai. Pointmamba: A simple state space model for point cloud analysis. arXiv preprint arXiv:2402.10739 , 2024. 1, 2 [39] Liting Lin, Heng Fan, Zhipeng Zhang, Yong Xu, and Haibin Ling. Swintrack: A simple and strong baseline for trans-former tracking. Advances in Neural Information Processing Systems , 35:16743–16754, 2022. 6 [40] Liting Lin, Heng Fan, Zhipeng Zhang, Yaowei Wang, Yong Xu, and Haibin Ling. Tracking meets lora: Faster training, larger model, stronger performance. In European Confer-ence on Computer Vision , pages 300–318. Springer, 2024. 6[41] Yue Liu, Yunjie Tian, Yuzhong Zhao, Hongtian Yu, Lingxi Xie, Yaowei Wang, Qixiang Ye, Jianbin Jiao, and Yunfan Liu. Vmamba: Visual state space model. Advances in neural information processing systems , 37:103031–103063, 2024. 1, 2 [42] Kevin M Lynch and Frank C Park. Modern robotics . Cam-bridge University Press, 2017. 3 [43] Jun Ma, Feifei Li, and Bo Wang. U-mamba: Enhancing long-range dependency for biomedical image segmentation. 
+
+arXiv preprint arXiv:2401.04722 , 2024. 1, 2 [44] Christoph Mayer, Martin Danelljan, Goutam Bhat, Matthieu Paul, Danda Pani Paudel, Fisher Yu, and Luc Van Gool. Transforming model prediction for tracking. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8731–8740, 2022. 2 [45] Etienne Meunier, Ana¨ ıs Badoual, and Patrick Bouthemy. Em-driven unsupervised learning for efficient motion seg-mentation. IEEE Transactions on Pattern Analysis and Ma-chine Intelligence , 45(4):4462–4473, 2022. 8 [46] Matthias Muller, Adel Bibi, Silvio Giancola, Salman Al-subaihi, and Bernard Ghanem. Trackingnet: A large-scale dataset and benchmark for object tracking in the wild. In 
+
+Proceedings of the European conference on computer vision (ECCV) , pages 300–317, 2018. 1, 6 [47] Peter Ochs, Jitendra Malik, and Thomas Brox. Segmentation of moving objects by long term video analysis. IEEE trans-actions on pattern analysis and machine intelligence , 36(6): 1187–1200, 2013. 6, 8 [48] Federico Perazzi, Jordi Pont-Tuset, Brian McWilliams, Luc Van Gool, Markus Gross, and Alexander Sorkine-Hornung. A benchmark dataset and evaluation methodology for video object segmentation. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 724–732, 2016. 6, 8 [49] Kejie Qiu, Tong Qin, Wenliang Gao, and Shaojie Shen. Tracking 3-d motion of dynamic objects using monocular visual-inertial sensing. IEEE Transactions on Robotics , 35 (4):799–816, 2019. 1 [50] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman R¨ adle, Chloe Rolland, Laura Gustafson, et al. Sam 2: Segment anything in images and videos. arXiv preprint arXiv:2408.00714 , 2024. 1, 2, 3, 6 [51] Chaitanya Ryali, Yuan-Ting Hu, Daniel Bolya, Chen Wei, Haoqi Fan, Po-Yao Huang, Vaibhav Aggarwal, Arkabandhu Chowdhury, Omid Poursaeed, Judy Hoffman, et al. Hi-era: A hierarchical vision transformer without the bells-and-whistles. In International conference on machine learning ,pages 29441–29454. PMLR, 2023. 2 [52] Liangtao Shi, Bineng Zhong, Qihua Liang, Ning Li, Sheng-ping Zhang, and Xianxian Li. Explicit visual prompts for visual object tracking. In Proceedings of the AAAI Confer-ence on Artificial Intelligence , pages 4838–4846, 2024. 6 [53] H´ ector J Sussmann and Guoqing Tang. Shortest paths for the reeds-shepp car: a worked out example of the use of geomet-ric techniques in nonlinear optimal control, 1991. 3, 4 [54] Kexin Tian, Jingrui Mao, Yunlong Zhang, Jiwan Jiang, Yang Zhou, and Zhengzhong Tu. Nuscenes-spatialqa: Aspatial understanding and reasoning benchmark for vision-language models in autonomous driving. In Proceedings 
+
+10 of the IEEE/CVF International Conference on Computer Vi-sion , pages 4567–4576, 2025. 1 [55] Kexin Tian, Haotian Shi, Yang Zhou, and Sixu Li. Physi-cally analyzable ai-based nonlinear platoon dynamics mod-eling during traffic oscillation: A koopman approach. IEEE Transactions on Intelligent Transportation Systems , 2025. 1 [56] Eric A Wan and Rudolph Van Der Merwe. The unscented kalman filter for nonlinear estimation. In Proceedings of the IEEE 2000 adaptive systems for signal processing, commu-nications, and control symposium (Cat. No. 00EX373) , pages 153–158. Ieee, 2000. 4 [57] Junyu Xie, Weidi Xie, and Andrew Zisserman. Segment-ing moving objects via an object-centric layered representa-tion. Advances in neural information processing systems , 35: 28023–28036, 2022. 8 [58] Junyu Xie, Weidi Xie, and Andrew Zisserman. Appearance-based refinement for object-centric motion segmentation. In 
+
+European Conference on Computer Vision , pages 238–256. Springer, 2024. 6, 8 [59] Junyu Xie, Charig Yang, Weidi Xie, and Andrew Zisserman. Moving object segmentation: All you need is sam (and flow). In Proceedings of the Asian conference on computer vision ,pages 162–178, 2024. 2 [60] Jinxia Xie, Bineng Zhong, Zhiyi Mo, Shengping Zhang, Liangtao Shi, Shuxiang Song, and Rongrong Ji. Autore-gressive queries for adaptive tracking with spatio-temporal transformers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 19300– 19309, 2024. 1, 6 [61] Zhaohu Xing, Tian Ye, Yijun Yang, Guang Liu, and Lei Zhu. Segmamba: Long-range sequential modeling mamba for 3d medical image segmentation. In International Conference on Medical Image Computing and Computer-Assisted Interven-tion , pages 578–588. Springer, 2024. 2 [62] Bin Yan, Houwen Peng, Jianlong Fu, Dong Wang, and Huchuan Lu. Learning spatio-temporal transformer for vi-sual tracking. In Proceedings of the IEEE/CVF international conference on computer vision , pages 10448–10457, 2021. 6 [63] Cheng-Yen Yang, Hsiang-Wei Huang, Wenhao Chai, Zhongyu Jiang, and Jenq-Neng Hwang. Samurai: Adapting segment anything model for zero-shot visual tracking with motion-aware memory. arXiv preprint arXiv:2411.11922 ,2024. 1, 6 [64] Yanchao Yang, Antonio Loquercio, Davide Scaramuzza, and Stefano Soatto. Unsupervised moving object detection via contextual information separation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 879–888, 2019. 8 [65] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and Xilin Chen. Joint feature learning and relation modeling for tracking: A one-stream framework. In European conference on computer vision , pages 341–357. Springer, 2022. 6 [66] Zhipeng Zhang and Houwen Peng. Deeper and wider siamese networks for real-time visual tracking. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4591–4600, 2019. 2 [67] Zizhao Zhang, Yuanpu Xie, Fuyong Xing, Mason McGough, and Lin Yang. Mdnet: A semantically and visually inter-pretable medical image diagnosis network. In Proceedings of the IEEE conference on computer vision and pattern recog-nition , pages 6428–6436, 2017. 2 [68] Yaozong Zheng, Bineng Zhong, Qihua Liang, Zhiyi Mo, Shengping Zhang, and Xianxian Li. Odtrack: Online dense temporal token learning for visual tracking. In Proceed-ings of the AAAI conference on artificial intelligence , pages 7588–7596, 2024. 6 
+
+11 A. Additional Implementation Details 
+
+A.1. Computing Environments 
+
+SUMO is a training-free model, with all inference per-formed in a zero-shot, per-sequence manner. All exper-iments are conducted using a single NVIDIA RTX 6000 Ada GPU (48GB) and dual AMD EPYC 9554 CPUs with 512GB RAM. Details of the software environment and de-pendencies are provided in the code. 
+
+A.2. Model Variants 
+
+We present three variants of SUMO: SUMO-S, SUMO-B, and SUMO-L, which correspond to three sizes of the image encoder backbone: Hiera-S, Hiera-B+, and Hiera-L, respec-tively. The number of parameters for each image encoder variants is reported in Table S1. 
+
+Table S1. Parameter amount of the image encoder backbones used in different SUMO variants.         
+
+> SUMO Variant Image Encoder #Params of Encoder SUMO-S Hiera-S 35M SUMO-B Hiera-B+ 70M SUMO-L Hiera-L 214M
+
+A.3. Model Parameters 
+
+In our implementation of the Selective Unscented Filter (SUF), we set the diagonal process noise covariance ma-trix Σrr ∈ Rn×n, used in the prediction step and defined in Eq. (19) of the main paper, as: 
+
+Σrr =
+
+ 
+
+> 120
+
+0 0 0 0 0 0 00 120 0 0 0 0 0 00 0 10 −2 0 0 0 0 00 0 0 120 0 0 0 00 0 0 0 1160 0 0 00 0 0 0 0 1160 0 00 0 0 0 0 0 10 −5 00 0 0 0 0 0 0 1160 
+
+
+
+(S1) We set the diagonal observation noise covariance ma-trix Σqq ∈ Rm×m, used in the update step and detailed in Eq. (25) of the main paper, as: 
+
+Σqq =
+
+ 
+
+> 1160
+
+0 0 00 1160 0 00 0 10 −5 00 0 0 1160 
+
+ (S2) In the sigma point generation step of SUF, based on the state vector detailed in Eq. (3) of the main paper, the state dimension is n = 8 . Consequently, 2n + 1 = 17 sigma points are generated. To construct the weights w(m) 
+
+> i
+
+, w(c) 
+
+> i
+
+,and the scaling factor λ, as detailed in Eqs. (15)–(16) of the main paper, we set the hyperparameters α, κ, and β as: 
+
+α = 0 .1, β = 2 , κ = 0 (S3) For the joint scoring function detailed in Eq. (22) of the main paper, we set the coefficient λjoint as: 
+
+λjoint = 0 .35 (S4) As described in the main paper, after selecting the final mask, we apply a stability threshold τ on appearance confi-dence to determine whether to perform the SUF update. In our implementation, we set the threshold τ as: 
+
+τ = 0 .3 (S5) In the memory selection mechanism, we set the mask decoder score threshold τmd , the object confidence threshold 
+
+τobj , and the NSSM score threshold τnssm as follows: 
+
+τmd = 0 .5, τobj = 0 .1, τnssm = 0 .5 (S6) For the initialization of the SUF, given the observation of the initial frame z0 ∈ R4, which serves as the initial measurement, we initialize the state mean μ0 ∈ R8 by con-catenating z0 with a zero velocity vector: 
+
+μ0 =
+
+z0
+
+0
+
+
+
+∈ R8 (S7) The initial covariance matrix Σ0 ∈ R8×8 is set as a di-agonal matrix with the following standard deviations: 
+
+Σ0 =
+
+ 
+
+> 110
+
+0 0 0 0 0 0 00 110 0 0 0 0 0 00 0 10 −2 0 0 0 0 00 0 0 110 0 0 0 00 0 0 0 1160 0 0 00 0 0 0 0 1160 0 00 0 0 0 0 0 10 −5 00 0 0 0 0 0 0 1160 
+
+
+
+(S8) 
+
+A.4. Input Settings 
+
+Our method uses the bounding box of the target object in the first frame as input prompt. The bounding box is rep-resented in the format [x, y, w, h ], where (x, y ) denotes the center coordinate of the box and (w, h ) denotes its width and height, respectively. This initialization is performed once at the beginning of each video sequence and remains fixed throughout inference. 
+
+# B. Additional Benchmarks and Metrics Details 
+
+B.1. VOT Benchmark Details 
+
+LaSOT is a large-scale benchmark with 1,400 videos densely annotated at every frame. It covers diverse object categories and tracking challenges such as occlusion, scale 12 variation, and background clutter. We evaluate on the offi-cial test set of 280 sequences. 
+
+LaSOT-ext extends LaSOT with 150 longer and more dif-ficult sequences. These videos exhibit more severe occlu-sions, abrupt motion, and low-resolution targets. We use the full set of 150 sequences for evaluation. 
+
+GOT-10k contains over 10,000 videos and 1.5 million bounding boxes across 560+ object categories. It adopts a one-shot protocol where test classes are disjoint from train-ing, emphasizing generalization. We perform inference on the official test set of 180 videos. 
+
+B.2. MOS Benchmarks Details 
+
+SegTrackv2 includes 14 short videos with pixel-level an-notations of deformable, fast-moving objects. The dataset features low resolution, non-rigid motion, and challenging boundaries. We evaluate on the full test set. 
+
+FBMS-59 consists of 59 videos with sparse annotations, focusing on motion-consistent grouping rather than appear-ance. It emphasizes long-term temporal consistency. We use the 30-video test split for evaluation. 
+
+DAVIS2016 provides 50 high-resolution videos with dense annotations for foreground-background segmenta-tion. It includes deformable objects, fast motion, and com-plex scenes. We perform inference on the 20-video valida-tion set, following common protocol. 
+
+DAVIS16-MOVING is a subset of DAVIS2016 contain-ing 12 sequences where the main object exhibits significant motion. It is designed to isolate motion-centric segmenta-tion performance. We evaluate on all 12 sequences. 
+
+# C. Additional Experiments 
+
+C.1. Comparison with SAM2 
+
+We compare SUMO with SAM2 to evaluate the effective-ness of integrating our NSSM methods into the tracking and segmentation pipeline. Experiments are conducted on both the LaSOT benchmark (for VOT) and the DAVIS16-MOVING benchmark (for MOS). Results are summarized in Table S2. Across all model sizes (Small, Base, and Large), SUMO consistently outperforms SAM2 on both benchmarks. On LaSOT, SUMO achieves clear improve-ments in AUC, normalized precision ( Pnorm ), and preci-sion ( P ), indicating better accuracy and stability in long-term object tracking. On DAVIS16-MOVING, SUMO also shows notable gains in both region similarity ( J ) and con-tour accuracy ( F), as well as the combined J &F score. Methods LaSOT (VOT) DAVIS16-MOVING (MOS)                                              
+
+> AU C ↑Pnorm ↑P↑J&F ↑ J ↑ F ↑
+> SAM2-S 66.9 56.1 83.4 84.4 82.8 86.1 SUMO-S 70.9 78.3 76.1 85.0 83.2 86.8 SAM2-B 67.1 55.3 83.0 87.0 83.5 89.5 SUMO-B 72.8 81.0 78.6 87.8 84.7 90.8 SAM2-L 71.0 53.7 85.9 86.9 85.0 88.3 SUMO-L 74.4 82.8 80.5 90.5 89.9 91.0
+> Table S2. Comparison between SUMO and SAM2 across different model sizes (Small, Base, Large) on LaSOT (VOT) and DAVIS16-MOVING (MOS).
+
+These results validate that the integration of nonlinear dy-namics into the vision framework significantly improves performance on both VOT and MOS tasks. 
+
+# D. Additional VOT and MOS Visualizations 
+
+D.1. VOT Visualization 
+
+Figure S1 and Figure S2 present additional VOT visualiza-tions covering diverse and challenging scenarios. SUMO exhibits strong performance under complex motion, occlu-sion, and shape deformations in long-term tracking, consis-tently achieving superior localization accuracy and robust-ness compared to the baselines. 
+
+# E. MOS visualization 
+
+Figure S3, Figure S4, and Figure S5 present additional MOS visualizations across various challenging scenes. SUMO produces high-quality segmentation masks with precise contours, accurate object boundaries, and minimal inclusion of irrelevant regions. It consistently segments the correct target object with high spatial precision, out-performing baselines in terms of mask fidelity and object completeness. 13 Figure S1. Qualitative visualization of VOT performance. 
+
+14 Figure S2. Qualitative visualization of VOT performance. 
+
+15 Figure S3. Qualitative visualization of MOS performance. 
+
+16 Figure S4. Qualitative visualization of MOS performance. 
+
+17 Figure S5. Qualitative visualization of MOS performance. 
+
+18

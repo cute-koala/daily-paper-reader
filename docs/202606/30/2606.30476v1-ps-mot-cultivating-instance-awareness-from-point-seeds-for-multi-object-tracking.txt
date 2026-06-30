@@ -1,0 +1,533 @@
+Title: PS-MOT: Cultivating Instance Awareness from Point Seeds for Multi-Object Tracking
+
+URL Source: https://arxiv.org/pdf/2606.30476v1
+
+Published Time: Tue, 30 Jun 2026 02:45:19 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# PS-MOT: Cultivating Instance Awareness from Point Seeds for Multi-Object Tracking 
+
+Kai Luo 1 , Fei Teng 1 , Mengfei Duan 1 , Wanjun Jia 1 , Xu Wang 1 , Hao Shi 2,3 , Kunyu Peng 4,5 , Zhiyong Li 1 , and Kailun Yang 1,∗ 
+
+> 1
+
+Hunan University, China  
+
+> 2
+
+Ant Group, China  
+
+> 3
+
+Zhejiang University, China  
+
+> 4
+
+Karlsruhe Institute of Technology, Germany  
+
+> 5
+
+INSAIT, Sofia University “St. Kliment Ohridski”, Bulgaria 
+
+Abstract. We introduce Point-supervised Multi-Object Tracking (PS-MOT) as a cost-effective alternative to traditional bounding box su-pervision, shifting the focus from spatial fitting to topological center-driven representation. However, PS-MOT faces challenges, e.g ., spatial ambiguity and identity drift due to the lack of explicit geometric struc-ture and scale constraints. To address these, we propose PS-Track, a hierarchical pipeline transitioning from points to instances across data, model, and loss levels. At the data level, we introduce Temporal-Feedback Prompting (TFP) to evolve points into temporally consistent pseudo-labels using negative spatial cues and motion priors. At the model level, we design the Point-Excited Wavelet Attention (PEWA) module, which leverages semantic correlations to activate high-frequency components, “hallucinating” object boundaries. At the loss level, Uncertainty-Guided Gaussian Learning (UGL) models pseudo-labels as probabilistic distri-butions, dynamically calibrating supervision intensity. Experiments on DanceTrack, EmboTrack, SportsMOT, and JRDB demonstrate that PS-Track provides a feasible and effective point-supervised alternative across diverse tracking scenarios, establishing a new state-of-the-art for point-supervised tracking. The source code is available at https://github. com/xifen523/PS-MOT .
+
+Keywords: Multi-Object Tracking · Point Annotation · Weakly Super-vised Learning · Wavelet Attention · Uncertainty-aware Modeling 
+
+## 1 Introduction 
+
+Multi-Object Tracking (MOT) has long served as a cornerstone of spatio-temporal perception, empowering autonomous systems to maintain persistent identity consistency and trajectory continuity for multiple targets in dynamic environ-ments [25, 71]. Despite the rapid evolution of Tracking-By-Detection (TBD) paradigms [45, 56] and query-based [18, 32] Transformer architectures, which  
+
+> ∗
+
+Correspondence: kailun.yang@hnu.edu.cn 
+
+> arXiv:2606.30476v1 [cs.CV] 29 Jun 2026
+
+2 K. Luo et al. (a) Fully Supervised (BBox) (c) Point-Supervised (Ours) Box Point Time Time Cost Cost  
+
+> (b) Fully Supervised VS Point-Supervised
+> HOTA IDF1 OSPA MOTA DetA AssA Baseline (Solid) Ours (Dotted) JRDB SportsMOT DanceTrack QuadTrack 25 50 75 100 50 37.5 25 12.5
+
+Fig. 1: Comparison between Fully Supervised MOT and our proposed Point-Supervised MOT (PS-MOT) . (a) Traditional MOT requires labor-intensive bound-ing box annotations, resulting in high time and labor costs. (b) Performance compari-son between fully supervised and point-supervised methods (solid bars: fully supervised baseline; dotted bars: ours). (c) Our point-supervised paradigm adopts a topological center-driven representation via simple point prompts (green dots), significantly reduc-ing annotation time and labor ( e.g. , 0.7-0.9s per point vs. 7-10s per box) [3, 12, 39]. 
+
+have significantly bolstered tracking precision, contemporary research remains constrained by a formidable scalability bottleneck. State-of-the-art MOT methods [17, 34] rely heavily on large-scale, frame-by-frame dense bounding box annotations, as illustrated in Fig. 1 (a). This depen-dency presents a dual challenge. First, bounding box annotation necessitates pre-cise alignment between object boundaries and camera perspectives. In complex scenes, rigid axis-aligned boxes often struggle to accurately depict true geomet-ric structures, rendering precise labeling both arduous and ambiguous. Second, establishing temporal associations across frames requires maintaining identity consistency and trajectory continuity, which further exacerbates the manual an-notation burden [15, 70]. Consequently, constructing millions of bounding boxes is prohibitively expensive, confining MOT research to a few meticulously cu-rated data domains and hindering its scalability in real-world applications [35]. To break this barrier, we propose a minimalist supervision paradigm: Point-supervised Multi-Object Tracking (PS-MOT), as illustrated in Fig. 1 (c). However, adopting point supervision introduces a fundamental precision-ambiguity paradox. A scale-less point naturally lacks geometric structure and scale constraints, rendering the supervision signal inherently ambiguous and un-derdetermined in the spatial domain [58,61]. This uncertainty triggers two criti-cal issues in temporal modeling: first, spatial leakage occurs as the model, lacking explicit boundary constraints and a physical understanding of spatial occupancy, allows supervision signals to permeate into the background or adjacent targets in crowded scenes, thereby weakening spatial discriminative power; second, iden-tity drift arises because the uncertainty in scale representation forces the model to implicitly infer target extents, leading to unstable cross-frame associations, temporal jitter, and frequent ID-switches. To address these challenges, we propose PS-Track, a unified framework that orchestrates a coarse-to-fine instance evolution across the data, model, and loss levels. Our core philosophy hinges on the insight that while point annotations PS-MOT 3
+
+lack explicit spatial cognition, the synergy between foundation model priors and temporal dynamics can effectively recover missing scale representations within a probabilistic space. This enables a progressive transition from a mere topological center to a precise and identity-consistent instance representation, effectively bridging the gap between sparse supervision and dense perception requirements. This evolutionary process is operationalized through three synergistic com-ponents. At the data level, Temporal-Feedback Prompting (TFP) evolves static point seeds into temporally consistent pseudo-labels by injecting negative spatial cues and motion priors, thereby resolving identity merging and fragmentation in crowded scenes. Parallel to this data evolution, the Point-Excited Wavelet At-tention (PEWA) module at the model level directly treats the original annotated points as frequency exciters. Inspired by the top-down mechanism of the human visual system [2,51], PEWA leverages these precise point seeds to selectively ac-tivate high-frequency wavelet coefficients, effectively hallucinating sharp object boundaries from sparse signals. Finally, to mitigate the intrinsic noise of evolved Associate Autoregressive Query-based 025 50 75 HOTA ByteTrack AR-MOT MOTIP PS-Track Paradigm  
+
+> Fig. 2: Versatility of PS-Track across mainstream tracking paradigms.
+
+labels, we transition from deterministic regression to Uncertainty-Guided Gaussian Learning (UGL) at the loss level. Since point annotations lack physical ex-tents, deterministic box regression causes noise mem-orization. UGL circumvents this by modeling pseudo-labels as Gaussian distributions, naturally accommo-dating spatial ambiguity. To mitigate label noise, UGL dynamically down-weights unreliable targets using the joint quality score generated by TFP. This data-to-loss synergy ensures precise and robust convergence. As shown in Fig. 1(b), PS-Track demonstrates promising performance under point supervision, narrowing the gap to fully su-pervised state-of-the-art models [17, 32] in certain scenarios while generalizing from standard pinhole cameras [13, 47] to embodied panoramic vision [32, 36]. Furthermore, Fig. 2 demonstrates its architectural versatility. Our framework can be integrated into diverse tracking paradigms—including TBD, autoregressive, and query-based models—maintaining competitive accuracy ( e.g. , trailing fully supervised [62] by merely 4.2 HOTA on DanceTrack [47] val set). Ultimately, this cross-scenario and cross-paradigm adaptability establishes PS-Track as a universal foundation for the novel PS-MOT task. Our contributions are summarized as follows: 
+
+– Formalization of the PS-MOT Paradigm: We formulate the task of Point-supervised MOT (PS-MOT), offering a scalable alternative to tradi-tional paradigms by shifting the focus from labor-intensive spatial fitting to a topological center-driven representation. This perspective effectively by-passes the scalability bottleneck inherent in bounding box-based methods. 
+
+– A Hierarchical Evolutionary Framework: We develop PS-Track, a uni-fied pipeline that orchestrates a coarse-to-fine point-to-instance transition by synergistically integrating temporal label evolution (TFP), frequency-domain boundary hallucination (PEWA), and uncertainty-aware probabilis-4 K. Luo et al. 
+
+tic learning. This hierarchical design enables stable instance representation to emerge from sparse, scale-less point seeds. 
+
+– Empirical Validation under Sparse Supervision: Extensive experi-ments on four challenging benchmarks—DanceTrack [47], EmboTrack [32], SportsMOT [13], and JRDB [36]—demonstrate that PS-Track achieves per-formance competitive with fully supervised counterparts. Remarkably, our method establishes a new state-of-the-art for point-supervised tracking while reducing annotation time by roughly 64% compared to full supervision. 
+
+## 2 Related Work 
+
+Annotation Paradigms in MOT. Current MOT is dominated by fully su-pervised paradigms, including Tracking-by-Detection (TBD) [45, 55, 56] with precise detectors [20, 40], and end-to-end transformers like MOTR [60], Track-Former [37], and MOTIP [17]. Despite state-of-the-art performance on stan-dard benchmarks [13–15, 47], their success heavily relies on massive bounding box ( BBox ) annotations. This dependence creates a severe scalability barrier in embodied and panoramic scenarios [13, 36]. In such densely crowded and ge-ometrically distorted views, annotating precise BBox es becomes prohibitively labor-intensive and expensive, effectively bottlenecking the curation of large-scale datasets. Conversely, point-level signals offer a highly efficient alternative, providing stable semantic anchors that drastically reduce the annotation bur-den while naturally resisting perspective distortions. To mitigate annotation costs, various label-efficient tracking strategies have emerged. However, unsuper-vised [22,28] and semi-supervised [52,65] methods often struggle with occlusions or rely heavily on initial seed quality, while weakly-supervised approaches [29,30] still depend on BBox priors for scale estimation. Although point supervision excels in static object detection [11, 57], its application in MOT remains under-explored. PS-Track addresses this by shifting the focus from absolute spatial precision to temporal identity consistency, offering a highly scalable and robust tracking solution without requiring any dense bounding box annotations. 
+
+Weakly-Supervised Localization. Weakly-Supervised Localization (WSL) serves as a critical bridge between coarse supervisory signals, e.g ., image-level tags [6, 50], scribbles [19, 21], and sparse points [10, 66], and dense instance-level understanding. Within the point-supervised regime, research has histor-ically focused on static object detection, where frameworks like P2BNet [11] and its subsequent iterations [58, 59] utilize Multiple Instance Learning (MIL) or coarse-to-fine regression to hallucinate bounding boxes from dimensionless point seeds. While these methods demonstrate impressive localization accuracy in static images, they inherently overlook the temporal continuity essential for video sequences. In the context of MOT [32, 56], independent frame-wise scale estimation frequently induces temporal jitter and identity instability. Conse-quently, reformulating point-to-mask generation as a trajectory-aware process, guided by motion priors to enforce spatio-temporal coherence, emerges as a nec-essary evolution to ensure tracking stability under sparse supervision. PS-MOT 5Backbone Decoder & Head Input Tracker Paradigm                                 
+
+> Decoders
+> Decoders
+> Decoders
+> ···
+> ···
+> ···
+> ···
+> Associative
+> Autoregressive
+> Query -based
+> t-1t
+> Hungarian
+> t-2
+> LSTM
+> t-1tt+1
+> Feature Map Object Queries
+> Loss
+> CNN reg reg cls cls id id LLL
+> ++
+> Point -Excited Wavelet Attention (PEWA )
+> Discret e
+> Wavelet
+> Transform
+> (DWT)
+> Low Frequency Calibration
+> Frequency Modulation
+> Conv2d
+> ReLU
+> Conv2d
+> Pooling
+> Conv2d
+> ReLU
+> Conv2d
+> Sigmoid
+> In verse
+> IDWT
+> Sigmoid
+> Refine Feature Heatmap
+> Point annotation Pseudo -Label
+> Data Level
+> Temporal -Feedback Prompting (TFP)
+> SAM
+> t-2
+> t-1
+> t
+> P+
+> P-
+> P-
+> Kalman Filter
+> Score
+> Motion Prior
+> IoU
+> Temporal -Feedback Prompting (TFP)
+> SAM
+> t-2
+> t-1
+> t
+> P+
+> P-
+> Kalman Filter
+> Score
+> Motion Prior
+> IoU
+> Uncertainty -Guided Gaussian L oss
+> High weight
+> Low weight
+> Precise
+> update
+> Tolerant
+> update
+> Loss
+> weight
+> Gaussian
+> Gaussian
+> Dynamic Weighting NLL Term
+> Model Level Loss Level (a) (b) (c) 2112
+> log
+> 2
+> 22
+> LBB
+> reg pred pseudo i
+> 
+> 
+> =−+
+
+Fig. 3: The overview of our proposed framework. It operates on a coarse-to-fine paradigm across three levels: (a) Data Level : The Temporal-Feedback Prompting mechanism evolves sparse points into consistent pseudo-labels; (b) Model Level : The Point-Excited Wavelet Attention (PEWA) module leverages frequency decomposition to Hallucinate boundaries from point cues; (c) Loss Level : The Uncertainty-Guided Gaussian Loss dynamically re-weights supervision signals based on temporal reliability. 
+
+A key challenge in MOT is the Location-Boundary Mismatch, where point seeds provide precise semantic centering but lack geometric scale or edge informa-tion. Conventional convolutional architectures [23,24], limited by local receptive fields and spatial pooling, struggle to reconstruct sharp boundaries from sparse points. Recent frequency-domain learning [49, 67] shows that high-frequency wavelet coefficients better represent structural edges than spatial intensities. By using annotated points to activate these high-frequency components—drawing inspiration from wavelet-based feature decomposition [46]—precise boundaries can be hallucinated without excessive architectural complexity. Additionally, weak supervision introduces heteroscedastic noise in pseudo-labels, and treating them as deterministic ground truth can hinder convergence. Shifting to prob-abilistic distribution learning, based on aleatoric uncertainty modeling [16, 27], allows the framework to adaptively down-weight unreliable signals, which stabi-lizes gradients from inaccurate labels to ensure reliable model convergence. 
+
+## 3 Methodology 
+
+3.1 Overall Architecture 
+
+Point-supervised Multi-Object Tracking (MOT) presents a fundamental para-dox: the supervision signal (a single pixel coordinate) is deterministic in location but highly ambiguous in scale and boundary. Traditional methods treat these points as static anchors, leading to semantic drift during occlusion and identity switching in crowded scenes. To bridge the gap between sparse supervision and dense pixel-level understanding, we propose a unified framework that treats the 6 K. Luo et al. 
+
+annotated point not merely as a label, but as a dynamic exciter of semantic regions, enabling progressive scale inference and boundary reconstruction. Our framework systematically addresses the ambiguity of point supervision through a three-stage Evolution-Perception-Adaptation paradigm, as illustrated in Fig. 3, spanning data, model, and loss levels: 
+
+– Data Level: Temporal-Feedback Prompting (Evolution). We argue that a single frame is insufficient to resolve the ambiguity of a point. By introducing a closed-loop interaction with the Segment Anything Model (SAM) [8], we transform static point annotations into temporally consistent pseudo-bounding boxes. Unlike naive generation, our module incorporates negative spatial cues to separate closely interacting targets and leverages motion-guided box constraints to suppress segmentation fragmentation, ef-fectively evolving noisy points into reliable trajectory priors. 
+
+– Model Level: Point-Excited Wavelet Attention (Perception). How can a network hallucinate accurate boundaries from a single point? Inspired by the top-down mechanism of the human visual system, where coarse global information guides local detail processing [2, 51], we introduce the Point-Excited Wavelet Attention (PEWA) module. Leveraging Discrete Wavelet Transform (DWT) [43], PEWA decomposes features into low-frequency (global context) and high-frequency (local boundary) components. The annotated point acts as a frequency exciter, selectively activating high-frequency coeffi-cients in the wavelet domain to reconstruct sharp object boundaries without heavy upsampling parameters [46]. 
+
+– Loss Level: Uncertainty-Guided Gaussian Learning (Adaptation). 
+
+Acknowledging that pseudo-labels inherently contain noise, we shift from deterministic regression to probabilistic modeling. We interpret the pseudo-labels as observations with heteroscedastic noise and formulate an uncertainty-aware loss function based on a Gaussian likelihood. By inheriting the Joint Quality Score from the data level—which fuses visual confidence and tempo-ral consistency—the network dynamically down-weights unreliable samples, achieving robust convergence despite label noise. 
+
+3.2 Data Level: Temporal-Feedback Prompting (TFP) 
+
+The efficacy of point-supervised learning is heavily contingent on the quality of the generated pseudo-labels. A naive application of foundation models ( e.g. ,SAM) often fails in dynamic tracking scenarios due to two critical issues: Identity Merging , where a single mask erroneously encompasses multiple crowded targets, and Semantic Fragmentation , where only a discriminative part ( e.g. , a limb) is segmented due to occlusion as shown in Fig. 4. To mitigate these, we propose the Temporal-Feedback Prompting (TFP) mechanism, which evolves sparse points into reliable bounding boxes through spatio-temporal constraints. 
+
+Spatial Disambiguation via Negative Cues. In crowded scenes like Dance-Track, targets often share overlapping boundaries, confusing the segmentation PS-MOT 7 
+
+> Fig. 4: Visual comparison of pseudo-labels generated by the original SAM and our Temporal-Feedback Prompting (TFP) module. The red box represents the initial pseudo-labels from SAM [8], whereas the green box denotes the labels refined by TFP. As illustrated, the TFP-generated labels exhibit significantly higher accuracy and robustness, effectively correcting the misalignments in the original SAM output.
+
+model when prompted with a single positive point p+ 
+
+> i
+
+. To enforce instance sep-aration, we introduce an Interactive Negative Cues strategy. For a target i, we construct a set of negative prompts P− 
+
+> i
+
+by sampling the centroids of its spatial neighbors: 
+
+P− 
+
+> i
+
+= {p+ 
+
+> j
+
+| j ∈ N (i), ∥p+ 
+
+> i
+
+− p+ 
+
+> j
+
+∥2 < τ dist }, (1) where N (i) denotes the set of co-existing tracks in the current frame and τdist 
+
+is a proximity threshold. By explicitly feeding {p+ 
+
+> i
+
+, P− 
+
+> i
+
+} into SAM, we impose a semantic firewall, compelling the model to reject features belonging to adjacent identities, thereby resolving the identity merging dilemma. 
+
+Temporal Regularization with Motion Priors. To combat segmentation fragmentation caused by occlusion, we leverage the temporal continuity of ob-ject trajectories. We maintain a motion state estimate for each tracklet using a Kalman filter. Before segmentation, we project the tracklet’s state to the cur-rent frame t to obtain a motion prior box Bt|t−1. This prior serves as a spatial constraint for the foundation model: 
+
+Mt = SAM (It, point = {p+ 
+
+> i
+
+, P− 
+
+> i
+
+}, box = Bt|t−1), (2) where the inclusion of Bt|t−1 restricts the segmentation search space, effectively suppressing outlier regions and ensuring the scale consistency of the generated mask Mt, thereby enhancing temporal stability and reducing drift. 
+
+Joint Quality Scoring for Robust Learning. Unlike traditional methods that treat all pseudo-labels as ground truth (hard labeling), we advocate for a soft labeling approach. We compute a Joint Quality Score Sjoint for each generated pseudo-box Bpseudo to quantify its reliability: 
+
+Sjoint = Ssam · (α · IoU (Bpseudo , B t|t−1) + β), (3) where Ssam is the model’s native visual confidence, and the IoU term mea-sures the consistency between the visual segmentation and the physical motion 8 K. Luo et al. 
+
+prior. α and β are scaling hyperparameters that control the contribution and base offset of temporal consistency, respectively. This score Sjoint is preserved and utilized in the subsequent loss level to dynamically down-weight unreliable samples, creating a noise-tolerant supervision signal for stable and robust prob-abilistic optimization dynamics. 
+
+3.3 Model Level: Point-Excited Wavelet Attention (PEWA) 
+
+While the Data Level evolves points into pseudo-boxes, the network’s internal representation must also adapt to the sparsity of point supervision. A funda-mental challenge is the Location-Boundary Mismatch : a point indicates where an object is, but the convolution kernels struggle to infer what shape it has without explicit boundary supervision. To bridge this gap, we draw inspiration from the Top-down processing mechanism of the human visual system [2], where high-level abstract representations guide the perception of low-level details. We propose the Point-Excited Wavelet Attention (PEWA) module, which treats annotated points as frequency exciters during training to hallucinate object boundaries in the wavelet domain under sparse supervision. During inference, it is bypassed, preserving the standard MOT setting with only RGB frames as input. 
+
+Wavelet Decomposition for Feature Decoupling. Standard CNNs inher-ently entangle semantic and structural information, hindering boundary halluci-nation from sparse points. While WaveFormer [46] explores frequency decoupling for general representation, we specifically exploit the Discrete Wavelet Transform (DWT) to isolate high-frequency signals for precise boundary reconstruction. By decoupling the feature map X ∈ RC×H×W via a single-level Haar wavelet de-composition, we obtain: 
+
+XLF , {XkHF }3 
+
+> k=1
+
+= DWT (X), (4) where XLF represents the Low-Frequency approximation containing global se-mantic context (corresponding to the abstract representation in top-down the-ory [2]), and {XkHF } (consisting of LH, HL, HH sub-bands) captures High-Frequency details such as edges and textures. 
+
+Point-Guided Frequency Excitation. In the decoupled domain, object bound-aries are concentrated in the HF components. However, without supervision, these HF components are dominated by background clutter. We propose a 
+
+Masked Frequency Modulation strategy to suppress noise and amplify target-related edges. First, we generate a spatial Gaussian heatmap G ∈ R1×H×W
+
+centered at the annotated point pi, representing the potential object scope. This heatmap is downsampled to match the wavelet domain resolution. We then gen-erate a Frequency Excitation Mask Mexc via a lightweight modulator ϕ:
+
+Mexc = σ(ϕ(G↓)) , Mexc ∈ RC× H   
+
+> 2×W
+> 2
+
+, (5) where σ is the Sigmoid function. This mask acts as a biological spotlight, selec-tively activating the high-frequency coefficients around the target: 
+
+ˆXkHF = XkHF ⊙ Mexc , k ∈ { LH, HL, HH }. (6) PS-MOT 9
+
+By this operation, we enforce a strong prior: only boundaries in the vicinity of the annotated point are valid within localized semantic regions. The Low-Frequency component XLF is left unmodulated (or processed via standard self-attention) to preserve the global identity consistency. 
+
+Inverse Reconstruction and Feature Fusion. Finally, the modulated high-frequency details and the global context are recombined via the Inverse Discrete Wavelet Transform (IDWT) to reconstruct the refined feature ˆX:
+
+ˆX = IDWT (XLF , { ˆXkHF }3
+
+> k=1
+
+) + X.  (7) This reconstruction process is parameter-efficient compared to traditional up-sampling layers. Through PEWA, the training process encourages boundary-sensitive feature responses from sparse point cues, which improves the discrimi-native embeddings used by the downstream tracker. 
+
+3.4 Loss Level: Uncertainty-Guided Gaussian Learning (UGL) 
+
+In the final stage of our framework, we address the inherent noise within the gen-erated pseudo-labels. Standard MOT training objectives ( e.g. , L1 or GIoU loss) implicitly assume that the ground truth follows a Dirac delta distribution ( i.e. ,zero uncertainty). Applying such rigid constraints to our evolved pseudo-boxes would force the network to overfit to the noise introduced by SAM’s segmentation errors or occlusion drifts. To fundamentally resolve this, we shift the supervision paradigm from deterministic regression to probabilistic likelihood maximization. 
+
+Modeling Heteroscedastic Aleatoric Uncertainty. We model each pseudo-bounding box Bpseudo not as a fixed ground truth, but as an observation drawn from a Gaussian distribution with an underlying true mean Bgt and a variance 
+
+σ2 representing the observation noise: 
+
+Bpseudo ∼ N (Bgt , σ 2). (8) Here, the variance σ captures the aleatoric uncertainty inherent in the weak su-pervision. Crucially, we propose that this uncertainty is inversely correlated with our Joint Quality Score ( Sjoint ) derived in the Data Level (Sec. 3.2). Intuitively, a trajectory with high temporal consistency and visual confidence should have low variance (high precision). We thus map the score to the variance domain: 
+
+σi = 1
+
+Sjoint,i + ϵ , (9) where ϵ is a stability constant. 
+
+Gaussian Likelihood Loss (GLL). Instead of minimizing the distance di-rectly, we maximize the log-likelihood of the predicted box Bpred given the noisy observation. This leads to our Uncertainty-Guided Regression Loss, formulated as the negative log-likelihood (NLL): 
+
+Lreg = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ 12σ2
+
+> i
+
+∥Bpred,i − Bpseudo,i ∥22 + 12 log σ2
+
+> i
+
+
+
+. (10) 10 K. Luo et al. 
+
+This formulation offers a profound physical interpretation. The first term acts as a dynamic reweighting mechanism: reliable samples (high Sjoint , small σ) receive large weights ( 12σ2 ) to enforce precise localization, whereas weights for unreliable samples ( e.g. , occluded targets) decay, allowing the model to tolerate potential labeling errors. Notably, since σi is deterministically derived from the joint qual-ity score Sjoint,i , the second term serves as a probabilistic calibration term in the Gaussian NLL. It preserves the absolute likelihood scale across batches with varying pseudo-label quality, ensuring that the objective remains statistically meaningful rather than becoming a purely relative weighted regression loss. 
+
+Total Objective. The final training objective integrates the uncertainty-guided regression and soft classification components: 
+
+Ltotal = λreg Lreg + λcls Lcls + λid Lid , (11) where Lcls is the standard classification loss, and Lid represents the identity prediction loss as defined in MOTIP [17], supervised by generated identity tags. Through the Uncertainty-Guided Gaussian Learning, PS-Track can adapt to the noise distribution of point-supervised data without manual label cleaning. 
+
+Table 1: Quantitative comparison on the DanceTrack [47] test set. Methods Venue Year HOTA ↑ DetA ↑ AssA ↑ MOTA ↑ IDF1 ↑                                                                                    
+
+> CenterTrack [68] ECCV 2020 41.8 78.1 22.6 86.8 35.7 FairMOT [63] IJCV 2021 39.7 66.7 23.8 82.2 40.8 QDTrack [38] CVPR 2021 54.2 80.1 36.8 87.7 50.4 TraDes [54] CVPR 2021 43.3 74.5 25.4 86.2 41.2 SUSHI [9] CVPR 2023 63.3 -50.1 88.7 63.4 FineTrack [41] CVPR 2023 52.7 -38.5 89.9 59.8 OC-SORT [7] CVPR 2023 55.1 80.3 38.3 92.0 54.6 CMTrack [44] ICIP 2024 61.8 -46.4 92.5 63.3 UCMCTrack+ [56] AAAI 2024 63.6 -51.3 88.9 65.0 TrackTrack [45] CVPR 2025 66.5 -52.9 93.6 67.8 MOTIP [17] CVPR 2025 69.6 80.4 60.4 90.6 74.7 PS-Track (ours) --52.3 68.2 40.4 71.7 53.4
+
+## 4 Experiments 
+
+4.1 Setups Datasets. We evaluate PS-Track on four diverse benchmarks to verify its ro-bustness against spatial ambiguity and semantic drift. DanceTrack [47] (105K frames) and SportsMOT [13] (150K frames) feature severe non-linear motions and uniform appearances, rigorously testing TFP’s identity preservation. For embodied robotic scenarios, we utilize JRDB [36] (panoramic dense crowds) and EmboTrack [32] (extreme ego-motion from mobile platforms). Together, these datasets encompass complex locomotion dynamics and diverse noise distribu-tions, comprehensively verifying PEWA’s boundary hallucination and our UGL under strictly sparse point supervision. Detailed experimental settings are pro-vided in the supplementary material. 
+
+Metrics. We evaluate tracking performance using HOTA [31], along with DetA and AssA to assess boundary estimation and identity consistency. We also report PS-MOT 11 
+
+Table 2: Quantitative comparison on the SportsMOT test set [13]. Methods HOTA ↑ DetA ↑ AssA ↑ MOTA ↑ IDF1 ↑                                                                      
+
+> w/o extra data:
+> FairMOT [63] 49.3 70.2 34.7 86.4 53.5 QDTrack [38] 60.4 77.5 47.2 90.1 62.3 ByteTrack [62] 62.1 76.5 50.5 93.4 69.1 TrackFormer [37] 63.3 66.0 61.1 74.1 72.4 OC-SORT [7] 68.1 84.8 54.8 93.4 68.0 MeMOTR [18] 68.8 82.0 57.8 90.2 69.9 MOTIP [17] 72.6 83.5 63.2 92.4 77.1 PS-Track (ours) 45.2 50.9 41.6 30.2 46.9
+> with extra data:
+> GTR [69] 54.5 64.8 45.9 67.9 55.8 CenterTrack [68] 62.7 82.1 48.0 90.8 60.0 ByteTrack [62] 62.8 77.1 51.2 94.1 69.8 TransTrack [48] 68.9 82.7 57.5 92.6 71.5 OC-SORT [7] 71.9 86.4 59.8 94.5 72.2 DiffMOT [34] 72.1 86.0 60.5 94.5 72.8
+
+Table 3: Quantitative comparison on the JRDB test set [36]. Method HOTA ↑ OSPA ↓ IDF1 ↑ MOTA ↑                                                                
+
+> TrackFormer [37] 19.16 0.95 19.66 17.79 MOTRv2 [64] 18.22 0.93 19.30 12.30 MeMOTR [18] 25.10 0.87 27.46 22.53 OmniTrack E2E[33] 21.56 0.94 22.87 25.01 OmniTrack++ E2E[32] 25.50 0.88 28.00 21.02 SORT [5] 23.49 0.90 26.11 24.59 DeepSORT [53] 22.15 0.95 23.46 24.88 ByteTrack [62] 25.00 0.86 27.95 26.59 Bot-SORT [1] 22.90 0.91 24.27 23.08 OC-SORT [7] 25.04 0.84 27.89 25.64 HybridSORT [55] 25.01 0.85 27.82 25.03 DiffMOT [34] 19.96 0.95 20.26 20.05 OmniTrack DA [33] 26.92 0.84 30.26 26.60 OmniTrack++ DA [32] 27.03 0.81 29.52 25.05 PS-Track (ours) 20.72 0.92 22.21 12.56
+
+MOTA [4] and IDF1 [42] for overall robustness and long-term stability. For embodied panoramic datasets ( e.g. , JRDB [36], EmboTrack [32]), OPSA [36] is additionally used to measure pattern-level consistency under sparse supervision. 
+
+Implementation Details. PS-Track is built upon MOTIP [17] with Deformable DETR [72] and an ImageNet-pretrained ResNet-50 backbone. All models are trained on a single NVIDIA GeForce RTX 5090 GPU with 30-frame video clips per batch. We optimize PS-Track with AdamW for 10 epochs using a base learn-ing rate of 1 × 10 −4, with the backbone learning rate scaled to 1 × 10 −5 and decayed at the 6-th and 9-th epochs. Compared with MOTIP, PS-Track intro-duces only moderate training overhead in our setting, increasing memory from 
+
+23 .7GB to 24 .2GB and training time from 7.4h to 8.0h per epoch, while keep-ing inference speed nearly unchanged since SAM and PEWA are bypassed at test time. During inference, PS-Track remains fully point-free and follows the standard MOT setting, requiring only RGB frames as input. 
+
+4.2 Benchmarking and Comparative Analysis Performance on Challenging Motion Scenarios. We evaluate our method on DanceTrack [47] and SportsMOT [13], featuring severe non-linear motions and highly uniform appearances. On DanceTrack (Tab. 1), PS-Track achieves a remarkable 52.3 HOTA and 53.4 IDF1. Despite strictly utilizing point-level annotations, it surpasses classic fully bounding-box supervised methods, yielding absolute HOTA improvements of +10.5 over CenterTrack [68] and +12.6 over FairMOT [63]. On SportsMOT (Tab. 2), PS-Track establishes a strong point-supervised baseline with 45.2 HOTA, demonstrating robustness against rapid pose deformations. We attribute this efficacy to our PEWA and UGL. PEWA hallucinates structural edges in the frequency domain to counter motion blur, while UGL’s dynamic weighting prevents overfitting to occlusion-induced noise. 
+
+Performance on Embodied Panoramic Scenarios. We further validate our framework on JRDB [36] and EmboTrack [32], characterized by first-person ego-motion, severe scale variations, and dense crowds. Acquiring dense bounding boxes here is prohibitively expensive, highlighting our paradigm’s practical value. 12 K. Luo et al. 
+
+Table 4: Comparison with state-of-the-art methods on EmboTrack [32]. 
+
+Method QuadTrack Dataset BipTrack Dataset        
+
+> HOTA ↑OSPA ↓IDF1 ↑MOTA ↑HOTA ↑OSPA ↓IDF1 ↑MOTA ↑
+
+TrackFormer [37] 19.6 0.97 17.8 3.2 – – – –MOTRv2 [64] 16.4 0.96 17.1 -0.1 39.3 0.78 38.6 2.7 MeMOTR [18] – – – – 43.2 0.82 46.2 27.9 OmniTrack++ E2E [32] 34.9 0.85 41.2 18.7 44.6 0.84 46.8 21.6 SORT [5] 14.6 0.98 15.6 4.8 42.7 0.86 45.0 28.3 DeepSORT [53] 21.2 0.96 22.6 5.1 41.2 0.90 38.6 22.6 ByteTrack [62] 20.7 0.94 22.6 8.7 44.1 0.84 46.3 20.6 Bot-SORT [1] 15.8 0.99 15.7 5.9 42.5 0.86 40.9 25.7 OC-SORT [7] 20.8 0.94 22.6 7.7 40.9 0.87 40.3 0.5 HybridSORT [55] 16.6 0.96 17.4 6.8 42.8 0.85 43.2 13.0 DiffMOT [34] 16.4 0.97 16.6 6.2 39.3 0.95 34.3 24.5 OmniTrack++ DA [32] 36.1 0.82 42.8 21.9 45.0 0.76 47.4 21.5 PS-Track (ours) 33.9 0.94 38.6 -1.3 33.9 0.97 32.7 14.7 
+
+On JRDB (Tab. 3), PS-Track achieves 20.72 HOTA, successfully outperforming fully-supervised counterparts like TrackFormer [37] (19.16) and DiffMOT [34] (19.96). More impressively, on the EmboTrack QuadTrack dataset (Tab. 4), PS-Track delivers a robust 33.9 HOTA and 38.6 IDF1, significantly surpass-ing fully-supervised models like ByteTrack [62] (20.7 HOTA) and OC-SORT [7] (20.8 HOTA). This strong performance in ego-centric environments validates our TFP mechanism. By injecting negative spatial cues, TFP constructs a se-mantic firewall between overlapping pedestrians, resolving the identity merging ambiguity inherent to point-supervised learning in dense crowds. 
+
+Table 5: Ablation study on different associate method using Point2RBox-v3 [61] as the point-supervised detector. All methods are trained with point annotations only. Tracker (TBD Paradigm) Detection HOTA ↑ DetA ↑ AssA ↑ MOTA ↑ IDF1 ↑                         
+
+> SORT [5] Point2 RBox-v3  11.8 16.3 10.2 -37.3 6.4 ByteTrack [62] 10.8 14.2 9.5 -29.8 5.7 OC-SORT [7] 10.8 14.3 9.5 -28.1 6.0 HybridSORT [55] 10.8 14.3 9.5 -28.1 5.9
+> BYTE [62]+PS-Track (ours) YOLOX [20] 42.9 62.6 29.5 77.3 47.9
+
+4.3 Ablation Studies Necessity of the Unified PS-MOT Framework. As a baseline, Tab. 5 evaluates a naive Tracking-by-Detection (TBD) pipeline coupling the point-supervised Point2RBox-v3 [61] with off-the-shelf associators. This decoupled paradigm catastrophically fails (10.8 HOTA, MOTA <−28 .0), as isolated detec-tors cannot resolve intrinsic scale ambiguity, producing boxes too degraded for any associator to salvage. Conversely, training a YOLOX [20] detector via our PS-Track paradigm with BYTE [62] yields a remarkable 42.9 HOTA and 47.9 PS-MOT 13 
+
+Table 6: Comprehensive ablation study on the DanceTrack val dataset. (a) Contribu-tion of core components. (b) Robustness to spatial annotation noise (simulating human clicking variance). (c) Sensitivity to the adaptive likelihood weight λreg . (d) Conver-gence analysis over training epochs.                                                                                                                                     
+
+> (a) Effectiveness of core components under the full 10-epoch training schedule.
+> Experiments TFP PEWA UGL HOTA ↑DetA ↑IDF1 ↑MOTA ↑AssA ↑
+> ①---30.3 45.4 32.5 36.3 20.4
+> ②✓--49.0 65.2 51.8 66.9 37.1
+> ③✓-✓49.4 64.7 52.8 66.7 38.0
+> ④✓✓✓50.3 65.3 52.9 66.2 39.1
+> (b) Robustness to annotation noise. Spatial perturbation σ(in pixels) is added to the GT points.
+> Noise Level σHOTA ↑DetA ↑IDF1 ↑MOTA ↑AssA ↑
+> σ= 0 (Clean) 44.2 64.7 45.5 67.3 30.4
+> σ= 8 px 44.1 65.0 45.9 68.9 30.1
+> σ= 16 px 44.1 64.5 45.1 67.4 30.4
+> σ= 32 px 42.8 62.4 45.3 68.1 29.5
+> σ= 48 px 39.8 60.6 41.0 64.0 26.2
+> (c) Loss weight sensitivity.
+> λreg HOTA ↑DetA ↑IDF1 ↑MOTA ↑AssA ↑
+> 144.2 64.7 45.5 67.3 30.4 242.7 65.9 43.7 69.7 27.9 344.8 64.9 45.5 65.9 31.1 440.8 64.2 41.8 65.5 26.1 543.7 65.0 45.1 67.2 29.6
+> (d) Epochs analysis.
+> Epoch HOTA ↑DetA ↑
+> 244.2 64.7 446.1 63.5 646.4 63.3 848.6 64.8 10 50.3 65.3
+
+IDF1. By unifying perception and temporal evolution, TFP and PEWA explic-itly constrain scale generation using motion priors. This +32 .1 HOTA margin demonstrates that PS-Track seamlessly integrates into existing TBD frameworks, resolving point-induced scale ambiguity to unlock robust tracking. 
+
+Effectiveness of Proposed Components. Tab. 6(a) details the individual module contributions. The naive point-to-box baseline ( ①) performs poorly (30.3 HOTA) due to the lack of temporal and uncertainty constraints. Integrating Temporal-Feedback Prompting (TFP) ( ②) yields a substantial +18.7 HOTA boost, confirming that motion priors and negative spatial cues effectively al-leviate identity merging and fragmentation. Adding Uncertainty-Guided Gaus-sian Learning (UGL) ( ③) further improves HOTA to 49.4 by adaptively down-weighting residual pseudo-label noise. Finally, the full PS-Track ( ④) equipped with PEWA reaches 50.3 HOTA; PEWA hallucinates structural boundaries in the frequency domain, extracting higher-quality embeddings for association. 
+
+Robustness to Annotation Variance. To assess resilience against the in-herent spatial variance of human clicking, we inject synthetic Gaussian noise (σ ∈ { 8, 16 , 32 , 48 } pixels) into training point coordinates. Tab. 6(b) demon-strates PS-Track’s remarkable stability, maintaining 44.1 and 42.8 HOTA un-der 16-pixel and extreme 32-pixel perturbations, respectively. This robustness directly validates the synergy of our framework: TFP and PEWA collabora-tively anchor imprecise clicks to true semantic boundaries via motion priors 14 K. Luo et al. 
+
+Table 7: Generalization across diverse tracking paradigms evaluated on the Dance-Track val set. B and P denote fully bbox and point-level supervision, respectively. Paradigm Method Sup. HOTA ↑ DetA ↑ IDF1 ↑ MOTA ↑ AssA ↑                                    
+
+> Association-based (e.g. , SORT [5]) Baseline (BYTE [62]) B47.1 70.5 51.9 88.2 31.5 BYTE+PS-Track (ours) P42.9 62.6 47.9 77.3 29.5 Autoregressive (e.g. , AR-MOT [26]) Baseline (AR-MOT [26]) B42.4 70.4 38.5 77.6 25.9 AR-MOT+PS-Track (ours) P36.9 76.4 31.0 84.5 18.0 Query-based (e.g. , MOTR [60]) Baseline (MOTIP [17]) B62.2 75.3 64.8 85.2 51.5 MOTIP+PS-Track (ours) P50.3 65.3 52.9 66.2 39.1
+
+and frequency-domain hallucination, while UGL probabilistically down-weights residual spatial errors, preventing overfitting and ensuring practicality. 
+
+Convergence and Sensitivity. Due to computational constraints, prior abla-tions employ a rapid 2-epoch schedule. Tab. 6(d) validates this protocol: perfor-mance scales smoothly from 44.2 HOTA (epoch 2) to 50.3 (epoch 10) without late-stage degradation, confirming our uncertainty-aware framework effectively resists noise memorization inherent to weak supervision. Furthermore, Tab. 6(c) demonstrates stability across varying regression loss weights ( λreg ), peaking at 44.8 HOTA when λreg = 3 . This proves PS-Track is highly robust and does not rely on exhaustive hyperparameter tuning. 
+
+Versatility Across Tracking Paradigms. Tab. 7 demonstrates PS-Track’s plug-and-play versatility across three mainstream architectures: Association-based (BYTE [62]), Autoregressive (AR-MOT [26]), and Query-based (MOTIP [17]). By integrating our core modules, these fully bounding-box supervised baselines successfully operate under strict point supervision. Notably, BYTE+PS-Track achieves 42.9 HOTA, trailing its fully-supervised counterpart by merely 4.2 points despite drastically reduced annotation costs. Similarly, integrations with MOTIP and AR-MOT maintain effective tracking capabilities, yielding 50.3 and 36.9 HOTA, respectively. These results validate that our framework acts as a universal catalyst—seamlessly mitigating scale ambiguity and unlocking robust point-supervised tracking for diverse pre-existing MOT paradigms. 
+
+4.4 Visualization Analysis 
+
+Fig. 5 qualitatively compares PS-Track with the fully-supervised MOTIP [17] on DanceTrack. Under abnormal poses (seq 003), PS-Track maintains tight lo-calization without bounding box jitter, verifying PEWA’s ability to hallucinate structural boundaries in the frequency domain. During dense occlusions (seq 0010), the negative spatial cues in TFP act as a semantic firewall to success-fully prevent identity switches caused by mask merging. Furthermore, amid complex intersecting motions of similar targets (seq 0030), our Uncertainty-Guided Gaussian Learning dynamically down-weights noisy visual features to preserve long-term trajectory stability. Overall, despite relying solely on sparse points, PS-Track demonstrates localization and association robustness visually commensurate with fully-supervised paradigms. PS-MOT 15     
+
+> Fig. 5: Qualitative comparison on the DanceTrack dataset. Dashed lines with the Mprefix denote the tracking results of MOTIP [17] while solid lines with the PS
+> prefix represent our proposed PS-Track.
+
+## 5 Conclusion 
+
+In this paper, we address the scalability bottleneck of Multi-Object Tracking by introducing Point-supervised MOT (PS-MOT). To overcome the inherent spatial ambiguity of sparse points, we propose a unified framework that orches-trates a coarse-to-fine evolution across the data, model, and loss levels. Specifi-cally, the Temporal-Feedback Prompting (TFP) module stabilizes pseudo-labels, the Point-Excited Wavelet Attention (PEWA) module hallucinates sharp object boundaries, and the Uncertainty-Guided Gaussian Learning (UGL) adaptively handles supervision noise. Extensive experiments on four challenging bench-marks, including the panoramic EmboTrack, demonstrate that PS-Track sub-stantially narrows the gap to fully supervised counterparts across diverse main-stream tracking architectures, while reducing measured human annotation time by approximately 64% in our 600-frame setting with offline pseudo-label gener-ation. We hope this work provides a pioneering foundation for future research in label-efficient embodied perception and large-scale tracking. 
+
+## Acknowledgments 
+
+This work was supported in part by the National Natural Science Founda-tion of China (Grant No. 62473139), in part by the Hunan Provincial Research and Development Project (Grant No. 2025QK3019), and in part by the State Key Laboratory of Autonomous Intelligent Unmanned Systems (the opening project number ZZKF2025-2-10). The project is partially funded by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) – SFB 1574 – 471687386. 16 K. Luo et al. 
+
+## References 
+
+1. Aharon, N., Orfaig, R., Bobrovsky, B.Z.: BoT-SORT: Robust associations multi-pedestrian tracking. arXiv preprint arXiv:2206.14651 (2022) 2. Bar, M.: A cortical mechanism for triggering top-down facilitation in visual object recognition. Journal of Cognitive Neuroscience (2003) 3. Bearman, A., Russakovsky, O., Ferrari, V., Fei-Fei, L.: What’s the point: Semantic segmentation with point supervision. In: ECCV (2016) 4. Bernardin, K., Stiefelhagen, R.: Evaluating multiple object tracking performance: The CLEAR MOT metrics. EURASIP Journal on Image and Video Processing (2008) 5. Bewley, A., Ge, Z., Ott, L., Ramos, F., Upcroft, B.: Simple online and realtime tracking. In: ICIP (2016) 6. Bilen, H., Vedaldi, A.: Weakly supervised deep detection networks. In: CVPR (2016) 7. Cao, J., Pang, J., Weng, X., Khirodkar, R., Kitani, K.: Observation-centric SORT: Rethinking SORT for robust multi-object tracking. In: CVPR (2023) 8. Carion, N., Gustafson, L., Hu, Y.T., Debnath, S., Hu, R., Suris, D., Ryali, C., Alwala, K.V., Khedr, H., Huang, A., Lei, J., Ma, T., Guo, B., Kalla, A., Marks, M., Greer, J., Wang, M., Sun, P., Rädle, R., Afouras, T., Mavroudi, E., Xu, K., Wu, T.H., Zhou, Y., Momeni, L., Hazra, R., Ding, S., Vaze, S., Porcher, F., Li, F., Li, S., Kamath, A., Cheng, H.K., Dollár, P., Ravi, N., Saenko, K., Zhang, P., Feichtenhofer, C.: SAM 3: Segment anything with concepts. arXiv preprint arXiv:2511.16719 (2025) 9. Cetintas, O., Brasó, G., Leal-Taixé, L.: Unifying short and long-term tracking with graph hierarchies. In: CVPR (2023) 10. Chan, S., Zhou, W., Lei, Y., Li, C., Hu, J., Hong, F.: Sparse point annotations for remote sensing image segmentation. Scientific Reports (2025) 11. Chen, P., Yu, X., Han, X., Hassan, N., Wang, K., Li, J., Zhao, J., Shi, H., Han, Z., Ye, Q.: Point-to-box network for accurate object detection via single point supervision. In: ECCV (2022) 12. Cheng, B., Parkhi, O., Kirillov, A.: Pointly-supervised instance segmentation. In: CVPR (2022) 13. Cui, Y., Zeng, C., Zhao, X., Yang, Y., Wu, G., Wang, L.: SportsMOT: A large multi-object tracking dataset in multiple sports scenes. In: ICCV (2023) 14. Dendorfer, P., Osep, A., Milan, A., Schindler, K., Cremers, D., Reid, I., Roth, S., Leal-Taixé, L.: MOTChallenge: A benchmark for single-camera multiple target tracking. International Journal of Computer Vision (2021) 15. Dendorfer, P., Rezatofighi, H., Milan, A., Shi, J., Cremers, D., Reid, I., Roth, S., Schindler, K., Leal-Taixé, L.: MOT20: A benchmark for multi object tracking in crowded scenes. arXiv preprint arXiv:2003.09003 (2020) 16. Gal, Y., Ghahramani, Z.: Dropout as a Bayesian approximation: Representing model uncertainty in deep learning. In: ICML (2016) 17. Gao, R., Qi, J., Wang, L.: Multiple object tracking as ID prediction. In: CVPR (2025) 18. Gao, R., Wang, L.: MeMOTR: Long-term memory-augmented transformer for multi-object tracking. In: ICCV (2023) 19. Gao, X., Li, Z., Shi, H., Chen, Z., Zhao, P.: Scribble-supervised video object seg-mentation via scribble enhancement. IEEE Transactions on Circuits and Systems for Video Technology (2025) PS-MOT 17 20. Ge, Z., Liu, S., Wang, F., Li, Z., Sun, J.: YOLOX: Exceeding YOLO series in 2021. arXiv preprint arXiv:2107.08430 (2021) 21. Hayat, M., Aramvith, S.: Superpixel-guided graph-attention boundary GAN for adaptive feature refinement in scribble-supervised medical image segmentation. IEEE Access (2025) 22. He, J., Huang, Z., Wang, N., Zhang, Z.: Learnable graph matching: Incorporat-ing graph partitioning with deep feature learning for multiple object tracking. In: CVPR (2021) 23. He, K., Gkioxari, G., Dollár, P., Girshick, R.: Mask R-CNN. In: ICCV (2017) 24. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: CVPR (2016) 25. Hu, Y., Yang, J., Chen, L., Li, K., Sima, C., Zhu, X., Chai, S., Du, S., Lin, T., Wang, W., Lu, L., Jia, X., Liu, Q., Dai, J., Qiao, Y., Li, H.: Planning-oriented autonomous driving. In: CVPR (2023) 26. Jia, L., Wu, Y., Ran, B., Wang, Y., Wang, L., Lu, H.: AR-MOT: Autoregressive multi-object tracking. arXiv preprint arXiv:2601.01925 (2026) 27. Kendall, A., Gal, Y.: What uncertainties do we need in Bayesian deep learning for computer vision? In: NeurIPS (2017) 28. Li, S., Yang, L., Tan, H., Wang, B., Huang, W., Liu, H., Yang, W., Lan, L.: Self-supervised re-identification for online joint multi-object tracking. Knowledge and Information Systems (2025) 29. Lim, J.S., Luo, Y., Chen, Z., Wei, T., Chapman, S., Huang, Z.: Track any peppers: Weakly supervised sweet pepper tracking using VLMs. arXiv preprint arXiv:2411.06702 (2024) 30. Lu, Z., Shuai, B., Chen, Y., Xu, Z., Modolo, D.: Self-supervised multi-object track-ing with path consistency. In: CVPR (2024) 31. Luiten, J., Osep, A., Dendorfer, P., Torr, P.H.S., Geiger, A., Leal-Taixé, L., Leibe, B.: HOTA: A higher order metric for evaluating multi-object tracking. Interna-tional Journal of Computer Vision (2021) 32. Luo, K., Shi, H., Peng, K., Teng, F., Wu, S., Wang, K., Yang, K.: OmniTrack++: Omnidirectional multi-object tracking by learning large-FoV trajectory feedback. arXiv preprint arXiv:2511.00510 (2025) 33. Luo, K., Shi, H., Wu, S., Teng, F., Duan, M., Huang, C., Wang, Y., Wang, K., Yang, K.: Omnidirectional multi-object tracking. In: CVPR (2025) 34. Lv, W., Huang, Y., Zhang, N., Lin, R.S., Han, M., Zeng, D.: DiffMOT: A real-time diffusion-based multiple object tracker with non-linear prediction. In: CVPR (2024) 35. Mao, J., Niu, M., Jiang, C., Liang, H., Chen, J., Liang, X., Li, Y., Ye, C., Zhang, W., Li, Z., Yu, J., Xu, H., Xu, C.X.: One million scenes for autonomous driving: Once dataset. In: NeurIPS (2021) 36. Martin-Martin, R., Patel, M., Rezatofighi, H., Shenoi, A., Gwak, J., Frankel, E., Sadeghian, A., Savarese, S.: JRDB: A dataset and benchmark of egocentric robot visual perception of humans in built environments. IEEE Transactions on Pattern Analysis and Machine Intelligence (2023) 37. Meinhardt, T., Kirillov, A., Leal-Taixé, L., Feichtenhofer, C.: TrackFormer: Multi-object tracking with transformers. In: CVPR (2022) 38. Pang, J., Qiu, L., Li, X., Chen, H., Li, Q., Darrell, T., Yu, F.: Quasi-dense similarity learning for multiple object tracking. In: CVPR (2021) 39. Papadopoulos, D.P., Uijlings, J.R.R., Keller, F., Ferrari, V.: Extreme clicking for efficient object annotation. In: ICCV (2017) 18 K. Luo et al. 
+
+40. Peng, Y., Li, H., Wu, P., Zhang, Y., Sun, X., Wu, F.: D-FINE: Redefine re-gression task in detrs as fine-grained distribution refinement. arXiv preprint arXiv:2410.13842 (2024) 41. Ren, H., Han, S., Ding, H., Zhang, Z., Wang, H., Wang, F.: Focus on details: Online multi-object tracking with diverse fine-grained representation. In: CVPR (2023) 42. Ristani, E., Solera, F., Zou, R., Cucchiara, R., Tomasi, C.: Performance measures and a data set for multi-target, multi-camera tracking. In: ECCVW (2016) 43. Shensa, M.J.: The discrete wavelet transform: wedding the a trous and Mallat algorithms. IEEE Transactions on Signal Processing (2002) 44. Shim, K., Hwang, J., Ko, K., Kim, C.: A confidence-aware matching strategy for generalized multi-object tracking. In: ICIP (2024) 45. Shim, K., Ko, K., Yang, Y., Kim, C.: Focusing on tracks for online multi-object tracking. In: CVPR (2025) 46. Shu, Z., Wu, J., Yan, W., Liu, X., Zhang, H., Liu, C., Mao, Y., Chen, J.: Wave-Former: Frequency-time decoupled vision modeling with wave equation. In: AAAI (2026) 47. Sun, P., Cao, J., Jiang, Y., Yuan, Z., Bai, S., Kitani, K., Luo, P.: DanceTrack: Multi-object tracking in uniform appearance and diverse motion. In: CVPR (2022) 48. Sun, P., Cao, J., Jiang, Y., Zhang, R., Xie, E., Yuan, Z., Wang, C., Luo, P.: TransTrack: Multiple object tracking with transformer. arXiv preprint arXiv:2012.15460 (2020) 49. Tan, C., Zhao, Y., Wei, S., Gu, G., Liu, P., Wei, Y.: Frequency-aware deepfake detection: Improving generalizability through frequency space domain learning. In: AAAI (2024) 50. Tang, P., Wang, X., Bai, X., Liu, W.: Multiple instance detection network with online instance classifier refinement. In: CVPR (2017) 51. Ullman, S.: Sequence seeking and counter streams: a computational model for bidirectional information flow in the visual cortex. Cerebral Cortex (1995) 52. Wang, X., Liu, J., Feng, M., Zhang, Z., Yang, X.: 3D multi-object tracking with semi-supervised GRU-Kalman filter. arXiv preprint arXiv:2411.08433 (2024) 53. Wojke, N., Bewley, A., Paulus, D.: Simple online and realtime tracking with a deep association metric. In: ICIP (2017) 54. Wu, J., Cao, J., Song, L., Wang, Y., Yang, M., Yuan, J.: Track to detect and segment: An online multi-object tracker. In: CVPR (2021) 55. Yang, M., Han, G., Yan, B., Zhang, W., Qi, J., Lu, H., Wang, D.: Hybrid-SORT: Weak cues matter for online multi-object tracking. In: AAAI (2024) 56. Yi, K., Luo, K., Luo, X., Huang, J., Wu, H., Hu, R., Hao, W.: UCMCTrack: Multi-object tracking with uniform camera motion compensation. In: AAAI (2024) 57. Yu, X., Chen, P., Wu, D., Hassan, N., Li, G., Yan, J., Shi, H., Ye, Q., Han, Z.: Object localization under single coarse point supervision. In: CVPR (2022) 58. Yu, Y., Ren, B., Zhang, P., Liu, M., Luo, J., Zhang, S., Da, F., Yan, J., Yang, X.: Point2RBox-v2: Rethinking point-supervised oriented object detection with spatial layout among instances. In: CVPR (2025) 59. Yu, Y., Yang, X., Li, Q., Da, F., Dai, J., Qiao, Y., Yan, J.: Point2RBox: Combine knowledge from synthetic visual patterns for end-to-end oriented object detection with single point supervision. In: CVPR (2024) 60. Zeng, F., Dong, B., Zhang, Y., Wang, T., Zhang, X., Wei, Y.: MOTR: End-to-end multiple-object tracking with transformer. In: ECCV (2022) PS-MOT 19 61. Zhang, T., Fan, Z., Liu, M., Zhang, X., Lu, X., Li, W., Zhou, Y., Yu, Y., Li, X., Yan, J., Yang, X.: Point2RBox-v3: Self-bootstrapping from point annotations via inte-grated pseudo-label refinement and utilization. arXiv preprint arXiv:2509.26281 (2025) 62. Zhang, Y., Sun, P., Jiang, Y., Yu, D., Weng, F., Yuan, Z., Luo, P., Liu, W., Wang, X.: ByteTrack: Multi-object tracking by associating every detection box. In: ECCV (2022) 63. Zhang, Y., Wang, C., Wang, X., Zeng, W., Liu, W.: FairMOT: On the fairness of detection and re-identification in multiple object tracking. International Journal of Computer Vision (2021) 64. Zhang, Y., Wang, T., Zhang, X.: MOTRv2: Bootstrapping end-to-end multi-object tracking by pretrained object detectors. In: CVPR (2023) 65. Zhao, Z., Yu, J., Zhang, L., Zhang, S.: CRTrack: Low-light semi-supervised multi-object tracking based on consistency regularization. arXiv preprint arXiv:2502.16809 (2025) 66. Zheng, M., Xu, Z., Xia, Q., Wu, H., Wen, C., Wang, C.: Seg2Box: 3D object detection by point-wise semantics supervision. In: AAAI (2025) 67. Zheng, S., Wu, Z., Xu, Y., Wei, Z., Plaza, A.: Learning orientation information from frequency-domain for oriented object detection in remote sensing images. IEEE Transactions on Geoscience and Remote Sensing (2022) 68. Zhou, X., Koltun, V., Krähenbühl, P.: Tracking objects as points. In: ECCV (2020) 69. Zhou, X., Yin, T., Koltun, V., Krähenbühl, P.: Global tracking transformers. In: CVPR (2022) 70. Zhou, Y., Cai, L., Cheng, X., Zhang, Q., Xue, X., Ding, W., Pu, J.: OpenAnno-tate2: Multi-modal auto-annotating for autonomous driving. IEEE Transactions on Intelligent Vehicles (2024) 71. Zhu, R., Zhao, J., Zhang, D., Wang, G., Chen, X., Zhang, S., Gong, J., Zhou, Q., Zhang, W., Wang, N., Tan, F., Xu, Z., Zhou, H., Yao, H., Zhang, C., Liu, L., Liu, X., Di, X., Li, B.: SparseAD: Sparse query-centric paradigm for efficient end-to-end autonomous driving. IEEE Transactions on Artificial Intelligence (2025) 72. Zhu, X., Su, W., Lu, L., Li, B., Wang, X., Dai, J.: Deformable DETR: Deformable transformers for end-to-end object detection. In: ICLR (2021) 20 K. Luo et al. 
+
+## A Implementation Details 
+
+Detailed Network Architecture. We implement PS-Track built upon the MOTIP [17] framework, adopting Deformable DETR [72] as our core detec-tor. The visual features are extracted using a ResNet-50 backbone pre-trained on ImageNet. To construct a robust multi-scale representation, we utilize fea-ture maps from the last three backbone stages (which are mapped to 4 feature levels), and process them using a standard 6-layer transformer encoder and a 
+
+6-layer transformer decoder. The model maintains 300 object queries to pre-dict dense instances. During training, PEWA is inserted after the backbone to refine multi-scale features using point-guided heatmaps. During inference, this branch is bypassed, and the tracker follows the original MOTIP inference graph without point inputs. This allows PEWA to refine the multi-scale feature maps and hallucinate structural boundaries before they are fed into the transformer encoder. 
+
+Training Setup and Data Augmentation. The entire framework is opti-mized end-to-end using the AdamW optimizer with a base learning rate of 
+
+1 × 10 −4 and a weight decay of 5 × 10 −4. To stabilize transformer training, we apply a 1-epoch learning rate warmup and gradient clipping with a maxi-mal norm of 0.1. Following standard practices in transformer-based detection, the learning rate for the ResNet-50 backbone is scaled down by a factor of 0.1
+
+(1 × 10 −5). During training, we apply standard data augmentation techniques, including random horizontal flipping, random cropping, scale jittering (resizing the shortest side of the input images between 480 and 800 pixels, capped at a maximum of 1440 pixels), and color jittering. 
+
+Hardware and Training Schedule. All models are trained on a server equipped with 1 NVIDIA GeForce RTX 5090 GPU, processing video clips of 30 frames per batch. Due to the substantial computational costs—requiring approximately 8
+
+hours per epoch on the DanceTrack dataset using a single RTX 5090 GPU—all ablation studies in the main text are consistently evaluated at the 2nd epoch. This rapid prototyping schedule serves as a fair and consistent benchmark for convergence analysis. For the final state-of-the-art comparisons, the fully con-verged PS-Track models are trained for 10 epochs, with the learning rate decayed by a factor of 0.1 at the 6-th and 9-th epochs. 
+
+Inference Details. During the evaluation phase, PS-Track operates in a com-pletely point-free manner. We strictly adhere to the default hyperparameter set-tings of the MOTIP tracker, including a detection confidence threshold of 0.3, a newborn track initialization threshold of 0.6, and a miss tolerance of 30 frames for temporal association, without requiring any specialized, dataset-specific fine-tuning. This consistent setup elegantly demonstrates that our framework can seamlessly translate the sparse point guidance learned during training into pre-cise bounding box predictions and robust identity associations during inference. PS-MOT 21    
+
+> (a) DanceTrack [47]
+> (b) SportsMOT [13]
+> (c) JRDB [36]
+
+Fig. S1: Visualization of point annotations across diverse datasets. 22 K. Luo et al.  
+
+> Fig. S2: Spatio-temporal visualization of point-level training labels on the DanceTrack dataset. Consecutive frames are sequentially stacked to illustrate the temporal evolution of the annotations.
+
+## B Point Label Generation and Visualization 
+
+To establish the point-level annotations used in our experiments, we synthesize point labels from the centers of the original ground-truth bounding boxes under a controlled benchmarking protocol. This strategy standardizes the supervision signal across datasets and enables reproducible comparisons, while serving as a proxy for point supervision rather than a direct human-click annotation study. Crucially, this generation process is completely automatic and strictly devoid of any subsequent manual curation, heuristic refinement, or human-in-the-loop fine-tuning. Consequently, although center sampling provides a simple and con-sistent point source, it can still introduce spatial ambiguity in challenging cases. For instance, in scenarios involving severe occlusions, extreme aspect ratios, or complex non-rigid deformations, the geometric center of a bounding box may PS-MOT 23 
+
+fall outside the visible physical boundary of the target instance, or inadvertently align with a neighboring object within densely packed or cluttered environments. We intentionally preserve these noisy artifacts to faithfully simulate a realis-tic, highly scalable annotation paradigm where human annotators might casually click near a target rather than precisely on it. By subjecting PS-Track to these unpolished, raw point seeds, we rigorously evaluate the framework’s capability to cultivate accurate instance awareness and maintain identity consistency un-der strictly sparse and highly imperfect supervision. As visualized in Fig. S1 and Fig. S2, our method demonstrates remarkable resilience, effectively interpreting these diverse and occasionally inaccurate point prompts across vastly different scenarios, from tracking dense dancers to dynamic sports players and crowded embodied perspectives under highly challenging and unconstrained conditions. 
+
+## C Addressing the Training-Inference Discrepancy of PEWA 
+
+Clarification on the Inference Phase. A natural question regarding the Point-Excited Wavelet Attention (PEWA) module is its behavior during the evaluation phase and the potential risk of label leakage. We explicitly clarify that PEWA is designed strictly as a training-only structural prior generator. It utilizes the ground-truth point seeds solely during training to hallucinate high-frequency boundaries, facilitating the learning of optimal representations. During inference, the model operates in a completely point-free manner: it takes only raw images as input, and the entire PEWA module is structurally bypassed and deactivated. Consequently, there is absolutely no reliance on point annotations during evaluation, completely eliminating any possibility of label leakage. 
+
+Investigating the Structural Gap. Given that PEWA modulates the feature maps fed into the transformer encoder during training but is absent during inference, this structural discrepancy raises a critical concern: does the network develop a biased over-reliance on these point-guided priors, thereby suffering a catastrophic performance drop when they are removed during inference? To investigate this, we intuitively hypothesized that stochastically activating PEWA with a probability p during training—acting as a structural dropout—might bridge this domain gap. To validate this, we conducted a comprehensive ablation study on the stochastic activation probability p evaluated on the highly dynamic DanceTrack validation set [47], as reported in Tab. S1. Here, p = 0 .0 denotes the baseline without PEWA, while p = 1 .0 indicates consistent activation. 
+
+Analysis on Feature Consistency. Contrary to the initial hypothesis, the re-sults demonstrate that introducing stochasticity ( p ∈ [0 .2, 0.8] ) does not bridge the gap but rather degrades the overall tracking performance, particularly the as-sociation accuracy (AssA). For instance, compared to the baseline ( p = 0 .0), set-ting p = 0 .4 drops the AssA from 29 .6 to 29 .0. We attribute this phenomenon to 
+
+feature representation inconsistency . Since PEWA explicitly reconstructs struc-tural edges in the frequency domain, randomly activating and deactivating it across training iterations causes severe feature jittering. This oscillation con-24 K. Luo et al.         
+
+> Table S1: Ablation of PEWA activation probability p.p= 0 .0denotes the baseline without PEWA, while p= 1 .0indicates consistent activation.
+
+## Activation Prob. p HOTA ↑ DetA ↑ IDF1 ↑ MOTA ↑ AssA ↑
+
+## p = 1 .0 (Ours) 44.2 64.7 45.5 67.3 30.4 
+
+## p = 0 .8 43.1 64.5 44.9 68.9 28.9 
+
+## p = 0 .6 43.6 64.0 44.8 68.5 29.8 
+
+## p = 0 .4 43.3 65.2 45.0 68.9 29.0 
+
+## p = 0 .2 43.0 64.7 44.2 66.9 28.8 
+
+## p = 0 .0 (Baseline) 43.7 65.0 45.1 67.2 29.6 
+
+fuses the downstream transformer encoder, hindering its ability to learn stable and discriminative temporal identity embeddings. Conversely, consistent activa-tion ( p = 1 .0) yields the optimal performance ( 44 .2 HOTA and 30 .4 AssA). This confirms that a stable, deterministic structural prior during training is far more beneficial for identity preservation than attempting to explicitly mimic the point-free inference state. The network learns a robust, generalized representation from the continuously refined boundaries, naturally translating this capability to the inference phase without suffering from the hypothesized structural bias. 
+
+## D Implementation Details of Comparative Methods 
+
+To ensure a fair and rigorous evaluation, we provide comprehensive implemen-tation details for the comparative baselines used in our experiments, specifically addressing the adaptations made for point-supervised detection and the repro-duction of unreleased tracking frameworks. 
+
+Adaptation of Point2RBox-v3. To construct a state-of-the-art Tracking-by-Detection (TBD) baseline under point-level supervision, we adopt Point2RBox-v3 [61], which represents the latest advancement in point-supervised object de-tection to the best of our knowledge. Since the DanceTrack dataset relies on horizontal bounding boxes (HBox), whereas Point2RBox-v3 natively predicts rotated bounding boxes (RBox) parameterized as [x, y, w, h, θ ], we perform a straightforward post-processing alignment. We strictly retain the original net-work architecture and default parameters without any manual tuning. The only modification made is adapting the data loader to support the DanceTrack dataset format. During the final inference stage, we project the predicted rotated boxes back to horizontal boxes by explicitly forcing the rotation angle θ to 0◦. This minimal intervention ensures seamless compatibility with off-the-shelf temporal associators and standard MOT evaluation protocols while strictly preserving the original detection capability of the baseline. 
+
+Reproduction of AR-MOT. As shown in Tab. 7 of the main text, we eval-uate the generalization of our PS-Track framework across different tracking PS-MOT 25 
+
+paradigms, including the autoregressive architecture represented by AR-MOT [26]. Since the official codebase for AR-MOT is currently unreleased, we carefully reproduced the algorithm based on the original manuscript to conduct this experiment. Our implementation faithfully reconstructs its core components, including the Region-Aware Alignment (RAA) and Temporal Memory Fusion (TMF) modules. For certain micro-level hyperparameters not completely de-tailed in the paper, we assigned values based on standard empirical practices in transformer-based tracking. Crucially, our manual reproduction successfully achieves the tracking accuracy reported in the original AR-MOT paper on the DanceTrack dataset. Therefore, we confidently utilize this validated reproduction to perform the AR-MOT + PS-Track experiments presented in Tab. 7. 
+
+## E Computational Overhead Analysis             
+
+> Table S2: Computational overhead compared with the MOTIP baseline. PEWA and SAM are not used during inference. Method Params FLOPs Train Mem. Train Time Inference FPS MOTIP 59.1M 408.9G 23.7GB ∼7.4h/ep 29.82 PS-Track 61.9M 408.9G 24.2GB ∼8.0h/ep 29.48
+
+To quantify the additional computational cost introduced by PS-Track, we compare it with the MOTIP baseline under the same training and inference setting. As shown in Tab. S2, PS-Track introduces only moderate training over-head: the training memory increases from 23.7GB to 24.2GB, and the training time increases from approximately 7.4h to 8.0h per epoch. The parameter count rises from 59.1M to 61.9M because it includes the training-time PEWA branch. During inference, however, PS-Track follows the standard MOT pipeline: SAM is used only for offline pseudo-label generation, and PEWA is bypassed. Therefore, the inference FLOPs remain unchanged and the FPS is identical to MOTIP. 
+
+E.1 Effect of Promptable Segmentation Backbones 
+
+To examine the dependence of PS-Track on the quality of offline pseudo-label generation, we replace only the promptable segmentation backbone used in TFP while keeping the tracker architecture, training schedule, and inference protocol unchanged. As shown in Tab. S3, stronger SAM variants produce more reliable pseudo-labels and lead to consistently better tracking performance. This veri-fies that PS-Track benefits from higher-quality foundation-model priors during training. Meanwhile, all SAM variants are used only for offline pseudo-label gen-eration and are not involved during inference, so the standard point-free MOT inference setting remains unchanged. 26 K. Luo et al.                      
+
+> Table S3: Effect of the promptable segmentation backbone used for offline pseudo-label generation. Only the SAM variant in TFP is changed, while the tracker and inference protocol remain unchanged. SAM Variant HOTA ↑DetA ↑IDF1 ↑MOTA ↑AssA ↑
+> SAM-v1 20.7 29.9 16.5 -27.5 14.4 SAM-v2 39.0 53.0 42.0 44.1 29.0 SAM-v3 (Ours) 50.3 65.3 52.9 66.2 39.1
+
+## F More Qualitative Results 
+
+To further intuitively demonstrate the effectiveness and robustness of our PS-Track framework, we provide comprehensive qualitative tracking results across three distinct and challenging datasets: DanceTrack [47], SportsMOT [13], and JRDB [36] datasets. As illustrated in Fig. S3, Fig. S4, and Fig. S5, PS-Track maintains highly accurate bounding box localization and identity-consistent track-ing trajectories under extremely complex scenarios, despite relying exclusively on sparse point supervision during training. Specifically, in DanceTrack scenes characterized by uniform appearances and frequent cross-overs, our model successfully predicts precise bounding boxes to effectively prevent identity switches. Similarly, against the backdrop of rapid camera movements and extreme human pose deformations in SportsMOT, PS-Track exhibits remarkable temporal stability, proving that the point-guided fea-tures are highly discriminative. Furthermore, in densely crowded, egocentric scenarios with severe perspective scaling like JRDB, our framework effectively separates closely interacting pedestrians, demonstrating its immense potential and scalability in embodied vision tasks. Collectively, these visualizations con-firm that our point-supervised paradigm effectively cultivates robust instance awareness, successfully bridging the gap between sparse annotations and dense perception requirements in dynamic, real-world environments. 
+
+## G Discussion and Limitations 
+
+Broader Impacts. The dominant reliance on dense bounding box annotations has long been a scalability bottleneck in the MOT community. By formalizing the Point-Supervised MOT (PS-MOT) paradigm, the impact of our framework extends beyond reducing manual spatial box-fitting effort suggested by prior per-instance annotation studies. Traditional rigid, axis-aligned bounding boxes intrinsically struggle to depict true geometric structures under severe perspec-tive distortions, such as those captured by omnidirectional cameras in embodied navigation or fisheye lenses. In contrast, point-level signals offer stable topolog-ical anchors that naturally resist these geometric deformations. Consequently, PS-MOT not only facilitates large-scale data curation but also unlocks scalable PS-MOT 27 
+
+tracking in geometrically complex scenarios where precise bounding box defi-nition is fundamentally ambiguous or ill-defined. Despite this paradigm shift, cultivating precise dense instance representations exclusively from dimension-less point seeds remains inherently challenging across diverse and unstructured robotic environments. 
+
+Limitations and Future Work. Our framework naturally exhibits certain lim-itations under extreme physical conditions. First, while our Temporal-Feedback Prompting (TFP) successfully employs negative spatial cues to separate adja-cent targets, it may still struggle in scenarios involving severe mutual occlusion and highly entangled limbs ( e.g. , crowded wrestling or dense dance formations). In such cases, a single point prompt might fall onto an ambiguous intersecting boundary, leading the foundation model to generate over-segmented or frag-mented pseudo-labels. Second, our Point-Excited Wavelet Attention (PEWA) module explicitly leverages high-frequency components to predict structural boundaries. When objects undergo extreme motion blur, these high-frequency edge features are physically degraded, making it difficult to accurately infer full physical extents without explicit scale priors. Another limitation lies in the an-notation protocol. Our benchmark experiments synthesize point labels from GT box centers for controlled and reproducible evaluation. This protocol does not measure real human clicking time and may provide cleaner center cues than prac-tical annotations. Moreover, MOT still requires temporal identity linkage, which is not removed by point supervision. Finally, TFP introduces additional offline pseudo-label generation cost through SAM. Therefore, our annotation-efficiency analysis should be interpreted as a controlled estimate of reduced box-labeling effort rather than a complete end-to-end cost measurement. To address these challenges, future work could explore integrating multi-modal prompts ( e.g. , combining sparse points with coarse language descriptions) to resolve semantic ambiguities. Furthermore, while PS-Track drastically reduces spatial annotation costs, it currently relies on frame-by-frame point supervision. A highly promising future direction is to extend this paradigm to temporally sparse annotations—such as providing point prompts only at fixed intervals ( e.g. ,every 5 frames)—coupled with unsupervised motion propagation, to push the boundaries of label-efficient video perception even further. Beyond 2D domains, adapting this point-driven framework to 3D MOT represents another compelling frontier. Given that annotating dense 3D bounding boxes in LiDAR or multi-view spaces is notoriously labor-intensive, elevating our topological center-driven approach to 3D point clouds or BEV representations could unlock unprecedented scalability for autonomous driving and spatial computing. We hope PS-Track establishes a solid foundation that inspires continued exploration in this domain. 28 K. Luo et al. 
+
+Fig. S3: Qualitative results on the DanceTrack [47] . Bounding boxes with the ‘PS’ prefix denote the continuous trajectories predicted by our PS-Track, demonstrating robust localization and stable identity association under purely point-level supervision. PS-MOT 29 
+
+Fig. S4: Qualitative results on the JRDB dataset [36] . Bounding boxes with the ‘PS’ prefix denote the continuous trajectories predicted by our PS-Track, demonstrating robust localization and stable identity association under purely point-level supervision. 30 K. Luo et al. 
+
+Fig. S5: Qualitative results on the SportsMOT [13] . Bounding boxes with the ‘PS’ prefix denote the continuous trajectories predicted by our PS-Track, demonstrating robust localization and stable identity association under purely point-level supervision.

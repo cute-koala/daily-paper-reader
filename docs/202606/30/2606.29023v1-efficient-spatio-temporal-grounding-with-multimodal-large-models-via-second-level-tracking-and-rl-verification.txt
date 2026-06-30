@@ -1,0 +1,286 @@
+Title: Efficient Spatio-Temporal Grounding with Multimodal Large Models via Second-Level Tracking and RL Verification
+
+URL Source: https://arxiv.org/pdf/2606.29023v1
+
+Published Time: Tue, 30 Jun 2026 00:46:42 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Efficient Spatio-Temporal Grounding with Multimodal Large Models via Second-Level Tracking and RL Verification 
+
+Tianshu Zhang ∗
+
+Tsinghua University 
+
+Yan Wang 
+
+Tsinghua University 
+
+Ji Qi †
+
+Tsinghua University 
+
+Lijie Wen †
+
+Tsinghua University 
+
+Abstract 
+
+Spatio-temporal grounding in long videos requires precise temporal localization and robust object tracking conditioned on natural-language queries. While recent vision-language models (VLMs) show strong reasoning ability, directly apply-ing frame-by-frame inference to long sequences is computationally expensive and unstable. We propose a practical pipeline that shifts from frame-level to second-level tracking and performs cross-second smoothing to preserve continuity while reducing sequence length. To improve reasoning supervision, we synthesize chain-of-thought style trajectories using advanced multimodal models for temporal localization and target selection, and replace generated spatio-temporal coordinates with ground-truth annotations to avoid noisy supervision. We further optimize the policy with reinforcement learning using a verifier based on t_IoU + mv _IoU .Experiments across multiple FPS settings show that our method achieves a strong trade-off between efficiency and localization quality. 
+
+1 Introduction 
+
+Spatio-temporal video grounding (STVG) asks a model to localize a natural-language query in both time and space [Su et al., 2021]. Given a video and a sentence such as “the person in red picks up the bag”, the model must identify the event interval and track the referred target throughout it. The task combines temporal moment localization, referring expression comprehension, object tracking, and video-language reasoning, making it a natural benchmark for language-controllable video understanding. STVG provides a more complete grounding interface than temporal localization, frame-level referring localization, or tracking alone. Temporal-only methods cannot identify where the described target is, while tracking methods do not solve language-conditioned search by themselves. STVG combines these requirements into a single task, making it useful for video retrieval, interactive annotation, human activity understanding, robot perception, and video agents. Existing systems make progress by coupling proposal generation, temporal boundary prediction, detection, tracking, cross-modal fusion, and target-aware reasoning [Zhang et al., 2020a, Gu et al., 2025a], but many still rely on dense frame processing or specialized modules whose cost grows quickly with video length. The difficulty becomes more pronounced in long videos. A short query may describe a brief action inside long background context, and the referred object may remain visible before and after the event with different relevance. Dense sampling preserves boundary cues but increases visual tokens and tracking states; sparse sampling is cheaper but may miss decisive transitions. Even after the correct segment is found, appearance change, occlusion, fast motion, and distractors can cause identity switches or jitter. 
+
+> ∗Work done during internship at Z.ai.
+> †Corresponding authors. Preprint.
+> arXiv:2606.29023v1 [cs.CV] 27 Jun 2026
+
+Figure 1: Comparison between our method and traditional VLMs. Left: existing VLMs performing per-frame tracking lead to token explosion. Right: our proposed per-second tracking mode with a post-smoothing strategy and the spatio-temporal reasoning paradigm. Recent MLLMs offer a promising alternative because they provide stronger language understanding, broader visual knowledge, and structured intermediate reasoning. For STVG, this is appealing: complex queries often require parsing attributes, relations, actions, and event order before deciding when and where the target appears. MLLMs can connect such linguistic constraints to visual evidence and express decisions in a flexible output format. However, there is still a clear gap between this promise and a robust STVG system. Direct frame-level MLLM grounding requires long visual contexts, fine temporal reasoning, and precise text-generated trajectories. One workaround is to input frames iteratively and track step by step [Fu et al., 2025], but this turns long-video grounding into many sequential MLLM calls and makes the wall-clock cost too high. MLLM-based STVG therefore needs a formulation that preserves semantic reasoning while controlling sequence length and grounding noise. Our work focuses on this practical missing piece: how should an MLLM-based STVG system handle long videos while producing usable temporal and spatial grounding? We argue that the basic reasoning unit should be the second rather than the frame. Many STVG queries describe actions and interactions that persist across short temporal neighborhoods; second-level units therefore shorten the sequence, preserve semantic event structure, and yield compact trajectories. A lightweight inter-second smoothing step restores continuity and reduces jitter. The second-level formulation also changes the training problem. We use three stages: CPT for broad spatio-temporal grounding, supervised fine-tuning for structured target and event reasoning, and reinforcement learning for metric-aligned localization. During SFT, generated traces expose temporal and identity decisions, but final coordinates and segments are replaced with annotations; RL then scores complete predictions with temporal and motion-aware spatial overlap, aligning optimization with evaluation more directly than token likelihood alone. Taken together, our formulation couples second-level tracking, ground-truth-corrected reasoning supervision, and verifier-driven RL. These components address long visual inputs, drift-prone traces, text-token coordinates, and metric-misaligned supervision. We evaluate on VidSTG subsets and HC-STVG, with FPS sensitivity and ablation studies analyzing the efficiency-quality trade-off. Our contributions are summarized as follows: • We formulate MLLM-based STVG around second-level tracking, reducing long-video sequence cost while maintaining track continuity through inter-second smoothing. 2• We develop a three-stage training pipeline that combines CPT, corrected reasoning SFT, and verifier-driven RL for spatio-temporal localization. • We construct reasoning supervision with generated decision traces and ground-truth coordi-nate replacement, separating useful semantic reasoning from unreliable generated geometry. • We optimize with a verifier based on tIoU + mv IoU and evaluate across VidSTG subsets, HC-STVG, multiple FPS settings, and targeted ablations. 
+
+2 Related Work 
+
+Video grounding and spatio-temporal localization. Spatio-temporal video grounding (STVG) localizes both the temporal interval and frame-level trajectory of a target described by language. Early non-MLLM studies approached this through language-guided video retrieval, object referring, and sentence-guided video segmentation Yamaguchi et al. [2017], Vasudevan et al. [2018], Gavrilyuk et al. [2018]. Later conventional methods rely on task-specific graph reasoning, two-stage localization, visual-linguistic Transformers, DETR-style tube prediction, consistency modeling, context-guided decoding, and open-vocabulary grounding Tan et al. [2022], Yang et al. [2022], Jin et al. [2022], Lin et al. [2022], Gu et al. [2024], Wasim et al. [2024]. These systems provide strong task-specific baselines, but they remain specialized cross-modal matching or tube regression pipelines with limited high-level reasoning and open-world knowledge. 
+
+Grounding in Multimodal Large Language Models. Recent MLLMs show promising grounding ability, but most work studies either spatial grounding in images or temporal grounding in videos. Spatial grounding models such as Qwen-VL [Bai et al., 2023] connect language to regions through location tokens, natural-language coordinates, image-caption-box alignment, referring mechanisms, or masks, while video MLLMs such as TimeChat [Ren et al., 2024] and query-enrichment methods [Pramanick et al., 2025] localize relevant moments from language. Later MLLMs [Team et al., 2026c, Bai et al., 2025, Team et al., 2026b] increasingly treat spatial and temporal grounding as core capabilities, yet they are still often evaluated separately [Cheng et al., 2025, Meng et al., 2026b]; methods that jointly predict temporal boundaries and spatial trajectories remain less common [Team et al., 2026d, Li et al., 2025b, Clark et al., 2026]. Recent systems such as LLaVA-ST [Li et al., 2025a] and SpaceVLLM [Wang et al., 2025] explore fine-grained spatial-temporal outputs, and other work studies zero-shot STVG or reinforcement fine-tuning [Fu et al., 2025, Meng et al., 2026a, Yang et al., 2025b, Gu et al., 2025b]. However, many approaches depend on architecture changes [Chamiti et al., 2025, Yang et al., 2026, Wang et al., 2024] or external-tool pipelines [Gao et al., 2025, Wu et al., 2026, Munasinghe et al., 2025, Wu et al., 2026], limiting generality [Yang et al., 2025a]. Our work instead studies joint spatial-temporal localization and RL enhancement without changing architecture or inference pipelines. 
+
+3 Method 
+
+3.1 Problem Definition 
+
+We study spatio-temporal video grounding (STVG) under a language-conditioned setting. Given an input video V = {f1, . . . , f T } with frame rate F and a natural-language query q, the model needs to output both the temporal interval in which the described event occurs and the spatial location of the referred target throughout that interval. The ground-truth annotation can be written as 
+
+y∗ = ( t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+, B∗), B∗ = {b∗
+
+> k
+
+}t∗
+
+> e
+> k=t∗
+> s
+
+, (1) where [t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+] denotes the target temporal span and b∗ 
+
+> k
+
+is the target box at time index k. In frame-level STVG, k usually corresponds to a frame. This is precise, but the sequence length grows linearly with the number of frames and quickly becomes impractical for MLLMs on long videos. We instead convert the video into second-level units S = {S1, . . . , S K }, where K = ⌈T /F ⌉ and Sk
+
+contains the frames falling into the k-th second. The model predicts 
+
+ˆy = (ˆ ts, ˆte, ˆB), ˆB = {ˆbk}ˆte
+
+> k=ˆ ts
+
+. (2) 3Figure 2: Model architecture and three-stage training. We train a GLM-V-style multimodal architec-ture to output per-second tracking results. The reasoning adopts a “time-then-space" logical CoT. Training includes CPT, logical CoT-focused SFT, and RL for spatio-temporal grounding. Here [ˆ ts, ˆte] is a second-level temporal span and ˆbk is the predicted target state for second k. When original annotations are available at frame granularity, we convert them to second-level supervision by aggregating visible target boxes within each second. This representation keeps the event structure needed by STVG while reducing the number of visual units from T frames to roughly T /F seconds. It also matches the fact that many language queries describe actions, interactions, and state changes that persist across short temporal neighborhoods rather than isolated frames. 
+
+3.2 Why Direct MLLM Grounding is Difficult 
+
+MLLMs are attractive for STVG because they can parse complex referring expressions and reason over event context, but direct STVG asks them to solve continuous localization through long discrete generation. A straightforward design would feed many frames to the MLLM and ask it to generate a temporal span together with dense coordinates. This creates several mismatches between what STVG requires and what MLLMs are naturally optimized to produce. Frame-level visual input quickly creates an expensive context problem: dense sampling preserves boundary cues but increases visual-token cost, while sparse sampling may remove the evidence that distinguishes the queried event from surrounding context. Direct grounding also lengthens the output, so generated reasoning and coordinate sequences can drift across similar frames, visible distractors, nearby temporal units, or language priors that are insufficiently grounded in visual evidence [Chen et al., 2024]. Finally, coordinates are a brittle text-generation interface for dense geometry: small numerical errors can produce jitter, and independently generated boxes do not guarantee stable identity. Since SFT optimizes token likelihood rather than temporal overlap, spatial overlap, or trajectory consistency, we use compact second-level outputs, corrected geometric supervision, and task-level RL rewards. 
+
+3.3 Three-Stage Training Pipeline 
+
+Our method uses a three-stage pipeline designed around these failure modes and is built on a GLM-V-style architecture. CPT builds the basic ability to connect language, temporal units, and object locations. SFT teaches the model how to reason about the queried target and approximate temporal window. RL then directly optimizes numerical grounding quality with task-level rewards to fully 4unlock models’ capablities. The stages are complementary: CPT provides broad visual grounding ability, SFT shapes the model’s decision process, and RL aligns the final output with STVG metrics. 
+
+3.4 CPT: Broad Spatio-Temporal Grounding Data construction. The CPT stage uses a mixture of STVG-style data, large-scale auxiliary tracking and segmentation data, and general video understanding data. In addition to video grounding annotations, we include a large amount of multi-object tracking (MOT) [Cui et al., 2023], single-object tracking (SOT) [Müller et al., 2018, Huang et al., 2021, Fan et al., 2020], and segmentation data [Miao et al., 2021, Ravi et al., 2024]. MOT data teaches the model to distinguish multiple instances, preserve identity under interactions, and reason about distractors. SOT data provides dense examples of following one target over time, which is important for stable trajectories after the temporal span has been selected. Segmentation data contributes fine-grained objectness and boundary information; we convert masks to boxes when training the box-output interface, while retaining the benefit of precise foreground supervision during representation learning. Most videos in CPT are sampled at 1 FPS, which matches our second-level formulation and keeps the visual context affordable. We also mix in a small portion of higher-FPS videos to preserve distributional coverage and ensure that the model still has sufficient processing ability when evaluation videos contain denser temporal evidence. This mixture avoids over-specializing the model to a single 1-FPS regime. All grounding-related data sources are converted into a unified second-level format. For tracking data, each training instance is formed by pairing a target description or template-derived prompt with a second-level trajectory. For segmentation data, prompts are constructed around object categories or referred regions, and the target mask or box is assigned to the corresponding second-level unit. For STVG data, the temporal span and trajectory are already aligned with language queries and are converted directly. Mixing these sources is important because STVG datasets alone are usually not large enough to teach robust tracking, object identity preservation, and spatial precision across diverse scenes at the CPT stage. We further add general video captioning and video question-answering data so that CPT does not collapse into a narrow coordinate-prediction task. These general video samples preserve the model’s basic conversational ability and broad video understanding ability, which are necessary for interpreting open-ended user queries before producing grounded outputs. 
+
+3.5 SFT: Reasoning Without Coordinate Drift Training data. The SFT stage uses 20 K examples sampled from the Vidstg and HC-STVG training sets. For each example, we use Gemini to generate a chain-of-thought style decision trace. The trace focuses on two questions: what object or person should be tracked, and what rough temporal window contains the described event. This supervision is intended to teach the model to make its grounding decision through explicit visual-language reasoning rather than by directly emitting coordinates from shallow pattern matching. 
+
+Reasoning format. We deliberately do not ask the model to output spatial coordinates inside the reasoning chain. This design keeps the trace focused on semantic decisions rather than dense geometry: the model describes the target, discriminative attributes, relevant actions, and approximate temporal evidence, while the final structured answer compactly provides the temporal span and trajectory supervised by ground truth. We also encourage the trace to spend more reasoning on locally ambiguous moments, such as adjacent temporal units with distractor objects or similar actions, instead of repeatedly verbalizing routine frame-level observations. 
+
+Coordinate correction. Although Gemini-generated traces are useful for semantic reasoning, we do not trust generated geometry as supervision. For any final structured output, temporal spans and boxes are replaced with ground-truth annotations. This produces a corrected sequence τ that preserves high-level reasoning while ensuring that all numerical labels are geometrically valid. The SFT loss is the standard next-token objective: 
+
+Lsft = −E(S,q,τ )
+
+X
+
+> u
+
+log πθ (τu | τ<u , S, q ). (3) 5This stage teaches the expected response structure and reasoning behavior for STVG, while leaving metric-level localization quality to the RL stage. 
+
+3.6 RL: Direct Optimization of Grounding Quality Reward design. For each prompt, the policy samples a group of candidate outputs. We parse each output into a temporal span and second-level trajectory, then score it with a verifier: 
+
+R = wt tIoU + wm mv IoU . (4) The temporal reward tIoU measures overlap between the predicted and ground-truth time windows: 
+
+tIoU = |[ˆ ts, ˆte] ∩ [t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+]||[ˆ ts, ˆte] ∪ [t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+]| . (5) This term provides a direct learning signal for event localization before spatial trajectory quality is evaluated. The motion-aware spatial reward mv IoU evaluates whether the predicted trajectory follows the correct target during the relevant time span. We compute spatial overlap over valid second-level states and aggregate it across the matched temporal region: 
+
+mv IoU = 1
+
+|Ω|
+
+X
+
+> k∈Ω
+
+IoU( ˆbk, b ∗
+
+> k
+
+), Ω = [ˆ ts, ˆte] ∩ [t∗ 
+
+> s
+
+, t ∗ 
+
+> e
+
+]. (6) If the temporal intersection is empty, the spatial reward is set to zero. This term encourages accurate localization, stable identity tracking, and motion-aware alignment after the model has found the correct event region. Together, tIoU and mv IoU score the two coupled parts of STVG without collapsing temporal and spatial errors into a single signal. 
+
+GRPO-style optimization. We initialize RL from the SFT model. For each prompt x, we sample a group of responses {yi}Gi=1 and compute normalized group advantages ˆAi from their verifier rewards. Let 
+
+ri(θ) = πθ (yi | x)
+
+πθold (yi | x) . (7) We optimize the clipped objective 
+
+JRL (θ) = E
+
+h
+
+min 
+
+
+
+ri(θ) ˆAi, clip [1 −ϵlow , 1+ ϵhigh ](ri(θ)) ˆAi
+
+i 
+
+. (8) We use asymmetric clipping with ϵlow = 0 .20 and ϵhigh = 0 .28 . The larger upper range allows beneficial updates to move slightly more when the verifier strongly prefers an output, while the lower range keeps harmful probability decreases conservative. We do not add an explicit KL penalty. 
+
+3.7 Inference with Second-Level Tracking and Smoothing 
+
+At inference time, the model receives the language query and second-level video units, then outputs a temporal span and a compact second-level trajectory. We parse the structured answer, discard invalid states, and apply inter-second smoothing to reduce local jitter. The smoothing step uses neighboring valid boxes to stabilize abrupt changes while preserving the predicted temporal boundaries. The final output can be kept at second-level granularity or expanded back to frame-level boxes through interpo-lation when required by a benchmark protocol. This inference procedure keeps the computational footprint close to the number of seconds rather than the number of frames, which is the main source of efficiency in long videos. 
+
+4 Experiments 
+
+4.1 Experimental Setup Benchmarks. We evaluate on two standard STVG leaderboards. VidSTG [Zhang et al., 2020b] is built from the VidOR [Shang et al., 2019] video relation dataset and asks models to ground multi-form 6language queries in untrimmed videos. It contains both declarative and interrogative sentence forms, making it a useful benchmark for testing whether a model can handle different linguistic expressions of the same grounding problem. HC-STVG focuses on human-centric spatio-temporal grounding in complex multi-person scenes. Compared with generic object grounding, HC-STVG stresses target disambiguation, interaction understanding, and identity preservation under crowded motion. Together, the two benchmarks cover both general video relation grounding and human-centric grounding, which are the main evaluation settings for STVG. We also evaluate on Video-MME-v2 [Fu et al., 2026] to check whether the training pipeline preserves and improves general video understanding rather than overfitting to coordinate prediction. 
+
+Metrics. Following standard STVG evaluation, we report temporal localization and tube localization metrics. mtIoU measures the mean temporal IoU between predicted and ground-truth time windows. 
+
+mvIoU measures the mean spatio-temporal tube IoU and is the primary indicator of full grounding quality. We also report vIoU@ R, which measures the percentage of examples whose tube IoU exceeds threshold R (e.g., 0.3 or 0.5). 
+
+Compared models. We compare against five general MLLM baselines: Qwen3.5, Seed2.0-pro, Kimi-k2.5 [Team et al., 2026a], Gemini3-Flash, and Gemini3-Pro. We also report three versions of our model: the SFT checkpoint, an RL checkpoint optimized with mv IoU only, and the final RL checkpoint optimized with tIoU + mv IoU . This setup separates the effect of task-specific SFT from the additional gains brought by verifier-driven RL. 
+
+4.2 Main Results 
+
+Table 1 summarizes the main STVG comparison. Our final RL model achieves the strongest grounding performance on both VidSTG and HC-STVG, reaching the best results among all evaluated systems. This is notable because our model is a 9B task-aligned checkpoint, while several baselines are substantially larger general-purpose MLLMs. The comparison suggests that STVG performance is not determined only by backbone scale: second-level formulation, grounding-and-tracking CPT, corrected reasoning supervision, and verifier-driven RL are all important for turning video-language understanding into precise trajectories. The progression from Ours-SFT to the two RL variants further isolates the effect of alignment. SFT already adapts the model to the required output format and reasoning behavior, but RL improves the final grounding metrics by optimizing completed predictions with task-level rewards. The full verifier, tIoU + mv IoU , is designed to improve both temporal localization and motion-aware spatial tracking, which explains why the final RL checkpoint is expected to perform best on the full tube metrics rather than only on temporal overlap. In training, the combined tIoU + mv IoU reward also converges faster than using mv IoU alone, because the temporal component provides a denser early signal before the model has learned to predict fully accurate trajectories. For the final RL model, we report the mean over three evaluation runs on VidSTG and HC-STVG. Beyond STVG, we also compare on Video-MME-v2 to assess general video understanding. This comparison is important because our training pipeline includes tracking-heavy data and coordinate supervision, which could in principle narrow the model toward localization-only behavior. Figure 3 shows the opposite trend: our model improves over GLM-4.1V-Thinking on both non-linear reasoning accuracy and simple accuracy, reaching 12 .6 and 28 .0 compared with the baseline’s 9.4 and 23 .7.This indicates that the spatio-temporal grounding task can successfully feed back into general video understanding, rather than merely producing a task-specific localization model. It also supports our design choice of including general video understanding data in CPT, so that the model can combine precise grounding with broader event and commonsense reasoning. 
+
+4.3 Training FPS Sensitivity 
+
+We evaluate how the training frame rate affects grounding quality. Lower FPS reduces training cost but may miss short transitions, while higher FPS exposes denser temporal evidence at the cost of longer visual sequences. We also include a dynamic-FPS setting that adjusts the sampling density according to the video or event duration. Figure 3 reports the sensitivity study; 1 FPS achieves the best result among the evaluated training frame-rate settings. 7Table 1: Main results on VidSTG and HC-STVG leaderboards. The Ours-RL numbers are means over three evaluation runs. Benchmark Model Params mtIoU ↑ mvIoU ↑ vIoU@0 .5 ↑
+
+VidSTG Qwen3.5 397B 27.88 15.32 15.50 Seed2.0-pro undisclosed 26.28 16.66 9.78 Kimi-k2.5 1T 23.99 16.05 10.46 Gemini3-Flash undisclosed 18.76 8.90 4.11 Gemini3-Pro undisclosed 20.07 11.57 4.98 Ours-SFT 9B 27.66 19.47 11.86 Ours-RL 9B 31.35 23.79 19.49 
+
+HC-STVG Qwen3.5 397B 50.99 28.20 16.18 Seed2.0-pro undisclosed 42.17 26.68 9.37 Kimi-k2.5 1T 43.9 10.99 9.04 Gemini3-Flash undisclosed TBD 16.64 2.84 Gemini3-Pro undisclosed 43.81 20.24 4.82 Ours-SFT 9B 51.23 33.75 26.18 Ours-RL 9B 60.04 40.99 34.12 
+
+Video-MME-v2 GLM-4.1V-Thinking Ours      
+
+> 010 20 30
+> Non-linear
+> Simple Acc.
+> 9.4 12.6
+> 23.7 28.0
+
+FPS Sensitivity    
+
+> 0.5FPS
+> 31.4
+> 1FPS
+> 39.08
+> Dynamic
+> 38.5
+
+RL Reward Ablation          
+
+> Reward mtIoU ↑mvIoU ↑
+> mv IoU only
+> tIoU +mv IoU
+> 29.11 22.59
+> 31.35 23.82
+
+Figure 3: Compact auxiliary results and ablations. Left: Video-MME-v2 head-to-head comparison. Right: training FPS sensitivity, tested on Dancetrack [Sun et al., 2022] and the RL reward ablation. 
+
+5 Discussion 
+
+5.1 Ablation Studies 
+
+We study the reward design in Figure 3 by comparing an RL variant optimized only with the motion-aware tube reward mv IoU against our verifier tIoU + mv IoU , while keeping the model, data, second-level formulation, and training pipeline fixed. The mv IoU -only variant directly optimizes the final tube quality, but it can only provide a weak learning signal early in RL. When the predicted temporal window is far from the ground truth, the reward becomes close to zero even if the model has partially identified the correct target. Adding tIoU makes the reward denser and leads to faster convergence: the policy can first learn to move the event window toward the correct segment, after which mv IoU becomes meaningful for refining the trajectory. 
+
+5.2 Case Analysis and Generalization 
+
+Qualitatively, the strongest gains appear in long videos with distractors and queries whose target cannot be identified from a category label alone. Frame-level or generic MLLM baselines often locate the correct object in a few frames but fail to maintain a stable tube, or they choose a temporal 8Prompt : Please track the person committing crime in the video           
+
+> Thinking : The user wants to fi nd the coordinates of the person described as "person committing crime" in the video. I need to analyze the video to identify who the criminal is and when they appear . Looking at the video, there are three people visible: 1. A person in a red hat on the right (appears to be a bystander) 2. A person in a blue hoodie in the foreground 3. A person in dark clothing behind the black car. The text overlay says "RED BANK CAR THEFT CAUGHT ON CAMERA". The action involves someone stealing a car. Looking at the sequence, the person in dark clothing appears to be the one interacting with the car door and attempting to steal it. This person starts moving towards the car around the middle of the video and opens the door. The "person committing crime" would be the individual in the dark clothes who is approaching the car and opening the door. This person becomes clearly visible and active starting around the 2nd or 3rd second and continues through the end of the video . I need to track this speci fi c person throughout the video duration. The person in the dark clothing is the one committing the theft. Prompt : Please track the car performing overtake in the video
+> Thinking : The user requests object tracking for the car performing overtake in the video. I need to: Identify the performing overtake in the video (it appears to be an F1 race car), locate the position of this red vehicle in every frame, mark it with bounding boxes and return the tracking results. From the video frames, this appears to be an F1 race with two cars competing on the track: An orange car (McLaren team) and a red car (Ferrari team) .The user wants to track the car performing overtake , which is the Ferrari. I need to identify and annotate the position of this car in every second. Let me analyze it frame by frame: Second 1: the red car is in the upper-right area. Second 2: the red car is in the upper-middle-right area. Second 3: the red car is at the upper-right corner near the turn. Seconds 4–5: the red car is on the right side of the track.Seconds 7–8: the red car is at the right-side corner. Second 9: the red car is in the lower-right area. Second 10: the red car is in the lower-middle area.……Second 15: the red car is in the lower area. I need to use the draw_video_objects_tracking tool to generate the tracking results.
+
+Figure 4: Qualitative case studies. Left: the model localizes the queried theft-related event and tracks the referred target despite nearby distractors. Right: the model keeps the target identity stable across motion and visually similar nearby objects. window that includes large amounts of irrelevant context. Our model more consistently identifies the queried target before producing the final trajectory, which reduces identity switches. Figure 4 provides two representative case studies. In the left panel of Figure 4, the query asks the model to track “the person committing crime,” which requires understanding the event rather than simply matching an object category. The video contains multiple people: a person in a red hat near the right side, a person in a blue hoodie in the foreground, and a person in dark clothing around the black car. The model’s reasoning first decomposes the scene, compares these candidate people, uses the video context and the on-screen cue about car theft, and then identifies the person in dark clothing as the one approaching the car and opening the door. This reasoning trace gives a useful high-level guide before coordinate prediction: it resolves who should be tracked and when the relevant action begins, after which the model produces a precise trajectory for the correct person. This case shows that the method preserves strong general video understanding while making it actionable for spatio-temporal tracking. In the right panel of Figure 4, the prompt asks for the car performing the overtake. This is difficult for a traditional localization or tracking model without large-scale CPT, because the model must understand a motorsport scene, infer that the orange car belongs to McLaren and the red car belongs to Ferrari, and decide which vehicle is performing the overtaking maneuver. Our method uses the MLLM’s world knowledge to connect visual appearance, team identity, and race dynamics before emitting the tracking boxes. This example illustrates an important generalization advantage: when the query depends on domain knowledge rather than only visual similarity, the MLLM-based formulation can identify targets that conventional pipelines are unlikely to distinguish reliably. 
+
+6 Conclusion 
+
+We present a practical MLLM framework for STVG. The method uses second-level tracking to reduce long context, corrected reasoning SFT to teach target and temporal reasoning, and verifier-driven RL to directly optimize numeric grounding quality. Experiments on VidSTG and HC-STVG show that a 9B task-aligned model can outperform much larger general MLLM baselines, suggesting that representation, supervision, and reward design are central for video grounding. The Video-MME-v2 result further shows that localization-oriented training can feed back into general video understanding. 
+
+Limitations. Future work can use the same MLLM reasoning ability to assist broader video understanding tasks, such as event parsing, long-horizon activity analysis, and interactive video agents. Besides, extending the method to noisier open-world videos or real-time settings will require stronger filtering, uncertainty handling, and adaptive temporal resolution. 9References 
+
+Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. Qwen-vl: A versatile vision-language model for understanding, localization, text reading, and beyond, 2023. URL https://arxiv.org/abs/2308.12966 .Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhifang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, Mei Li, Kaixin Li, Zicheng Lin, Junyang Lin, Xuejing Liu, Jiawei Liu, Chenglong Liu, Yang Liu, Dayiheng Liu, Shixuan Liu, Dunjie Lu, Ruilin Luo, Chenxu Lv, Rui Men, Lingchen Meng, Xuancheng Ren, Xingzhang Ren, Sibo Song, Yuchong Sun, Jun Tang, Jianhong Tu, Jianqiang Wan, Peng Wang, Pengfei Wang, Qiuyue Wang, Yuxuan Wang, Tianbao Xie, Yiheng Xu, Haiyang Xu, Jin Xu, Zhibo Yang, Mingkun Yang, Jianxin Yang, An Yang, Bowen Yu, Fei Zhang, Hang Zhang, Xi Zhang, Bo Zheng, Humen Zhong, Jingren Zhou, Fan Zhou, Jing Zhou, Yuanzhi Zhu, and Ke Zhu. Qwen3-vl technical report, 2025. URL https://arxiv.org/abs/2511.21631 .Tzoulio Chamiti, Leandro Di Bella, Adrian Munteanu, and Nikos Deligiannis. Refergpt: Towards zero-shot referring multi-object tracking, 2025. URL https://arxiv.org/abs/2504.09195 .Junzhe Chen, Tianshu Zhang, Shiyu Huang, Yuwei Niu, Linfeng Zhang, Lijie Wen, and Xuming Hu. Ict: Image-object cross-level trusted intervention for mitigating object hallucination in large vision-language models, 2024. URL https://arxiv.org/abs/2411.15268 .Zixu Cheng, Jian Hu, Ziquan Liu, Chenyang Si, Wei Li, and Shaogang Gong. V-star: Benchmarking video-llms on video spatio-temporal reasoning, 2025. URL https://arxiv.org/abs/2503. 11495 .Christopher Clark, Jieyu Zhang, Zixian Ma, Jae Sung Park, Mohammadreza Salehi, Rohun Tripathi, Sangho Lee, Zhongzheng Ren, Chris Dongjoo Kim, Yinuo Yang, Vincent Shao, Yue Yang, Weikai Huang, Ziqi Gao, Taira Anderson, Jianrui Zhang, Jitesh Jain, George Stoica, Winson Han, Ali Farhadi, and Ranjay Krishna. Molmo2: Open weights and data for vision-language models with video understanding and grounding, 2026. URL https://arxiv.org/abs/2601.10611 .Yutao Cui, Chenkai Zeng, Xiaoyu Zhao, Yichun Yang, Gangshan Wu, and Limin Wang. Sportsmot: A large multi-object tracking dataset in multiple sports scenes, 2023. URL https://arxiv.org/ abs/2304.05170 .Heng Fan, Hexin Bai, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia Yu, Harshit, Mingzhen Huang, Juehuan Liu, Yong Xu, Chunyuan Liao, Lin Yuan, and Haibin Ling. Lasot: A high-quality large-scale single object tracking benchmark, 2020. URL https://arxiv.org/abs/2009.03465 .Chaoyou Fu, Haozhi Yuan, Yuhao Dong, Yi-Fan Zhang, Yunhang Shen, Xiaoxing Hu, Xueying Li, Jinsen Su, Chengwu Long, Xiaoyao Xie, Yongkang Xie, Xiawu Zheng, Xue Yang, Haoyu Cao, Yunsheng Wu, Ziwei Liu, Xing Sun, Caifeng Shan, and Ran He. Video-mme-v2: Towards the next stage in benchmarks for comprehensive video understanding, 2026. URL https://arxiv.org/ abs/2604.05015 .Teng Fu, Mengyang Zhao, Ke Niu, Kaixin Peng, and Bin Li. Omnipt: Unleashing the potential of large vision language models for pedestrian tracking and understanding, 2025. URL https: //arxiv.org/abs/2511.17053 .Shida Gao, Feng Xue, Xiangfeng Wang, Anlong Ming, Teng Long, Yihua Shao, Haozhe Wang, Zhaowen Lin, Wei Wang, and Nicu Sebe. 1 + 1 > 2: Detector-empowered video large language model for spatio-temporal grounding and reasoning, 2025. URL https://arxiv.org/abs/ 2512.06673 .Kirill Gavrilyuk, Amir Ghodrati, Zhenyang Li, and Cees G. M. Snoek. Actor and action video segmentation from a sentence, 2018. URL https://arxiv.org/abs/1803.07485 .Xin Gu, Heng Fan, Yan Huang, Tiejian Luo, and Libo Zhang. Context-guided spatio-temporal video grounding, 2024. URL https://arxiv.org/abs/2401.01578 .10 Xin Gu, Yaojie Shen, Chenxi Luo, Tiejian Luo, Yan Huang, Yuewei Lin, Heng Fan, and Libo Zhang. Knowing your target: Target-aware transformer makes better spatio-temporal video grounding, 2025a. URL https://arxiv.org/abs/2502.11168 .Xin Gu, Haoji Zhang, Qihang Fan, Jingxuan Niu, Zhipeng Zhang, Libo Zhang, Guang Chen, Fan Chen, Longyin Wen, and Sijie Zhu. Thinking with bounding boxes: Enhancing spatio-temporal video grounding via reinforcement fine-tuning, 2025b. URL https://arxiv.org/abs/2511. 21375 .Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A large high-diversity benchmark for generic object tracking in the wild. IEEE Transactions on Pattern Analysis and Machine Intelligence , 43 (5):1562–1577, May 2021. ISSN 1939-3539. doi: 10.1109/tpami.2019.2957464. URL http: //dx.doi.org/10.1109/TPAMI.2019.2957464 .Yang Jin, Yongzhi Li, Zehuan Yuan, and Yadong Mu. Embracing consistency: A one-stage approach for spatio-temporal video grounding, 2022. URL https://arxiv.org/abs/2209.13306 .Hongyu Li, Jinyu Chen, Ziyu Wei, Shaofei Huang, Tianrui Hui, Jialin Gao, Xiaoming Wei, and Si Liu. Llava-st: A multimodal large language model for fine-grained spatial-temporal understanding, 2025a. URL https://arxiv.org/abs/2501.08282 .Xinhao Li, Ziang Yan, Desen Meng, Lu Dong, Xiangyu Zeng, Yinan He, Yali Wang, Yu Qiao, Yi Wang, and Limin Wang. Videochat-r1: Enhancing spatio-temporal perception via reinforcement fine-tuning, 2025b. URL https://arxiv.org/abs/2504.06958 .Zihang Lin, Chaolei Tan, Jian-Fang Hu, Zhi Jin, Tiancai Ye, and Wei-Shi Zheng. Stvgformer: Spatio-temporal video grounding with static-dynamic cross-modal understanding, 2022. URL 
+
+https://arxiv.org/abs/2207.02756 .Jiahao Meng, Xiangtai Li, Haochen Wang, Yue Tan, Tao Zhang, Lingdong Kong, Yunhai Tong, Anran Wang, Zhiyang Teng, Yujing Wang, and Zhuochen Wang. Open-o3-video: Grounded video reasoning with explicit spatio-temporal evidence, 2026a. URL https://arxiv.org/abs/2510. 20579 .Jiahao Meng, Tan Yue, Qi Xu, Haochen Wang, Zhongwei Ren, Weisong Liu, Yuhao Wang, Renrui Zhang, Yunhai Tong, and Haodong Duan. Videozerobench: Probing the limits of video mllms with spatio-temporal evidence verification, 2026b. URL https://arxiv.org/abs/2604.01569 .Jiaxu Miao, Yunchao Wei, Yu Wu, Chen Liang, Guangrui Li, and Yi Yang. Vspw: A large-scale dataset for video scene parsing in the wild. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4133–4143, 2021. Shehan Munasinghe, Hanan Gani, Wenqi Zhu, Jiale Cao, Eric Xing, Fahad Shahbaz Khan, and Salman Khan. Videoglamm: A large multimodal model for pixel-level visual grounding in videos, 2025. URL https://arxiv.org/abs/2411.04923 .Matthias Müller, Adel Bibi, Silvio Giancola, Salman Al-Subaihi, and Bernard Ghanem. Trackingnet: A large-scale dataset and benchmark for object tracking in the wild, 2018. URL https://arxiv. org/abs/1803.10794 .Shraman Pramanick, Effrosyni Mavroudi, Yale Song, Rama Chellappa, Lorenzo Torresani, and Triantafyllos Afouras. Enrich and detect: Video temporal grounding with multimodal llms, 2025. URL https://arxiv.org/abs/2510.17023 .Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, and Christoph Feichtenhofer. Sam 2: Segment anything in images and videos, 2024. URL https://arxiv.org/abs/2408. 00714 .Shuhuai Ren, Linli Yao, Shicheng Li, Xu Sun, and Lu Hou. Timechat: A time-sensitive multimodal large language model for long video understanding, 2024. URL https://arxiv.org/abs/2312. 02051 .11 Xindi Shang, Donglin Di, Junbin Xiao, Yu Cao, Xun Yang, and Tat-Seng Chua. Annotating objects and relations in user-generated videos. In Proceedings of the 2019 on International Conference on Multimedia Retrieval , pages 279–287. ACM, 2019. Rui Su, Qian Yu, and Dong Xu. Stvgbert: A visual-linguistic transformer based framework for spatio-temporal video grounding. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , pages 1533–1542, October 2021. Peize Sun, Jinkun Cao, Yi Jiang, Zehuan Yuan, Song Bai, Kris Kitani, and Ping Luo. Dancetrack: Multi-object tracking in uniform appearance and diverse motion, 2022. URL https://arxiv. org/abs/2111.14690 .Chaolei Tan, Zihang Lin, Jian-Fang Hu, Xiang Li, and Wei-Shi Zheng. Augmented 2d-tan: A two-stage approach for human-centric spatio-temporal video grounding, 2022. URL https: //arxiv.org/abs/2106.10634 .Kimi Team, Tongtong Bai, Yifan Bai, Yiping Bao, S. H. Cai, Yuan Cao, Y. Charles, H. S. Che, Cheng Chen, Guanduo Chen, Huarong Chen, Jia Chen, Jiahao Chen, Jianlong Chen, Jun Chen, Kefan Chen, Liang Chen, Ruijue Chen, Xinhao Chen, Yanru Chen, Yanxu Chen, Yicun Chen, Yimin Chen, Yingjiang Chen, Yuankun Chen, Yujie Chen, Yutian Chen, Zhirong Chen, Ziwei Chen, Dazhi Cheng, Minghan Chu, Jialei Cui, Jiaqi Deng, Muxi Diao, Hao Ding, Mengfan Dong, Mengnan Dong, Yuxin Dong, Yuhao Dong, Angang Du, Chenzhuang Du, Dikang Du, Lingxiao Du, Yulun Du, Yu Fan, Shengjun Fang, Qiulin Feng, Yichen Feng, Garimugai Fu, Kelin Fu, Hongcheng Gao, Tong Gao, Yuyao Ge, Shangyi Geng, Chengyang Gong, Xiaochen Gong, Zhuoma Gongque, Qizheng Gu, Xinran Gu, Yicheng Gu, Longyu Guan, Yuanying Guo, Xiaoru Hao, Weiran He, Wenyang He, Yunjia He, Chao Hong, Hao Hu, Jiaxi Hu, Yangyang Hu, Zhenxing Hu, Ke Huang, Ruiyuan Huang, Weixiao Huang, Zhiqi Huang, Tao Jiang, Zhejun Jiang, Xinyi Jin, Yu Jing, Guokun Lai, Aidi Li, C. Li, Cheng Li, Fang Li, Guanghe Li, Guanyu Li, Haitao Li, Haoyang Li, Jia Li, Jingwei Li, Junxiong Li, Lincan Li, Mo Li, Weihong Li, Wentao Li, Xinhang Li, Xinhao Li, Yang Li, Yanhao Li, Yiwei Li, Yuxiao Li, Zhaowei Li, Zheming Li, Weilong Liao, Jiawei Lin, Xiaohan Lin, Zhishan Lin, Zichao Lin, Cheng Liu, Chenyu Liu, Hongzhang Liu, Liang Liu, Shaowei Liu, Shudong Liu, Shuran Liu, Tianwei Liu, Tianyu Liu, Weizhou Liu, Xiangyan Liu, Yangyang Liu, Yanming Liu, Yibo Liu, Yuanxin Liu, Yue Liu, Zhengying Liu, Zhongnuo Liu, Enzhe Lu, Haoyu Lu, Zhiyuan Lu, Junyu Luo, Tongxu Luo, Yashuo Luo, Long Ma, Yingwei Ma, Shaoguang Mao, Yuan Mei, Xin Men, Fanqing Meng, Zhiyong Meng, Yibo Miao, Minqing Ni, Kun Ouyang, Siyuan Pan, Bo Pang, Yuchao Qian, Ruoyu Qin, Zeyu Qin, Jiezhong Qiu, Bowen Qu, Zeyu Shang, Youbo Shao, Tianxiao Shen, Zhennan Shen, Juanfeng Shi, Lidong Shi, Shengyuan Shi, Feifan Song, Pengwei Song, Tianhui Song, Xiaoxi Song, Hongjin Su, Jianlin Su, Zhaochen Su, Lin Sui, Jinsong Sun, Junyao Sun, Tongyu Sun, Flood Sung, Yunpeng Tai, Chuning Tang, Heyi Tang, Xiaojuan Tang, Zhengyang Tang, Jiawen Tao, Shiyuan Teng, Chaoran Tian, Pengfei Tian, Ao Wang, Bowen Wang, Chensi Wang, Chuang Wang, Congcong Wang, Dingkun Wang, Dinglu Wang, Dongliang Wang, Feng Wang, Hailong Wang, Haiming Wang, Hengzhi Wang, Huaqing Wang, Hui Wang, Jiahao Wang, Jinhong Wang, Jiuzheng Wang, Kaixin Wang, Linian Wang, Qibin Wang, Shengjie Wang, Shuyi Wang, Si Wang, Wei Wang, Xiaochen Wang, Xinyuan Wang, Yao Wang, Yejie Wang, Yipu Wang, Yiqin Wang, Yucheng Wang, Yuzhi Wang, Zhaoji Wang, Zhaowei Wang, Zhengtao Wang, Zhexu Wang, Zihan Wang, Zizhe Wang, Chu Wei, Ming Wei, Chuan Wen, Zichen Wen, Chengjie Wu, Haoning Wu, Junyan Wu, Rucong Wu, Wenhao Wu, Yuefeng Wu, Yuhao Wu, Yuxin Wu, Zijian Wu, Chenjun Xiao, Jin Xie, Xiaotong Xie, Yuchong Xie, Yifei Xin, Bowei Xing, Boyu Xu, Jianfan Xu, Jing Xu, Jinjing Xu, L. H. Xu, Lin Xu, Suting Xu, Weixin Xu, Xinbo Xu, Xinran Xu, Yangchuan Xu, Yichang Xu, Yuemeng Xu, Zelai Xu, Ziyao Xu, Junjie Yan, Yuzi Yan, Guangyao Yang, Hao Yang, Junwei Yang, Kai Yang, Ningyuan Yang, Ruihan Yang, Xiaofei Yang, Xinlong Yang, Ying Yang, Yi Yang, Yi Yang, Zhen Yang, Zhilin Yang, Zonghan Yang, Haotian Yao, Dan Ye, Wenjie Ye, Zhuorui Ye, Bohong Yin, Chengzhen Yu, Longhui Yu, Tao Yu, Tianxiang Yu, Enming Yuan, Mengjie Yuan, Xiaokun Yuan, Yang Yue, Weihao Zeng, Dunyuan Zha, Haobing Zhan, Dehao Zhang, Hao Zhang, Jin Zhang, Puqi Zhang, Qiao Zhang, Rui Zhang, Xiaobin Zhang, Y. Zhang, Yadong Zhang, Yangkun Zhang, Yichi Zhang, Yizhi Zhang, Yongting Zhang, Yu Zhang, Yushun Zhang, Yutao Zhang, Yutong Zhang, Zheng Zhang, Chenguang Zhao, Feifan Zhao, Jinxiang Zhao, Shuai Zhao, Xiangyu Zhao, Yikai Zhao, Zijia Zhao, Huabin Zheng, Ruihan Zheng, Shaojie Zheng, Tengyang Zheng, Junfeng Zhong, Longguang Zhong, Weiming Zhong, M. Zhou, Runjie Zhou, Xinyu Zhou, Zaida Zhou, Jinguo Zhu, Liya Zhu, Xinhao Zhu, 12 Yuxuan Zhu, Zhen Zhu, Jingze Zhuang, Weiyu Zhuang, Ying Zou, and Xinxing Zu. Kimi k2.5: Visual agentic intelligence, 2026a. URL https://arxiv.org/abs/2602.02276 .V Team, Wenyi Hong, Xiaotao Gu, Ziyang Pan, Zhen Yang, Yuting Wang, Yue Wang, Yuanchang Yue, Yu Wang, Yanling Wang, Yan Wang, Xijun Liu, Wenmeng Yu, Weihan Wang, Wei Li, Shuaiqi Duan, Sheng Yang, Ruiliang Lv, Mingdao Liu, Lihang Pan, Ke Ning, Junhui Ji, Jinjiang Wang, Jing Chen, Jiazheng Xu, Jiale Zhu, Jiale Cheng, Ji Qi, Guobing Gan, Guo Wang, Cong Yao, Zijun Dou, Zihao Zhou, Zihan Wang, Zhiqi Ge, Zhijie Li, Zhenyu Hou, Zhao Xue, Zehui Wang, Zehan Qi, Zehai He, Yutao Zhang, Yusen Liu, Yukuo Cen, Yuchen Li, Yuan Wang, Yu Yang, Yongbin Liu, Yijian Lu, Yifan Xu, Yanzi Wang, Yanxiao Zhao, Yanfeng Wang, Yadong Xue, Yabo Xu, Xinyu Zhang, Xinyu Liu, Xiao Liu, Wenyi Zhao, Wenkai Li, Tianyu Tong, Tianshu Zhang, Shudan Zhang, Shengdong Yan, Qinkai Zheng, Mingde Xu, Licheng Bao, lat Long long, Jiaxing Xu, Jiaxin Fan, Jiawen Qian, Jiali Chen, Jiahui Lin, Jiadai Sun, Haozhi Zheng, Haoran Wang, Haochen Li, Hanyu Liu, Han Xu, Fan Yang, Dan Zhang, Da Yin, Chuangxin Zhao, Chengcheng Wu, Boyan Shi, Bowen Lv, Bowei Jia, Bo Li, Bin Chen, Baoxu Wang, Peng Zhang, Debing Liu, Bin Xu, Juanzi Li, Minlie Huang, Yuxiao Dong, and Jie Tang. Glm-5v-turbo: Toward a native foundation model for multimodal agents, 2026b. URL https://arxiv.org/abs/2604.26752 .V Team, Wenyi Hong, Wenmeng Yu, Xiaotao Gu, Guo Wang, Guobing Gan, Haomiao Tang, Jiale Cheng, Ji Qi, Junhui Ji, Lihang Pan, Shuaiqi Duan, Weihan Wang, Yan Wang, Yean Cheng, Zehai He, Zhe Su, Zhen Yang, Ziyang Pan, Aohan Zeng, Baoxu Wang, Bin Chen, Boyan Shi, Changyu Pang, Chenhui Zhang, Da Yin, Fan Yang, Guoqing Chen, Haochen Li, Jiale Zhu, Jiali Chen, Jiaxing Xu, Jiazheng Xu, Jing Chen, Jinghao Lin, Jinhao Chen, Jinjiang Wang, Junjie Chen, Leqi Lei, Letian Gong, Leyi Pan, Mingdao Liu, Mingde Xu, Mingzhi Zhang, Qinkai Zheng, Ruiliang Lyu, Shangqin Tu, Sheng Yang, Shengbiao Meng, Shi Zhong, Shiyu Huang, Shuyuan Zhao, Siyan Xue, Tianshu Zhang, Tianwei Luo, Tianxiang Hao, Tianyu Tong, Wei Jia, Wenkai Li, Xiao Liu, Xiaohan Zhang, Xin Lyu, Xinyu Zhang, Xinyue Fan, Xuancheng Huang, Yadong Xue, Yanfeng Wang, Yanling Wang, Yanzi Wang, Yifan An, Yifan Du, Yiheng Huang, Yilin Niu, Yiming Shi, Yu Wang, Yuan Wang, Yuanchang Yue, Yuchen Li, Yusen Liu, Yutao Zhang, Yuting Wang, Yuxuan Zhang, Zhao Xue, Zhengxiao Du, Zhenyu Hou, Zihan Wang, Peng Zhang, Debing Liu, Bin Xu, Juanzi Li, Minlie Huang, Yuxiao Dong, and Jie Tang. Glm-4.5v and glm-4.1v-thinking: Towards versatile multimodal reasoning with scalable reinforcement learning, 2026c. URL https://arxiv.org/abs/2507.01006 .Vidi Team, Chia-Wen Kuo, Chuang Huang, Dawei Du, Fan Chen, Fanding Lei, Feng Gao, Guang Chen, Haoji Zhang, Haojun Zhao, Jin Liu, Jingjing Zhuge, Lili Fang, Lingxi Zhang, Longyin Wen, Lu Guo, Lu Xu, Lusha Li, Qihang Fan, Rachel Deng, Shaobo Fang, Shu Zhang, Sijie Zhu, Stuart Siew, Weiyan Tao, Wen Zhong, Xiaohui Shen, Xin Gu, Ye Yuan, Yicheng He, Yiming Cui, Zhenfang Chen, Zhihua Wu, and Zuhua Lin. Vidi2.5: Large multimodal models for video understanding and creation, 2026d. URL https://arxiv.org/abs/2511.19529 .Arun Balajee Vasudevan, Dengxin Dai, and Luc Van Gool. Object referring in videos with language and human gaze, 2018. URL https://arxiv.org/abs/1801.01582 .Han Wang, Yanjie Wang, Yongjie Ye, Yuxiang Nie, and Can Huang. Elysium: Exploring object-level perception in videos via mllm, 2024. URL https://arxiv.org/abs/2403.16558 .Jiankang Wang, Zhihan Zhang, Zhihang Liu, Yang Li, Jiannan Ge, Hongtao Xie, and Yongdong Zhang. Spacevllm: Endowing multimodal large language model with spatio-temporal video grounding capability, 2025. URL https://arxiv.org/abs/2503.13983 .Syed Talal Wasim, Muzammal Naseer, Salman Khan, Ming-Hsuan Yang, and Fahad Shahbaz Khan. Video-groundingdino: Towards open-vocabulary spatio-temporal video grounding, 2024. URL 
+
+https://arxiv.org/abs/2401.00901 .Xiyang Wu, Zongxia Li, Jihui Jin, Guangyao Shi, Gouthaman KV, Vishnu Raj, Nilotpal Sinha, Jingxi Chen, Fan Du, and Dinesh Manocha. Mass: Motion-aware spatial-temporal grounding for physics reasoning and comprehension in vision-language models, 2026. URL https://arxiv.org/ abs/2511.18373 .Masataka Yamaguchi, Kuniaki Saito, Yoshitaka Ushiku, and Tatsuya Harada. Spatio-temporal person retrieval via natural language queries, 2017. URL https://arxiv.org/abs/1704.07945 .13 Antoine Yang, Antoine Miech, Josef Sivic, Ivan Laptev, and Cordelia Schmid. Tubedetr: Spatio-temporal video grounding with transformers, 2022. URL https://arxiv.org/abs/2203. 16434 .Fan Yang, Shurong Zheng, Hongyin Zhao, Yufei Zhan, Xin Li, Yousong Zhu, Chaoyang Zhao Ming Tang, and Jinqiao Wang. Tracevision: Trajectory-aware vision-language model for human-like spatial understanding, 2026. URL https://arxiv.org/abs/2602.19768 .Yi Yang, Yiming Xu, Timo Kaiser, Hao Cheng, Bodo Rosenhahn, and Michael Ying Yang. Multi-object tracking retrieval with llava-video: A training-free solution to mot25-stag challenge, 2025a. URL https://arxiv.org/abs/2511.03332 .Zaiquan Yang, Yuhao Liu, Gerhard Hancke, and Rynson W. H. Lau. Unleashing the potential of multimodal llms for zero-shot spatio-temporal video grounding, 2025b. URL https://arxiv. org/abs/2509.15178 .Zhu Zhang, Zhou Zhao, Zhijie Lin, Baoxing Huai, and Nicholas Jing Yuan. Object-aware multi-branch relation networks for spatio-temporal video grounding, 2020a. URL https://arxiv. org/abs/2008.06941 .Zhu Zhang, Zhou Zhao, Yang Zhao, Qi Wang, Huasheng Liu, and Lianli Gao. Where does it exist: Spatio-temporal video grounding for multi-form sentences, 2020b. URL https://arxiv.org/ abs/2001.06891 .14 A Prompt Templates and Reproducibility Materials 
+
+This appendix provides the prompt templates used for evaluation, tool-style grounding calls, and Gemini-based SFT data synthesis. Reproduction materials, including code, configuration files, scripts, and instructions for accessing public benchmark data, will be released with the project page. 
+
+A.1 Evaluation Prompt 
+
+The evaluation prompt asks the model to perform second-level object tracking conditioned on a target description and to return a parseable JSON object with globally consistent labels. 
+
+Based on the description of the objects appearing in the video "target to be tracked", please track the objects corresponding to this description at every second (tracks per second) of the given video, and provide the bounding box and a globally consistent label for each object. Note that the same object across different timestamp should be assigned the same label. Note: Please organize the output in valid JSON format, where each key is the time index (starting from 0), and the value is a list of detected objects in current timestamp. Each element in the list corresponds to a detection result in JSON format, with keys label and bbox_2d, whose values are the object label and bounding box, respectively. For example: {"0": [{"label": "car-1", "bbox_2d": [1,2,3,4]}, {"label": "car-2", "bbox_2d": [2,3,4,5]}], "1": [{"label": "car-2", "bbox_2d": [4,5,6,7]}, {"label": "person-1", "bbox_2d": [10,20,30,40]}]} 
+
+A.2 OpenClaw Case Prompt 
+
+For the OpenClaw integration case, the model is queried with a shorter target-specific tracking prompt: 
+
+Output the object tracking results for target to be tracked in the video. 
+
+A.3 Gemini SFT Data Synthesis Prompt 
+
+This prompt is used to synthesize chain-of-thought style decision traces for SFT. The generated trace is used for semantic reasoning supervision, while temporal spans and coordinates are replaced with ground-truth annotations before training.    
+
+> Instruction. Given the sampled video context, query, and available annotation metadata, write a concise reasoning trace for spatio-temporal grounding. Focus on identifying the referred target, discriminative attributes, relevant actions, distractors, and the rough temporal evidence.
+> Important constraint. Do not produce final coordinate values as authoritative labels. Coordinates and temporal boundaries will be replaced with ground-truth annotations in post-processing.
+> Desired response. Provide a time-then-space reasoning trace followed by a structured placeholder answer containing the target identity, approximate event interval, and trajectory fields.
+
+A.4 Reproduction Materials 
+
+The code and reproduction materials will be released with the project page. The materials con-tain environment setup, data preparation instructions, training/evaluation commands, prompt files, configuration files, and scripts for reproducing the main tables and figures. 15
