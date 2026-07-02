@@ -1,0 +1,2575 @@
+Title: Gaussian Belief Propagation for Tracking With Unresolved Measurements
+
+URL Source: https://arxiv.org/pdf/2606.31716v1
+
+Published Time: Wed, 01 Jul 2026 01:14:54 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+> 1
+
+# Gaussian Belief Propagation for Tracking With Unresolved Measurements 
+
+Augustin A. Saucan, Member, IEEE , Florian Meyer, Member, IEEE , Peter Willett, Fellow, IEEE 
+
+Abstract —Unresolved measurements occur in many inference problems where two or more hidden processes may, at times, jointly generate a single measurement. For instance, such phe-nomena are encountered in multiobject tracking owing to the limited resolution capabilities of practical sensors; or in camera-aided autonomous driving due to shadowing or occlusions. Substantial performance degradation, such as track losses, are incurred when unresolved measurements are not accounted for. In this paper, we address multiobject tracking under ageneralized unresolved measurement model, where any subset of objects may generate a single unresolved measurement ac-cording to a probabilistic model. Our innovation lies both in modeling and algorithm-design directions. First, we develop a probability distribution for object partitions based on a model of pairwise coupling of objects and subsequently a probability distribution for object-to-measurement association variables. This generic model incorporates sensor resolution capabilities, sensor detection and noise characteristics for object groups. Second, a generic Loopy Belief Propagation (LBP) method as well as a specialized Gaussian Loopy Belief Propagation (GLBP) algorithm are proposed that perform object state inference under the afore-mentioned model. In contrast to direct marginalization methods, which involve a computational complexity of O(mn), for m
+
+measurements and n objects, the proposed GLBP algorithm achieves a computational complexity on the order of O(mn 2n ).Numerical results demonstrate the effectiveness of our proposed GLBP, with estimation performance that closely matches that of exact marginalization for only a fraction of the computational resources. 
+
+I. I NTRODUCTION 
+
+Multiobject tracking [1]–[8] is the problem of estimating the states of multiple hidden processes from available sensor measurements. Multiobject tracking in densely cluttered en-vironments is of considerable interest across a variety of en-gineering domains, including autonomous navigation, applied ocean sciences, air traffic control, and biomedical applications. In many such applications, sensors supply a set of point measurements for which the added combinatorial optimiza-tion problem of data association, i.e., unknown associations between measurements and objects, requires addressing before state inference can be carried out. In traditional data-association problems, a one-to-one cor-respondence is assumed between detected objects and mea-       
+
+> A. A. Saucan is with the Institute of Telecommunications, TU Wien, Vienna 1040, Austria (email: augustin.saucan@tuwien.ac.at ). F. Meyer is with the Scripps Institution of Oceanography and the Department of Electrical and Computer Engineering, University of California San Diego, San Diego, CA (e-mail: flmeyer@ucsd.edu ). P. Willett is with the Department of Electrical and Computer Engineering, University of Connecticut, Storrs, CT, USA (email: peter.willett@uconn.edu ). This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible.
+
+surements. However, the much harder problem of many-to-one associations arises in practical situations whenever objects occlude/shadow one another or when objects are unresolved vis-` a-vis the sensor resolution capabilities. An unresolved group of objects may generate a single measurement and when not explicitly modeled, such situations can lead to inaccurate tracking results and frequent track losses. For monopulse radars, a maximum likelihood estimator coupled with the minimum description length criterion is employed in [9] in order to estimate the number and the location information of multiple unresolved objects. Also for monopulse radars, a particle filter approach coupled with a likelihood-ratio test is developed in [10] in order to detect and estimate object spawning phenomena. Several early approaches for multiobject tracking with po-tentially unresolved measurements address tracking of only two objects. In [1, Ch. 9.4] two crossing objects are tracked using imaging sensors. Image processing tools are used to detect potential unresolved situations and switch between in-dependent and coupled tracking. Fixed-grid resolution models were employed in [11], [12] and [1, Ch. 6.4] in order to detect when two objects become unresolved. Based on this model, Gaussian approximations are derived for the marginal state probability density functions (pdfs) of the two objects. The resulting method, called Joint Probabilistic Data Association with Merged Measurements (JPDAM) in [11], [12], was sub-sequently refined in [13] through a simplified approximation of the merged-measurement pdf. Departing from the fixed-grid resolution assumption in [11]–[13], the authors of [14] introduce a sensor resolution model in which the probability that two objects are unresolved is explicitly characterized. Tracking of two potentially unre-solved objects is then addressed using a generalized multiple hypothesis tracking formulation that incorporates unresolved-object hypotheses. This resolution model is further employed in [15], where an interacting multiple model JPDAM ap-proach is proposed to handle both maneuvering objects and unresolved measurements. Using tools from analytic combi-natorics, in [16] a joint likelihood function is derived so that it accounts for all feasible measurement-to-object association hypotheses. Based on this formulation, a Joint Probabilistic Data Association Filter (JPDAF) is proposed for a two-object tracking scenario. Still based on the model of [14] and on LBP [3], [6], [17], [18], a method that tracks multiple objects but where the merged measurement phenomenon is limited to groups of only two objects is proposed in [19]. Resolution graphs are introduced in [20] as a model for arbitrary-sized groups of objects that generate an unresolved measurement. The nodes of a resolution graph are the objects 
+
+> arXiv:2606.31716v1 [cs.IT] 30 Jun 2026 2
+
+while an edge between two nodes indicates that the two objects are unresolved. Furthermore, a probabilistic model is implicitly assumed for resolution graphs since each edge is considered a Bernoulli random variable with probability of success given by the same pairwise coupling model of [14]. The resulting framework can be interpreted as a generalization of the two-object resolution model given in [14] to a fixed but arbitrary number of objects. Subsequently in [20], the joint posterior pdf of objects is obtained by directly marginalizing over all valid resolution graphs and association hypotheses. In order to reduce computational complexity, a sensor-dependent strategy is employed to eliminate certain resolution graphs. A multiobject tracking approach based on labeled random finite sets is proposed in [4], where a generalized labeled multi-Bernoulli (GLMB) density is employed in conjunction with a merged-measurement model that does not take into account any specific sensor resolution capabilities. In a similar manner to [20], the GLMB filter ideally evaluates all asso-ciation hypotheses between objects and measurements and, unlike [20], constructs a tree of such hypotheses through time. In practice, however, the exponential growth of this tree needs to be mitigated by pruning techniques. An alternative approach is the merged measurement labeled multi-Bernoulli filter pro-posed in [21]; however, this still requires the construction and evaluation of a large number of association hypotheses during the update step, followed by explicit marginalization for each object across these hypotheses. Also in [22], a multiobject tracking filter is proposed for merged measurements without any sensor resolution model. In this work, we consider the problem of tracking a fixed but arbitrary number of objects under the assumption that any subset of objects may become unresolved. The novelty of our approach lies both in the modeling and algorithm-design directions. First, we develop a probability distribution of object partitions based on the pairwise coupling model of [14] and subsequently a prior probability distribution for association variables. This generic model is flexible enough to allow the incorporation of sensor resolution capabilities, a detection process, and sensor noise characteristics for object groups; while being capable of modeling scenarios where several arbitrary-sized groups of objects generate unresolved measurements. Second, a generic LBP method is proposed that performs object-state inference under the aforementioned model. Furthermore, this generic method is specialized to a GLBP algorithm that employs Gaussian distributions for ob-ject posteriors and which achieves a computational complexity that scales on the order of O(mn 2n), for m measurements and 
+
+n objects. This is a substantial improvement over a method that relies on exact marginalization with a complexity of O(mn).The remainder of the paper is organized as follows. Notation and the system model are introduced in Sec. II. The proposed distribution for object partitions is presented in Sec. III. In Sec. IV, the data-association model with unresolved measure-ments is introduced, and together with the distribution for object partitions is used to develop the multiobject posterior distribution. A generic LBP algorithm for multiobject tracking is derived in Sec. V, while a GLBP filter is proposed in Sec. VI. Numerical results are provided in Sec. VII. II. N OTATION AND SYSTEM MODEL 
+
+Throughout this work, the following notations are em-ployed. Random variables are displayed in sans serif, upright fonts; their realizations in serif, italic fonts. Vectors and matrices are denoted by bold lowercase and uppercase letters, respectively. Random sets and their realizations are denoted by upright sans serif and calligraphic font, respectively. For example, a random vector and its realization are denoted by 
+
+x and x while a random set and its realization are denoted by X and X , respectively. The set cardinality is denoted by 
+
+|X|. The set of integers {a, a + 1 , · · · , b }, for any a < b , is denoted as Ja, b K. A set indicator function is introduced as 
+
+1X (Y) = 1 if Y ⊆ X and 1X (Y) = 0 otherwise. A set equality operator is defined as δX (Y) = 1 if X = Y and 
+
+δX (Y) = 0 otherwise. The product of a function h(·) over all the elements of a set X is denoted as ∏ 
+
+> x∈X
+
+h(x). We make the convention of ∏ 
+
+> x∈X
+
+h(x) = 1 when X = ∅. Equality up to a normalization factor is denoted as ∝.An undirected graph G is defined by the set of ver-tices/nodes V ⊂ N and the set of edges E ⊂ V × V . The set of vertices of a graph G is denoted via VG and the set of edges via EG. For a graph G, we say two of its vertices 
+
+a, b ∈ V G are connected when G contains a path between the two vertices, which we denote by a ! b. Trivially a ! a
+
+for any a ∈ V G. For a given set of vertices A ⊂ N, the set of all graphs spanning the vertices in A is denoted via G(A).The set of all partitions of a set A is denoted via B(A).A component of an undirected graph G is defined as a connected subgraph of G that is not part of any larger connected subgraph [23]. Let C(G) be the union of component vertex sets of G. More specifically, C(G) , {C(v) : v ∈ V G}
+
+and C(v) , {u ∈ V G : u ! v}. Note that the elements of C(G) effectively partition the graph vertices, i.e., C(G) = 
+
+{Ci : ∪i Ci = VG, C i ∩ Cj = ∅ for i 6 = j}.A Gaussian probability density function with variable x ∈
+
+Rd, mean vector m ∈ Rd, and covariance matrix P ∈ Rd×d
+
+is denoted as fG(x; m, P ). For some natural n ≥ 1, let 
+
+w = ( w1, w 2, · · · , w n) be a tuple of non-negative weights that sum to one, m = ( m1, m2, · · · , mn) be a tuple of vectors from Rd, and P = ( P1, P2, · · · , Pn) a tuple of covariance matrices from Rd×d, then we denote a Gaussian mixture via fGM (x; w, m, P ) , ∑ni=1 wifG(x; mi, Pi). A projection of a Gaussian mixture onto the space of single Gaussian probability densities that preserves the first and second order moments of the original mixture is defined as 
+
+(Π fGM )( x) = fG(x; m, P ) (1) where m = ∑ni=1 wimi and P = ∑ni=1 wiPi +∑ni=1 wi(mi − m)( mi − m)⊤.
+
+A. System Model 
+
+A number no of mobile objects is considered. The trajectory of each object i ∈ O , J1, n oK is described by a stochastic process x(i) 
+
+> k
+
+∈ X indexed by the discrete time k and taking values in the state space X ⊆ Rdx . The multiobject stochastic process is given by xk = [(x(1)  
+
+> k
+
+)⊤, (x(2)  
+
+> k
+
+)⊤, · · · , (x(no ) 
+
+> k
+
+)⊤]⊤
+
+.At time k, a sensor produces a random number mk ∈ N3
+
+of measurements that is collected in a single vector zk =
+
+[(z(1)  
+
+> k
+
+)⊤, (z(2)  
+
+> k
+
+)⊤, · · · , (z(mk ) 
+
+> k
+
+)⊤]⊤
+
+, where each individual mea-surement is z(j) 
+
+> k
+
+∈ Z, with Z ⊆ Rdz . The collection of all measurements up to and including time k is denoted via 
+
+z1: k , (z1, z2, · · · , zk). Furthermore, for any subset of indices 
+
+I , {i1, i 2, · · · , i m} ⊂ O , the set of corresponding object state vectors (x(i1 ) 
+
+> k
+
+, x(i2 ) 
+
+> k
+
+, · · · , x(im)
+
+> k
+
+) is denoted via xI 
+
+> k
+
+.Considering the state vectors at time step k to be fixed and equal to xk = [(x(1)  
+
+> k
+
+)⊤, (x(2)  
+
+> k
+
+)⊤, · · · , (x(no) 
+
+> k
+
+)⊤]⊤
+
+, the following are assumed to hold for the multiobject and sensor system. 
+
+A.1 Object dynamics. The object states x(1)  
+
+> k
+
+, x(2)  
+
+> k
+
+, · · · , x(no)
+
+> k
+
+are independent. Furthermore, each object evolves in time according to a known motion model. Specifically, the stochastic process {x(i) 
+
+> k
+
+}k for each object i is Marko-vian with known conditional density f (i)
+
+> k+1 |k
+
+(x|y), i.e., the probability of x(i) 
+
+> k+1
+
+∈ A conditioned on the event 
+
+{x(i) 
+
+> k
+
+= x(i) 
+
+> k
+
+} is given by ∫ 
+
+> A
+
+f (i)
+
+> k+1 |k
+
+(x|x(i) 
+
+> k
+
+)d x for any Borel set A.
+
+A.2 Resolution graph [20]. The resolution graph G is a random graph spanning the objects ( VG = O) and with edges sampled independently for each pair i, l ∈ O with coupling probability 1
+
+Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) = exp 
+
+(
+
+− 1
+
+2
+
+(h(x(i) 
+
+> k
+
+) − h(x(l) 
+
+> k
+
+))⊤
+
+× A−1u,k 
+
+(h(x(i) 
+
+> k
+
+) − h(x(l) 
+
+> k
+
+)))
+
+(2) where h : X → Z is the sensor measurement function that maps object states x ∈ X to measurements z
+
+in the measurement domain Z. The sensor resolution capabilities are captured by the positive definite matrix 
+
+Au,k . Intuitively, two closely-spaced objects in the mea-surement domain Z have a high coupling probability, i.e., high probability of becoming an unresolved pair. Sensor-specific examples of h(·) and Au,k are given in [14]. Also denote Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) , 1 − Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) for any pair (i, l ) of objects. Each component C of the resolution graph G contains a group of objects. If C is a singleton, then we call the respective object resolved. Conversely, when |C| ≥ 2, we refer to the group of objects in C as unresolved. 
+
+A.3 Object group detection and measurement. Given a resolution graph G, the group of objects defined by each component of G may generate up to one measurement. For each subset I ⊂ O, let P I 
+
+> d,k
+
+: X|I| → [0 , 1] be the probability of detection of group I as a function of the object states. Also, let f I
+
+> u,k
+
+(·| xI 
+
+> k
+
+) be a probability density function on the domain Z. Note that both P I
+
+> d,k
+
+and f I
+
+> u,k
+
+, as functions of the object states (x(i) : i ∈ I ),are symmetric, i.e., the order of object state vectors does not affect the function values. Additionally P I 
+
+> d,k
+
+and f I
+
+> u,k
+
+may depend on the group I, e.g., group size and identity       
+
+> 1Note that other choices for Pu,k are possible, for example in [24], Pu,k =1for closely spaced objects and gradually decreases to zero for objects that are farther apart than some threshold value.
+
+of the unresolved objects. For each component C of G,the group of objects in C is detected with probability 
+
+P C
+
+> d,k
+
+(xCk ), whereupon the group generates a measurement vector z ∈ Z according to the conditional probability distribution f C
+
+> u,k
+
+(·| xCk )2. No measurement is generated when the group is mis-detected. 
+
+A.4 Clutter measurements. Independent of the objects and their corresponding measurements, a random number of clutter measurements [1] are generated as independent and identically distributed (iid) with pdf fc,k (·). The number of such clutter measurements follows a Poisson distribution with rate parameter λc,k . We also make the generally-assumed hypothesis that fc,k (z) > 0 for any 
+
+z ∈ Z.
+
+A.5 Measurement origin uncertainty. Both clutter and object-originated measurements are arranged in a concatenated measurement vector, 
+
+zk = [(z(1)  
+
+> k
+
+)⊤, · · · , (z(mk ) 
+
+> k
+
+)⊤]⊤
+
+, with the number of measurements mk being a random variable. The order of measurements in this vector is irrelevant. Furthermore, 
+
+measurement origin uncertainty is assumed, that is, the origin—whether a single object, a group of objects, or clutter—of a single measurement z(j) 
+
+> k
+
+is unknown. III. A P ROBABILISTIC MODEL FOR OBJECT PARTITIONS 
+
+The resolution graph of Assumption A.2 implicitly intro-duces a probability measure over the set of all partitions of the object set. More specifically, each edge is a Bernoulli random variable with probability (2) and the components of the resulting random graph G define a random partition of O.In this section, we construct a probability mass function for partitions of the multiobject set O, according to the generative model of Assumption A.2. Note that here, we extend our previous model from [19] to groups of unresolved objects of arbitrary size. 
+
+1) Constructive definition: Consider again the state vec-tors at time step k to be fixed and equal to xk =
+
+[(x(1)  
+
+> k
+
+)⊤, (x(2)  
+
+> k
+
+)⊤, · · · , (x(no) 
+
+> k
+
+)⊤]⊤
+
+. More specifically, any par-tition P , {U 1, U2, · · · , Um} ∈ B(O) contains groups of objects such that ∪i Ui = O and Ui ∩ U j = ∅ for all i 6 = j.Sampling a partition P from B(O) can be achieved by first sampling a graph G from the set G(O) of undirected graphs with vertex set O. The sampling of G, or equivalently of its edge set EG, is achieved by independent Bernoulli sampling for each edge (i, l ) from the set {(i, l ) ∈ J1, n oK2 : i < l }
+
+with probability of success given by (2). Second, the set of vertices corresponding to each component of G becomes an element in the partition P. Sampling such a partition requires (no
+
+> 2
+
+) operations, namely one Bernoulli experiment per possible edge. Note that multiple graphs may correspond to a single partition, as showcased in Fig. 1.                                                                                             
+
+> 2For a radar sensor, an unresolved measurement may be generated as z=
+> ∑
+> i∈Cwih(x(i)
+> k) + v, where {wi}is a convex set of weights (each wimay depend on the radar cross-section of the i-th object) and vis an additive noise term that may depend on the group C(e.g., the size of the group). 4
+> G11234
+> z
+> G21234
+> z
+> G3
+> 1234
+> zG4
+> 1234z
+> Fig. 1. Figure showcasing all possible resolution graphs {Gi}4
+> i=1 for the par-tition {{1,2,3},{4}}. The graph vertices •are objects with fixed locations
+> {x(i)
+> k}4
+> i=1 . The four graphs have edge sets EG1={(1 ,2) ,(2 ,3) ,(1 ,3) },
+> EG2={(1 ,2) ,(1 ,3) },EG3={(1 ,2) ,(2 ,3) }, and EG4={(1 ,3) ,(2 ,3) }.For each case i∈ { 1,2,3,4}and conditionally on the object set and Gi, we additionally depict an instance of a single unresolved measurement ⋆that is generated by the object group I,{1,2,3}, i.e., z∼fI
+> k(·| xI). In all four cases, object 4is assumed to be misdetected. Given z, the true association vectors in all four cases are ak= [1 ,1,1,0] ⊤,b(0)
+> k= [0 ,0,0,1] ⊤, and
+> b(1)
+> k= [1 ,1,1,0] ⊤.
+
+2) Probability measure on partitions: We denote via 
+
+G(O, P u,k ) the distribution of the random graph G resulting from the previous construction. This model can be seen as a generalization of the celebrated Erd˝ os–R´ enyi random graph model, whose edges are iid with a fixed probability. For a given set A ⊆ O , we define 
+
+V A
+
+> u,k
+
+(xA 
+
+> k
+
+) , ∏
+
+> {i,l }⊂A
+
+Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) . (3) The probability of G taking the value G is given by 3
+
+PG(G|xk) = ∏
+
+> (i,l )∈E G
+
+Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) ∏ 
+
+> (i,l )/∈E G
+
+Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)= V O
+
+> u,k
+
+(xk) ∏
+
+> (i,l )∈E G
+
+Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)
+
+Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+) (4) for which one can easily check that ∑ 
+
+> G
+
+PG(G|xk) = 1 , as a special case of the multi-Binomial theorem. Subsequently, the random graph G induces a random par-tition P ∈ B(O) according to the procedure in the previous section. Thus, the induced probability measure over partitions 
+
+P ∈ B(O) is obtained by summing over all graphs with components equal to the elements in P, i.e., 
+
+PP(P| xk) = ∑
+
+> G∈G(O)
+
+PG(G|xk) δC(G)(P) (5) where C(G) denotes the set of components of the graph G. The computational complexity of constructing PP is gouverned by the enumeration of all 2(no2 ) undirected graphs on the vertex set O.                    
+
+> 3For all times kand i6=j, we assume that h(x(i)
+> k)6=h(x(j)
+> k). In general, events of the type {h(x(i)
+> k) = h(x(j)
+> k)}have zero probability. Whenever this is not the case, one may eliminate the pairs (i, j )from the edge set.
+
+For any subset I ⊂ O of objects, let 
+
+rI
+
+> u,k
+
+(xI 
+
+> k
+
+) ,
+
+∑ G∈G(I)
+
+> C(G)= {I}
+
+∏       
+
+> (i,l )∈E G
+> Pu,k (x(i)
+> k,x(l)
+> k)
+> Qu,k (x(i)
+> k,x(l)
+> k)
+
+if |I| > 11 if |I| = 1 
+
+(6) where in equation (6), the summation is carried out over all connected graphs restricted to I as the set of vertices. 
+
+Proposition III.1. For any partition P ∈ B(O), the proba-bility measure PP(P| xk) can be equivalently expressed as 
+
+PP(P| xk) = V O
+
+> u,k
+
+(xk) ∏
+
+> U ∈P
+
+[rU
+
+> u,k
+
+(xU 
+
+> k
+
+)] . (7) Proof of the above proposition is deferred to Appendix I. IV. D ATA ASSOCIATION MODEL AND POSTERIOR 
+
+DISTRIBUTION 
+
+In what follows, we will present the statistical model for data association with potentially unresolved objects. 
+
+A. Data Association Variables and Constraints 
+
+Due to the measurement origin uncertainty of Assumption 
+
+A. 5, there exist numerous possible explanations for an ob-served measurement vector zk = [(z(1)  
+
+> k
+
+)⊤, · · · , (z(mk ) 
+
+> k
+
+)⊤]⊤
+
+.This fact is represented by the random object-oriented associ-ation vector ak = [ a(1)  
+
+> k
+
+, · · · , a(no) 
+
+> k
+
+]⊤ with entries 
+
+a(i) 
+
+> k
+
+,
+
+
+
+j ∈ J1, m kK object i generated/contributed to the j-th measurement 
+
+0 object i has not contributed to any measurement. Note that all vectors ak ∈ A k , J0, m kKno are valid. The knowledge contained in ak explains the origin of every measurement in zk. However, ak is a random hidden variable in our Bayesian state estimation problem. For minimum mean squared error estimation, nuisance parameters are marginalized by computing a marginal posterior pdf from a joint posterior pdf. Within this marginalization step, for each possible mul-tiobject state vector xk, a sum with a number of terms that is equal to all possible association vectors ak needs to be computed. Due to the large number of possible vectors, this is typically infeasible. As in [3], [6], [17], [25], we aim to develop a feasible approximate object state estimation based on LBP. Here, the aforementioned infeasible marginalization is avoided by intro-ducing the complementary measurement-oriented association tuple bk = (b(0)  
+
+> k
+
+, b(1)  
+
+> k
+
+, · · · , b(mk )
+
+> k
+
+), where the measurement-oriented association vectors b(j) 
+
+> k
+
+, for all j ∈ J0, m kK, are defined as 
+
+b(j) 
+
+> k
+
+, [[b(j) 
+
+> k
+
+]1, [b(j) 
+
+> k
+
+]2, · · · , [b(j) 
+
+> k
+
+]no
+
+]⊤ ∈ { 0, 1}no .
+
+For 1 ≤ j ≤ mk, the vector b(j) 
+
+> k
+
+∈ B , {0, 1}no indicates the set of objects {i ∈ J1, n oK : [ b(j) 
+
+> k
+
+]i = 1 } that generated the 
+
+j-th measurement or, whenever b(j) 
+
+> k
+
+= 0, it indicates that the 5
+
+j-th measurement is clutter. The special case of vector b(0)  
+
+> k
+
+in-dicates miss-detections, i.e., the set {i ∈ J1, n oK : [ b(0)  
+
+> k
+
+]i = 1 }
+
+contains all miss-detected objects. An example of association vectors is given in Fig. 1. Furthermore, the following transformations are defined as 
+
+S(b(j)
+
+> k
+
+) , {i ∈ J1, n oK : [ b(j) 
+
+> k
+
+]i = 1 } ∀j ∈ J0, m kK (8) 
+
+S(bk) , {S(b(j)
+
+> k
+
+) : j ∈ J1, m kK, S(b(j)
+
+> k
+
+) 6 = ∅} . (9) Note that not all elements bk ∈ Bk , B(mk +1) are valid measurement-oriented association tuples. A bk is invalid if an object contributes to more than one measurement, or whenever a measurement is assigned to clutter and objects, or whenever an object is both miss-detected and associated to a measurement. A constraint function that eliminates in-valid bk is next constructed by observing that a one-to-one correspondence exists between ak and valid bk. For example, in the all-clutter case, the measurement-oriented association tuple defined by b(0)  
+
+> k
+
+= 1, and b(j) 
+
+> k
+
+= 0, ∀j ≥ 1, uniquely corresponds to ak = [0 , · · · , 0] ⊤. It can easily be verified that for invalid bk there is no corresponding valid ak. For example, an invalid event where a single object contributes to two different measurements can be described by an bk ∈ B k
+
+but not by an ak ∈ A k.Eliminating non-valid measurement-oriented association tu-ples can be achieved by checking correspondence between events ak and bk. This correspondence is enforced by the following product of elementwise consistency constraints, i.e., 
+
+Ψk(ak, bk) ,
+
+> no
+
+∏
+
+> i=1
+> mk
+
+∏
+
+> j=0
+
+ψij 
+
+(a(i) 
+
+> k
+
+, b(j)
+
+> k
+
+) (10) where for all (i, j ) ∈ J1, n oK × J0, m kK, we define 
+
+ψij (a(i) 
+
+> k
+
+, b(j) 
+
+> k
+
+) ,
+
+
+
+0, a(i) 
+
+> k
+
+= j and i / ∈ S (b(j)
+
+> k
+
+), or 
+
+a(i) 
+
+> k
+
+6 = j and i ∈ S (b(j)
+
+> k
+
+)
+
+1, otherwise .
+
+(11) Only if all elements in ak are consistent with all elements in bk, i.e., all element-wise consistency constraints in (10) are equal to one, do the two vectors represent the same association event. Since only valid events can be represented by an ak and a bk at the same time, the represented event must be valid. 
+
+B. A Model for the Prior Association Probabilities 
+
+A probabilistic model for the association vectors ak ∈ A k
+
+and bk ∈ Bk arises due to the mechanism of generating and detecting measurements as described in Section II. This model serves as a prior distribution for the aforementioned association variables and is given by the following proposition. 
+
+Proposition IV.1. The prior pmf of ak ∈ A k , bk ∈ B k, and 
+
+mk is 
+
+p(ak, bk, m k|xk) = Ψ k(ak, bk) e−λc (λc)mk −|S (bk )|
+
+mk!
+
+× V O
+
+> u,k
+
+(xk)
+
+[ ∏
+
+> A∈S (
+
+bk )
+
+P A
+
+> d,k
+
+(xA 
+
+> k
+
+) rA
+
+> u,k
+
+(xA 
+
+> k
+
+)
+
+]
+
+× ∑ 
+
+> U ∈ B(S(b(0)
+> k))
+
+∏
+
+> W∈U
+
+(1 − P W
+
+> d,k
+
+(xW 
+
+> k
+
+)) rW
+
+> u,k
+
+(xW 
+
+> k
+
+)
+
+(12) 
+
+where S(b(0)  
+
+> k
+
+) is the set of misdetected objects according to 
+
+bk, while P A
+
+> d,k
+
+(xA 
+
+> k
+
+) is the probability of detection for group 
+
+A, introduced in Sec. II, Assumption A.3. 
+
+The derivation of Proposition IV.1 is based on Proposition III.1 and is provided in Appendix II. 
+
+C. The Joint Posterior Pdf 
+
+The goal of this paper is to compute the marginal prob-abilities f (x(i) 
+
+> k
+
+|z1: k), for each object i ∈ O . In principle, these marginal pdfs could be obtained from the joint posterior pdf f (xk, ak, bk|z1: k), which involves all object states and association variables at time k, by direct marginalization. However, this is typically infeasible due to the large number of valid association events. To obtain feasible estimates of the required marginals, we apply LBP on the factor graph representing f (xk, ak, bk|z1: k) [26]. In what follows, we assume that the measurement at time k,
+
+zk, has been observed and is thus fixed. Note that this implies that mk is also observed and fixed. By using Bayes’ rule, the joint posterior factorizes as 
+
+f (xk, ak, bk|z1: k) = f (xk, ak, bk|z1: k−1, zk, m k)
+
+∝ f (zk|xk, ak, bk, m k)p(ak, bk, m k|xk)
+
+×f (xk|z1: k−1). (13) Note that here we have made the common assumption [6] that, conditioned on xk and mk, the association vectors ak and bk
+
+are independent of all previous measurements z1: k−1.The first term in (13) corresponds to the likelihood of the measurement zk that, based on the assumptions discussed in Section II, can be written as 
+
+f (zk|xk, ak, bk, m k) = 
+
+> mk
+
+∏
+
+> j=1
+
+fc
+
+(z(j)
+
+> k
+
+)g(xk, S(b(j) 
+
+> k
+
+); z(j)
+
+> k
+
+)
+
+(14) where, for any j ∈ J1, m kK and subset I ⊆ O , we introduced 
+
+g(xk, I; z(j)
+
+> k
+
+) ,
+
+   
+
+> fI
+> u,k (z(j)
+> k|
+
+xI   
+
+> k)
+> fc(z(j)
+> k)
+
+, if I 6 = ∅
+
+1, if I = ∅ .6
+
+ψmk ,n o
+
+ψ0,1
+
+ψ0,n o
+
+ψmk ,1
+
+a1
+
+ano
+
+b0
+
+bmk
+
+q0
+
+qmk
+
+xno
+
+f 1
+
+f no
+
+x1
+
+Fig. 2. Factor graph showcasing the dependencies between object state variables and association variables at a single time step k. The following compact notation was used: f i , f (x(i)
+
+> k
+
+∣∣z1: k−1
+
+), qj , q(j)
+
+> k
+
+(xk , S(b(j) 
+
+> k
+
+),for all j ∈ J0, m k K, and ψij , ψij 
+
+(a(i) 
+
+> k
+
+, b(j)
+
+> k
+
+), all j ∈ J1, m k K and 
+
+i ∈ J1, n oK.
+
+By plugging expressions (12) and (14) into (13), and drop-ping constant factors, we obtain 
+
+f (xk, ak, bk|z1: k) ∝ Ψk(ak, bk)
+
+[ no∏
+
+> i=1
+
+f (x(i)
+
+> k
+
+∣∣z1: k−1
+
+)]
+
+×
+
+[ mk∏
+
+> j=0
+
+q(j)
+
+> k
+
+(xk, S(b(j) 
+
+> k
+
+))]
+
+(15) where for any subset I ⊂ O , we introduce 
+
+q(0) 
+
+> k
+
+(xk, I ) , V O
+
+> u,k
+
+(xk) ∑
+
+> P∈ B(I)
+
+∏
+
+> U ∈P
+
+(1 − P U
+
+> d,k
+
+(xU 
+
+> k
+
+)) rU
+
+> u,k
+
+(xU 
+
+> k
+
+)
+
+(16) while for j ∈ J1, m kK
+
+q(j)
+
+> k
+
+(xk, I) ,
+
+ 
+
+> rI
+> u,k (
+
+xI    
+
+> k)PI
+> d,k (
+
+xI     
+
+> k)fI
+> u,k (z(j)
+> k|
+
+xI    
+
+> k)
+> λcfc(z(j)
+> k)
+
+, if I 6 = ∅
+
+1, if I = ∅.
+
+The factorization of f (xk, ak, bk|z1: k) in (15) is key for the development of a scalable LBP method presented next. V. A G ENERIC LBP A LGORITHM 
+
+In the following, the subscript k, denoting the time index, will be dropped for compactness. Furthermore, the time-predicted distribution f (x(i)
+
+> k
+
+∣∣z1: k−1
+
+) is denoted as f (i)0
+
+(x(i)).The algorithm is composed of a succession of message ex-changes between the various variables and factors of (15). The succession of these messages is presented next. 1) Measurement evaluation . The messages from the joint node xk to each node b(j) , with j ∈ J1, m kK, are 
+
+ϕxbj (b) = 
+
+∫ rI 
+
+> u
+
+(xS(b)) P S(b)d (xS(b)) f I 
+
+> u
+
+(z(j) |xS(b))
+
+λcfc(z(j))
+
+× ∏
+
+> i∈S (b)
+
+f (i)0
+
+(x(i))dxS(b) (17) for b such that S(b) 6 = ∅, while ϕxbj (b) = 1 for S(b) = 
+
+∅. The message to b(0) is 
+
+ϕxb0 (b) = 
+
+∫
+
+q(0) (x, S(b)) no∏
+
+> i=1
+
+f (i)0
+
+(x(i))dx . (18) 2) Data association loop. Execute for each iteration ℓ =1, 2, · · · , L or until convergence:  
+
+> •
+
+Compute messages μ(ℓ)  
+
+> bjai
+
+(·) from each node b(j) 
+
+> k
+
+to each node a(i) 
+
+> k
+
+(i.e., ∀(i, j ) ∈ J1, n oK × J0, m K) via 
+
+μ(ℓ)  
+
+> bjai
+
+(a) ∝ ∑
+
+> b∈B
+
+ψij (a, b)ϕxbj (b) ∏  
+
+> i′6=i
+
+μ(ℓ−1)   
+
+> ai′bj
+
+(b)
+
+where the initialization μ(0)  
+
+> aibj
+
+= 1 is used. The above message can be observed to take only two distinct values—for a = j and for a 6 = j. By dividing μ(ℓ)  
+
+> bjai
+
+(·)
+
+with one of the two distinct values, e.g., μ(ℓ)  
+
+> bjai
+
+(a) with 
+
+a 6 = j, and performing an equivalent normalization step for the messages μ(ℓ−1)   
+
+> ai′bj
+
+(·), a simplified form can be obtained as 
+
+μ(ℓ)  
+
+> bjai
+
+(a) = 
+
+{
+
+Ψ(ℓ) 
+
+> ij
+
+if a = j
+
+1 otherwise where 
+
+Ψ(ℓ) 
+
+> ij
+
+,
+
+∑ 
+
+> b∈B
+
+bi ϕxbj(b) ∏  
+
+> i′6=i
+
+[Υ(ℓ−1)  
+
+> i′j
+
+]bi′
+
+∑
+
+> b∈B
+
+(1 − bi) ϕxbj(b) ∏  
+
+> i′6=i
+
+[Υ(ℓ−1)  
+
+> i′j
+
+]bi′
+
+(19) The equivalent normalization step for the messages 
+
+μ(ℓ−1)   
+
+> ai′bj
+
+(·) resulting in the expressions Υ(ℓ−1)  
+
+> ij
+
+, will be introduced in what follows.  
+
+> •
+
+Compute messages μ(ℓ) 
+
+> aibj
+
+(·) from each node a(i) 
+
+> k
+
+to each node b(j) 
+
+> k
+
+(i.e., ∀(i, j ) ∈ J1, n oK × J0, m K) via 
+
+μ(ℓ)  
+
+> aibj
+
+(b) ∝
+
+> m
+
+∑
+
+> a=0
+
+ψij (a, b) ∏  
+
+> j′6=j
+
+μ(ℓ)  
+
+> bj′ai
+
+(a)
+
+which, after renormalization, has the form 
+
+μ(ℓ) 
+
+> aibj
+
+(b) = 
+
+{
+
+Υ(ℓ) 
+
+> ij
+
+if i ∈ S (b)1 otherwise (20) where 
+
+Υ(ℓ) 
+
+> ij
+
+, 1
+
+∑mj′ =0   
+
+> j′6=j
+
+Ψ(ℓ)
+
+> ij ′
+
+.
+
+3) Compute association beliefs (optional). For all j ∈
+
+J0, m K and i ∈ J1, n oK, compute the probability estimates 
+
+ˆpj (b) ∝ ϕxbj (b)
+
+> no
+
+∏
+
+> i=1
+
+μ(L)  
+
+> aibj
+
+(b)ˆpi(a) ∝
+
+> m
+
+∏
+
+> j=1
+
+μ(L)  
+
+> bjai
+
+(a)
+
+which take the following forms 
+
+ˆpj (b) ∝
+
+{
+
+ϕxbj (b) ∏ 
+
+> i∈S (b)
+
+Υ(L) 
+
+> ij
+
+if S(b) 6 = ∅
+
+1 otherwise and 
+
+ˆpi(a) ∝
+
+{
+
+Ψ(L) 
+
+> ia
+
+if a ∈ J1, m K
+
+1 if a = 0 . (21) 7
+
+4) Message from each node qj to each node x(i). For each index j, the message from a node b(j) to the corresponding factor qj is given by 
+
+μbj qj (b) = 
+
+> no
+
+∏
+
+> i=1
+
+μ(L) 
+
+> aibj
+
+(b)
+
+where, for each pair (i, j ), the message μai bj (b) takes two distinct values based on b, as seen in (20). Sub-sequently for j ∈ J1, m K, the message from qj to x(i)
+
+becomes 
+
+γqj xi (x(i)) = ∑
+
+> b∈B
+
+μbj qj (b)
+
+[
+
+(1 − bi) ϕxbj (b)+ bi ξ(j) 
+
+> i
+
+(x(i), S(b)) 
+
+]
+
+(22) where we introduce the marginal likelihood of object 
+
+i, when group I ⊇ {i} is associated with the j-th measurement, as 
+
+ξ(j) 
+
+> i
+
+(x(i), I) = 
+
+∫ rI 
+
+> u
+
+(xI ) P I 
+
+> d
+
+(xI ) f I 
+
+> u
+
+(z(j) |xI )
+
+λcfc(z(j) )
+
+∏
+
+> l∈I\ i
+
+f (l)0
+
+(x(l))dxI\ i.
+
+(23) For the special case of j = 0 , the message from q0 to 
+
+x(i) becomes 
+
+γq0 xi (x(i)) = ∑
+
+> b∈B
+
+μb0 q0 (b) ξ(0)  
+
+> i
+
+(x(i), S(b)) (24) where 
+
+ξ(0)  
+
+> i
+
+(x(i), I) = 
+
+∫
+
+q(0) (x, I) ∏
+
+> l∈O\ i
+
+f (l)0 (x(l))d xO\ i .
+
+5) Object state update. The belief computed at node x(i),for all i, is given by 
+
+f(x(i)|z) ∝ f (i)0 (x(i))
+
+[ m∏
+
+> j=0
+
+γqj xi (x(i))
+
+]
+
+. (25) The right-hand side terms in (25) have the following interpretation: the first term is the prior density for x(i)
+
+while the product over indices j ∈ J0, m K corresponds to measurement update terms with j = 0 being the special case of misdetection. Various implementations of the previous generic LBP algo-rithm are possible. The most flexible choice relies on particle filter methods [27, Ch. 3], where the messages are represented via collections of weighted samples. Such implementations incorporate the exact non-linear and/or non-Gaussian object state-space model, however, a curse-of-dimensionality phe-nomenon occurs whenever multiobject integrals, such as the one in (17), need to be evaluated. Here, the number of samples generally must increase exponentially with the integration dimension in order to maintain evaluation accuracy. In this work, we focus on Gaussian implementations, where messages are represented via Gaussian densities or Gaussian mixtures. In contrast to the sampling-based implementations, Gaussian implementations enjoy analytical forms even for high-dimensional integration. However, linearization or other approximations are necessary for Gaussian implementations when the dynamics of objects or the sensor measurement equation are non-linear. 
+
+A. Computational Complexity 
+
+The computational complexity of the LBP algorithm heavily depends on the representation of the individual messages. The measurement evaluation step of (17) has to be conducted 
+
+m 2no times. An additional complexity in the measurement evaluation of (17) stems from the need to integrate over the function rI 
+
+> u
+
+(xS(b)) defined in (6) for any subset I ⊂ O .Evaluating rI 
+
+> u
+
+(·) at one point involves an additional worst-case complexity of O(2 n2o ) which has to be accounted for in sampling-based implementations when evaluating (17). In Gaussian implementations however, the functions rI 
+
+> u
+
+(·) are assumed (or approximated) as constants as described in the next sections. The computational complexity of the data association loop is dominated by the evaluation of the message in (19), and is O(m n o 2no ). In contrast, a direct approach that computes marginal association probabilities for each object, would in-volve summations over all association vectors a ∈ A , leading to a computational complexity of the order O(mno ). Note that the direct approach also needs to evaluate measurements according to (17) and hence also incurs the same complexity as the LBP for measurement evaluation. Furthermore, a com-putational cost that depends on 2no seems to be unavoidable for any algorithm since all subsets of O need to be evaluated. VI. G AUSSIAN LBP A LGORITHM 
+
+In addition to Assumptions A.1-A.5, the following assump-tions will prove useful in the current section. 
+
+B.1 Gaussian object models. The prior object densities are Gaussian and the object dynamics are linear-Gaussian. Thus, the predicted object densities are also Gaussian, denoted via f (i)0 (x) = fG(x, m(i), P (i)) for all i ∈ O .
+
+B.2 Constant probabilities of detection. The probabilities of detection are constants, i.e., for any set I ⊆ O
+
+P I
+
+> d,k
+
+(xI ) = P I 
+
+> d,k
+
+for all xI .
+
+B.3 Gaussian observation models. The sensor observation functions are linear and the sensor noise is additive Gaus-sian. Specifically, for any nonempty subset of unresolved objects A ⊂ O , the sensor likelihood function is 4
+
+f A
+
+> u,k
+
+(z|xA 
+
+> k
+
+) = fG
+
+(
+
+z; ∑
+
+> ℓ∈A
+
+HA 
+
+> k
+
+x(ℓ) 
+
+> k
+
+, RA
+
+> k
+
+)
+
+(26) where the observation HA 
+
+> k
+
+and the covariance RA
+
+> k
+
+matrices may depend on the unresolved group identity 
+
+A. Note that this simplified Gaussian model is flexible enough to model sensing modalities where an unresolved measurement correspond to a centroid of the individual object measurements and where the measurement noise varies with the size of the unresolved group.                    
+
+> 4Another possibility for the likelihood function is
+> fG
+> (z;∑
+> ℓ∈A HA
+> k,ℓ x(ℓ)
+> k,RA
+> k
+> ),where the observation matrix HA
+> k,ℓ
+> depends on both the object group Aand the individual object index ℓ.8
+
+B.4a) Coupling probability based on predicted object states. The coupling probability of an unresolved pair 
+
+Pu,k (·, ·) is a constant ˜Pu,k given by 
+
+˜P il  
+
+> u,k
+
+= exp 
+
+(
+
+− 1
+
+2
+
+(h(i)r − h(l)r
+
+)⊤A−1u,k 
+
+(h(i)r − h(l)r
+
+))
+
+(27) where h(i)r , H{i} 
+
+> k
+
+m(i) for each i ∈ O .
+
+B.4b) Averaged coupling probability. The coupling proba-bility of an unresolved pair Pu,k (·, ·) is a constant ˜Pu,k 
+
+given by 
+
+˜P il  
+
+> u,k
+
+=
+
+∫ ∫ 
+
+Pu,k (x, y)f (i) 
+
+> k|k−1
+
+(x)f (l)
+
+> k|k−1
+
+(y)d xdy . (28) Note that when combined with assumptions B.1 and B.3, the above simplifies to 
+
+˜P il  
+
+> u,k
+
+=
+
+√
+
+det (2 πAu,k ) fG
+
+(H{i} 
+
+> k
+
+m(i); H{l} 
+
+> k
+
+m(l), Cil k
+
+) .
+
+(29) where Cil k = Au,k + H{i} 
+
+> k
+
+P (i)(H{i} 
+
+> k
+
+)⊤ +
+
+H{l} 
+
+> k
+
+P (l)(H{l} 
+
+> k
+
+)⊤ for each pair i, l .In both Assumptions B.4a) and B.4b), the coupling proba-bility at time k between two objects i and l is constant with respect to the state values of the respective objects. Based on either assumption B.4a) or B.4b), analogous definitions follow for ˜Qil  
+
+> u,k
+
+= 1 − ˜P il 
+
+> u,k
+
+, ˜V O 
+
+> u,k
+
+= ∏
+
+> 1≤i<l ≤no
+
+˜Qil  
+
+> u,k
+
+and ˜rA
+
+> u,k
+
+.Employing these assumptions and dropping the time index k
+
+in (15) leads to 
+
+f (x, a, b|z) ∝ Ψ(a, b)[ no∏
+
+> i=1
+
+f (i)0
+
+(x(i))]
+
+× q(0) (S(b(0) ))[ m∏
+
+> j=1
+
+q(j)(x, S(b(j)))]
+
+(30) where, for any subset I ⊆ O , the {q(j)}mj=0 factors become 
+
+q(0) (I) = ∑
+
+> P∈ B(I)
+
+∏
+
+> U ∈P
+
+(1 − P U
+
+> d
+
+) ˜rU
+
+> u
+
+and for j ≥ 1
+
+q(j)(x, I) =
+
+{ ˜rI      
+
+> uPI
+> dfI
+> u(z(j)|
+
+xI )    
+
+> λcfc(z(j))
+
+, if I 6 = ∅
+
+1, if I = ∅.
+
+The specialization of the LBP algorithm to the Gaussian case leads to the Gaussian LBP (GLBP) message passing algorithm. Using standard Gaussian results [27, Ch. 3.8], the GLBP measurement evaluation for z(j) and a vector b such that S(b) = I 6 = ∅ becomes 
+
+ϕxbj (b) = ˜rI 
+
+> u
+
+P I 
+
+> d
+
+fG
+
+(z(j); ∑ 
+
+> i∈I
+
+HI m(i), SI
+
+)
+
+λcfc(z(j) ) (31) where SI = RI +∑ 
+
+> i∈I
+
+HI P (i)[HI ]⊤, whereas ϕxb0 (b) = 
+
+q(0) (S(b)) for all b. The data association loop in the GLBP is identical to the general LBP of the previous section. The marginal likelihood of object i, when group I ⊇ { i} is associated with the j-th measurement becomes the weighted Gaussian likelihood function 
+
+ξ(j) 
+
+> i
+
+(x(i), I) = ˜rI 
+
+> u
+
+P I 
+
+> d
+
+fG
+
+(z(j)
+
+> I\ i
+
+; HI x(i), SI\ i
+
+)
+
+λcfc(z(j) ) (32) where 
+
+z(j) 
+
+> I\ i
+
+= z(j) − ∑
+
+> l∈I\ i
+
+HI m(l)
+
+SI\ i = SI − HI P (i)[HI ]⊤ .
+
+From the above marginal-likelihood and (22), each message 
+
+γqj xi (·) is a mixture of 2no−1 weighted Gaussian likelihood components and one constant component. Thus, the belief at each node i from (25) is also a mixture distribution with an ex-ponential growth in the number of components, i.e., O(2 no m).To avoid this increase in the number of components, after each update with a γqj xi (·) message in the belief (25), we perform a projection from the space of Gaussian mixture distributions to that of single Gaussian distributions. For any object i,recall that f (i)0
+
+(x(i)) is the predicted density f (x(i)
+
+> k
+
+∣∣z1: k−1
+
+)
+
+and which, in virtue of B.1, has a single Gaussian form. We sequentially perform for j = 1 , 2, · · · , m :
+
+{ ˜f (i) 
+
+> j
+
+(x(i)) ∝ f (i)
+
+> j−1
+
+(x(i)) γqj xi (x(i)),f (i) 
+
+> j
+
+(x(i)) = (Π ˜f (i)
+
+> j
+
+)(x(i)) (33) where ˜f (i) 
+
+> j
+
+(x(i)) has a Gaussian mixture form 
+
+fGM (x(i); m(i) 
+
+> j
+
+, P (i) 
+
+> j
+
+) with m(i) 
+
+> j
+
+and P (i) 
+
+> j
+
+given by standard Gaussian results [27, Ch. 3.8]. Furthermore, Π is the projection defined in (1). At the last step ( j = m), we obtain the single Gaussian approximation f (i) 
+
+> m
+
+(x(i)) to the marginal distribution at node x(i). Note that while the message q(0) (·)
+
+is necessary for the data association loop, the message 
+
+γq0 xi (x(i)) is a constant and has no influence on the update of (33). 
+
+A. Complexity Analysis 
+
+The measurement evaluation step of GLBP algorithm incurs a computational complexity on the order of O(m 2no ), follow-ing from the computation of (31) for all j and all b. Here, a computational complexity O(2 n2o ), stemming from evaluating 
+
+˜rI 
+
+> u
+
+for all sets I ⊂ O , may be ignored since evaluating either (27) or (28) may be achieved much faster than (31). The computational complexity of the data association loop remains at O(m n o 2no ). The computational complexity of the update in (33) is O(m n o 2no ) for all objects. This follows, since for each object i and each measurement index j, a Gaussian mixture with 2no−1 terms is formed after an update with a message γqj xi is performed, followed by a projection to a single Gaussian which also involves O(2 no ) computations. VII. N UMERICAL RESULTS 
+
+In this section, we present numerical results that com-pare our proposed GLBP algorithm with a Gaussian Exact-Marginals (GEM) algorithm. The two algorithms share all 9
+
+Unresolved measurement Resolved measurement Clutter measurement Object position Resolution graph 
+
+X coordinate [m] Y coordinate [m] 
+
+30 30 20 20 10 10 00
+
+−30 
+
+−30 
+
+−20 
+
+−20 
+
+−10 
+
+−10 0.002 0.004 0.006 0.008 0.01 0.012 0.014 0.016 0.018 0.02 
+
+> Fig. 3. Static scenario depicting four closely-spaced objects with their location probability densities, which are indicated by the colored areas. Also, note an instance of the resolution graph and of the different measurements. The graph and the type of measurements are unknown to the filter.
+
+elements, such as, Gaussian object models, model parameters, approximations (i.e., B.1-B.3 and B.4b)), with the exception that GLBP employs our proposed LBP mechanism to evaluate the marginal association probabilities pi(a) ∀a whereas the GEM performs an exact evaluation of these marginals by a direct evaluation of the joint probabilities of all multiobject association events. The GEM algorithm may be seen as a variant of the method of [20] for unresolved measurements, the difference being that the latter method avoids multiobject association events that are deemed impossible for a given sensor in order to reduce its computational complexity. The GLBP and GEM methods are compared in a static and a dynamic scenario, as presented next. 
+
+A. Static Scenario 
+
+A static (or fixed time) scenario is considered where the object state vectors correspond to the XY coordinates of the objects and are Gaussian distributed as displayed in Fig-ure 3. A linear Gaussian observation model (26) is employed to generate noisy location measurements from the objects through the process of object grouping followed by group detection and measurement generation (described in Sec. II). Further model parameters are: Au,k = 10 2 I2; P I 
+
+> d,k
+
+= 0 .9
+
+∀I ; clutter observations are uniformly distributed on the compact space [−30 , 30] × [−30 , 30] ; for an object group 
+
+I, the observation matrix is taken to be HI 
+
+> k
+
+= |I| −1 I2
+
+which calculates the centroid average of the object positions; whereas the observation noise covariance matrix exhibits a slow increase with the cardinality |I| of the object group (here, taken to be RI 
+
+> k
+
+= σ2 3
+
+√|I| I2). The data-association loop (step 2 of the generic LBP algorithm) is run until 
+
+max ij 
+
+∣∣ log Υ(ℓ+1) 
+
+> ij
+> Υ(ℓ)
+> ij
+
+∣∣ ≤ 10 −9, for some ℓ, or otherwise until the maximum number of iterations L = 50 is reached. In order to quantify the performance of association prob-ability estimation, the Total Variation Distance (TVD) is 
+
+Resolved-measurement Noise Variance σ2 [m 2]Average TVD 
+
+Median Percentiles 
+
+30 20 10 40 50 60 70 80 
+
+0.01 0.02 0.03 0.04        
+
+> Fig. 4. Static scenario depicting average TVD between the GLBP estimated marginal probabilities and the exact evaluation of the marginals. The curves correspond to the median error and 25% −75% percentile bands. The clutter rate is λc,k = 10 .
+
+Clutter rate λc,k 
+
+> Average TVD
+
+Median Percentiles 
+
+30 25 20 15 10 5
+
+0.01 0.02 0.03 0.04 0.05 0.06        
+
+> Fig. 5. Static scenario depicting average TVD between the GLBP estimated marginals and the exact evaluation of the marginals. The curves correspond to the median error and 25% −75% percentile bands. The measurement noise has σ2= 10 .
+
+used to compare the GLBP marginal probabilities {ˆpi(·)}no
+
+> i=1
+
+and the exact probabilities {pi(·)}no 
+
+> i=1
+
+obtained using GEM. The TVD [28, Ch. 5] is a distance between two probability mass functions (pmfs). Specifically, for two pmfs ˆp and p
+
+defined on the same discrete space of outcomes Ω, their TVD 
+
+dTV (ˆ p, p ) is given by dTV (ˆ p, p ) = 1
+
+> 2
+
+∑ 
+
+> ω∈Ω
+
+|ˆp(ω)−p(ω)|, with 
+
+dTV (ˆ p, p ) ∈ [0 , 1] . When the TVD between two pmfs is equal to a specific value, say v, then the difference in probability between the two pmfs is upper bounded by v for any outcome 
+
+ω ∈ Ω.For each object i, the GLBP algorithm provides the asso-ciation pmf estimate ˆpi given in (21), defined on the space of outcomes Ω = {0, 1, 2, · · · , m k} and where ˆpi(j) is the estimated posterior probability that object i contributed to measurement j, if j > 0, and the estimated posterior probabil-ity that object i is misdetected if j = 0 . Since both GLBP and GEM algorithms provide an association pmf estimate for each object, we employ an Average TVD (ATVD) metric between their respective pmf sets. Specifically letting {ˆpi(·)}no 
+
+> i=1
+
+and 
+
+{pi(·)}no 
+
+> i=1
+
+be the pmfs produced by GLBP and GEM, the ATVD is defined as dATV (ˆ p, p ) = 1
+
+> no
+
+∑no 
+
+> i=1
+
+dTV (ˆ pi, p i).Performance curves depicting the ATVD between the GLBP estimated association probabilities and the GEM exact as-sociation probabilities are depicted in Fig. 4 and Fig. 5, as functions of the measurement noise parameter σ2 and clutter rate λc,k , respectively. Both figures showcase the median 10 
+
+ATVD and various percentile intervals obtained from a number of 300 independent simulations. Note that the GLBP estimated association pmfs are close in ATVD to the GEM exact association pmfs and that this distance slowly increases with the measurement noise variance and clutter rate. The lower computational complexity of the GLBP algo-rithm, as compared to the GEM algorithm, is reflected in the high speed-ups reported in Table I, which are defined as the ratios between the wall-clock run-times of the GEM and the GLBP algorithm. The small loss in ATVD is compensated by this high increase in computational efficiency of the GLBP. The computational speed-up becomes more significant at in-creased clutter rates or number of objects, while increasing the latter leads to the most pronounced increase. This is in line with the results in Sec. V-A since the GEM algorithm incurs a computational complexity of O(mno ) whereas the GLBP has a computational complexity of O(m n o2no ).                                          
+
+> Clutter Rate Number of
+> objects λ= 5 λ= 10 λ= 20 λ= 30
+> ATVD 0.01 0.02 0.04 0.05
+> Speed-up no= 4 731 212 746
+> ATVD 0.04 0.06 0.1 0.14
+> Speed-up no= 5 13 91 1234 6730
+> TABLE I ATVD BETWEEN THE PROPOSED GLBP AND GEM ALGORITHMS AND SPEED -UP VALUES (RATIO OF GEM AND GLBP WALL -CLOCK RUN TIMES ). T HE RESOLVED NOISE VARIANCE IS KEPT AT σ2= 4 M2.
+
+B. Dynamic Scenario 
+
+In this section, we consider a scenario in which the state vector of any object i ∈ O evolves according to the discrete white-noise acceleration model [29, Ch. 6.3.2] in a 2D plane. More specifically, the individual object state vectors contain object 2D position (x, y ) and velocity information ( ˙ x, ˙y), i.e., 
+
+x(i) = [x, y, ˙x, ˙y]⊤. Considering a sampling period Ts, state transitions are characterized by the Gaussian transition kernel 
+
+f (i)
+
+> k+1 |k
+
+(x|y) = fG(x; F y , Q), where 
+
+F =
+
+[I2 Ts I2
+
+02 I2
+
+]
+
+and Q = σ2
+
+> o
+
+[ T 4s 
+
+> 4
+
+I2 T 3s 
+
+> 2
+
+I2  
+
+> T3s
+> 2
+
+I2 T 2s I2
+
+]
+
+.
+
+The specific filtering parameters employed in this work are 
+
+Ts = 1 s and an object noise of σo = 5 × 10 −3 m/s 2. For an object group I, the observation model of (26) has obser-vation matrix HI 
+
+> k
+
+= |I| −1 [I2, 02
+
+] which yields the centroid average of the object positions; whereas the observation noise covariance matrix is RI 
+
+> k
+
+= σ2I2 if I is a singleton and 
+
+RI 
+
+> k
+
+= 2 σ2I2 whenever |I| > 1. The probability of detection is a constant P I 
+
+> d,k
+
+= 0 .98 for any group I ⊆ O of objects. Clutter observations are uniformly distributed on the compact 
+
+[−150 , 150] × [−150 , 150] . The sensor resolution capabilities are described by the matrix Au,k = 10 2 I2. An instance of four object tracks with the unresolved measurement model is depicted in Fig. 6. Correspondingly, the estimated object tracks produced by the GLBP filter are showcased in Fig. 7. In Fig. 8, we showcase the estimated tracks produced by a Gaussian LBP algorithm that does not employ any unresolved 
+
+X coordinate [m] Y coordinate [m] 
+
+> True object tracks Clutter measurements Resolved measurements Unresolved measurements
+
+50 50 
+
+−50 
+
+−50 100 100 
+
+−100 
+
+−100 
+
+−150 
+
+−150 150 150 00         
+
+> Fig. 6. Dynamic scenario depicting an instance of four object tracks. The object tracks are designed so as to meet in the center (0 ,0) of the 2D plane. Also shown are the measurements and measurement types—clutter, resolved (generated by a single object), and unresolved (generated by two or more objects). The measurement noise has parameter σ2= 5 and λc,k = 5 . Note that the measurement type information is not available to the proposed filter.
+
+measurement model, but instead assumes the standard one-to-one association rule. We name this method as the No-U GLBP algorithm. As can be seen from Fig. 8, the No-U GLBP algorithm struggles with handling closely-spaced objects, leading to track divergence and track switching. We compare the performance of our proposed method GLBP with three reference methods—No-U GLBP, GEM-JPDAF, and the Oracle filter. The GEM-JPDAF employs the exact data-association step of GEM in a JPDAF framework. Thus, GEM-JPDAF is similar to the method of [20] with two modifications. Namely, the GEM-JPDAF does not em-ploy any strategies to eliminate association hypotheses in the calculation of marginal probabilities and approximates object marginal pdfs as Gaussian. The Oracle filter employs the true v
+
+X coordinate [m] Y coordinate [m]     
+
+> True Est. 1
+> Est. 2
+> Est. 3
+> Est. 4
+
+50 50 
+
+−50 
+
+−50 100 100 
+
+−100 
+
+−100 
+
+−150 
+
+−150 150 150 00    
+
+> Fig. 7. GLBP estimated object tracks corresponding to the case in Fig. 6. Ground truth tracks are labeled as “true” and the four estimated tracks are labeled as “Est.” 1through 4.11
+
+v
+
+X coordinate [m] Y coordinate [m] 
+
+True Est. 1
+
+Est. 2
+
+Est. 3
+
+Est. 4
+
+50 50 
+
+−50 
+
+−50 100 100 
+
+−100 
+
+−100 
+
+−150 
+
+−150 150 150 00    
+
+> Fig. 8. Estimated object tracks using the No-U GLBP algorithm that assumes at most one-to-one associations and does not employ any model for unresolved measurements. One may observe the divergence of track Est. 4and the switch of track Est. 3to following a different object when the objects become closely spaced.
+
+associations between objects and measurements followed by a marginalization step in order to update each object posterior distribution, which is also assumed Gaussian. In Fig. 9, the Labeled Mean Squared Error (LMSE) between the estimated object tracks and the true object tracks are shown as a function of time for the three methods. The LMSE is obtained as the sum of individual-object MSE curves, as a function of time, and divided by the number of objects. Individual-object MSE curves are calculated between each true object track and the corresponding estimated track (i.e., having the same label as the true object track). The median and percentile curves in Fig. 9 are computed from a set of 
+
+100 independent runs. One can observe that all LMSE curves have sharp peaks when the objects meet in the middle of the 2D plane. Notice that the LMSE values of the GLBP are close to those of the GEM-JPDAF and slightly worse than those of the Oracle filter, only noticeable when the object tracks cross and the association problem is at its hardest to solve. In Tables II and III, we present the LMSE as function of observation noise variance and clutter rate, respectively. The curve of LMSE as a function of time is compressed into a 
+
+> Median Oracle P-int. Oracle Median GEM-JPDAF P-int. GEM-JPDAF Median GLBP P-int. GLBP
+
+30 
+
+20 20 10 40 40 50 60 60 70 80 80 
+
+Time [s] Labeled MSE [m 2]                                                                
+
+> Fig. 9. Labeled MSE of estimated object tracks (2D position only) as a function of time. The curves correspond to the median error and 10% −90%
+> percentile (P-int.) bands. The measurement noise has σ2= 10 and the clutter rate is λc,k = 5 .
+> Observation noise variance σ2[m 2]
+> 2510 20 40
+> ALMSE 2.8 5.4 9.6 15.6 26
+> GLBP IQR 1.4 1.8 4.7 611.2
+> ALMSE 7.2 8.8 11.2 18.2 36.2
+> No-U GLBP IQR 197 186 90 189 545
+> ALMSE 2.9 5.4 9.4 15.6 25.3
+> GEM-JPDAF IQR 1.4 2.1 4.3 5.9 12.3
+> ALMSE 2.6 4.9 8.3 13.4 22
+> Oracle Filter IQR 1.3 1.6 2.9 3.2 5.2
+> TABLE II MEDIAN AND IQR VALUES FOR THE TIME -AVERAGED LMSE (ALMSE)
+> OF VARIOUS METHODS AS A FUNCTION OF DIFFERENT OBSERVATION NOISE VARIANCE . T HE CLUTTER RATE IS FIXED AT λc,k = 5 .
+
+single time-average LMSE value, denoted ALMSE, with the median and interquartile range (IQR) being reported in the tables. Additionally, the speed-up of the proposed GLBP with respect to the GEM-JPDAF is reported in Table III. From both Tables II and III, one may observe that the GLBP performance is similar to that of the GEM-JPDAF, but at a fraction of the computational run time. The high IQR values of the No-U GLBP method are due to track divergences.                                                    
+
+> Clutter Rate
+> λ= 10 λ= 20 λ= 30 λ= 40
+> ALMSE 2.7 2.8 3.2 3.3
+> IQR 1.2 1.2 1.5 2GLBP
+> Speed-Up 213 1131 3355 7973
+> ALMSE 6.9 9.1 127 390
+> No-U GLBP IQR 426 799 1265 1650
+> ALMSE 2.7 2.8 3.2 3.2
+> GEM-JPDAF IQR 1.2 1.3 1.6 1.6
+> ALMSE 2.5 2.5 2.6 2.6
+> Oracle Filter IQR 0.8 0.8 0.9 0.7
+> TABLE III MEDIAN AND IQR VALUES FOR THE TIME -AVERAGED LMSE (ALMSE)
+> OF VARIOUS METHODS AS A FUNCTION OF DIFFERENT CLUTTER RATES .THE OBSERVATION NOISE VARIANCE IS FIXED AT σ2= 2 .
+
+A measure for track switches may be constructed as follows. Apart from the labeled MSE between estimated and ground truth object states, the best matching assignment—in terms of total MSE—between the unlabeled estimated set of states and the ground truth set of object states may be evaluated for any method at any time step. We refer to this MSE value as the best-matching MSE. Such linear assignment problems are routinely solved using the Hungarian algorithm [30]. In this work, a track switch is declared whenever a difference between the labeled MSE and the best-matching MSE is greater in magnitude than the respective best-matching MSE. In Table IV, we present the average number of such track switches that occur throughout an 80 -second simulation, again averaged over 100 independent simulations. Note the similar values for the proposed GLBP and GEM-JPDAF methods, whereas the No-U GLBP method exhibits higher number of track switches that corroborate the higher ALMSE values from Table II. VIII. C ONCLUSION 
+
+In this paper, we address the data association problem and object state inference from potentially unresolved measure-ments, where two or more objects may jointly generate a single measurement. Building upon a well-known unresolved measurement model, a probability distribution for partitions 12                           
+
+> Observation Noise Variance
+> σ2= 2 σ2= 5 σ2= 10 σ2= 20 σ2= 40
+> GLBP 0.5 1.1 1.2 1.6 2
+> No-U GLBP 4.9 3.5 5.4 7.9 7.1
+> GEM-JPDAF 0.5 1.2 1.3 1.7 1.2
+> TABLE IV AVERAGE NUMBER OF TRACK SWITCHES ENCOUNTERED BY EACH METHOD OVER THE COURSE OF A SINGLE SIMULATION . T HE CLUTTER RATE IS FIXED AT λc,k = 5 .
+
+of objects is developed, which serves as a prior distribution for the data-association problem. Furthermore, we propose a message-passing algorithm for performing state inference with the resulting model. Through numerical experiments, we demonstrate the effectiveness of the proposed method and its reduced computational cost as compared to a direct marginalization method. ACKNOWLEDGMENT 
+
+We thank Prof. Simon Maskell for the constructive talks on the subject of unresolved measurements. APPENDIX IPROOF OF PROPOSITION III.1 Without loss of generality, let P be a partition P =
+
+{U 1, U2, · · · , Um} ∈ B(O) (with arbitrary 1 ≤ m ≤ no). Then, the summation in (5) over graphs with connected components identical to the sets in P leads to 
+
+PP
+
+({U 1, U2, · · · , Um}∣∣xk
+
+)
+
+= V O
+
+> u,k
+
+(xk) ∑
+
+> G∈G(O)
+> C(G)= P
+
+∏
+
+> (i,l )∈E G
+
+Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)
+
+Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)= V O
+
+> u,k
+
+(xk)
+
+> m
+
+∏
+
+> j=1
+
+[ ∑   
+
+> Gj∈G(Uj)
+> C(Gj)= Uj
+
+∏
+
+> (i,l )∈E Gj
+
+Pu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)
+
+Qu,k (x(i) 
+
+> k
+
+, x(l) 
+
+> k
+
+)
+
+]
+
+= V O
+
+> u,k
+
+(xk)
+
+> m
+
+∏
+
+> j=1
+
+[rUj
+
+> u,k
+
+(xUj 
+
+> k
+
+)] .
+
+The second equality above follows from the observation that a graph G ∈ G(O) that satisfies C(G) = P may be seen as composed of the independent subgraphs {Gj }mj=1 , each being connected and where no path exists between two subgraphs 
+
+Gj and Gj′ with j 6 = j′. Thus, the set of edges EG may be partitioned into EG = EG1 ∪E G2 ∪· · ·∪E Gm according to these subgraphs. Finally, the summation over graphs G becomes a summation over independent subgraphs Gj with C(Gj ) = Uj
+
+for each j ∈ J1, m K.APPENDIX II PROOF OF PROPOSITION IV.1 Assume throughout this section that bk is a valid association tuple, i.e., there exists an ak ∈ A k such that Ψk(ak, bk) = 1 .In contrast to classical multiobject tracking (where only one object can contribute to a single measurement), here, several objects may jointly generate a measurement. Indeed, the set 
+
+S(bk) contains all detected groups of objects. Moreover, the elements of S(bk) may be viewed as virtual objects or 
+
+clusters , to which the classical assignment rule of one dis-tinct measurement per virtual object applies. The association variable bk also conveys the knowledge of the set of detected objects Ad = ∪j S(b(j) 
+
+> k
+
+) and that of the set of misdetected objects Am = S(b(0)  
+
+> k
+
+). Note that bk does not contain any information on the partitioning of the misdetected object set. In fact, the partitioning of Am remains a hidden variable in the proposed model. Consider an arbitrary set of detected object groups A with 
+
+|A| ≤ mk, i.e., there exists a partition P ∈ B(O) such that 
+
+A ⊆ P . Note that for such a set A, there are potentially multiple corresponding assignment tuples bk, namely, all valid 
+
+bk ∈ B k with S(bk) = A. Indeed, in this case the groups in 
+
+A can be seen as the virtual objects. Mirroring the reasoning in [1, p. 315], it follows that the number of valid assignment tuples bk for which the same set of virtual objects is detected is given by the number of permutations of the mk measurements taken as |A| . This corresponds to the number of events under which a distinct measurement index from the set J1, m kK is assigned to an element from A—a virtual object. Assuming that these permutations are a priori equally likely, for a valid 
+
+bk ∈ B k and |A| ≤ mk, one has 
+
+p(bk|A , m k) = 
+
+[ mk!
+
+(mk − |A| )! 
+
+]−1
+
+δA(S(bk)) =
+
+[ mk!
+
+mc
+
+> k
+
+!
+
+]−1
+
+δA(S(bk)) (34) where the number of false alarms is mc 
+
+> k
+
+= mk − |S (bk)|.Let P ∈ B(O) be any partition of objects, denote the indices of detected objects via the set Ad and the set of indices of misdetected objects via Am = O \ A d. From Assumption A.3 and given P, the probability of detecting the objects with indices in Ad and misdetecting those with indices in Am is 
+
+p(Ad, Am|P , xk) = ∏
+
+> U ∈P
+
+[
+
+1Ad (U)P U
+
+> d,k
+
+(xU 
+
+> k
+
+)+1Am (U)(1 − P U
+
+> d,k
+
+(xU 
+
+> k
+
+))]
+
+.(35) Note that the above probability is zero whenever the hypoth-esis in Assumption A.3 is not respected, that is, whenever any element U of P contains both detected and misdetected it holds that 1Ad (U) = 1Am (U) = 0 .For any n ≤ mk, let A = {A 1, A2, · · · , An} be a set of detected object groups, i.e., Ai ⊂ O ∀ i, Ai ∩ A j = ∅ for any 
+
+i 6 = j, and all the objects in Ad , ∪iAi are detected while the objects in Am = O \ A d are misdetected. Alternatively, the set A may be seen as a partial partition of O (i.e., there exists a partition P ∈ B(O) such that A ⊆ P ) that contains all the detected object groups. Furthermore, marginalizing over the unknown partitions of the misdetected objects, the prior 13 
+
+probability of A can be expressed as 
+
+p(A| xk)= ∑
+
+> U ∈ B(Am)
+
+p(A, U| xk)= ∑
+
+> U ∈ B(Am)
+
+p(A ∪ U , Ad, Am|xk)= ∑
+
+> U ∈ B(Am)
+
+p(Ad, Am|A ∪ U , xk)PP(A ∪ U| xk)= ∑
+
+> U ∈ B(Am)
+
+[ n∏
+
+> i=1
+
+P Ai 
+
+> d,k
+
+(xAi 
+
+> k
+
+)
+
+][ ∏
+
+> W∈U
+
+(1 − P W 
+
+> d,k
+
+(xW 
+
+> k
+
+))]
+
+×V O
+
+> u,k
+
+(xk)
+
+[ n∏
+
+> i=1
+
+rAi
+
+> u,k
+
+(xAi 
+
+> k
+
+)
+
+] ∏
+
+> W∈U
+
+rW
+
+> u,k
+
+(xW 
+
+> k
+
+)= V O
+
+> u,k
+
+(xk)
+
+[ n∏
+
+> i=1
+
+P Ai 
+
+> d,k
+
+(xAi 
+
+> k
+
+) rAi
+
+> u,k
+
+(xAi 
+
+> k
+
+)
+
+]
+
+× ∑
+
+> U ∈ B(Am)
+
+∏
+
+> W∈U
+
+(1 − P W 
+
+> d,k
+
+(xW 
+
+> k
+
+)) rW
+
+> u,k
+
+(xW 
+
+> k
+
+) (36) where in the second line we employed the fact that knowing 
+
+A and U is equivalent to knowing both: (i) the partition A ∪ U 
+
+of all the objects in O; and (ii) the sets of detected Ad and misdetected Am objects. The penultimate line follows from Proposition III.1 and (35), by plugging in the probability of a partition given the object states xk and the probabilities of detection/misdetection for object groups. Note that bk determines S(bk). Furthermore, (bk, m k)
+
+jointly imply mc 
+
+> k
+
+= mk − |S (bk)| whenever mk ≥ |S (bk)|.Thus, the joint probability of bk and mk becomes 
+
+p(bk, m k|xk)=p(bk, S(bk), m k|xk)=p(bk|S (bk), xk, m k) p(mk|S (bk), xk) p(S(bk)|xk)=p(bk|S (bk), m k)p(mc
+
+> k
+
+)p(S(bk)|xk)=V O
+
+> u,k
+
+(xk)e−λc (λc)mc
+
+> k
+
+mk!
+
+[ ∏
+
+> A∈S (
+
+bk )
+
+P A
+
+> d,k
+
+(xA 
+
+> k
+
+) rA
+
+> u,k
+
+(xA 
+
+> k
+
+)
+
+]
+
+× ∑ 
+
+> U ∈ B(S(b(0)
+> k))
+
+∏
+
+> S∈U
+
+(1 − P S
+
+> d,k
+
+(xS 
+
+> k
+
+)) rS
+
+> u,k
+
+(xS 
+
+> k
+
+) .
+
+The third equality above uses: (i) the independence of bk and 
+
+xk when conditioned on the set of detected groups S(bk) and the number of measurements mk; and (ii) the independence of false alarms from the detection of objects. Subsequently, in the last equality, we plugged in the expressions (34) and (36). REFERENCES [1] Y. Bar-Shalom and X. R. Li, Multitarget-Multisensor Tracking: Prin-ciples and Techniques , 2nd ed. Storrs, CT, USA: YBS Publishing, 1995. [2] A. A. Saucan, T. Chonavel, C. Sintes, and J.-M. Le Caillec, “CPHD-DOA tracking of multiple extended sonar targets in impulsive environ-ments,” IEEE Trans. Signal Process. , vol. 64, no. 5, pp. 1147–1160, March 2016. [3] F. Meyer, P. Braca, P. Willett, and F. Hlawatsch, “A scalable algorithm for tracking an unknown number of targets using multiple sensors,” IEEE Trans. Signal Process. , vol. 65, no. 13, pp. 3478–3493, July 2017. [4] M. Beard, B. T. Vo, and B. N. Vo, “Bayesian multi-target tracking with merged measurements using labelled random finite sets,” IEEE Trans. Signal Process. , vol. 63, no. 6, pp. 1433–1447, Mar. 2015. [5] A. A. Saucan, M. J. Coates, and M. Rabbat, “A multisensor multi-Bernoulli filter,” IEEE Trans. Signal Process. , vol. 65, no. 20, pp. 5495– 5509, October 2017. [6] F. Meyer, T. Kropfreiter, J. L. Williams, R. Lau, F. Hlawatsch, P. Braca, and M. Z. Win, “Message passing algorithms for scalable multitarget tracking,” Proc. IEEE , vol. 106, no. 2, pp. 221–259, February 2018. [7] B.-N. Vo, B.-T. Vo, and D. Phung, “Labeled random finite sets and the Bayes multi-target tracking filter,” IEEE Trans. Signal Process. , vol. 62, no. 24, pp. 6554–6567, Dec. 2014. [8] A. A. Saucan and M. Z. Win, “Information-seeking sensor selection for ocean-of-things,” IEEE Internet Things J. , vol. 7, no. 10, pp. 10 072– 10 088, October 2020, special issue on Internet of Things for Smart Ocean .[9] X. Zhang, P. Willett, and Y. Bar-Shalom, “Monopulse radar detection and localization of multiple unresolved targets via joint bin processing,” 
+
+IEEE Trans. Signal Process. , vol. 53, no. 4, pp. 1225–1236, 2005. [10] A. Isaac, P. Willett, and Y. Bar-Shalom, “Quickest detection and tracking of spawning targets using monopulse radar channel signals,” IEEE Trans. Signal Process. , vol. 56, no. 3, pp. 1302–1308, 2008. [11] K.-C. Chang and Y. Bar-Shalom, “Joint probabilistic data association for multitarget tracking with possibly unresolved measurements,” in 
+
+American Control Conference , 1983, pp. 466–471. [12] ——, “Joint probabilistic data association for multitarget tracking with possibly unresolved measurements and maneuvers,” IEEE Trans. Autom. Control , vol. 29, no. 7, pp. 585–594, 1984. [13] ——, “A simplification of the JPDAM algorithm,” IEEE Trans. Autom. Control , vol. 31, no. 10, pp. 989–991, 1986. [14] W. Koch and G. Van Keuk, “Multiple hypothesis track maintenance with possibly unresolved measurements,” IEEE Trans. Aerosp. Electron. Syst. ,vol. 33, no. 3, pp. 883–892, 1997. [15] S. Jeong and J. K. Tugnait, “Tracking of two targets in clutter with possibly unresolved measurements,” IEEE Trans. Aerosp. Electron. Syst. ,vol. 44, no. 2, pp. 748–765, 2008. [16] R. B. Angle, R. L. Streit, and M. Efe, “Multiple target tracking with unresolved measurements,” IEEE Signal Process. Lett. , vol. 28, pp. 319– 323, 2021. [17] J. Williams and R. A. Lau, “Approximate evaluation of marginal association probabilities with belief propagation,” IEEE Trans. Aerosp. Electron. Syst. , vol. 50, no. 4, pp. 2942–2959, 2014. [18] F. Meyer and J. L. Williams, “Scalable detection and tracking of geometric extended objects,” IEEE Trans. Signal Process. , vol. 69, pp. 6283–6298, February 2021. [19] A. A. Saucan and F. Meyer, “On data association with possibly unresolved measurements,” in Int. Conf. Inform. Fusion (FUSION) ,Charleston, SC, USA, 2023, pp. 1–8. [20] D. Svensson, M. Ulmke, and L. Hammarstrand, “Multitarget sensor resolution model and joint probabilistic data association,” IEEE Trans. Aerosp. Electron. Syst. , vol. 48, no. 4, pp. 3418–3434, Oct. 2012. [21] A. A. Saucan and M. Z. Win, “On the labeled multi-Bernoulli filter with merged measurements,” in IEEE Int. Conf. Commun. , 2020, pp. 1–5. [22] J. Li, L. Gao, S. Zhao, and P. Wei, “Message passing based multitarget tracking with merged measurements,” Signal Processing , vol. 227, p. 109682, 2025. [23] R. Diestel, Graph Theory , 5th ed., ser. Graduate Texts in Mathematics. Berlin, Heidelberg: Springer, 2017, vol. 173. [24] C.-B. Chang and K.-P. Dunn, “A functional model for the closely spaced object resolution process,” MIT-LL Technical Report 611, Tech. Rep., May 1982. [25] P. Sharma, A. A. Saucan, D. J. Bucci, and P. K. Varshney, “Decentral-ized Gaussian filters for cooperative self-localization and multi-target tracking,” IEEE Trans. Signal Process. , vol. 67, no. 22, pp. 5896–5911, November 2019. [26] F. R. Kschischang, B. J. Frey, and H.-A. Loeliger, “Factor graphs and the sum-product algorithm,” IEEE Trans. Inf. Theory , vol. 47, no. 2, pp. 498–519, February 2001. [27] B. Ristic, S. Arulampalam, and N. Gordon, Beyond the Kalman Filter: Particle Filters for Tracking Applications . Artech House, 2004. [28] L. Devroye and G. Lugosi, Combinatorial Methods in Density Estima-tion . New York, NY: Springer, 2001. [29] Y. Bar-Shalom, X. Rong Li, and T. Kirubarajan, Estimation with Appli-cations to Tracking and Navigation: Theory, Algorithms and Software .Hoboken, NJ: John Wiley and Sons, January 2002. [30] C. H. Papadimitriou and K. Steiglitz, Combinatorial Optimization: Algorithms and Complexity . New York: Dover Publications, 1998.

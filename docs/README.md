@@ -6,28 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-01
-- 运行时间：2026-07-01 20:58:57 UTC
+- 最新运行日期：2026-07-02
+- 运行时间：2026-07-02 20:33:33 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读一篇高分视觉定位论文，速读一篇3D定位剪枝加速方法。  
-重点推荐《HKVLM》中通过绑定语言查询到冻结检测器实现忠实推理的范式，值得深入研究。  
-下一步建议关注视觉语言推理与检测解耦的设计思路，可辅助优化多模态接地任务。
-- 详情：[/202607/01/README](/202607/01/README)
+今日精读两篇9.0分追踪算法论文，分别针对未解析测量和恶劣天气两大难题。
+
+最值得关注：高斯置信传播能有效处理未解析测量场景，而SFDATrack实现了无源领域自适应跟踪，在雨雪天气下表现稳健。
+
+建议普通读者重点关注恶劣天气下的模型泛化能力，尝试将无源自适应思路引入自己的实际追踪任务。
+- 详情：[/202607/02/README](/202607/02/README)
 
 ### 精读区论文标签
-1. [HKVLM: Faithful Reasoning Grounding by Binding Language Queries to a Frozen Detector](/202607/01/2606.28862v1-hkvlm-faithful-reasoning-grounding-by-binding-language-queries-to-a-frozen-detector)  
-   标签：评分：8.0/10、query:vt
-   evidence：将语言查询绑定到物体以实现指代跟踪
+1. [Gaussian Belief Propagation for Tracking With Unresolved Measurements](/202607/02/2606.31716v1-gaussian-belief-propagation-for-tracking-with-unresolved-measurements)  
+   标签：评分：9.0/10、query:vt
+   evidence：带未分辨测量的多目标跟踪
+2. [SFDATrack: Generalized Source-Free Domain Adaptive Tracking Under Adverse Weather Conditions](/202607/02/2607.00369v1-sfdatrack-generalized-source-free-domain-adaptive-tracking-under-adverse-weather-conditions)  
+   标签：评分：9.0/10、query:vt
+   evidence：域适应视觉目标跟踪
 
 ### 速读区论文标签
-1. [PruneGround: Plug-and-play Spatial Pruning for 3D Visual Grounding](/202607/01/2606.31148v1-pruneground-plug-and-play-spatial-pruning-for-3d-visual-grounding)  
-   标签：评分：7.0/10、query:vt
-   evidence：语言引导的3D视觉指代定位
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
