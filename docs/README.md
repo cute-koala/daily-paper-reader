@@ -6,29 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-03
-- 运行时间：2026-07-03 21:23:36 UTC
+- 最新运行日期：2026-07-04
+- 运行时间：2026-07-04 21:01:05 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：2
-- 速读区：0
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今天精读两篇高分论文，聚焦通用目标跟踪与长视频指代表达理解。  
-最值得看的是：一篇反思通用目标跟踪如何迈向人类级感知智能，另一篇提出首个长时自我中心视频指代表达理解基准。  
-建议关注视频理解与人机交互领域的读者优先阅读这两篇论文，把握前沿方向。
-- 详情：[/202607/03/README](/202607/03/README)
+1) 今日聚焦神经形态语音识别与全景分割主动感知，速读两篇前沿论文。  
+2) 最值得关注：多说话人视觉语音识别中神经形态OT-CFM的节能潜力。  
+3) 建议追踪低功耗计算与主动感知在复杂场景中的实际部署方向。
+- 详情：[/202607/04/README](/202607/04/README)
 
 ### 精读区论文标签
-1. [Rethinking Generic Object Tracking Toward Human-Level Perceptual Intelligence](/202607/03/2607.01395v1-rethinking-generic-object-tracking-toward-human-level-perceptual-intelligence)  
-   标签：评分：10.0/10、query:vt
-   evidence：直接针对通用目标跟踪问题
-2. [LongEgoRefer: A Benchmark for Long-Form Egocentric Video Referring Expression Comprehension](/202607/03/2607.02096v1-longegorefer-a-benchmark-for-long-form-egocentric-video-referring-expression-comprehension)  
-   标签：评分：9.0/10、query:vt
-   evidence：提出长时间第一人称视频参考表达理解任务，与视觉语言跟踪密切相关
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [A First Exploration of Neuromorphic OT-CFM for Multi-Speaker VSR](/202607/04/2606.31225v1-a-first-exploration-of-neuromorphic-ot-cfm-for-multi-speaker-vsr)  
+   标签：评分：6.0/10、query:vt
+   evidence：使用ByteTrack进行多说话者分割
+2. [Seek to Segment: Active Perception for Panoramic Referring Segmentation](/202607/04/2607.02497v1-seek-to-segment-active-perception-for-panoramic-referring-segmentation)  
+   标签：评分：6.0/10、query:vt
+   evidence：基于VLM的主动全景指代分割
 
 
 <div class="dpr-home-promo-card">
