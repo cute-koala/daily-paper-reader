@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-05 <!--dpr-date:20260705-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/05/2607.02269v1-anygroundbench-a-specialized-domain-benchmark-for-video-grounding-in-vision-language-models" data-sidebar-item="{&quot;title&quot;: &quot;AnyGroundBench: A Specialized-Domain Benchmark for Video Grounding in Vision-Language Models&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.02269v1-anygroundbench-a-specialized-domain-benchmark-for-video-grounding-in-vision-language-models&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;面向领域适应的时空视频理解基准&quot;}">AnyGroundBench: A Specialized-Domain Benchmark for Video Grounding in Vision-Language Models</a>
   * 2026-07-04 <!--dpr-date:20260704-->
     * 速读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/04/2606.31225v1-a-first-exploration-of-neuromorphic-ot-cfm-for-multi-speaker-vsr" data-sidebar-item="{&quot;title&quot;: &quot;A First Exploration of Neuromorphic OT-CFM for Multi-Speaker VSR&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.31225v1-a-first-exploration-of-neuromorphic-ot-cfm-for-multi-speaker-vsr&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;使用ByteTrack进行多说话者分割&quot;}">A First Exploration of Neuromorphic OT-CFM for Multi-Speaker VSR</a>

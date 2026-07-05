@@ -6,29 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-04
-- 运行时间：2026-07-04 21:01:05 UTC
+- 最新运行日期：2026-07-05
+- 运行时间：2026-07-05 20:02:43 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
-- 速读区：2
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-1) 今日聚焦神经形态语音识别与全景分割主动感知，速读两篇前沿论文。  
-2) 最值得关注：多说话人视觉语音识别中神经形态OT-CFM的节能潜力。  
-3) 建议追踪低功耗计算与主动感知在复杂场景中的实际部署方向。
-- 详情：[/202607/04/README](/202607/04/README)
+今日精读一篇8.0分视频定位基准论文。核心发现：AnyGroundBench专门评估视觉语言模型在视频中的定位能力。建议关注该基准如何帮助衡量模型的实际视频理解水平。
+- 详情：[/202607/05/README](/202607/05/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [AnyGroundBench: A Specialized-Domain Benchmark for Video Grounding in Vision-Language Models](/202607/05/2607.02269v1-anygroundbench-a-specialized-domain-benchmark-for-video-grounding-in-vision-language-models)  
+   标签：评分：8.0/10、query:vt
+   evidence：面向领域适应的时空视频理解基准
 
 ### 速读区论文标签
-1. [A First Exploration of Neuromorphic OT-CFM for Multi-Speaker VSR](/202607/04/2606.31225v1-a-first-exploration-of-neuromorphic-ot-cfm-for-multi-speaker-vsr)  
-   标签：评分：6.0/10、query:vt
-   evidence：使用ByteTrack进行多说话者分割
-2. [Seek to Segment: Active Perception for Panoramic Referring Segmentation](/202607/04/2607.02497v1-seek-to-segment-active-perception-for-panoramic-referring-segmentation)  
-   标签：评分：6.0/10、query:vt
-   evidence：基于VLM的主动全景指代分割
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
