@@ -6,21 +6,19 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-05
-- 运行时间：2026-07-05 20:02:43 UTC
+- 最新运行日期：2026-07-06
+- 运行时间：2026-07-06 21:14:39 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
+- 本次总论文数：0
+- 精读区：0
 - 速读区：0
 
 ### 今日简报（AI）
-今日精读一篇8.0分视频定位基准论文。核心发现：AnyGroundBench专门评估视觉语言模型在视频中的定位能力。建议关注该基准如何帮助衡量模型的实际视频理解水平。
-- 详情：[/202607/05/README](/202607/05/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202607/06/README](/202607/06/README)
 
 ### 精读区论文标签
-1. [AnyGroundBench: A Specialized-Domain Benchmark for Video Grounding in Vision-Language Models](/202607/05/2607.02269v1-anygroundbench-a-specialized-domain-benchmark-for-video-grounding-in-vision-language-models)  
-   标签：评分：8.0/10、query:vt
-   evidence：面向领域适应的时空视频理解基准
+- 本次无精读推荐。
 
 ### 速读区论文标签
 - 本次无速读推荐。
