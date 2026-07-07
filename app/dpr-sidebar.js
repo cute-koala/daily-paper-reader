@@ -1611,7 +1611,6 @@
       unreadResultPaperIds: vs.unreadResultPaperIds,
     };
     var viewModel = normalUnreadFilterMode ? filterModelForPaperResults(model, resultOptions) : model;
-    var summary = computeModelReadSummary(viewModel, vs.readMap);
     var renderedGroups = 0;
     if (viewModel && viewModel.conferences && viewModel.conferences.length) {
       var conferenceView = resultMode
@@ -1619,8 +1618,8 @@
         : (vs.conferenceViewMode === 'tag'
           ? buildConferenceTagView(viewModel, vs.activeConferenceTag, vs.readMap)
           : buildConferenceConfView(viewModel, vs.activeConference, vs.readMap));
-      var conferenceTotal = resultMode ? countPapersInView(conferenceView) : summary.conference.papers;
-      var conferenceUnread = resultMode ? countUnreadInView(conferenceView, vs.readMap) : summary.conference.unread;
+      var conferenceTotal = countPapersInView(conferenceView);
+      var conferenceUnread = countUnreadInView(conferenceView, vs.readMap);
       if (!resultMode || conferenceTotal > 0) {
         renderedGroups += 1;
         html.push(renderAxisGroup({
@@ -1643,8 +1642,8 @@
       var dailyView = resultMode
         ? buildDailyResultView(model, resultOptions)
         : buildDailyCalendarTagView(viewModel, vs.activeDailyDate, vs.activeDailyTag, vs.readMap, vs.activeDailyMonth);
-      var dailyTotal = resultMode ? countPapersInView(dailyView) : summary.daily.papers;
-      var dailyUnread = resultMode ? countUnreadInView(dailyView, vs.readMap) : summary.daily.unread;
+      var dailyTotal = countPapersInView(dailyView);
+      var dailyUnread = countUnreadInView(dailyView, vs.readMap);
       if (!resultMode || dailyTotal > 0) {
         renderedGroups += 1;
         html.push(renderAxisGroup({
@@ -2008,7 +2007,6 @@
       });
     });
     $$('.dpr-sidebar-panel', state.bodyEl).forEach(function (panel) {
-      var panelKey = panel.getAttribute('data-panel');
       var header = $('.dpr-sidebar-panel-header', panel);
       var totalEl = header && $('.dpr-sidebar-day-total', header);
       var unreadEl = header && $('.dpr-sidebar-day-unread', header);
@@ -2017,11 +2015,7 @@
       papers.forEach(function (li) {
         if (li.getAttribute('data-read') === '0') unread += 1;
       });
-      var resultMode = panel.classList.contains('is-result-mode');
-      var counts = panelKey === 'conference' ? summary.conference : summary.daily;
-      if (resultMode) {
-        counts = { papers: papers.length, unread: unread };
-      }
+      var counts = { papers: papers.length, unread: unread };
       if (totalEl) totalEl.textContent = String(counts.papers);
       if (unreadEl) unreadEl.textContent = String(counts.unread);
       if (counts.unread === 0) {

@@ -74,6 +74,20 @@ function cssRule(css, selector) {
   return css.slice(start + 1, end);
 }
 
+function panelHeaderCounts(html, panel) {
+  const start = html.indexOf('dpr-sidebar-panel-header-' + panel);
+  assert.ok(start >= 0, panel + ' panel header should exist');
+  const end = html.indexOf('<div class="dpr-sidebar-panel-content">', start);
+  assert.ok(end > start, panel + ' panel content should follow header');
+  const header = html.slice(start, end);
+  const unread = /dpr-sidebar-day-unread">([^<]+)/.exec(header);
+  const total = /dpr-sidebar-day-total">([^<]+)/.exec(header);
+  return {
+    unread: unread ? Number(unread[1]) : NaN,
+    total: total ? Number(total[1]) : NaN,
+  };
+}
+
 function createClassList(initial = []) {
   const values = new Set(initial);
   return {
@@ -264,6 +278,8 @@ function testAxisTabsRenderUnreadCounts() {
   assert.ok(html.includes('<span class="dpr-sidebar-axis-tab-unread">0</span>/<span class="dpr-sidebar-axis-tab-total">1</span>'));
   assert.ok(html.includes('data-axis-section-toggle="daily:tag:20260624:__all__" aria-expanded="false" data-unread="1"'));
   assert.ok(!html.includes('dpr-sidebar-axis-section-dot'));
+  assert.deepEqual(panelHeaderCounts(html, 'daily'), { unread: 1, total: 2 });
+  assert.deepEqual(panelHeaderCounts(html, 'conference'), { unread: 0, total: 1 });
 
   assert.equal(typeof tools.buildAxisViewForMode, 'function');
   const updatedDateView = tools.buildAxisViewForMode(model, 'daily', 'date', {
@@ -1178,7 +1194,7 @@ function testAxisSectionsAreExpandable() {
   assert.ok(/class="[^"]*dpr-sidebar-axis-section-conference[^"]*is-expanded[^"]*"/.test(expandedHtml));
 }
 
-function testPanelCountsUseFullModel() {
+function testPanelCountsUseVisibleAxisSlice() {
   const sidebar = loadSidebarForTest('#/202606/24/paper-a');
   const tools = sidebar.__test;
   const model = tools.parseSidebar(sampleSidebar);
@@ -1204,8 +1220,8 @@ function testPanelCountsUseFullModel() {
       'conference/neurips-2024/paper-c': 'good',
     },
   });
-  assert.ok(html.includes('<span class="dpr-sidebar-day-unread">1</span>/<span class="dpr-sidebar-day-total">2</span>'));
-  assert.ok(html.includes('<span class="dpr-sidebar-day-unread">2</span>/<span class="dpr-sidebar-day-total">3</span>'));
+  assert.deepEqual(panelHeaderCounts(html, 'conference'), { unread: 0, total: 1 });
+  assert.deepEqual(panelHeaderCounts(html, 'daily'), { unread: 1, total: 2 });
 }
 
 function testSearchResultsComeFromFullModel() {
@@ -1562,7 +1578,7 @@ testTopLevelPanelsDefaultExpanded();
 testActivePaperCanForceOpenTopLevelPanel();
 testPanelHeaderClickOnlyChangesSidebarViewState();
 testAxisSectionsAreExpandable();
-testPanelCountsUseFullModel();
+testPanelCountsUseVisibleAxisSlice();
 testSearchResultsComeFromFullModel();
 testSearchNoResultsShowsEmptyState();
 testUnreadResultsComeFromFullModel();
