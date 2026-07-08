@@ -1,0 +1,707 @@
+Title: SpecTrack: Spectral Prompt Guided Adaptive Experts for Multispectral Object Tracking
+
+URL Source: https://arxiv.org/pdf/2607.05988v1
+
+Published Time: Wed, 08 Jul 2026 00:40:58 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# SpecTrack: Spectral Prompt Guided Adaptive Experts for Multispectral Object Tracking 
+
+Xingyu Tan a, Yunrong Qin a, Qing Song a, Chun Liu a, Mengjie Hu a, ∗
+
+> aBeijing University of Posts and Telecommunications, China
+
+Abstract 
+
+Multispectral image(MSI) and hyperspectral image(HSI) object tracking object tracking exploits recorded band-wise observations to improve target–background discrimination under similar RGB appearance, mixed pixels, illumination variation, occlusion, and clutter. However, existing trackers commonly process all search regions through a fixed capacity spectral–spatial path, ignoring that tracking di ffi culty varies substantially across frames and target states. Clear regions may require only lightweight local discrimination, whereas ambiguous boundaries and spectrally sim-ilar distractors often demand stronger contextual reasoning. To address this limitation, we propose SpecTrack, a spectral–spatial complexity-aware tracker that formulates MSI tracking as search-region-level adaptive capacity allo-cation. Its core component, the Spectral Adaptive Mixture-of-Experts (SAMoE) module, provides a capacity-ordered expert pool with progressively increasing latent rank, receptive field, and depth. Expert selection is guided by a Spec-tral Prompt Router, which fuses semantic context, spatial boundary cues, and a latent channel-variation cue computed after multispectral patch embedding to activate a sparse subset of SAMoE experts for each search region. In par-allel, a Shared Global Expert supplies common latent spectral–spatial context to reduce fragmented sparse-routing decisions. Experiments on MUST, MSITrack, and HOTC20 demonstrate a favorable accuracy–e ffi ciency trade-o ff .The accuracy-oriented SpecTrack-L384 achieves state-of-the-art or highly competitive AUCs of 65.2%, 51.9%, and 72.6% on the three benchmarks, while the balanced SpecTrack-B224 reaches 62.4% AUC at 43.7 FPS on MUST. An additional GOT-10k evaluation indicates RGB-domain architectural generalization, with SpecTrack-L384 achieving 79.3% AO. The source code will be available at https://github.com/Star-Swift/SpecTrack .
+
+Keywords: Multispectral object tracking, Adaptive experts, Mixture of Experts, Spectral prompt routing, Vision Transformer 
+
+1. Introduction 
+
+Multispectral and hyperspectral (MSI /HSI) videos provide recorded band-wise observations of a target and its surrounding background. Compared with RGB tracking, these observations o ff er additional cues for target–background discrimination, especially when the target and distractors share similar RGB appearance but respond di ff erently across the recorded bands. This property is valuable in UAV and remote-sensing track-ing scenarios with camouflage, low contrast, illumina-tion variation, occlusion, and cluttered backgrounds. Fig. 1 illustrates this motivation with benchmark ex-amples. RGB-similar target and background regions may exhibit di ff erent recorded-band responses, provid-ing useful tracking evidence beyond RGB appearance. 
+
+> ∗Corresponding author
+
+Despite these advantages, MSI /HSI tracking remains challenging because spectral–spatial ambiguity varies substantially across frames and target states. Clear tar-get regions may be localized with lightweight local dis-crimination, whereas mixed pixels, ambiguous bound-aries, partial occlusion, low resolution, illumination variation, and spectrally similar distractors often require stronger contextual reasoning. Prior MSI /HSI track-ing studies have improved spectral–spatial representa-tion through band-attention modeling in BAE-Net [1], ensemble-style feature fusion in SEE-Net [2], Siamese spectral matching in SiamHYPER [3], dynamic tem-plate modeling in SPIRIT [4], and Transformer-based interaction in UNTrack [5]. However, these methods usually process di ff erent search regions with a simi-lar modeling budget. This fixed-capacity assumption is mismatched with tracking videos, where the di ffi -culty of each search region changes continuously over arXiv:2607.05988v1 [cs.CV] 7 Jul 2026 Template  Target                                                    
+
+> Partial Occlusion
+> Template Target
+> Partial Occlusion
+> Template Target
+> Similar Background
+> Template Target
+> Similar Background
+> Template Template Target Target Target Background Background Template Target Background
+> 422.5nm 487.5nm 550nm 602.5nm 660nm 725nm 785nm 887.5nm
+> RGB
+> Template Target Background
+> 422.5nm 487.5nm 550nm 602.5nm 660nm 725nm 785nm 887.5nm
+> RGB
+> Template Template Target Target Target Background Background Template Target Background
+> 422.5nm 487.5nm 550nm 602.5nm 660nm 725nm 785nm 887.5nm
+> RGB
+> Template Target Background
+> 422.5nm 487.5nm 550nm 602.5nm 660nm 725nm 785nm 887.5nm
+> RGB
+> Intensity Intensity Intensity Intensity
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> 50
+> 150
+> 250
+> Spectral
+> Spectral
+> RGB
+> RGB
+
+Figure 1: Motivating examples for multispectral tracking. Target and background regions with similar RGB appearance can show separabil-ity in recorded band-wise responses. The curves are discrete digital-number or normalized-intensity traces; their physical interpretation depends on sensor response, bandpass, radiometric calibration and ac-quisition conditions. 
+
+time. This observation motivates a di ff erent question: 
+
+How can a multispectral tracker use recorded-band-induced target–background separability to allocate appropriate spectral–spatial modeling capacity for search regions with di ff erent ambiguity levels? 
+
+We therefore formulate MSI /HSI tracking as spectral–spatial complexity-aware capacity allocation, where di ff erent search regions are assigned di ff er-ent modeling budgets according to their ambiguity. SpecTrack implements this idea with three coupled modules: the Spectral Adaptive Mixture-of-Experts (SAMoE) module provides a capacity-ordered expert pool; the Spectral Prompt Router selects a sparse subset of experts using semantic context, spatial boundary response, and latent channel-variation cues; and the Shared Global Expert supplies common spectral–spatial context to stabilize sparse routing. Recent MoE-style trackers, including MoETrack [6], SPMTrack [7], and HotMoE [8], have shown the po-tential of expert-based adaptation in visual tracking. In contrast, SpecTrack studies recorded-band-aware ca-pacity allocation for MSI /HSI tracking, where latent channel variation after multispectral patch embedding provides search-region-level routing evidence. We fur-ther examine whether this routing behavior is meaning-ful through mechanism-aligned ablations and diagnos-tics. We validate SpecTrack on MUST [5], MSITrack [9] and the 16-band HOTC20 benchmark [10]. GOT-10k [11] is reported as an RGB one-shot architectural generalization test. The main contributions are summa-rized as follows: The main contributions are summa-rized as follows: 
+
+• We formulate MSI /HSI single object tracking as spectral–spatial complexity-aware capacity alloca-tion, where search regions with di ff erent ambigu-ity levels are assigned di ff erent modeling budgets rather than processed by a fixed-capacity path. 
+
+• We propose the SAMoE module, a capacity-ordered expert pool for MSI /HSI tracking. Its experts di ff er in latent rank, receptive field, and depth, enabling lightweight modeling for clear re-gions and stronger reasoning for ambiguous re-gions. 
+
+• We design a Spectral Prompt Router and a Shared Global Expert for stable sparse expert routing. The router selects experts from semantic, spatial, and latent channel-variation cues, while the shared ex-pert provides common spectral–spatial context to reduce fragmented local decisions. 
+
+• We validate SpecTrack on MUST, MSITrack, and HOTC20 with mechanism-aligned ablations, rout-ing diagnostics, and accuracy–e ffi ciency analyses. GOT-10k is additionally used to examine RGB-domain architectural generalization. 
+
+2. Related Work 
+
+2.1. Spectral–Spatial Modeling for MSI /HSI Tracking 
+
+MSI /HSI tracking exploits recorded band-wise ob-servations to improve target–background discrimination under low illumination, camouflage, similar color and cluttered background. Early hyperspectral trackers re-lied on handcrafted spectral descriptors, material un-mixing, or correlation-filter formulations [10, 12]. Deep trackers then introduced band attention, ensemble fu-sion and cross-band feature interaction, including BAE-Net [1], SST-Net [13], SEE-Net [2] and CBFF-Net [14]. Recent methods such as SiamHYPER [3], SPIRIT [4], SENSE [15], MVP-HOT [16] and ProFiT [17] further show that spectral information should be modeled be-yond naive channel expansion. These studies mainly address how to extract or fuse spectral–spatial representations. SpecTrack stud-ies a complementary problem: how recorded-band-induced evidence can decide the amount of feature-transformation capacity required by each search re-gion. This distinction is important for tracking, because the spectral–spatial ambiguity varies across frames. 2RGB  TIR 
+
+> RGB expert
+> Thermal expert
+> Fusion expert
+> Confidence gating
+> Tracking Result
+
+(a) MoETrack RGB (search)     
+
+> RGB (template)
+> ......
+> t-2 t-1 t
+> Temporal context
+> One stream ViT backbone
+> TMoE block
+> Router
+> Expert 1
+> Expert 2
+> Expert N
+> Tracking Result
+> ...
+
+(b) SPMTrack HSI 
+
+Switch router 
+
+> Expert 1
+> Expert 2
+> Expert N
+> ...
+
+Tracking head 
+
+Tracking Result  (c) HotMoE One stream ViT backbone   
+
+> SAMoE block
+> Router
+> Tracking Result
+> ...
+> MSI (search)
+> MSI (template)
+> Expert 1
+> Expert 2
+> Expert N
+> Context Prompt
+
+(d) SpecTrack Figure 2: Mechanism level comparison of MoE-style trackers. MoETrack focuses on RGB-T modality validity and confidence-aware fusion; SPM-Track uses tracking-specific MoE blocks for RGB spatio-temporal relation modeling; HotMoE performs sparse HSI expert activation. SpecTrack di ff ers by using recorded-band-induced ambiguity cues to route each MSI /HSI search region to capacity ordered experts inside a shared one-stream backbone, while a Shared Global Expert preserves common latent context. 
+
+Clear targets may only require low-cost local model-ing, whereas mixed pixels, ambiguous boundaries, oc-clusion, illumination changes and spectrally similar dis-tractors require stronger contextual modeling. There-fore, SpecTrack treats multispectral information not only as an input feature source, but also as routing evi-dence for search-region-level capacity allocation. 
+
+2.2. Adaptive Computation and MoE-style Tracking 
+
+MoE and conditional computation have been widely used for adaptive representation learning [18, 19, 20]. Recent tracking methods also introduce MoE-style de-signs, but they address di ff erent adaptation problems. MoETrack [6] studies RGB-T tracking under modality validity variation. It uses modality-related experts and confidence-aware fusion to decide when RGB, thermal, or fused predictions should dominate. SPMTrack [7] inserts tracking-specific MoE blocks into an RGB one-stream tracker to improve generic spatio-temporal rela-tion modeling. HotMoE [8] explores sparse expert acti-vation for HSI tracking, where a switch-style router ac-tivates suitable HSI expert models to reduce inference cost. Fig. 2 summarizes these mechanism-level di ff er-ences. The key distinction is the source and role of the routing evidence. MoETrack uses modality valid-ity as the main cue for RGB-T decision fusion. SPM-Track uses visual relation features to improve scalable RGB tracking. HotMoE uses HSI features for sparse expert activation. In contrast, SpecTrack asks whether recorded MSI /HSI evidence inside a shared tracking backbone can estimate the spectral–spatial ambiguity of each search region and then allocate a suitable modeling budget. This leads to three non-interchangeable design choices. First, SpecTrack uses a capacity-ordered ex-pert ladder rather than homogeneous relation experts or independent modality heads. The experts are orga-nized from low to high capacity through rank, receptive field and depth, so the router can assign lightweight ex-perts to clear regions and stronger experts to ambigu-ous regions. Second, SpecTrack routes by a Spectral Prompt Router that combines semantic context, spatial boundary response and latent channel-variation cues af-ter multispectral patch embedding. This di ff ers from modality-validity routing in RGB-T tracking and from generic RGB relation routing. Third, SpecTrack intro-3duces a Shared Global Expert to provide common latent context before aggregating sparse local experts, reduc-ing fragmented decisions caused by local sparse routing. A direct transplant of MoETrack, SPMTrack, or HotMoE is not fully equivalent because these meth-ods are designed for di ff erent inputs, expert outputs, backbones and training protocols. To avoid conflating the proposed idea with implementation di ff erences, we complement published-method comparisons with same-backbone mechanism controls in Sec. 4.4. These con-trols approximate the core alternatives under the same SpecTrack-B224 backbone, input resolution, training split and evaluation protocol: homogeneous MoE-style experts test whether multiple experts alone are su ffi cient; semantic-only routing tests generic visual routing; capacity experts without prompt routing test whether capacity diversity alone is enough; and local experts without the Shared Global Expert test whether sparse HSI-style expert activation can replace shared context modulation. 
+
+2.3. Remote-Sensing Interpretation Scope 
+
+Physical interpretation in remote sensing depends on sensor metadata, bandpass, radiometric calibration, il-lumination and acquisition geometry. Tracking bench-marks often provide digital numbers or normalized in-tensities. SpecTrack therefore uses qualitative spectral curves as recorded-band separability illustrations and uses latent channel variation as a routing descriptor af-ter patch embedding. When calibrated reflectance and sensor response functions are available, the same rout-ing idea can be extended toward sensor-aware material cues. 
+
+3. Method 
+
+3.1. Framework Overview 
+
+As illustrated in Fig. 3, SpecTrack follows a one-stream tracking paradigm and reorganizes the later en-coder blocks around the spectral–spatial di ffi culty for-mulation. Template and search tokens interact in the shared encoder, while the prediction head consumes the final search-region tokens for localization. The core idea is to allocate expert capacity at the search-region feature level for heterogeneous search conditions. The architecture has three roles. First, the capacity-ordered expert set provides a low-to-high representation ladder for search regions with di ff erent ambiguity lev-els. Second, the Spectral Prompt Router converts se-mantic, spatial and latent channel-variation cues into a sample-level Top-k expert selection. Third, the Shared Global Expert supplies common latent context before the sparse expert update is inserted back into the search tokens. These operations are performed after patch em-bedding in latent feature space; SAMoE is an adaptive feature-transformation block guided by recorded-band-induced cues. For a SAMoE block at layer l, let ˆ Zls ∈ RB×Ls×d de-note the search tokens after the standard self-attention sublayer. We reshape them into a latent search feature map x = U( ˆ Zls) ∈ RB×d×H×W , where Ls = HW and 
+
+U(·) denotes token-to-map unflattening. SAMoE com-putes one residual update for the whole search sample and then flattens it back to the search token positions. The router is therefore sample conditioned at the search-region level. 
+
+Feature extraction network. The network takes a tem-plate image Z ∈ RHz×Wz×Cb from the first frame and a search region S ∈ RHs×Ws×Cb from the current frame, where Cb denotes the number of recorded spec-tral bands. The multispectral input is partitioned into patches and projected into a shared latent space: 
+
+ei = PE( pi), pi ∈ RP×P×Cb , (1) where PE( ·) denotes the patch projection layer. Tem-plate and search embeddings are concatenated, supple-mented with positional encodings and processed by the one-stream Transformer encoder. 
+
+SAMoE block. In later encoder blocks, SpecTrack in-serts SAMoE after self-attention and before the feed-forward network. The block is written as: ˆZl = Zl−1 + MSA(LN( Zl−1)) , (2) 
+
+∆xls = SAMoE( U( ˆ Zls)) , (3) ˜Zl = ˆZl + αl Rs(F (∆xls)) , (4) 
+
+Zl = ˜Zl + FFN(LN( ˜ Zl)) , (5) where F (·) flattens a feature map back to tokens, Rs(·)inserts the update only into the search token positions and αl is a learnable residual scale. SAMoE updates the search tokens in this branch, while template tokens in-fluence the search representation through the preceding one-stream attention. 
+
+Prediction head. The prediction head receives the final search region tokens and reshapes them to recover the two-dimensional feature map. Following OSTrack [21], we use a center point prediction head in which classifi-cation and regression branches estimate the score map, target size, o ff set and final bounding box. 4` Multispectral Patch Embedding 
+
+> Multispectral Patch Embedding
+> C
+> Transformer Encoder
+> SAMoE Block 1
+
+Feature Extraction Network 
+
+> SAMoE Block L
+> MLP
+> 𝑪𝒍𝒔 .Head
+> `
+> MLP
+> 𝑹𝒆𝒈 .Head
+
+Prediction Head 
+
+> bbox Search S
+> Template Z
+> SAMoE Block 2
+
+... 
+
+Outputs  
+
+> ...
+> Semantic context
+> ...
+> Spectral Prompt
+> ...
+> Search region features
+> Spectral Prompt Router
+> E1
+> E2
+> E3
+> E4
+> Adaptive Experts
+> Shared Global Linear
+> Shared Experts
+> ...
+> SAMoE Output
+> ...
+> Score map
+> Cconcatenate
+> Template tokens
+> Search tokens
+> Element-wise Multiplication
+> Matrix Multiplication
+
+SAMoE Block Figure 3: Overall framework of SpecTrack. Template and search MSI inputs are patch embedded and interact in a one-stream Transformer encoder. Standard blocks process the early encoder stages, while later blocks use SAMoE, which contains an adaptive expert set, a Spectral Prompt Router and a Shared Global Expert. The center head consumes the final search tokens and predicts the score map, target size, o ff set and bounding box. 
+
+3.2. Spectral Prompt Router 
+
+Eff ective expert assignment is critical for adaptive computation. Spatial semantics alone may be insu ffi -cient for camouflaged targets, mixed pixels, ambiguous boundaries and spectrally similar distractors. The Spec-tral Prompt Router therefore combines semantic con-text with a fixed spatial high-pass prompt and a latent channel-variation prompt. Given x ∈ RB×d×H×W , the router first normalizes the feature and obtains a semantic descriptor: ¯x = LN( x), z = GAP( ¯ x) ∈ RB×d. (6) The spatial prompt is computed by a fixed depth-wise Laplacian filter: 
+
+Klap =
+
+
+
+0 −1 0
+
+−1 4 −10 −1 0
+
+ , hspa = DWConv rep Klap ( ¯ x),
+
+(7) where rep denotes replicate padding at image bound-aries. We pool the absolute high-pass response and nor-malize it by the average feature magnitude: 
+
+espa = GAP( |hspa |)GAP( | ¯x|) + τ ∈ RB×d, (8) where τ is a small numerical constant. The spectral prompt summarizes latent channel vari-ation after multispectral patch embedding. The patch projection is initialized by spectral-aware channel ex-pansion and optimized on MSI /HSI tracking data, so the resulting latent channels carry recorded-band-induced feature contrast. A first-order finite di ff erence com-pactly describes this contrast for expert routing: (Dc ¯x)b,c,h,w =
+
+
+
+0, c = 1,
+
+¯xb,c,h,w − ¯xb,c−1,h,w, c > 1, (9) followed by the same magnitude normalization: 
+
+espe = GAP( |Dc ¯x|)GAP( | ¯x|) + τ ∈ RB×d. (10) This operation provides a compact recorded-band-induced latent contrast cue for routing capacity in the learned feature space. The two prompts are concatenated and fused by a lightweight two-layer projection: 
+
+eprompt = ϕ f ([ espa , espe ]) = W f 
+
+> 2
+
+δ (W f 
+
+> 1
+
+LN([ espa , espe ]) ) ,
+
+(11) where [ ·, ·] denotes channel concatenation and δ is GELU. The routing logits are: 
+
+r = Wsz + W f eprompt + ϵ, r ∈ RB×N . (12) 5During training, ϵb,i ∼ N (0 , σ 2 
+
+> ϵ
+
+) is a small Gaussian routing jitter with a fixed code-default standard devia-tion. It stabilizes early routing and uses the same code default across benchmarks. During validation and infer-ence, ϵ is set to zero. The final sparse gate is computed from the softmax probabilities p = Softmax( r). Let Ib = TopK( pb, k)be the selected expert indices of sample b. The gate is renormalized over the selected experts: 
+
+gb,i =
+
+
+
+pb,i
+
+∑ j∈I b pb, j
+
+, i ∈ I b,
+
+0, i < Ib.
+
+(13) Thus, unselected experts have zero gate value and are skipped during inference. The gate is sample condi-tioned at the search-region level and shared by all tokens in the current search region. This definition also ex-plains the routing diagnostics in the experiments: usage counts selected Top-k slots, whereas gate weight records the normalized selected gb,i values. 
+
+3.3. Adaptive Expert Set 
+
+Standard MoE architectures usually use homoge-neous experts with identical structures. SAMoE uses a capacity-ordered expert set whose experts are organized by computational and representational capacity. 
+
+Capacity schedule. For an input feature x ∈ RB×d×H×W ,SAMoE contains N experts E = {Ei}Ni=1 from lightweight to strong. Expert Ei first projects d channels to a rank ri, applies ti repeated latent spatial-frequency mixer units and projects the feature back to d channels: 
+
+d Win i
+
+−−→ riti mixer units 
+
+−−−−−−−−−→ riWout i
+
+−−−→ d. (14) The nested rank schedule used in the main experiments is: 
+
+ri = max 
+
+(
+
+rmin ,
+
+⌊ iN rmax 
+
+⌋) 
+
+, i = 1, . . . , N, (15) where rmin and rmax are fixed by the backbone width and are kept unchanged across datasets. The expert depth is scaled linearly: 
+
+ti = max 
+
+(
+
+1,
+
+⌈ iN tmax 
+
+⌉) 
+
+. (16) For the default four-expert setting, the resulting expert schedule is summarized in Tab. 1. This table gives the computation order required to reproduce the block at the architectural level; low-level constants such as initial-ization seeds, normalization epsilons and PyTorch layer defaults follow the released implementation. 
+
+Expert computation path. Each local expert has its own parameters; local projection, convolution, FFT mixing, MLP and output projection weights are independent across experts. Given x, expert Ei first applies normal-ization, a 1 × 1 rank projection and a depth-wise convo-lution: 
+
+u(0)  
+
+> i
+
+= δ (DWConv κi
+
+(Win i LN( x))) , (17) where δ(·) is GELU. The convolution is applied in the spatial domain and injects local context before the FFT mixer. For the m-th mixer unit, u(m−1)  
+
+> i
+
+is split into non-overlapping spatial windows of size wi × wi:
+
+{u(m−1)   
+
+> i,j
+
+}Ji 
+
+> j=1
+
+= Pwi
+
+(u(m−1) 
+
+> i
+
+) . (18) If H or W is not divisible by wi, replicate padding is ap-plied before partitioning and the padded area is cropped after window reversal. Within each window, Q, K and 
+
+V are produced by a linear projection in the rank space: (qi, j, ki, j, vi, j) = Split (Wqkv i u(m−1)  
+
+> i,j
+
+) . (19) The frequency interaction is computed over the two spa-tial dimensions of each window: 
+
+ai, j = Re (F −12D
+
+(F2D(qi, j) ⊙ F 2D(ki, j))) , (20) 
+
+oi, j = ai, j ⊙ vi, j. (21) The window outputs are reversed to the full feature map and passed through a rank-space MLP with a residual connection: ¯u(m) 
+
+> i
+
+= P−1
+
+> wi
+
+({oi, j}Ji
+
+> j=1
+
+) , (22) 
+
+u(m) 
+
+> i
+
+= u(m−1)  
+
+> i
+
++ ¯u(m) 
+
+> i
+
++ MLP i
+
+(LN (u(m−1)  
+
+> i
+
++ ¯u(m)
+
+> i
+
+)) . (23) The local residual update produced by expert Ei is: 
+
+∆i(x) = Wout i u(ti) 
+
+> i
+
+∈ RB×d×H×W . (24) Equations 17–24 clarify the operation order: normaliza-tion, rank projection, depth-wise convolution, local win-dow partition, QKV projection, two-dimensional spatial FFT interaction on latent features, inverse FFT, value modulation, window reversal, rank-space MLP and out-put projection. 
+
+3.4. Shared Experts 
+
+Sparse expert selection reduces redundant computa-tion, while selected experts still require common con-text to avoid fragmented local updates. The Shared Global Expert provides a common modulation signal 6Table 1: Default capacity schedule of SAMoE when N = 4. The rank values are produced by Eq. 15; wi is the non-overlapping local window size used by the FFT mixer, κi is the depth-wise convolution kernel size and ti is the number of repeated rank-space mixer units. Expert Rank Window wi Kernel κi Depth ti Intended role                                     
+
+> E1r14×43×31Low-cost local response for clear targets
+> E2r28×85×52Moderate local context and boundary modeling
+> E3r316 ×16 7×73Larger spectral-spatial ambiguity modeling
+> E4r432 ×32 9×94Highest capacity for di ffi cult search regions
+
+for all selected local experts. It uses global pooling fol-lowed by a small bottleneck projection: 
+
+sg = GAP(LN( x)) , mg = σ (Wg 
+
+> 2
+
+δ(Wg 
+
+> 1
+
+sg)) ∈ RB×d,
+
+(25) where σ(·) is the sigmoid function. The modulation vec-tor is broadcast to the spatial dimensions and applied to each selected expert update: ˜∆i(x) = ∆ i(x) ⊙ Broadcast( mg). (26) The SAMoE output is then: SAMoE( x) = Wo
+
+
+
+> N
+
+∑
+
+> i=1
+
+gi(x) ˜ ∆i(x)
+
+ . (27) The shared branch provides common latent context be-fore the sparse expert outputs are inserted into the back-bone residual path. 
+
+3.5. Loss Function 
+
+The tracking loss follows the OSTrack [21] cen-ter point prediction strategy. We use weighted focal loss [22] for classification and a combination of ℓ1 loss and generalized IoU loss [23] for regression: 
+
+Ltrack = Lcls + λGLGIoU + λL1LL1. (28) The auxiliary routing loss is computed at the sam-ple level. Let pb,i be the pre-TopK probability from the router and let ⊮(i ∈ I b) indicate whether expert i is se-lected for sample b. The importance and load statistics are: Imp i =
+
+> B
+
+∑
+
+> b=1
+
+pb,i, Load i =
+
+> B
+
+∑
+
+> b=1
+
+⊮(i ∈ I b). (29) We use the squared coe ffi cient of variation: 
+
+CV (v)2 = Var( v)Mean( v)2 + τ . (30) Because SAMoE experts have di ff erent costs, the de-fault loss also includes a simple complexity bias. The relative complexity proxy of expert Ei is: 
+
+χi = ri ti (κ2 
+
+> i
+
++ w2 
+
+> i
+
+), ci = χi
+
+max j χ j + τ . (31) The complexity term penalizes excessive reliance on the strongest experts while still allowing them to be selected when the router assigns high probability: 
+
+Lcomp =
+
+> N
+
+∑
+
+> i=1
+
+ci
+
+Imp i
+
+∑ j Imp j + τ . (32) The final MoE regularizer is: 
+
+Lmoe = 12CV (Imp) 2 + 12CV (Load) 2 + λcLcomp . (33) The total training objective is: 
+
+L = Ltrack + λmoe Lmoe . (34) We set λG = 2, λL1 = 5 and λmoe = 0.01 unless other-wise specified; the small coe ffi cient λc follows the same code default in all datasets. The terminology used in the scaling ablation is de-fined by the equations above. Nested rank + max scal-ing means that ranks follow Eq. 15 and the complexity weight is normalized by the maximum proxy in Eq. 31. 
+
+Min complexity scaling uses the same proxy but nor-malizes by min j χ j, which over-amplifies the cost di ff er-ence and is used only as an ablation. Exponential rank scaling replaces Eq. 15 with an exponentially increasing rank sequence while keeping the same window, kernel and depth order. Without complexity bias sets λc = 0and without auxiliary loss sets λmoe = 0. During inference, the auxiliary loss and routing noise are disabled. The tracker uses one static template and one dynamically updated template [24]; the online tem-plate is updated only when both the fixed interval and confidence threshold criteria are satisfied. 
+
+4. Experiments 
+
+4.1. Implementation Details 
+
+SpecTrack is implemented in Python 3.13 with Py-Torch 2.9. Training uses eight NVIDIA RTX 3090 GPUs and speed is measured on one RTX 3090. The default setting uses a Fast-iTPN /OSTrack-style one-stream encoder, N = 4 capacity-ordered experts and Top k = 2 routing. 7Model. We develop five variants to examine accuracy– speed trade-o ff s (Tab. 2). L variants use HiViT-L [25], B variants use HiViT-B and T224 uses HiViT-T. The en-coders are initialized with FastiTPN [26] and adapted to MSI /HSI inputs through spectral-aware channel expan-sion. 
+
+Spectral aware channel expansion. The original patch projection of an RGB pretrained model has weights 
+
+Wrgb ∈ Rd×3×P×P. For an MSI /HSI input with C
+
+bands, we construct WC ∈ Rd×C×P×P from the RGB pretrained projection to preserve a stable initializa-tion. In the eight band MSI setting with band centers 
+
+{422 .5, 487 .5, 550 .0, 602 .5, 660 .0, 725 .0, 785 .0, 887 .5} nm, we use a spectral aware mapping based on wave-length proximity: bands with λ ≤ 500 .0 nm are initialized from the blue RGB channel, bands with 500 .0 < λ < 620 .0 nm from the green channel and bands with λ ≥ 620 .0 nm from the red channel. Let 
+
+m(c) ∈ { B, G, R} denote the mapped RGB channel for band c and ηc denote an optional scale factor. The expanded kernel is: 
+
+WC 
+
+> :,c,:,:
+
+= ηcWrgb 
+
+> :,m(c),:,:
+
+. (35) We set ηc = 1 for insert and ηc = 1/2 for insert half-copy . For other band layouts, we use interpolation-based initialization: 
+
+WC 
+
+> :,c,:,:
+
+= 3
+
+C
+
+> 3
+
+∑
+
+> r=1
+
+αc,rWrgb 
+
+> :,r,:,:
+
+,
+
+> 3
+
+∑
+
+> r=1
+
+αc,r = 1, (36) where αc,r interpolates the band center to RGB ref-erence centers when metadata are available and uses 
+
+αc,r = 1/3 otherwise. The factor 3 /C keeps the acti-vation scale close to the RGB projection. HOTC20 uses this fallback because its 470–620 nm range is concen-trated in the visible spectrum. 
+
+Training protocol. The main tables use dataset-specific training. MUST, MSITrack and HOTC20 models are trained on their o ffi cial training splits; GOT-10k follows its one-shot RGB protocol. Template and search im-ages expand target boxes by factors of 2 and 4. We use AdamW, batch size 32, learning rate 10 −4, 25 epochs and step decay at epoch 15. 
+
+Inference. The online template is updated every 25 frames when the confidence score exceeds 0.7. Fol-lowing standard practice [21], we apply a Hann window penalty to incorporate positional priors. 
+
+4.2. Dataset Versions, Protocols and Metrics 
+
+We evaluate SpecTrack on four benchmarks (Tab. 3): MUST [5], MSITrack [9], HOTC20 [10] and GOT-10k [11]. The first three support MSI /HSI evaluation; GOT-10k is the RGB one-shot generalization setting. We report standard metrics: Area Under the Curve (AUC), Success Rates at 0.5 /0.75 ( S R 0.5/0.75 ), Precision (P) and Normalized Precision ( Pnorm ). Scores are in-terpreted within the stated dataset protocol, metric and comparator list. For runtime comparison, executable methods are re-measured on the same hardware /software environment; FPS excludes data loading. SpecTrack-L384 is the accuracy-oriented variant, while B224 and T224 show practical accuracy–speed operating points. 
+
+Spectral curve interpretation. Qualitative curves use discrete recorded bands and benchmark-provided digital-number or normalized-intensity scales. They are reported as template–target–background separabil-ity evidence for tracking, with ROI selection and uncer-tainty handled by the dataset protocol when available. 
+
+4.3. Comparison with Published Trackers 
+
+We evaluate SpecTrack within each benchmark pro-tocol in Tab. 3; reported numbers remain benchmark-specific. 
+
+Evaluation on MUST dataset. On MUST (Tab. 4), SpecTrack-L384 is reported as the accuracy-upper-bound variant: it achieves 65.2% AUC, 79.8% SR 0.5 and 61.0% SR 0.75 , improving over UNTrack by 5.5, 4.0 and 14.8 points. The balanced SpecTrack-B224 variant is the practical default, reaching 62.4% AUC at 43.7 FPS, which is 2.7 AUC points above UNTrack while run-ning faster under the unified runtime. Thus, the MUST improvement is not only represented by the expensive L384 setting. Fig. 4 and Fig. 5 show gains across chal-lenge categories and similar-background scenes. 
+
+Evaluation on MSITrack dataset. We compare Spec-Track with published trackers on the MSITrack bench-mark in Tab. 5. GRM is the strongest listed baseline in AUC and Precision. The accuracy-oriented SpecTrack-L384 increases AUC from 47.8% to 51.9% and Pre-cision from 63.0% to 65.0%. Below the largest vari-ant, SpecTrack-B224 already reaches 48.4% AUC and SpecTrack-B384 reaches 49.8% AUC with a 3.0-point gain in Pre N over GRM. This shows that the adaptive design contributes across model scales rather than only through the L384 upper-bound setting. 8Table 2: Configuration of SpecTrack model variants. Model Transformer Search Template Params FLOPs Speed Encoder Resolution Resolution (M) (G) (fps) SpecTrack-L384 HiViT-L 384 ×384 192 ×192 434 289 5.9 SpecTrack-L224 HiViT-L 224 ×224 112 ×112 434 109 19.4 SpecTrack-B384 HiViT-B 384 ×384 192 ×192 117 81 17.2 SpecTrack-B224 HiViT-B 224 ×224 112 ×112 117 31 43.7 SpecTrack-T224 HiViT-T 224 ×224 112 ×112 30 9 80.1 Table 3: Dataset versions and protocols used in the main comparisons. External data and mixed training results should be reported separately. Dataset Bands Split Protocol note MUSTT [5] 8 160 /90 train /test UAV MSI MSITrack [9] 8 220 /80 train /test 395–950 nm MSI HOTC20 [10] 16 40 /35 train /test 470–620 nm HSI GOT-10k [11] 3 offi cial train /test RGB protocol Table 4: Comparison with published trackers on the MUST dataset. The best and second best results are marked in bold and underline, re-spectively. All rerun FPS values are measured under the same runtime environment; “–” denotes that no comparable speed is available. Method AUC SR 0.5 SR 0.75 Pre Pre N FPS OSTrack 256 [21] 52.3 64.8 36.3 67.5 65.2 40.4 OSTrack 384 [21] 55.1 69.6 44.1 73.3 68.8 21.1 ODTrack [27] 52.7 67.3 38.8 71.3 66.2 32.0 ZoomTrack [28] 53.3 67.7 40.4 72.3 66.7 37.5 UNTrack [5] 59.7 75.8 46.2 79.2 74.8 38.0 SpecTrack-T224 57.9 72.9 52.0 75.3 73.5 80.1 
+
+SpecTrack-B224 62.4 76.6 59.3 78.8 76.2 43.7 SpecTrack-B384 63.7 78.4 58.8 80.8 77.8 17.2 SpecTrack-L224 63.1 77.1 58.9 79.5 76.7 19.4 SpecTrack-L384 65.2 79.8 61.0 82.6 79.5 5.9 Table 5: Comparison with published trackers on the MSITrack dataset. The best and second best results are marked in bold and un-derline, respectively. Method AUC SR 0.5 SR 0.75 Pre Pre N
+
+OSTrack 256 [21] 42.0 50.9 34.2 55.7 50.5 OSTrack 384 [21] 43.1 52.5 36.1 56.2 52.4 LMTrack [29] 43.2 52.4 39.7 55.2 52.5 ZoomTrack [28] 44.3 54.7 35.1 59.0 54.4 NeighborTrack [30] 44.8 55.2 35.7 59.7 54.6 EVPTrack [31] 46.2 55.8 43.9 58.3 56.0 AQATrack [32] 47.1 56.7 44.7 58.5 56.9 UNTrack [5] 47.3 58.4 40.5 61.8 57.8 GRM [33] 47.8 58.1 40.8 63.0 57.8 SpecTrack-T224 43.3 52.7 40.7 55.1 52.2 SpecTrack-B224 48.4 58.6 43.3 63.2 58.2 SpecTrack-B384 49.8 61.4 45.8 63.8 60.8 SpecTrack-L224 50.7 61.1 46.4 63.5 60.7 SpecTrack-L384 51.9 62.2 48.9 65.0 62.2 
+
+Evaluation on HOTC20 dataset. We evaluate Spec-Track on the 16 band HOTC20 benchmark in Tab. 6. 
+
+Figure 4: Attribute-level AUC comparison between SpecTrack and published trackers on the MUST dataset. The values in parentheses denote the strongest listed baseline AUC and SpecTrack AUC, respec-tively. 
+
+This naming follows the dataset source in Xiong et al. [10] and avoids conflating it with later HOTC re-leases that use di ff erent camera subsets and band counts. SpecTrack-L384 achieves the highest AUC of 72.6% and is interpreted as the accuracy upper bound of the proposed variants. The balanced SpecTrack-B224 ob-tains 70.2% AUC at 43.7 FPS, which is competitive with HotMoE and UNTrack at 70.4% AUC. We therefore present HOTC20 as a clear accuracy–e ffi ciency trade-off : high-capacity variants improve the accuracy ceil-ing, while B224 provides the practical operating point. 
+
+RGB generalization on GOT-10k. We further evaluate SpecTrack on the RGB GOT-10k one-shot protocol to examine architectural generalization beyond MSI /HSI tracking. SpecTrack-L384 achieves 79.3% AO, 88.7% SR 0.5, and 81.4% SR 0.75 , ranking first among the com-pared published trackers in Tab. 7. This suggests that the proposed capacity-aware expert design can transfer to generic RGB tracking. 9SpecTrack Untrack ZoomTrack GT OSTrack 256 OSTrack 384 ODTrack Similar Color 
+
+Template Result #640 Result #655 Result #683 Similar Background 
+
+Template Result #4 Result #31 Result #40 Figure 5: Qualitative tracking examples on two representative MUST sequences with multiple challenge attributes. The predicted boxes illustrate localization behavior under similar color appearance, clut-tered background and challenging target background separation. 
+
+4.4. Ablation Studies 
+
+The ablations are organized as diagnostic questions rather than repeated “full model versus baseline” com-parisons. Each group isolates a di ff erent part of the pro-posed capacity-allocation pipeline: the recorded MSI input, the multispectral input adapter, the routing cues, the latent channel-variation cue, the MoE design, the sparse-routing hyperparameters and the resulting rout-ing behavior. Unless otherwise specified, all ablations use SpecTrack-B224 on MUST with the same input resolution, training split and evaluation protocol as the main comparison. 
+
+4.4.1. Input Evidence: Do Recorded Multispectral Bands Help? 
+
+Tab. 9 separates the contribution of the input modality from the contribution of the proposed architecture. Both the uniform baseline and SpecTrack are evaluated with pseudo-color RGB projections and real MSI inputs. Changing the baseline input from pseudo-RGB to MSI raises AUC from 55.2 to 59.1, showing that recorded bands provide useful target–background ev-idence even without the proposed adaptive modules. SpecTrack further benefits from MSI input, improving from 56.3 to 62.4 AUC. Thus, the following ablations are conducted in the MSI setting, where the proposed 
+
+Table 6: Comparison with published trackers on the HOTC20 dataset. The best and second best results are marked in bold and underline, respectively. Method AUC Pre FPS MHT [10] 58.7 88.0 -BAENet [1] 60.6 87.7 -SSTNet [13] 62.1 90.1 -SiamHYPER [3] 67.8 94.5 27.7 SEENet [2] 65.3 93.0 13.1 HANet [34] 68.8 94.8 21.2 HotMoE [8] 70.4 93.5 43.7 UNTrack [5] 70.4 93.7 37.0 SpecTrack-T224 63.8 91.2 80.1 
+
+SpecTrack-B224 70.2 93.4 43.7 SpecTrack-B384 71.2 95.0 17.2 SpecTrack-L224 72.4 95.1 19.4 SpecTrack-L384 72.6 95.0 5.9 Table 7: Comparison with published trackers on the GOT-10k dataset under the one shot protocol. The best and second best results are marked in bold and underline, respectively. Method AO SR 0.5 SR 0.75 
+
+OSTrack 256 [21] 71.0 80.4 68.2 OSTrack 384 [21] 73.7 83.2 70.8 LoRAT [35] 72.1 81.8 70.7 SeqTrack [36] 74.7 84.7 71.8 SPMTrack [7] 76.5 85.9 76.3 UNTrack [5] 77.3 88.4 74.7 SpecTrack-T224 72.9 82.2 71.0 SpecTrack-B224 77.5 87.1 78.2 SpecTrack-B384 78.9 87.8 79.6 SpecTrack-L224 78.5 87.5 79.4 SpecTrack-L384 79.3 88.7 81.4 
+
+Table 8: Logical organization of the ablation study. Each experi-ment answers a distinct question in the proposed capacity-allocation pipeline.          
+
+> Question Evidence Main role Do recorded MSI bands help tracking? Tab. 9 Separates input evidence from architecture. How should RGB patch weights be expanded to MSI? Tab. 10 Chooses a stable multispec-tral input adapter. Which prompt cues guide routing? Tab. 11 Tests semantic, spatial and latent channel cues. Is the latent channel cue meaningful? Tab. 12 Tests order sensitivity and raw-band replacement. Is the gain more than generic MoE? Tab. 13 Separates capacity ordering, prompt routing and shared context. What sparse-routing setting is practical? Tabs. 14–15 Balances accuracy and runtime. Does the router behave as intended? Tab. 16 Diagnoses expert usage, entropy and high-capacity allocation.
+
+routing cues have meaningful recorded-band-induced variation to exploit. 10 Table 9: Ablation study on input modalities. RGB denotes pseudo-color images synthesized from MSI frames, while MSI uses the recorded multispectral input. Model Input Data AUC Pre Baseline RGB 55.2 71.4 Baseline MSI 59.1 76.5 SpecTrack RGB 56.3 73.5 SpecTrack MSI 62.4 78.8                       
+
+> Table 10: Ablation study on channel expansion strategies in the eight-band MSI setting. ∆denotes the AUC di ff erence relative to the copy
+> baseline.
+> Strategy Weight construction Target scenario AUC ∆
+> copy Duplicate RGB to 8 channels Naive fill 61.2 –halfcopy Duplicate RGB, scaled by 1 /2Activation control 61.8 +0.6 random 3 RGB channels +
+> random init No band metadata 60.3 -0.9 insert Proximity to RGB assignment Known band centers 62.1 +0.9 insert halfcopy Proximity assignment, scaled by 1 /2Default 62.4 +1.2
+
+4.4.2. Input Adapter: How Should RGB Weights Be Ex-panded to MSI? 
+
+Tab. 10 examines how the RGB patch embedding is adapted to eight-band MSI. This experiment does not test the MoE mechanism; it controls the multispectral initialization before routing is applied. Insert halfcopy 
+
+gives the best AUC and is used as the default for MUST and MSITrack. HOTC20 uses the interpolation fall-back because its 16 bands cover a narrower 470–620 nm range. 
+
+4.4.3. Routing Cues: Can Spectral–Spatial Prompts Guide Expert Selection? 
+
+Tab. 11 focuses on the router input. Semantic-only routing reaches 60.9 AUC. Adding the spatial bound-ary prompt improves AUC to 61.5, and adding the la-tent channel-variation prompt improves AUC to 61.7. Their fusion reaches 62.4 AUC, indicating that the two prompts are complementary: the spatial cue emphasizes boundary and texture changes, while the latent channel cue summarizes recorded-band-induced feature varia-tion. 
+
+4.4.4. Latent Cue: Is Channel Order Merely an Un-ordered Statistic? 
+
+Tab. 12 tests whether the latent channel-variation cue depends on the learned latent-channel organization. During inference, the trained backbone, expert parame-ters, semantic descriptor, spatial prompt and expert in-                       
+
+> Table 11: E ff ect of routing prompts on MUST with SpecTrack-B224. The table isolates the information used by the router while keeping the backbone and expert setting fixed. Prompt type AUC Pre FPS Semantic only 60.9 76.7 45.8 Semantic +spatial prompt 61.5 77.9 41.9 Semantic +latent channel-variation prompt 61.7 77.8 43.5 Semantic +spatial +latent channel-variation 62.4 78.8 43.7
+
+puts are kept fixed; only the channel order used by the finite-di ff erence operation in Eq. 9 is perturbed. The re-verse order preserves a structured but inverted neighbor-hood, random permutations destroy most latent-channel adjacency relations and the raw-band baseline replaces the latent cue with finite di ff erences along the recorded band order. Reversing the latent order reduces AUC by 0.9 points, while random permutations reduce AUC by 1.2 points on average. The raw-band prompt baseline decreases AUC by 2.0 points, indicating that direct finite di ff er-ences along recorded bands do not substitute for the learned latent routing cue. Corrupted orders can in-crease high-capacity usage or gate mass while lowering tracking accuracy, so the benefit does not come from selecting stronger experts more often; it comes from as-signing them according to a better-aligned latent ambi-guity cue. 
+
+4.4.5. Expert Design: Is the Gain More Than Generic MoE? 
+
+Tab. 13 compacts the overlapping module, MoE and shared-context controls into a single diagnostic table. The rows answer di ff erent questions. Capacity experts alone test whether multiple branches are enough; the se-mantic router tests whether generic semantic routing is enough; homogeneous MoE-style experts test whether generic expert branching can replace capacity ordering; and the local-only setting tests whether shared global context is needed under sparse routing. The compact controls show that the final improve-ment is not explained by MoE-like branches alone. Capacity experts without prompt routing improve the uniform baseline but remain below the full model. Semantic-only routing gives no additional gain over ca-pacity experts alone, suggesting that MSI tracking re-quires more than generic semantic descriptors. Ho-mogeneous experts under the fused prompt are also weaker than capacity-ordered experts, and removing the Shared Global Expert reduces the AUC from 62.4 to 61.5. Therefore, the gain comes from the combination of capacity ordering, multispectral prompt-guided rout-11 Table 12: Latent-channel order sensitivity of the channel-variation prompt on MUST with SpecTrack-B224. Accuracy values follow the same MUST reporting protocol as the main ablation setting; deltas are computed relative to the unperturbed identity model. High-capacity statistics refer to the logged usage and gate mass associated with the stronger experts E3 and E4. Usage L1 and Gate L1 measure distribution shifts from the identity routing behavior. Seed Setting AUC ∆AUC Pre ∆Pre High-cap. usage ∆usage High-cap. gate ∆gate Usage L1 Gate L1 identity Full SpecTrack-B224 62.4 0.0 78.8 0.0 0.550 0.000 0.196 0.000 0.000 0.000 reverse Reverse latent order 61.5 -0.9 77.8 -1.0 0.579 0.029 0.239 0.043 0.247 0.350 seed 0 Random latent permutation 61.3 -1.1 77.8 -1.0 0.563 0.013 0.231 0.036 0.187 0.296 seed 1 Random latent permutation 59.9 -2.5 75.8 -3.0 0.558 0.009 0.203 0.007 0.296 0.357 seed 2 Random latent permutation 61.3 -1.1 77.7 -1.1 0.554 0.004 0.246 0.050 0.085 0.180 seed 3 Random latent permutation 61.1 -1.3 77.6 -1.2 0.566 0.017 0.235 0.039 0.200 0.343 seed 4 Random latent permutation 62.3 -0.1 78.7 -0.1 0.588 0.038 0.256 0.060 0.178 0.266 raw band Raw-band prompt baseline 60.4 -2.0 76.6 -2.2 0.557 0.007 0.215 0.019 0.181 0.249 Random latent permutation over five seeds: AUC 61 .2 ± 0.7, Precision 77 .5 ± 0.9, ∆AUC = −1.2 and ∆Precision = −1.3. Table 13: Compact MoE /prompt controls on MUST under the same SpecTrack-B224 protocol. ∆ denotes the AUC change relative to the uniform backbone baseline. “Fused prompt” denotes semantic, spatial and latent channel-variation cues. # Variant / controlled question AUC ∆
+
+1 Uniform backbone baseline 59.1 0.0 2 Capacity experts only: are multiple capacity branches su ffi cient? 60.9 +1.8 3 Capacity experts + semantic router: is generic se-mantic routing su ffi cient? 60.9 +1.8 4 Homogeneous MoE + fused prompt: is generic MoE su ffi cient? 61.4 +2.3 5 Capacity experts + fused prompt, w /o shared global context 61.5 +2.4 6 SpecTrack full 62.4 +3.3 Templates Search Frames Attention Maps with SAMo E Attention Maps with MSA   
+
+> BC-Person-015  IV-Ball-001 IV-Person-005
+> Ground Truth with SAMo Ewith MSA
+
+Figure 6: Attention map comparison between the uniform process-ing MSA baseline and the adaptive SAMoE block. The SAMoE-enhanced block denotes the adaptive expert block used by SpecTrack, whereas MSA denotes the uniform baseline. The adaptive block pro-duces more target-concentrated responses in cluttered regions, sup-porting the capacity allocation interpretation. 
+
+ing and shared global context. 
+
+4.4.6. Sparse Routing: What Accuracy–E ffi ciency Set-ting Is Practical? 
+
+After the mechanism is fixed, Tabs. 14 and 15 tune the number of experts and the routing sparsity. These experiments answer a deployment question rather than 
+
+Table 14: Ablation study on the number of experts ( N) with the acti-vated experts fixed to k = 2. The default setting is N = 4, k = 2. 
+
+N (Total) k (Top k) AUC Pre FPS 3 2 62.2 78.6 45.4 
+
+4 2 62.4 78.8 43.7 5 2 62.5 78.8 39.7 6 2 62.1 78.4 35.2 Table 15: E ff ect of Top-k routing with N = 4 experts on MUST. 
+
+N k AUC FPS 4 1 61.1 52.4 
+
+4 2 62.4 43.7 4 3 62.3 33.6 4 4 62.1 27.3 
+
+another component-removal question. With k = 2, increasing N from 3 to 5 gives only a marginal accuracy gain, while N = 6 reduces both ac-curacy and speed. With N = 4, Top-k = 1 is fastest but loses accuracy, whereas k = 3 and k = 4 increase computation without improving AUC. We therefore use 
+
+N = 4, k = 2 as the default accuracy–e ffi ciency point. 
+
+4.4.7. Routing Diagnostics: Does the Router Behave as Intended? 
+
+The previous tables measure accuracy. Tab. 16 in-stead examines routing behavior at the search-sample level. Usage denotes the percentage of selected expert slots and Hp is the dense-router entropy before Top-k
+
+selection. The full router does not collapse to a single expert: all four experts are used, and the stronger experts E3 and E4 receive 54.9% of the selected slots. Removing the latent channel prompt reduces E4 usage from 30.6% to 25.8% and increases entropy, indicating less confident capacity assignment. Removing the shared expert also weakens the high-capacity preference. Logged sam-12 Table 16: Routing statistics of SAMoE on the MUST test split. Usage denotes Top-k = 2 selected-slot frequency. Hp is computed from dense-router probabilities before Top-k.Setting E1 E2 E3 E4 Hp
+
+Default SAMoE 23.9 21.2 24.3 30.6 0.353 w/o latent channel prompt 23.5 26.0 24.7 25.8 0.431 w/o shared expert 23.3 23.2 26.0 27.5 0.423 
+
+ples show a Spearman correlation of 0.60 between latent channel-variation strength and the pre-renormalization retained mass of E3 +E4, supporting the link between embedded spectral–spatial ambiguity and high-capacity expert allocation. 
+
+5. Discussion and Limitations 
+
+Remote-sensing interpretation.. SpecTrack uses recorded multispectral observations as routing evidence for tracking, rather than as calibrated material spectra. The Spectral Prompt Router learns how latent channel variation, boundary response, and semantic context jointly indicate the di ffi culty of a search region. This design is practical for benchmark tracking data where complete radiometric calibration metadata are often unavailable. When calibrated reflectance, bandpass information, and sensor response functions are avail-able, the routing cues could be extended toward more sensor-aware or material-aware tracking designs. 
+
+Failure-oriented analysis.. Fig. 7 summarizes the attribute-level limitations of SpecTrack-B224 on MUST. The weakest cases are out-of-view, full occlu-sion, low resolution, and scale variation. These failures are consistent with the design scope of SpecTrack: adaptive expert routing can allocate stronger local spectral–spatial capacity when useful target evidence remains in the search region, but it cannot reliably re-cover a target that is absent from the crop or represented by only a few mixed pixels. These observations suggest that future work should combine adaptive capacity allocation with global re-detection, longer temporal memory, uncertainty-aware template update, and sensor-calibrated prompts when richer radiometric metadata are available. 
+
+6. Conclusion 
+
+This paper presented SpecTrack, a spectral–spatial complexity-aware tracker that formulates MSI /HSI 0 10 20 30 40 50 60 70 80 90        
+
+> Attribute AUC (%)
+> OV (n=4)
+> FOC (n=7)
+> LR (n=11)
+> SV (n=9)
+> BC (n=5)
+> MB (n=8)
+> FM (n=8)
+> IV (n=7)
+> SC (n=5)
+> SOB (n=6)
+> CM (n=7)
+> POC (n=12)
+> (a) Attribute-level performance
+> 010 20 30 40 50 60 70
+> Failure rate (%)
+> (b) Localization failures
+> IoU < 0.5
+> IoU < 0.75
+
+Figure 7: Failure-oriented attribute analysis of SpecTrack-B224 on MUST. Attributes are sorted by AUC in ascending order. Red bars mark the four weakest attributes, and the dashed vertical line denotes the unweighted attribute mean. The right panel reports the percentage of frames whose predicted box falls below IoU thresholds 0.5 and 0.75. Out-of-view, full-occlusion, low-resolution, and scale-variation cases remain the dominant failure modes. 
+
+tracking as search-region-level adaptive capacity alloca-tion. By combining capacity-ordered experts, prompt-guided sparse routing, and shared global context, Spec-Track adapts the modeling capacity to the ambiguity of each search region instead of processing all regions through a fixed-capacity path. Experiments on MUST, MSITrack, and HOTC20 demonstrate that SpecTrack achieves a favorable accuracy–e ffi ciency trade-o ff , with SpecTrack-B224 serving as the balanced default and SpecTrack-L384 reporting the accuracy-oriented setting. Mechanism-aligned ablations and routing diagnostics further sup-port the roles of multispectral input, spectral–spatial prompts, capacity-ordered experts, and shared global context. The additional GOT-10k evaluation indi-cates RGB-domain architectural generalization. Re-maining limitations mainly arise from out-of-view, full-occlusion, low-resolution, and scale-variation cases, suggesting future directions such as global re-detection, longer temporal memory, and sensor-aware calibration. 
+
+References 
+
+[1] Z. Li, F. Xiong, J. Zhou, J. Wang, J. Lu, Y. Qian, Bae-net: A band attention aware ensemble network for hyperspectral object tracking, in: 2020 IEEE International Con-ference on Image Processing (ICIP), IEEE, 2020, pp. 2106–2110, iSSN: 2381-8549. doi:10.1109 /ICIP40778.2020.9191105. [2] Z. Li, F. Xiong, J. Zhou, J. Lu, Y. Qian, Learning a deep ensemble network with band importance for hyperspectral object tracking, IEEE Transac-13 tions on Image Processing 32 (2023) 2901–2914. doi:10.1109 /TIP.2023.3263109. [3] Z. Liu, X. Wang, Y. Zhong, M. Shu, C. Sun, Siamhyper: Learning a hyperspectral object tracker from an rgb-based tracker, IEEE Transac-tions on Image Processing 31 (2022) 7116–7129. doi:10.1109 /TIP.2022.3216995. [4] Y. Chen, Q. Yuan, Y. Tang, Y. Xiao, J. He, L. Zhang, Spirit: Spectral awareness interaction network with dynamic template for hyperspec-tral object tracking, IEEE Transactions on Geo-science and Remote Sensing 62 (2024) 1–16. doi:10.1109 /TGRS.2023.3347950. [5] H. Qin, T. Xu, T. Li, Z. Chen, T. Feng, J. Li, Must: The first dataset and unified framework for multispectral uav single ob-ject tracking, in: 2025 IEEE /CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2025, pp. 16882–16891, iSSN: 2575-7075. doi:10.1109 /CVPR52734.2025.01573. [6] Z. Tang, T. Xu, X.-J. Wu, X. Zhu, C. Cheng, Z. Feng, J. Kittler, Revisiting rgbt tracking bench-marks from the perspective of modality valid-ity: A new benchmark, problem, and solution, IEEE Transactions on Image Processing 34 (2025) 7235–7249. doi:10.1109 /TIP.2025.3611687. [7] W. Cai, Q. Liu, Y. Wang, Spmtrack: Spatio-temporal parameter-e ffi cient fine-tuning with mix-ture of experts for scalable visual tracking, in: 2025 IEEE /CVF Conference on Com-puter Vision and Pattern Recognition (CVPR), 2025, pp. 16871–16881, iSSN: 2575-7075. doi:10.1109 /CVPR52734.2025.01572. [8] W. Sun, Y. Tan, J. Li, S. Hou, X. Li, Y. Shao, Z. Wang, B. Song, Hotmoe: Exploring sparse mixture-of-experts for hyperspectral object track-ing, IEEE Transactions on Multimedia 27 (2025) 4072–4083. doi:10.1109 /TMM.2025.3535339. [9] T. Feng, T. Xu, H. Qin, T. Li, S. Han, X. Zou, Z. Lv, J. Li, Msitrack: A chal-lenging benchmark for multispectral single ob-ject tracking, in: Proceedings of the 33rd ACM International Conference on Multimedia, MM ’25, Association for Computing Machinery, New York, NY, USA, 2025, pp. 12614–12620. doi:10.1145 /3746027.3758197. [10] F. Xiong, J. Zhou, Y. Qian, Material based object tracking in hyperspectral videos, IEEE Transac-tions on Image Processing 29 (2020) 3719–3733. doi:10.1109 /TIP.2020.2965302. [11] L. Huang, X. Zhao, K. Huang, Got-10k: A large high-diversity benchmark for generic object track-ing in the wild, IEEE Transactions on Pattern Analysis and Machine Intelligence 43 (5) (2021) 1562–1577. doi:10.1109 /TPAMI.2019.2957464. [12] B. Uzkent, A. Rangnekar, M. J. Ho ff man, Aerial vehicle tracking by adaptive fusion of hyperspec-tral likelihood maps, in: 2017 IEEE Conference on Computer Vision and Pattern Recognition Work-shops (CVPRW), 2017, pp. 233–242, iSSN: 2160-7516. doi:10.1109 /CVPRW.2017.35. [13] Z. Li, X. Ye, F. Xiong, J. Lu, J. Zhou, Y. Qian, Spectral-spatial-temporal attention network for hyperspectral tracking, in: 2021 11th Work-shop on Hyperspectral Imaging and Signal Pro-cessing: Evolution in Remote Sensing (WHIS-PERS), IEEE, 2021, pp. 1–5, iSSN: 2158-6276. doi:10.1109 /WHISPERS52202.2021.9484032. [14] L. Gao, P. Liu, Y. Jiang, W. Xie, J. Lei, Y. Li, Q. Du, Cb ff -net: A new frame-work for effi cient and accurate hyperspectral object tracking, IEEE Transactions on Geo-science and Remote Sensing 61 (2023) 1–14. doi:10.1109 /TGRS.2023.3253173. [15] Y. Chen, Q. Yuan, Y. Tang, Y. Xiao, J. He, Z. Liu, Sense: Hyperspectral video ob-ject tracker via fusing material and motion cues, Information Fusion 109 (2024) 102395. doi:10.1016 /j.in ff us.2024.102395. [16] L. Zhao, S. Xie, J. Li, P. Tan, W. Hu, Mvp-hot: A moderate visual prompt for hyperspectral ob-ject tracking, Journal of Visual Communication and Image Representation 105 (2024) 104326. doi:10.1016 /j.jvcir.2024.104326. [17] Y. Chen, Q. Yuan, Y. Tang, X. Wang, Y. Xiao, J. He, Profit: A prompt-guided frequency-aware filtering and template-enhanced in-teraction framework for hyperspectral video tracking, ISPRS Journal of Photogrammetry and Remote Sensing 226 (2025) 164–186. doi:10.1016 /j.isprsjprs.2025.05.008. 14 [18] R. Aljundi, P. Chakravarty, T. Tuytelaars, Ex-pert gate: Lifelong learning with a net-work of experts, in: 2017 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2017, pp. 7120–7129, iSSN: 1063-6919. doi:10.1109 /CVPR.2017.753. [19] C. Riquelme, J. Puigcerver, B. Mustafa, M. Neu-mann, R. Jenatton, A. Susano Pinto, D. Keysers, N. Houlsby, Scaling vision with sparse mixture of experts, in: Advances in Neural Information Pro-cessing Systems, Vol. 34, Curran Associates, Inc., 2021, pp. 8583–8595. [20] J. Puigcerver, C. Riquelme Ruiz, B. Mustafa, N. Houlsby, From sparse to soft mixtures of ex-perts, Vol. 2024, 2024, pp. 28435–28445. [21] B. Ye, H. Chang, B. Ma, S. Shan, X. Chen, Joint feature learning and relation modeling for track-ing: A one-stream framework, in: S. Avidan, G. Brostow, M. Cissé, G. M. Farinella, T. Hassner (Eds.), Computer Vision ECCV 2022, Springer Nature Switzerland, Cham, 2022, pp. 341–357. doi:10.1007 /978-3-031-20047-2_20. [22] H. Law, J. Deng, Cornernet: Detecting objects as paired keypoints, in: V. Ferrari, M. Hebert, C. Sminchisescu, Y. Weiss (Eds.), Computer Vi-sion ECCV 2018, Springer International Publish-ing, Cham, 2018, pp. 765–781. doi:10.1007 /978-3-030-01264-9_45. [23] H. Rezatofighi, N. Tsoi, J. Gwak, A. Sadeghian, I. Reid, S. Savarese, Generalized intersection over union: A metric and a loss for bound-ing box regression, in: 2019 IEEE /CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR), 2019, pp. 658–666, iSSN: 2575-7075. doi:10.1109 /CVPR.2019.00075. [24] B. Yan, H. Peng, J. Fu, D. Wang, H. Lu, Learning spatio-temporal transformer for vi-sual tracking, in: 2021 IEEE /CVF Interna-tional Conference on Computer Vision (ICCV), 2021, pp. 10428–10437, iSSN: 2380-7504. doi:10.1109 /ICCV48922.2021.01028. [25] X. Zhang, Y. Tian, L. Xie, W. Huang, Q. Dai, Q. Ye, Q. Tian, Hivit: A simpler and more e ffi -cient design of hierarchical vision transformer, in: International Conference on Learning Representa-tions, 2022. [26] Y. Tian, L. Xie, J. Qiu, J. Jiao, Y. Wang, Q. Tian, Q. Ye, Fast-itpn: Integrally pre-trained transformer pyramid network with token migration, IEEE Trans. Pattern Anal. Mach. Intell. 46 (12) (2024) 9766–9779. doi:10.1109 /TPAMI.2024.3429508. [27] Y. Zheng, B. Zhong, Q. Liang, Z. Mo, S. Zhang, X. Li, Odtrack: Online dense temporal to-ken learning for visual tracking, in: Pro-ceedings of the AAAI Conference on Artifi-cial Intelligence, Vol. 38, 2024, pp. 7588–7596. doi:10.1609 /aaai.v38i7.28591. [28] Y. Kou, J. Gao, B. Li, G. Wang, W. Hu, Y. Wang, L. Li, Zoomtrack: Target-aware non-uniform re-sizing for e ffi cient visual tracking, in: Advances in Neural Information Processing Systems, Vol. 36, 2023, pp. 50959–50977. [29] C. Xu, B. Zhong, Q. Liang, Y. Zheng, G. Li, S. Song, Less is more: Token context-aware learning for object tracking, in: Pro-ceedings of the AAAI Conference on Artifi-cial Intelligence, Vol. 39, 2025, pp. 8824–8832. doi:10.1609 /aaai.v39i8.32954. [30] Y.-H. Chen, C.-Y. Wang, C.-Y. Yang, H.-S. Chang, Y.-L. Lin, Y.-Y. Chuang, H.-Y. M. Liao, Neighbor-track: Single object tracking by bipartite match-ing with neighbor tracklets and its applications to sports, in: 2023 IEEE /CVF Conference on Com-puter Vision and Pattern Recognition Workshops (CVPRW), 2023, pp. 5139–5148, iSSN: 2160-7516. doi:10.1109 /CVPRW59228.2023.00542. [31] L. Shi, B. Zhong, Q. Liang, N. Li, S. Zhang, X. Li, Explicit visual prompts for visual object tracking, in: Proceedings of the AAAI Conference on Arti-ficial Intelligence, Vol. 38, 2024, pp. 4838–4846. doi:10.1609 /aaai.v38i5.28286. [32] J. Xie, B. Zhong, Z. Mo, S. Zhang, L. Shi, S. Song, R. Ji, Autoregressive queries for adap-tive tracking with spatio-temporal transform-ers, in: 2024 IEEE /CVF Conference on Com-puter Vision and Pattern Recognition (CVPR), 2024, pp. 19300–19309, iSSN: 2575-7075. doi:10.1109 /CVPR52733.2024.01826. [33] S. Gao, C. Zhou, J. Zhang, Generalized re-lation modeling for transformer tracking, in: 2023 IEEE /CVF Conference on Com-puter Vision and Pattern Recognition (CVPR), 15 2023, pp. 18686–18695, iSSN: 2575-7075. doi:10.1109 /CVPR52729.2023.01792. [34] S. Yu, J. Ni, S. Fu, T. Qu, Hyperspectral atten-tion network for object tracking, Sensors 24 (19) (2024) 6178. doi:10.3390 /s24196178. [35] L. Lin, H. Fan, Z. Zhang, Y. Wang, Y. Xu, H. Ling, Tracking meets lora: Faster training, larger model, stronger performance, in: A. Leonardis, E. Ricci, S. Roth, O. Russakovsky, T. Sattler, G. Varol (Eds.), Computer Vision ECCV 2024, Springer, Springer Nature Switzerland, Cham, 2025, pp. 300–318. doi:10.1007 /978-3-031-73232-4_17. [36] X. Chen, H. Peng, D. Wang, H. Lu, H. Hu, Se-qtrack: Sequence to sequence learning for vi-sual object tracking, in: 2023 IEEE /CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR), 2023, pp. 14572–14581, iSSN: 2575-7075. doi:10.1109 /CVPR52729.2023.01400. 16
