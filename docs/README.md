@@ -6,37 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-08
-- 运行时间：2026-07-08 21:09:51 UTC
+- 最新运行日期：2026-07-09
+- 运行时间：2026-07-09 21:02:39 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：3
+- 本次总论文数：4
+- 精读区：2
 - 速读区：2
 
 ### 今日简报（AI）
-今日推荐5篇论文，精读两篇高分工作：视频推理分割与多光谱目标跟踪。
-最值得关注的是选择性时空聚合压缩框架STAC（9.0分）与频谱引导自适应专家模型SpecTrack（9.0分）。
-建议优先精读这两篇，深入理解其时空建模与跨模态融合思路。
-- 详情：[/202607/08/README](/202607/08/README)
+今日精读2篇、速读2篇，聚焦动态目标检测与视频对象分割。最值得关注的是鱼眼相机与LiDAR融合模型（9.0分）及自监督视频分割方法（8.0分）。建议优先精读高分的多模态融合与自监督学习论文，深入理解无监督视频理解技术。
+- 详情：[/202607/09/README](/202607/09/README)
 
 ### 精读区论文标签
-1. [STAC: Selective Spatiotemporal Aggregation and Compression for Video Reasoning Segmentation](/202607/08/2607.02922v1-stac-selective-spatiotemporal-aggregation-and-compression-for-video-reasoning-segmentation)  
+1. [Dynamic Object Detection and Tracking in Construction: A Fisheye Camera and LiDAR Sensor Fusion Model](/202607/09/2607.06896v1-dynamic-object-detection-and-tracking-in-construction-a-fisheye-camera-and-lidar-sensor-fusion-model)  
    标签：评分：9.0/10、query:vt
-   evidence：利用语言查询实现跨帧的像素级目标跟踪
-2. [SpecTrack: Spectral Prompt Guided Adaptive Experts for Multispectral Object Tracking](/202607/08/2607.05988v1-spectrack-spectral-prompt-guided-adaptive-experts-for-multispectral-object-tracking)  
-   标签：评分：9.0/10、query:vt
-   evidence：多光谱目标跟踪
-3. [ProxyPose: 6-DoF Pose Tracking via Video-to-Video Translation](/202607/08/2607.06555v1-proxypose-6-dof-pose-tracking-via-video-to-video-translation)  
+   evidence：施工场景下的动态目标检测与跟踪，使用传感器融合进行跟踪
+2. [`Attention-Guided Cross-Temporal Clustering for Self-Supervised Video Object Segmentation](/202607/09/2607.07230v1-attention-guided-cross-temporal-clustering-for-self-supervised-video-object-segmentation)  
    标签：评分：8.0/10、query:vt
-   evidence：物体6自由度位姿跟踪
+   evidence：自监督视频对象分割，跨帧一致跟踪
 
 ### 速读区论文标签
-1. [A First Exploration of Neuromorphic OT-CFM for Multi-Speaker VSR](/202607/08/2606.31225v2-a-first-exploration-of-neuromorphic-ot-cfm-for-multi-speaker-vsr)  
-   标签：评分：6.0/10、query:vt
-   evidence：使用ByteTrack跟踪进行多说话者分割
-2. [Repurposing CLIP to Localize at Pixel Level](/202607/08/2607.05253v2-repurposing-clip-to-localize-at-pixel-level)  
-   标签：评分：6.0/10、query:vt
-   evidence：重新利用CLIP进行像素级定位
+1. [LeVLJEPA: End-to-End Vision-Language Pretraining Without Negatives](/202607/09/2607.00784v1-levljepa-end-to-end-vision-language-pretraining-without-negatives)  
+   标签：评分：7.0/10、query:vt
+   evidence：视觉语言预训练，无需负样本
+2. [Video-Text Temporal Localization via Multi-Scale Convolution and Dynamic Routing](/202607/09/2607.05093v2-video-text-temporal-localization-via-multi-scale-convolution-and-dynamic-routing)  
+   标签：评分：7.0/10、query:vt
+   evidence：视频文本时间定位，层次化时序建模
 
 
 <div class="dpr-home-promo-card">
