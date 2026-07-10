@@ -6,32 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-09
-- 运行时间：2026-07-09 21:02:39 UTC
+- 最新运行日期：2026-07-10
+- 运行时间：2026-07-10 20:49:03 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：2
 - 精读区：2
-- 速读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读2篇、速读2篇，聚焦动态目标检测与视频对象分割。最值得关注的是鱼眼相机与LiDAR融合模型（9.0分）及自监督视频分割方法（8.0分）。建议优先精读高分的多模态融合与自监督学习论文，深入理解无监督视频理解技术。
-- 详情：[/202607/09/README](/202607/09/README)
+今天精读2篇视频理解与分割论文，分别获得9.0和8.0高分。
+推荐关注Whareformer对长视频中“目标在哪”的追踪建模，以及SAM-MT的实时多目标交互式分割技术。
+下一步可考虑将长视频追踪与实时分割结合，以提升视频分析效率。
+- 详情：[/202607/10/README](/202607/10/README)
 
 ### 精读区论文标签
-1. [Dynamic Object Detection and Tracking in Construction: A Fisheye Camera and LiDAR Sensor Fusion Model](/202607/09/2607.06896v1-dynamic-object-detection-and-tracking-in-construction-a-fisheye-camera-and-lidar-sensor-fusion-model)  
+1. [Whareformer: Learning to Track What is Where in Long Egocentric Videos](/202607/10/2607.08537v1-whareformer-learning-to-track-what-is-where-in-long-egocentric-videos)  
    标签：评分：9.0/10、query:vt
-   evidence：施工场景下的动态目标检测与跟踪，使用传感器融合进行跟踪
-2. [`Attention-Guided Cross-Temporal Clustering for Self-Supervised Video Object Segmentation](/202607/09/2607.07230v1-attention-guided-cross-temporal-clustering-for-self-supervised-video-object-segmentation)  
+   evidence：自我中心视频中的物体跟踪，在线实例跟踪，直接匹配视觉目标跟踪
+2. [SAM-MT: Real-Time Interactive Multi-Target Video Segmentation](/202607/10/2607.08688v1-sam-mt-real-time-interactive-multi-target-video-segmentation)  
    标签：评分：8.0/10、query:vt
-   evidence：自监督视频对象分割，跨帧一致跟踪
+   evidence：多目标视频分割与跟踪
 
 ### 速读区论文标签
-1. [LeVLJEPA: End-to-End Vision-Language Pretraining Without Negatives](/202607/09/2607.00784v1-levljepa-end-to-end-vision-language-pretraining-without-negatives)  
-   标签：评分：7.0/10、query:vt
-   evidence：视觉语言预训练，无需负样本
-2. [Video-Text Temporal Localization via Multi-Scale Convolution and Dynamic Routing](/202607/09/2607.05093v2-video-text-temporal-localization-via-multi-scale-convolution-and-dynamic-routing)  
-   标签：评分：7.0/10、query:vt
-   evidence：视频文本时间定位，层次化时序建模
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
