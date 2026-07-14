@@ -6,32 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-13
-- 运行时间：2026-07-13 21:11:52 UTC
+- 最新运行日期：2026-07-14
+- 运行时间：2026-07-14 21:05:20 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读高评分《WaspMOT》与《REMIND》，并速读事件相机跟踪及目标持久性预测论文。重点关注两个方向：长期多目标追踪基准（WaspMOT 9.0分）和面向室内导航的再识别记忆方法（REMIND 8.0分）。建议优先精读这两篇论文，汲取高质量基准设计与记忆增强跟踪思路。
-- 详情：[/202607/13/README](/202607/13/README)
+今日精读一篇自学习视觉特征追踪间歇粒子的论文，速读一篇基于文本目标的可供性操作规划研究。《Tracking Intermittent Particles with Self-Learned Visual Features》得分8.0，是今日最值得细读的方向。建议读者优先研读精读论文，掌握其自学习视觉特征的具体实现思路。
+- 详情：[/202607/14/README](/202607/14/README)
 
 ### 精读区论文标签
-1. [WaspMOT: A Benchmark for Long-Term Multi-Object Tracking of Trichogramma Wasps](/202607/13/2607.08729v1-waspmot-a-benchmark-for-long-term-multi-object-tracking-of-trichogramma-wasps)  
-   标签：评分：9.0/10、query:vt
-   evidence：多目标跟踪基准，针对长期身份保持
-2. [REMIND: RE-Identification with Memory for INDoor Navigation](/202607/13/2607.09267v1-remind-re-identification-with-memory-for-indoor-navigation)  
+1. [Tracking Intermittent Particles with Self-Learned Visual Features](/202607/14/2607.09829v1-tracking-intermittent-particles-with-self-learned-visual-features)  
    标签：评分：8.0/10、query:vt
-   evidence：用于室内物体的长期多目标重识别跟踪器，与视觉目标跟踪相关
+   evidence：自监督学习用于间歇性粒子跟踪
 
 ### 速读区论文标签
-1. [Equivariant Filter for High Performance Image Tracking using an Event Camera](/202607/13/2607.09103v1-equivariant-filter-for-high-performance-image-tracking-using-an-event-camera)  
-   标签：评分：7.0/10、query:vt
-   evidence：使用事件相机的图像跟踪，与视觉目标跟踪相关
-2. [PreSIST: Vision-Language-Informed Object Persistence Prediction in Open-World Scenes](/202607/13/2607.04057v1-presist-vision-language-informed-object-persistence-prediction-in-open-world-scenes)  
+1. [Affordance-Based Manipulation Planning with Text Goals and Sim-to-Real Generalisation via Real-to-Sim Image Conversion](/202607/14/2607.11004v1-affordance-based-manipulation-planning-with-text-goals-and-sim-to-real-generalisation-via-real-to-sim-image-conversion)  
    标签：评分：6.0/10、query:vt
-   evidence：视觉语言信息驱动的物体持久性预测
+   evidence：在操作规划中跟踪物体位置，与视觉目标跟踪相关
 
 
 <div class="dpr-home-promo-card">
