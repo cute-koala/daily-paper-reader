@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-15 <!--dpr-date:20260715-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/15/2607.12503v1-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms" data-sidebar-item="{&quot;title&quot;: &quot;DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.12503v1-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;跟踪动态物体证据用于4D推理&quot;}">DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs</a>
   * 2026-07-14 <!--dpr-date:20260714-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/14/2607.09829v1-tracking-intermittent-particles-with-self-learned-visual-features" data-sidebar-item="{&quot;title&quot;: &quot;Tracking Intermittent Particles with Self-Learned Visual Features&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.09829v1-tracking-intermittent-particles-with-self-learned-visual-features&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;自监督学习用于间歇性粒子跟踪&quot;}">Tracking Intermittent Particles with Self-Learned Visual Features</a>

@@ -6,26 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-14
-- 运行时间：2026-07-14 21:05:20 UTC
+- 最新运行日期：2026-07-15
+- 运行时间：2026-07-15 20:53:35 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
+- 本次总论文数：1
+- 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-今日精读一篇自学习视觉特征追踪间歇粒子的论文，速读一篇基于文本目标的可供性操作规划研究。《Tracking Intermittent Particles with Self-Learned Visual Features》得分8.0，是今日最值得细读的方向。建议读者优先研读精读论文，掌握其自学习视觉特征的具体实现思路。
-- 详情：[/202607/14/README](/202607/14/README)
+今日速读1篇论文，聚焦多模态大模型在4D时空推理中的动态对象追踪方法。值得关注的方向是《DynTrace》提出如何通过跟踪动态对象证据提升MLLM对视频时序理解的准确性。建议普通读者关注该工作如何结合时空证据与推理，后续可探索其在自动驾驶或视频问答等动态场景的应用。
+- 详情：[/202607/15/README](/202607/15/README)
 
 ### 精读区论文标签
-1. [Tracking Intermittent Particles with Self-Learned Visual Features](/202607/14/2607.09829v1-tracking-intermittent-particles-with-self-learned-visual-features)  
-   标签：评分：8.0/10、query:vt
-   evidence：自监督学习用于间歇性粒子跟踪
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Affordance-Based Manipulation Planning with Text Goals and Sim-to-Real Generalisation via Real-to-Sim Image Conversion](/202607/14/2607.11004v1-affordance-based-manipulation-planning-with-text-goals-and-sim-to-real-generalisation-via-real-to-sim-image-conversion)  
-   标签：评分：6.0/10、query:vt
-   evidence：在操作规划中跟踪物体位置，与视觉目标跟踪相关
+1. [DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs](/202607/15/2607.12503v1-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms)  
+   标签：评分：7.0/10、query:vt
+   evidence：跟踪动态物体证据用于4D推理
 
 
 <div class="dpr-home-promo-card">
