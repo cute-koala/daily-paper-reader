@@ -6,24 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-15
-- 运行时间：2026-07-15 20:53:35 UTC
+- 最新运行日期：2026-07-16
+- 运行时间：2026-07-16 20:35:06 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
+- 本次总论文数：2
+- 精读区：1
 - 速读区：1
 
 ### 今日简报（AI）
-今日速读1篇论文，聚焦多模态大模型在4D时空推理中的动态对象追踪方法。值得关注的方向是《DynTrace》提出如何通过跟踪动态对象证据提升MLLM对视频时序理解的准确性。建议普通读者关注该工作如何结合时空证据与推理，后续可探索其在自动驾驶或视频问答等动态场景的应用。
-- 详情：[/202607/15/README](/202607/15/README)
+今天精读1篇、速读1篇，聚焦时空视频定位与4D推理。最值得看的是《ScanFocus》的粗到细框架，分数9.0，擅长视频中精确的活动定位。下步可从理解“粗到细”策略入手，再对比动态追踪方法DynTrace。
+- 详情：[/202607/16/README](/202607/16/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [ScanFocus: A Coarse-to-Fine Framework for Spatio-Temporal Video Grounding](/202607/16/2607.13421v1-scanfocus-a-coarse-to-fine-framework-for-spatio-temporal-video-grounding)  
+   标签：评分：9.0/10、query:vt
+   evidence：根据自然语言描述检索物体轨迹
 
 ### 速读区论文标签
-1. [DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs](/202607/15/2607.12503v1-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms)  
+1. [DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs](/202607/16/2607.12503v2-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms)  
    标签：评分：7.0/10、query:vt
-   evidence：跟踪动态物体证据用于4D推理
+   evidence：使用多模态大语言模型跟踪动态物体证据
 
 
 <div class="dpr-home-promo-card">
