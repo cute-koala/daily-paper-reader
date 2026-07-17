@@ -6,26 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-16
-- 运行时间：2026-07-16 20:35:06 UTC
+- 最新运行日期：2026-07-17
+- 运行时间：2026-07-17 21:05:24 UTC
 - 运行状态：成功
 - 本次总论文数：2
 - 精读区：1
 - 速读区：1
 
 ### 今日简报（AI）
-今天精读1篇、速读1篇，聚焦时空视频定位与4D推理。最值得看的是《ScanFocus》的粗到细框架，分数9.0，擅长视频中精确的活动定位。下步可从理解“粗到细”策略入手，再对比动态追踪方法DynTrace。
-- 详情：[/202607/16/README](/202607/16/README)
+今日精读了满分10分的《CosFly-VLA》与速读7分的《FoMoVLA》，聚焦空间感知的视觉-语言-动作模型在无人机跟踪中的应用。  
+最值得细看的是《CosFly-VLA》，其空间感知能力为VLA模型在动态跟踪场景提供新思路。  
+建议读者优先研读《CosFly-VLA》技术细节，并留意VLA模型中视觉预判与运动引导的协同设计。
+- 详情：[/202607/17/README](/202607/17/README)
 
 ### 精读区论文标签
-1. [ScanFocus: A Coarse-to-Fine Framework for Spatio-Temporal Video Grounding](/202607/16/2607.13421v1-scanfocus-a-coarse-to-fine-framework-for-spatio-temporal-video-grounding)  
-   标签：评分：9.0/10、query:vt
-   evidence：根据自然语言描述检索物体轨迹
+1. [CosFly-VLA: A Spatially Aware Vision-Language-Action Model for UAV Tracking](/202607/17/2607.15004v1-cosfly-vla-a-spatially-aware-vision-language-action-model-for-uav-tracking)  
+   标签：评分：10.0/10、query:vt
+   evidence：无人机目标跟踪与视觉-语言-动作模型
 
 ### 速读区论文标签
-1. [DynTrace: Tracking Dynamic Object Evidence for 4D Spatio-Temporal Reasoning in MLLMs](/202607/16/2607.12503v2-dyntrace-tracking-dynamic-object-evidence-for-4d-spatio-temporal-reasoning-in-mllms)  
+1. [FoMoVLA: Bridging Visual Foresight and Motion Guidance for Vision-Language-Action Models](/202607/17/2607.14739v1-fomovla-bridging-visual-foresight-and-motion-guidance-for-vision-language-action-models)  
    标签：评分：7.0/10、query:vt
-   evidence：使用多模态大语言模型跟踪动态物体证据
+   evidence：在VLA中使用稀疏点跟踪进行运动引导
 
 
 <div class="dpr-home-promo-card">
