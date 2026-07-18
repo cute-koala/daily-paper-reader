@@ -6,28 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-17
-- 运行时间：2026-07-17 21:05:24 UTC
+- 最新运行日期：2026-07-18
+- 运行时间：2026-07-18 20:23:45 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：1
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读了满分10分的《CosFly-VLA》与速读7分的《FoMoVLA》，聚焦空间感知的视觉-语言-动作模型在无人机跟踪中的应用。  
-最值得细看的是《CosFly-VLA》，其空间感知能力为VLA模型在动态跟踪场景提供新思路。  
-建议读者优先研读《CosFly-VLA》技术细节，并留意VLA模型中视觉预判与运动引导的协同设计。
-- 详情：[/202607/17/README](/202607/17/README)
+今日精读一篇高分论文《PiVoT》，提出变分解法实现实时大规模多目标检测与跟踪。该方案在重度遮挡场景下表现优异，变分方法有望成为复杂环境下视觉任务的新突破口。建议普通读者重点学习其算法原理及实验设计。
+- 详情：[/202607/18/README](/202607/18/README)
 
 ### 精读区论文标签
-1. [CosFly-VLA: A Spatially Aware Vision-Language-Action Model for UAV Tracking](/202607/17/2607.15004v1-cosfly-vla-a-spatially-aware-vision-language-action-model-for-uav-tracking)  
-   标签：评分：10.0/10、query:vt
-   evidence：无人机目标跟踪与视觉-语言-动作模型
+1. [PiVoT: A Variational Solution for Real-time Large-scale Multi-object Detection and Tracking under Heavy Clutter](/202607/18/2607.13891v1-pivot-a-variational-solution-for-real-time-large-scale-multi-object-detection-and-tracking-under-heavy-clutter)  
+   标签：评分：9.0/10、query:vt
+   evidence：强杂波下的多目标检测与跟踪，直接解决视觉目标跟踪问题
 
 ### 速读区论文标签
-1. [FoMoVLA: Bridging Visual Foresight and Motion Guidance for Vision-Language-Action Models](/202607/17/2607.14739v1-fomovla-bridging-visual-foresight-and-motion-guidance-for-vision-language-action-models)  
-   标签：评分：7.0/10、query:vt
-   evidence：在VLA中使用稀疏点跟踪进行运动引导
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">

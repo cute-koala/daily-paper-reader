@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-18 <!--dpr-date:20260718-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/18/2607.13891v1-pivot-a-variational-solution-for-real-time-large-scale-multi-object-detection-and-tracking-under-heavy-clutter" data-sidebar-item="{&quot;title&quot;: &quot;PiVoT: A Variational Solution for Real-time Large-scale Multi-object Detection and Tracking under Heavy Clutter&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.13891v1-pivot-a-variational-solution-for-real-time-large-scale-multi-object-detection-and-tracking-under-heavy-clutter&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;强杂波下的多目标检测与跟踪，直接解决视觉目标跟踪问题&quot;}">PiVoT: A Variational Solution for Real-time Large-scale Multi-object Detection and Tracking under Heavy Clutter</a>
   * 2026-07-17 <!--dpr-date:20260717-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/17/2607.15004v1-cosfly-vla-a-spatially-aware-vision-language-action-model-for-uav-tracking" data-sidebar-item="{&quot;title&quot;: &quot;CosFly-VLA: A Spatially Aware Vision-Language-Action Model for UAV Tracking&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.15004v1-cosfly-vla-a-spatially-aware-vision-language-action-model-for-uav-tracking&quot;, &quot;score&quot;: &quot;10.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;vt&quot;}], &quot;evidence&quot;: &quot;无人机目标跟踪与视觉-语言-动作模型&quot;}">CosFly-VLA: A Spatially Aware Vision-Language-Action Model for UAV Tracking</a>
