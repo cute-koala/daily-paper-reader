@@ -6,21 +6,19 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-18
-- 运行时间：2026-07-18 20:23:45 UTC
+- 最新运行日期：2026-07-19
+- 运行时间：2026-07-19 19:47:12 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
+- 本次总论文数：0
+- 精读区：0
 - 速读区：0
 
 ### 今日简报（AI）
-今日精读一篇高分论文《PiVoT》，提出变分解法实现实时大规模多目标检测与跟踪。该方案在重度遮挡场景下表现优异，变分方法有望成为复杂环境下视觉任务的新突破口。建议普通读者重点学习其算法原理及实验设计。
-- 详情：[/202607/18/README](/202607/18/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202607/19/README](/202607/19/README)
 
 ### 精读区论文标签
-1. [PiVoT: A Variational Solution for Real-time Large-scale Multi-object Detection and Tracking under Heavy Clutter](/202607/18/2607.13891v1-pivot-a-variational-solution-for-real-time-large-scale-multi-object-detection-and-tracking-under-heavy-clutter)  
-   标签：评分：9.0/10、query:vt
-   evidence：强杂波下的多目标检测与跟踪，直接解决视觉目标跟踪问题
+- 本次无精读推荐。
 
 ### 速读区论文标签
 - 本次无速读推荐。
