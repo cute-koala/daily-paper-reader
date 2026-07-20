@@ -1,0 +1,25 @@
+---
+title: Information-dependent eye-hand coordination emerges from active vision
+title_zh: 信息依赖的眼手协调源于主动视觉
+authors: "Zhao, J., VERDEL, D., Tan, Y., Burdet, E."
+date: 2026-07-17
+pdf: "https://www.biorxiv.org/content/10.64898/2026.05.29.726887v2.full.pdf"
+tags: ["query:world-model"]
+score: 8.0
+evidence: 具有学习世界模型的模型预测控制
+tldr: 人类日常活动中依赖视觉信息规划手部运动，眼动表现出扫视-追踪模式以高效减少不确定性。本文提出双随机模型预测控制框架，通过连续控制眼动最小化任务相关不确定性并构建内部模型。实验操纵信息量、密度和难度，模型自适应调整眼动模式并保持恒定提取视界，精确预测眼手运动特征。该工作提供了理解人类眼动连续调节的原则性框架，并为机器人辅助和主动感知应用开辟新视角。
+source: biorxiv
+selection_source: fresh_fetch
+figures_json: "[{\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1286, \"height\": 731, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1399, \"height\": 1076, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1248, \"height\": 1106, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1169, \"height\": 1563, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 1175, \"height\": 1138, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 687, \"height\": 341, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1472, \"height\": 560, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 1828, \"height\": 802, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1833, \"height\": 799, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1829, \"height\": 800, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 1831, \"height\": 801, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/fig-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1832, \"height\": 803, \"label\": \"Figure\"}]"
+tables_json: "[{\"url\": \"assets/tables/biorxiv/biorxiv-10-64898-2026-05-29-726887-v2/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1568, \"height\": 2216, \"label\": \"Table\"}]"
+motivation: 现有研究缺乏统一计算原理解释连续任务中眼动模式（扫视-追踪）如何高效减少不确定性而涌现。
+method: 提出双随机模型预测控制框架，连续控制眼动最小化任务相关不确定性并构建内部模型用于手部运动规划。
+result: 模型通过操纵信息量、密度和难度，自适应调整眼动模式并保持恒定提取视界，精确匹配实验眼手运动特征。
+conclusion: 该原则性框架揭示了人类眼动调节机制，为机器人辅助与主动感知系统设计提供新思路。
+---
+
+## 摘要
+在日常活动中，人类依赖视觉信息来规划手部运动，因此通过眼睛注视提取任务相关信息成为运动控制的关键环节。行为研究揭示了典型的扫视-追踪模式，这些模式可能由共享的神经回路控制，能够有效降低任务相关的不确定性。然而，目前仍缺乏一个统一的计算原理解释这些模式在阅读或驾驶等连续任务中的涌现机制。本文提出了一种主动视觉的双随机模型预测控制框架，其中眼球运动被持续控制以最小化任务相关的不确定性，并构建用于手部运动规划的内部模型。通过操纵未来视觉信息的数量、密度和难度的实验，我们展示了眼球运动模式如何适应信息环境，同时保持不变的提取视界。该模型自然涌现出扫视-追踪模式，准确预测了实验中观察到的眼部和手部运动特征。这些结果为理解人类眼球运动的连续调节提供了原则性框架，并为机器人辅助和主动感知应用开辟了新视角。
+
+## Abstract
+In daily activities, humans rely on visual information to plan hand movements, making the extraction of task-relevant information through eye gaze a key aspect of motor control. Behavioral studies have revealed characteristic saccade-pursuit patterns, likely governed by shared neural circuits, which enable an efficient reduction of task-related uncertainty. However, a unifying computational principle explaining the emergence of these patterns in continuous tasks such as reading or driving is still lacking. Here we propose a dual stochastic model predictive control formulation of active vision, in which eye movements are continuously controlled to minimize task-relevant uncertainty and build an internal model used for hand movement planning. Through experiments manipulating the amount, density, and difficulty of future visual information, we show how eye movement patterns adapt to the information context while maintaining an invariant extraction horizon. A saccade-pursuit pattern naturally emerges from the model, which accurately predicts both eye and hand movement features observed in experiments. These results provide a principled framework for understanding the continuous regulation of human eye movements and open new perspectives for applications in robotic assistance and active perception.
