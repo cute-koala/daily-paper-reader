@@ -18,72 +18,50 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-21
-- 运行时间：2026-07-21 21:07:23 UTC
+- 最新运行日期：2026-07-22
+- 运行时间：2026-07-22 21:42:41 UTC
 - 运行状态：成功
-- 本次总论文数：16
+- 本次总论文数：10
 - 精读区：7
-- 速读区：9
+- 速读区：3
 
 ### 今日简报（AI）
-今日精选16篇AI论文，聚焦层次规划与世界模型，以及高度相似目标的多目标跟踪重识别。
-
-最值得深入的是《Mind the Gap》揭示层次规划在LLM世界模型中的承诺与陷阱，以及《VLA-ReID》提出视频级关联解决高度相似对象重识别难题。
-
-建议关注层次规划与世界模型的实际部署风险，并尝试将VLA-ReID方法应用于你自己的密集行人或车辆跟踪场景。
-- 详情：[/202607/21/README](/202607/21/README)
+今日精读7篇、速读3篇，重点推荐《PAVXploreRL》和《Predictive Training》两篇9分论文。最值得关注的方向是物理动作视觉世界模型的强化学习探索，以及基于潜在想象的视觉四足导航预测训练。建议读者后续可进一步探索“何时规划”的选择策略和AI增强MPC在安全控制中的应用。
+- 详情：[/202607/22/README](/202607/22/README)
 
 ### 精读区论文标签
-1. [Mind the Gap: Promises and Pitfalls of Hierarchical Planning in LeWorldModel](/202607/21/2607.12547v2-mind-the-gap-promises-and-pitfalls-of-hierarchical-planning-in-leworldmodel)  
+1. [PAVXploreRL: Physical-Action-Visual World Model Reinforcement Learning with Action Exploration](/202607/22/2607.16602v2-pavxplorerl-physical-action-visual-world-model-reinforcement-learning-with-action-exploration)  
    标签：评分：9.0/10、query:world-model
-   evidence：在LeWorldModel中进行分层规划，直接涉及学习的世界模型控制
-2. [VLA-ReID: Video-Level Association for Re-Identification in Multi-Object Tracking with Highly Similar Objects](/202607/21/2607.17157v1-vla-reid-video-level-association-for-re-identification-in-multi-object-tracking-with-highly-similar-objects)  
-   标签：评分：9.0/10、query:vt
-   evidence：针对高度相似对象的多目标跟踪，使用视频级关联再识别
-3. [Test-Time Scaling for World Action Models via Zero-Shot Geometric Evaluation](/202607/21/2607.17454v1-test-time-scaling-for-world-action-models-via-zero-shot-geometric-evaluation)  
+   evidence：基于动作条件的物理-动作-视觉世界模型强化学习探索
+2. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/22/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
    标签：评分：9.0/10、query:world-model
-   evidence：世界动作模型的测试时缩放与规划
-4. [GeoWorldAD: Geometry World Action Model for Autonomous Driving](/202607/21/2607.17521v1-geoworldad-geometry-world-action-model-for-autonomous-driving)  
+   evidence：潜在想象预测训练用于导航；用于规划的世界模型
+3. [DWM: Separating World Effects from Actions in Latent World Models](/202607/22/2607.18715v1-dwm-separating-world-effects-from-actions-in-latent-world-models)  
    标签：评分：9.0/10、query:world-model
-   evidence：用于自动驾驶规划的几何世界动作模型
-5. [SAGE: Subgoal-Conditioned Action Generation for Latent World Model Planning](/202607/21/2607.17973v1-sage-subgoal-conditioned-action-generation-for-latent-world-model-planning)  
+   evidence：在潜在世界模型中分离世界效应与动作；匹配潜在动力学强化学习
+4. [WorldScape Policy 2.0: Empowering Steerable World Action Modeling with Reasoning-Augmented Memory](/202607/22/2607.18840v1-worldscape-policy-20-empowering-steerable-world-action-modeling-with-reasoning-augmented-memory)  
    标签：评分：9.0/10、query:world-model
-   evidence：潜在世界模型规划，使用子目标条件动作生成
-6. [Learning from World Feedback: Why Model Uncertainty Fails as a Risk Signal in Model-Based RL](/202607/21/2607.16591v1-learning-from-world-feedback-why-model-uncertainty-fails-as-a-risk-signal-in-model-based-rl)  
-   标签：评分：8.0/10、query:world-model
-   evidence：基于世界反馈的模型强化学习，结合世界模型的MPC规划
-7. [The generator is the tracker: Multi-object tracking by painting persistent identity colours](/202607/21/2607.17120v1-the-generator-is-the-tracker-multi-object-tracking-by-painting-persistent-identity-colours)  
+   evidence：带推理增强记忆的世界动作模型，实现可控世界建模
+5. [Model-Agnostic Meta Learning for Differentiable MPC](/202607/22/2607.19271v1-model-agnostic-meta-learning-for-differentiable-mpc)  
+   标签：评分：9.0/10、query:world-model
+   evidence：元学习可微模型预测控制，适应未见任务
+6. [Masked Visual Actions for Unified World Modeling](/202607/22/2607.19343v1-masked-visual-actions-for-unified-world-modeling)  
+   标签：评分：9.0/10、query:world-model
+   evidence：掩码视觉动作实现统一世界建模；用于前向动力学的像素空间控制接口
+7. [SaaF: Scene-Specific Ambiguity-Aware 3D Language Fields towards Interactive Real-World Object Retrieval](/202607/22/2607.16309v1-saaf-scene-specific-ambiguity-aware-3d-language-fields-towards-interactive-real-world-object-retrieval)  
    标签：评分：8.0/10、query:vt
-   evidence：通过视频生成实现持久身份着色的多目标跟踪
+   evidence：在3D场景中使用自然语言进行交互式物体检索，类似指代跟踪
 
 ### 速读区论文标签
-1. [PAVXploreRL: Physical-Action-Visual World Model Reinforcement Learning with Action Exploration](/202607/21/2607.16602v1-pavxplorerl-physical-action-visual-world-model-reinforcement-learning-with-action-exploration)  
+1. [When to Plan: Learning to Select Between Reactive Control and Deliberative Planning](/202607/22/2607.16421v1-when-to-plan-learning-to-select-between-reactive-control-and-deliberative-planning)  
    标签：评分：8.0/10、query:world-model
-   evidence：物理-动作-视觉世界模型，用于具身AI的强化学习动作探索
-2. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/21/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
-   标签：评分：8.0/10、query:world-model
-   evidence：使用潜在想象进行预测训练，结合JEPA风格预测器用于四足导航
-3. [Mobile Network Control with a World Model](/202607/21/2607.17747v1-mobile-network-control-with-a-world-model)  
-   标签：评分：8.0/10、query:world-model
-   evidence：基于世界模型的移动网络控制，利用不确定性优化
-4. [From World Action Models to Embodied Brains: A Roadmap for Open-World Physical Intelligence](/202607/21/2607.11689v1-from-world-action-models-to-embodied-brains-a-roadmap-for-open-world-physical-intelligence)  
-   标签：评分：6.0/10、query:world-model
-   evidence：世界行动模型路线图，连接动作与预测结果，用于开放世界规划
-5. [GFR-SAM: Training-Free Referring Camouflaged Object Segmentation via Cross-Image Prompting](/202607/21/2607.11732v1-gfr-sam-training-free-referring-camouflaged-object-segmentation-via-cross-image-prompting)  
-   标签：评分：6.0/10、query:vt
-   evidence：无训练的指代伪装目标分割，与指代跟踪相关
-6. [Attention from Above: A Multimodal Model for Drone-Based Object Localization](/202607/21/2607.17669v1-attention-from-above-a-multimodal-model-for-drone-based-object-localization)  
-   标签：评分：6.0/10、query:vt
-   evidence：基于文本提示的多模态目标检测，类似于语言引导跟踪
-7. [Planning with Transformers: Chain of Computation and Structured Context Windows](/202607/21/2607.17710v1-planning-with-transformers-chain-of-computation-and-structured-context-windows)  
-   标签：评分：6.0/10、query:world-model
-   evidence：使用Transformer进行规划，链式计算和结构化上下文窗口
-8. [PGN: Design and Implementation of a Vision-Language Navigation System Based on Pangu Multimodal Foundation Model](/202607/21/2607.17806v1-pgn-design-and-implementation-of-a-vision-language-navigation-system-based-on-pangu-multimodal-foundation-model)  
-   标签：评分：6.0/10、query:vt
-   evidence：视觉语言导航系统，使用多模态大模型，与视觉语言跟踪相关
-9. [Value-Aware Prediction for Robust Multi-Agent Coordination Under Communication Loss](/202607/21/2607.17914v1-value-aware-prediction-for-robust-multi-agent-coordination-under-communication-loss)  
-   标签：评分：6.0/10、query:world-model
-   evidence：多智能体强化学习中的价值感知预测，涉及世界模型元素
+   evidence：使用强化学习学习在反应控制与深思规划之间切换
+2. [AI-Augmented Model Predictive Control for Safe and Adaptive Rendezvous and Proximity Operations](/202607/22/2607.16630v1-ai-augmented-model-predictive-control-for-safe-and-adaptive-rendezvous-and-proximity-operations)  
+   标签：评分：7.0/10、query:world-model
+   evidence：AI增强的模型预测控制用于航天器交会，数据驱动调整类似于学习世界模型
+3. [RoboInter1.5: A Holistic Intermediate Representation Suite for Embodied World Modeling and Robotic Manipulation](/202607/22/2607.18709v1-robointer15-a-holistic-intermediate-representation-suite-for-embodied-world-modeling-and-robotic-manipulation)  
+   标签：评分：7.0/10、query:world-model
+   evidence：用于具身世界建模的中间表示套件
 
 
 <div class="dpr-home-promo-card dpr-home-panel">
