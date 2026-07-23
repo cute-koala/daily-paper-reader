@@ -18,50 +18,64 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 21:42:41 UTC
+- 最新运行日期：2026-07-23
+- 运行时间：2026-07-23 21:45:46 UTC
 - 运行状态：成功
-- 本次总论文数：10
+- 本次总论文数：14
 - 精读区：7
-- 速读区：3
+- 速读区：7
 
 ### 今日简报（AI）
-今日精读7篇、速读3篇，重点推荐《PAVXploreRL》和《Predictive Training》两篇9分论文。最值得关注的方向是物理动作视觉世界模型的强化学习探索，以及基于潜在想象的视觉四足导航预测训练。建议读者后续可进一步探索“何时规划”的选择策略和AI增强MPC在安全控制中的应用。
-- 详情：[/202607/22/README](/202607/22/README)
+1) 今日精读两篇高分论文，聚焦动态视觉跟踪与事件相机特征追踪，分别获10分和9分。  
+2) 最值得关注的是DRGBT-1K大规模基准与GoStop的自适应时间聚合方法，为动态RGBT跟踪和事件特征追踪提供新思路。  
+3) 建议深入理解这两个方向的核心技术，并尝试将基准方法迁移到实际机器人或自动驾驶场景中验证。
+- 详情：[/202607/23/README](/202607/23/README)
 
 ### 精读区论文标签
-1. [PAVXploreRL: Physical-Action-Visual World Model Reinforcement Learning with Action Exploration](/202607/22/2607.16602v2-pavxplorerl-physical-action-visual-world-model-reinforcement-learning-with-action-exploration)  
+1. [DRGBT-1K: A Large-scale High-quality Benchmark for Dynamic RGBT Tracking](/202607/23/2607.19772v1-drgbt-1k-a-large-scale-high-quality-benchmark-for-dynamic-rgbt-tracking)  
+   标签：评分：10.0/10、query:vt
+   evidence：动态RGBT视觉跟踪的大规模基准
+2. [GoStop: Reinforcement Learning for Adaptive Temporal Aggregation in Event-Based Feature Tracking](/202607/23/2607.15699v1-gostop-reinforcement-learning-for-adaptive-temporal-aggregation-in-event-based-feature-tracking)  
+   标签：评分：9.0/10、query:vt
+   evidence：特征跟踪，事件相机跟踪，强化学习用于跟踪
+3. [PAVXploreRL: Physical-Action-Visual World Model Reinforcement Learning with Action Exploration](/202607/23/2607.16602v2-pavxplorerl-physical-action-visual-world-model-reinforcement-learning-with-action-exploration)  
    标签：评分：9.0/10、query:world-model
-   evidence：基于动作条件的物理-动作-视觉世界模型强化学习探索
-2. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/22/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
+   evidence：基于强化学习的动作条件世界模型，优化物理合理性和视觉保真度
+4. [WorldScape Policy 2.0: Empowering Steerable World Action Modeling with Reasoning-Augmented Memory](/202607/23/2607.18840v1-worldscape-policy-20-empowering-steerable-world-action-modeling-with-reasoning-augmented-memory)  
    标签：评分：9.0/10、query:world-model
-   evidence：潜在想象预测训练用于导航；用于规划的世界模型
-3. [DWM: Separating World Effects from Actions in Latent World Models](/202607/22/2607.18715v1-dwm-separating-world-effects-from-actions-in-latent-world-models)  
+   evidence：用于机器人操作的世界动作模型，结合推理增强记忆
+5. [Koopman Dreamer: Spectrally Constrained Latent Dynamics for Stable World-Model Imagination](/202607/23/2607.19719v1-koopman-dreamer-spectrally-constrained-latent-dynamics-for-stable-world-model-imagination)  
    标签：评分：9.0/10、query:world-model
-   evidence：在潜在世界模型中分离世界效应与动作；匹配潜在动力学强化学习
-4. [WorldScape Policy 2.0: Empowering Steerable World Action Modeling with Reasoning-Augmented Memory](/202607/22/2607.18840v1-worldscape-policy-20-empowering-steerable-world-action-modeling-with-reasoning-augmented-memory)  
-   标签：评分：9.0/10、query:world-model
-   evidence：带推理增强记忆的世界动作模型，实现可控世界建模
-5. [Model-Agnostic Meta Learning for Differentiable MPC](/202607/22/2607.19271v1-model-agnostic-meta-learning-for-differentiable-mpc)  
-   标签：评分：9.0/10、query:world-model
-   evidence：元学习可微模型预测控制，适应未见任务
-6. [Masked Visual Actions for Unified World Modeling](/202607/22/2607.19343v1-masked-visual-actions-for-unified-world-modeling)  
-   标签：评分：9.0/10、query:world-model
-   evidence：掩码视觉动作实现统一世界建模；用于前向动力学的像素空间控制接口
-7. [SaaF: Scene-Specific Ambiguity-Aware 3D Language Fields towards Interactive Real-World Object Retrieval](/202607/22/2607.16309v1-saaf-scene-specific-ambiguity-aware-3d-language-fields-towards-interactive-real-world-object-retrieval)  
+   evidence：基于Koopman的潜在动力学谱约束，用于连续控制中稳定的世界模型想象
+6. [ReferTrack: Referring Then Tracking for Embodied Visual Tracking](/202607/23/2607.20061v1-refertrack-referring-then-tracking-for-embodied-visual-tracking)  
+   标签：评分：9.0/10、query:vt
+   evidence：基于语言的指代跟踪
+7. [From Perception to Assistance: Open-Vocabulary Shared Autonomy for Robotic Manipulation](/202607/23/2607.17323v1-from-perception-to-assistance-open-vocabulary-shared-autonomy-for-robotic-manipulation)  
    标签：评分：8.0/10、query:vt
-   evidence：在3D场景中使用自然语言进行交互式物体检索，类似指代跟踪
+   evidence：使用视觉语言模型和可提示视频分割实现语言引导的跟踪
 
 ### 速读区论文标签
-1. [When to Plan: Learning to Select Between Reactive Control and Deliberative Planning](/202607/22/2607.16421v1-when-to-plan-learning-to-select-between-reactive-control-and-deliberative-planning)  
+1. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/23/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
    标签：评分：8.0/10、query:world-model
-   evidence：使用强化学习学习在反应控制与深思规划之间切换
-2. [AI-Augmented Model Predictive Control for Safe and Adaptive Rendezvous and Proximity Operations](/202607/22/2607.16630v1-ai-augmented-model-predictive-control-for-safe-and-adaptive-rendezvous-and-proximity-operations)  
+   evidence：隐式想象预测训练，类似世界模型
+2. [Planning with Transformers: Chain of Computation and Structured Context Windows](/202607/23/2607.17710v1-planning-with-transformers-chain-of-computation-and-structured-context-windows)  
+   标签：评分：8.0/10、query:world-model
+   evidence：使用Transformer进行规划，计算链
+3. [Dreamer-CPC: Message Learning with World Models for Decentralized Multi-agent Reinforcement Learning](/202607/23/2607.19809v1-dreamer-cpc-message-learning-with-world-models-for-decentralized-multi-agent-reinforcement-learning)  
+   标签：评分：8.0/10、query:world-model
+   evidence：将世界模型(DreamerV3)与消息学习相结合，用于去中心化多智能体强化学习，利用潜在状态进行通信
+4. [SpikingMOT: A Spike-Driven Multi-Object Tracker](/202607/23/2607.19875v1-spikingmot-a-spike-driven-multi-object-tracker)  
+   标签：评分：8.0/10、query:vt
+   evidence：基于脉冲神经网络的多目标跟踪
+5. [From Language to Navigation Goals: A Vision-Language Approach for Semantic Navigation of Mobile Robots Using RGB-D Perception](/202607/23/2607.13624v1-from-language-to-navigation-goals-a-vision-language-approach-for-semantic-navigation-of-mobile-robots-using-rgb-d-perception)  
+   标签：评分：7.0/10、query:vt
+   evidence：基于视觉语言方法的语义导航，利用自然语言指令
+6. [Environment-free Synthetic Data Generation for API-Calling Agents](/202607/23/2607.16900v2-environment-free-synthetic-data-generation-for-api-calling-agents)  
    标签：评分：7.0/10、query:world-model
-   evidence：AI增强的模型预测控制用于航天器交会，数据驱动调整类似于学习世界模型
-3. [RoboInter1.5: A Holistic Intermediate Representation Suite for Embodied World Modeling and Robotic Manipulation](/202607/22/2607.18709v1-robointer15-a-holistic-intermediate-representation-suite-for-embodied-world-modeling-and-robotic-manipulation)  
+   evidence：使用LLM作为数字世界模型生成合成轨迹
+7. [Active Inference as a Convex Markov Decision Process](/202607/23/2607.20152v1-active-inference-as-a-convex-markov-decision-process)  
    标签：评分：7.0/10、query:world-model
-   evidence：用于具身世界建模的中间表示套件
+   evidence：主动推理作为凸MDP，利用潜在动力学进行规划
 
 
 <div class="dpr-home-promo-card dpr-home-panel">

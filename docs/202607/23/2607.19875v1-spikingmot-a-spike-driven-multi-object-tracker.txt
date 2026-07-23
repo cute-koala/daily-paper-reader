@@ -1,0 +1,550 @@
+Title: SpikingMOT: A Spike-Driven Multi-Object Tracker
+
+URL Source: https://arxiv.org/pdf/2607.19875v1
+
+Published Time: Thu, 23 Jul 2026 00:42:06 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# SpikingMOT: A Spike-Driven Multi-Object Tracker 
+
+# Yiding Sun 1,2 , Xiangyang Yang 1, Dongxu Zhang 1, Qirui Wang 1, Zijie Xu 2, Wenxuan Liu 2,Shuiwang Li 3, Jihua Zhu 1, Zhaofei Yu 2, Tiejun Huang 2
+
+> 1
+
+Xi’an Jiaotong University 
+
+> 2
+
+Peking University 
+
+> 3
+
+Guilin University of Technology 
+
+Abstract 
+
+Multi-object tracking (MOT) plays a fundamental role in vi-sual perception, where accurate trajectory prediction is es-sential for reliable target association under complex motion patterns. Recent trackers have improved motion modeling with densely activated artificial neural networks, yet they largely overlook whether such dense responses are necessary for tra-jectory prediction. In this paper, we formulate activation spar-sity preference (ASP) by tackling two key questions: ① How can we identify a model architecture that appropriately and formally explains ASP, and ② How can we translate this ex-planation into competitive tracking performance. Theoreti-cal analysis shows that sparse gating is no worse than state-independent dropout under the same activation rate. Based on this insight, SpikingMOT is proposed as a spike-driven tracker that adaptively models sparse trajectory dynamics with spik-ing neural networks (SNNs). Specifically, SpikingMOT de-composes each trajectory state into pseudo-trajectory bases and uses the current prediction error to calibrate the posterior for next-frame prediction. With this brain-inspired loop, Spik-ingMOT achieves state-of-the-art performance in extensive experiments, e.g. 74.9 HOTA on SportsMOT and 56.5 HOTA on DanceTrack, while reducing the parameters and energy by 72% and 86.7%, respectively. These results bring SNNs into MOT, opening a promising direction for efficient tracking. 
+
+# Introduction 
+
+Multi-object tracking (MOT) is a fundamental task in com-puter vision, with broad applications in surveillance, au-tonomous driving (Sun et al. 2026a,b), and robotics (Guo et al. 2026; Wang et al. 2026). Under this topic, Tracking-by-detection (TBD) has become the dominant paradigm due to its concise design, which typically consists of two steps: 1) using an off-the-shelf detector to obtain object bounding boxes, and 2) tracking targets across frames with motion or appearance cues. Over the past decade, these two components have often been optimized separately while still complement-ing each other within a complete tracking system. Although classical TBD trackers instantiate this prior us-ing filter-based methods (Zhang et al. 2022; Bewley et al. 2016), such approaches often struggle to maintain reliable associations in complex scenarios (Sun et al. 2022). To overcome these challenges, learning-based methods, such as MambaTrack (Xiao et al. 2024a), have emerged as a promis-ing alternative and attracted considerable attention. Dense    
+
+> a) Quantitative observation b) Qualitative consequence
+
+ID Switch 
+
+ID Switch 
+
+> Sparse
+
+Maintain Maintain 
+
+Figure 1: Empirical evidence for ASP. (a) Tracking per-formance under progressively reduced activation rates in MambaTrack with all protocols fixed. Moderate suppression consistently improves HOTA within a nontrivial range. (b) Tracking cases showing that uniformly dense responses can amplify redundant motion cues and cause inaccurate pre-diction or identity switches, whereas moderate suppression preserves informative motion responses. Instead of relying on hand-crafted assumptions about reg-ular motion, MambaTrack employs an autoregressive predic-tor (Gu and Dao 2024) to learn motion dynamics from his-torical trajectories. Subsequent studies extend this paradigm through improved trajectory representations (Huang et al. 2025), adaptive association (Khanna et al. 2025), and flow-based decoding (Hu et al. 2026). Nevertheless, these methods still rely on densely activated artificial neural networks (ANNs), potentially introducing re-dundant motion responses and unnecessary computation. To examine whether dense activation is essential for trajectory prediction, we conduct a controlled dropout study on Mam-baTrack while keeping the remaining tracking pipeline un-changed. Fig. 1 indicates moderate suppression not only pre-serves performance but improves it within a nontrivial range. We term this tendency the Activation Sparsity Preference (ASP) , suggesting that sparse activations are not merely tol-erated by trajectory prediction, but can actively benefit it. Spiking neural networks (SNNs) perform event-driven computation through sparse binary spikes and stateful mem-brane dynamics, making them a natural architectural candi-date for realizing ASP. However, directly replacing an ANN motion predictor with a generic SNN backbone remains in-sufficient. Sparse firing determines whether a response is activated, but does not specify how heterogeneous motion arXiv:2607.19875v1 [cs.NE] 22 Jul 2026 Para (13.3M) Active Unit (100%) HOTA (72.6) Energy (26.9mJ)  
+
+> Para ( -72%) Active Unit ( -84.6%) Energy ( -86.7%) HOTA ( +2.3pp)
+> occluded turn linear
+> Mamba Block
+> Mamba Block
+> Spike Block
+> Spike Decoder
+> Spike Block
+> MambaTrack  SpikingMOT  (ours)
+> Mamba Block
+> occluded turn linear
+> Pred. + Post-Pred. Input: BBox (Dec.) Pred.
+> T
+
+Figure 2: Inspired by ASP, SpikingMOT replaces dense ANN-based trajectory modeling with sparse spiking dynam-ics, enabling efficient motion prediction. Red text highlight the characteristics and advantages of SpikingMOT. patterns should be organized into selectable hypotheses or how these hypotheses should be updated after new observa-tions. Effective tracking therefore requires two task-specific capabilities. One provides a structured motion representa-tion for sparse selection, while the other adapts the selected responses using online observations. Accordingly, we first show that state-conditioned sparse gating is no worse than state-independent dropout under the same activation rate (cf. Supp A) . Based on this insight, we propose SpikingMOT, the first spike-driven tracker for MOT. Specifically, building upon SNNs, we develop a brain-inspired strategy tailored to ASP, which consists of two al-ternating optimization steps: decomposition and calibration. Unlike a generic SNN, the decomposition step parses each trajectory box into multiple pseudo-trajectories, mimicking population coding in the brain (Pouget, Dayan, and Zemel 2000), where a continuous motion state is represented by a distributed set of selectively activated neural populations. Prediction-error calibration then connects two consecutive prediction steps. After association at frame f , it measures the residual between the predicted box and its matched de-tection. This residual adjusts the contribution of each motion basis, and the calibrated weights are carried forward to pre-dict frame f + 1 . In this way, the first component provides explicit motion candidates for sparse selection, while the sec-ond corrects that selection using newly observed motion. By iteratively performing these two steps, SpikingMOT adap-tively learns the motion distribution of each scene, thereby releasing the full potential of SNNs for trajectory prediction in Fig. 2. Our main contributions are fourfold. 
+
+• We explore the ASP phenomenon within MOT trajec-tory prediction and provide a biological plausibility from population coding and predictive coding. 
+
+• Building upon this insight, we propose SpikingMOT, the first spike-driven tracker for MOT, whose spatial-temporal dynamics provide adaptive sparse activations. 
+
+• Derived from the framework, we present a brain-inspired strategy for ASP, which introduces a pseudo-trajectory decomposition and a prediction-error calibration. 
+
+• Extensive experiments show that SpikingMOT exhibits superior performance, e.g. , it attains state-of-the-art HOTA of 74.9 on SportsMOT and 56.5 on DanceTrack, while reducing 72% parameters and 86.7% energy. 
+
+# Related Works 
+
+Multi-Object Tracking 
+
+MOT methods can be broadly grouped into two paradigms: TBD and joint detection and embedding (JDE). JDE meth-ods seek to fuse detection and tracking into a single network, whereas TBD methods typically decouple the pipeline into multiple modules. As an early attempt, Tracktor (Bergmann, Meinhardt, and Leal-Taixé 2019) uses the regression head of Faster R-CNN (Ren et al. 2015) to predict object locations in the next frame, but it struggles under low-frame-rate scenar-ios. JDE (Wang et al. 2020) extends a YOLO-based (Redmon et al. 2016) detector with an additional ReID branch to ex-tract identity embeddings, yet the detection and embedding objectives are considered to compete with each other during optimization. To alleviate this issue, FairMOT (Zhang et al. 2021) builds upon the anchor-free detector CenterNet (Zhou, Wang, and Krähenbühl 2019) and introduces a more balanced design, leading to improved tracking performance. With the advent of DETR (Carion et al. 2020), several methods have explored its cross-frame query mechanism for implicit asso-ciation. TransTrack (Sun et al. 2020), TrackFormer (Mein-hardt et al. 2022) and MOTR (Zeng et al. 2022) are among the first to bridge detection and tracking within this frame-work. Subsequent approaches further improve the paradigm from the perspectives of memory encoding (Cai et al. 2022) and background awareness. While the community has con-tinuously advanced detector architectures, limited attention has been paid to the design of the tracker itself. In this pa-per, SpikingMOT shifts the focus to the tracking stage and pioneers the first spike-driven tracker for MOT. 
+
+Motion Models in MOT 
+
+Motion is an inherent property of objects. Early classical MOT trackers, such as SORT (Bewley et al. 2016) and Deep-SORT (Wojke, Bewley, and Paulus 2017), rely on the Kalman filter (KF) (Kalman 1960) to predict each target’s inter-frame displacement. Later methods along this line refine the KF from different perspectives. For instance, OC-SORT (Cao et al. 2023) incorporates nonlinear motion cues, while Deep OC-SORT (Maggiolino et al. 2023) adaptively incorporates appearance cues into the observation-centric association pro-cess. Despite these advances, filter-based methods still de-pend heavily on predefined hyperparameters and often fail to generalize to real-world scenarios. As a successor, learning-based methods use data-driven models to mitigate the limita-tions. These approaches learn from an object’s historical tra-jectory and predict its future state with neural networks. Mo-tionTrack (Xiao et al. 2024b) demonstrates the feasibility of this direction with a Transformer architecture. DiffMOT (Lv et al. 2024) and DiffusionTrack (Luo et al. 2024a) reformulate motion prediction as a generative task and achieve strong per-formance. MambaTrack (Xiao et al. 2024a) and its variants further exploit hidden states for data diversity. Nevertheless, existing models rarely question whether dense motion mod-eling is necessary for trajectory prediction. To investigate this question, SpikingMOT explores the ASP phenomenon and introduces sparse spikes as an effective solution. 
+
+SNNs in Vision Tasks 
+
+In recent years, SNN methods have shown remarkable progress across a wide range of tasks, achieving performance comparable to that of ANNs (Hu, Tang, and Pan 2023). Their applications span image classification (Yao et al. 2023, 2025), object detection (Luo et al. 2024b; Li et al. 2025; Liu et al. 2025, 2021; Qu et al. 2025), semantic segmentation (Lei et al. 2025), video classification (Zou et al. 2025), reinforcement learning (Xu et al. 2025, 2026), temporal prediction (Dong et al. 2026) and object tracking (Zhang et al. 2026; Shan et al. 2026). Existing SNN-based MOT methods either operate on event streams (Wang et al. 2025) or retain a Kalman filter for motion prediction (Zhong et al. 2026). In contrast, our SpikingMOT introduces spike-driven motion prediction for RGB-based MOT and, together with SpikeYOLO, enables fully spike-driven tracking under the TBD paradigm. 
+
+# Method 
+
+SpikingMOT contains two task-specific components. Motion-basis decomposition constructs candidate displace-ments and performs spike-gated reconstruction, while prediction-error calibration updates their contributions for the next frame. Fig. 3 illustrates the overall framework. 
+
+Problem Formulation 
+
+Given a video sequence {Vf }Ff =1 and an object detector D,the detector produces candidate observations at frame f :
+
+Zf = D(Vf ) = {(zjf , s jf )}Nf
+
+> j=1
+
+, zjf = ( cjx,f , c jy,f , w jf , h jf )⊤,
+
+(1) where sjf is the detection confidence. We denote the state of track τi at frame f by xif = ( cix,f , c iy,f , w if , h if )⊤. The goal is to output a trajectory set TF = {τi}NT
+
+> i=1
+
+, where each tracklet stores its associated box states and identity label. For each track τi ∈ T f −1, SpikingMOT predicts the next box from its history and the calibrated basis posterior from the previous frame: 
+
+ˆxif = Φ Θ
+
+ Xif −H:f −1; ¯ aif −1
+
+ , Xif −H:f −1 = {xim}f −1  
+
+> m=f−H
+
+,
+
+(2) where ΦΘ is the motion predictor and H denotes the history length. For a track initialized at frame f init  
+
+> i
+
+, we use the uni-form prior ¯aif init   
+
+> i−1,k
+
+= 1 /K for k = 1 , . . . , K . where K is the number of motion bases. During training, the current prediction is supervised by the ground-truth box at frame f , while the calibrated posterior after frame f is further required to improve the next-step prediction: 
+
+min  
+
+> Θ,B
+
+Ltrain = 1
+
+|S| 
+
+X 
+
+> (i,f )∈S
+
+h
+
+ℓ ˆxif , xif
+
+ + α ℓ 
+
+
+
+ˆxi, cal  
+
+> f+1
+
+, xif +1 
+
+ i 
+
++ βRspk + μRdiv .
+
+(3) Here, S denotes trajectory segments with available states at frames f and f +1 . ℓ(·) is the box prediction loss (Rezatofighi et al. 2019; Girshick et al. 2014). α, β, and μ balance the loss terms. The spike sparsity and basis diversity regularizers are 
+
+Rspk = 12|S| KT 
+
+X 
+
+> (i,f )∈S
+
+X 
+
+> q∈{ f,f +1 }
+> K
+
+X
+
+> k=1
+> T
+
+X
+
+> t=1
+
+oi,t q,k , (4) 
+
+Rdiv = 1
+
+K(K − 1) 
+
+> K
+
+X 
+
+> k,m =1
+> k̸=m
+
+ b⊤ 
+
+> k
+
+bm
+
+∥bk∥2∥bm∥2 + ϵ
+
+2
+
+, (5) where B = {bk}Kk=1 is the learnable motion-basis dictio-nary and ϵ > 0 is used for numerical stability. Θ collects the parameters of the trajectory encoder and all projection, displacement, and calibration heads. 
+
+Trajectory-State Encoding 
+
+Raw boxes contain scene-dependent coordinates and object scales. To obtain a transferable motion state, we encode rel-ative box variations rather than absolute positions. For two consecutive boxes, the normalized displacement is 
+
+rim = ∆cix,m 
+
+wim−1
+
+, ∆ciy,m 
+
+him−1
+
+, log wim
+
+wim−1
+
+, log him
+
+him−1
+
+!⊤
+
+, (6) where ∆cix,m = cix,m −cix,m −1 and ∆ciy,m = ciy,m −ciy,m −1.The recent motion sequence is encoded as 
+
+hif = EΘ
+
+ [rif −H+1 , . . . , rif −1] ∈ Rdh , (7) where hif summarizes the motion state before frame f , and 
+
+EΘ denotes the trajectory-state encoder. 
+
+Motion-Basis Decomposition 
+
+Basis-conditioned motion candidates. The ASP observa-tion suggests that only a small subset of motion components is needed for each prediction. We first express this objective as sparse selection over a conceptual binary support sif :
+
+min  
+
+> sif∈{ 0,1}K
+
+ℓ xif −1 ⊕
+
+> K
+
+X
+
+> k=1
+
+ωif,k δif,k , xif
+
+!
+
+s.t. 1 ≤ ∥ sif ∥0 ≪ K, ωif,k = aif,k sif,k 
+
+PKm=1 aif,m sif,m 
+
+.
+
+(8) Here, δif,k is the displacement proposed by basis k. In prac-tice, the binary support is implemented by the effective spike gate introduced below. Inspired by population coding (Pouget, Dayan, and Zemel 2000), SpikingMOT decomposes the encoded motion state Video 
+
+Detector 
+
+Normlization 
+
+Spike Encoder 
+
+> Pseudo-trajectory Decomposition
+
+Calibration 
+
+Spike Gates 
+
+> Gating
+
+Spike Decoder 
+
+Decomposition 
+
+> Prediction-error Calibration
+> Cal → Ground Truth @ f+1
+
+Spike Calibration Head 
+
+> Motion Basis
+> Similarity Calculation @ f-H:f-1
+
+## × × × × × × × 
+
+## × × × × × × ×
+
+## × × × ××××
+
+Softmax        
+
+> xywh
+> Former Posterior
+> Activate basis 2
+> Suppress others
+> Feature GT @ f
+
+Figure 3: Overview of SpikingMOT. Given historical boxes of each active track, SpikingMOT encodes the recent trajectory, decomposes the motion state into pseudo-trajectory bases, selects informative bases through LIF spike firing, reconstructs a motion prior for association, and uses the matched detection residual to calibrate future basis responses. into K basis-conditioned motion responses. The calibrated posterior from the previous frame is injected as a track-specific prior. 
+
+δif,k = PΘ
+
+ hif , bk
+
+ ∈ R4. (9) Each basis produces a one-step candidate displacement, whose successive selection and propagation across frames form a pseudo-trajectory. 
+
+Spike-gated reconstruction. The dense basis posterior is di-rectly encoded as Ii,t f,k = aif,k for t = 1 , . . . , T and passed to a LIF neuron. The membrane dynamics are (Neftci, Mostafa, and Zenke 2019) 
+
+˜ui,t f,k = λu i,t −1 
+
+> f,k
+
++ Ii,t f,k , oi,t f,k = H
+
+
+
+˜ui,t f,k − ϑ
+
+
+
+,ui,t f,k = ˜ ui,t f,k − ϑo i,t f,k .
+
+(10) Here, u and ˜u are the post-reset and pre-reset membrane potentials, λ is the leakage factor, ϑ is the firing threshold, and oi,t f,k ∈ { 0, 1} is the emitted spike. During backpropaga-tion, the derivative of H is approximated using a surrogate gradient (cf. Supp D.1) .The emitted spikes are aggregated into a bounded gate: 
+
+gif,k = 1
+
+D clip 
+
+> T
+
+X
+
+> t=1
+
+oi,t f,k , 0, D 
+
+!
+
+, gif,k ∈ [0 , 1] , (11) where D is maximum integer value emitted during training. The effective basis weights and reconstructed motion are 
+
+ωif,k = aif,k ˜gif,k 
+
+PKm=1 aif,m ˜gif,m 
+
+,
+
+b∆if =
+
+> K
+
+X
+
+> k=1
+
+ωif,k δif,k , ˆxif = xif −1 ⊕ b∆if .
+
+(12) The predicted boxes are matched with detections using Hun-garian assignment (Kuhn 1955). We follow the association cost, confidence filtering, and matching thresholds of Mam-baTrack. 
+
+Prediction-Error Calibration 
+
+Following the predictive-coding view that residual errors provide corrective signals for internal predictions (Rao and Ballard 1999), SpikingMOT uses the matched detection residual to recalibrate the basis posterior for future motion prediction. For a matched pair (τi, zjf ), we compute a scale-normalized box residual: 
+
+eif = cjx,f − ˆcix,f 
+
+ˆwif
+
+, cjy,f − ˆciy,f 
+
+ˆhif
+
+, log wjf
+
+ˆwif
+
+, log hjf
+
+ˆhif
+
+!⊤
+
+.
+
+(13) During training, the observation in Eq. (13) is the ground-truth box with known identity correspondence. During infer-ence, it is the detection obtained through Hungarian assign-ment. The calibration head predicts a logit correction for all bases: 
+
+∆ηif = CΘ
+
+ [hif ; eif ; aif ; ˜ gif ] ∈ RK . (14) The calibrated posterior is 
+
+¯aif = softmax  log( aif + ϵ) + ∆ ηif
+
+ . (15) For an unmatched active track, no error correction is applied and we set ¯aif = aif . The calibrated posterior is carried to the next prediction step: 
+
+ˆxi, cal   
+
+> f+1
+
+= Φ Θ
+
+ Xif −H+1: f ; ¯ aif
+
+ . (16) Thus, the residual observed at frame f updates the basis prior used to predict frame f + 1 , forming a closed loop between motion prediction and error-driven basis selection 
+
+(cf. Supp B) .Tracker Efficiency DanceTrack SportsMOT Para. Eng. T×D HOTA ↑ IDF1 ↑ AssA ↑ MOTA ↑ HOTA ↑ IDF1 ↑ AssA ↑ MOTA ↑
+
+> KF
+
+*SMTrack-SY 23 M N/A N/A N/A 37.7 38.5 27.5 70.6 43.3 48.9 37.6 66.5 SMTrack-SY 69 M N/A N/A N/A 42.7 43.4 27.8 74.6 57.5 56.2 43.9 82.8 FairMOT N/A N/A N/A 39.7 40.8 23.8 82.2 49.3 53.5 34.7 86.4 ByteTrack N/A N/A N/A 47.7 53.9 32.1 89.6 63.4 70.3 51.3 95.7 OC-SORT N/A N/A N/A 55.1 54.6 38.3 92.0 73.7 74.0 61.5 96.5 ANN QDTrack N/A N/A N/A 54.2 50.4 36.8 87.7 60.4 62.3 47.2 90.1 GTR N/A N/A N/A 48.0 50.3 31.9 84.7 54.5 55.8 45.9 67.9 TransTrack N/A N/A N/A 45.5 45.2 27.5 88.4 68.9 71.5 57.5 92.6 MotionTrack 25.2 55.8 N/A - - - - 74.0 74.0 61.7 96.6 *SportMamba 19.3 32.2 N/A 51.8 49.5 37.5 88.7 74.3 74.7 63.8 96.9 
+
+DiffMOT 14.6 21.9 N/A 56.1 55.7 38.5 92.2 72.1 72.8 60.5 94.5 MambaMOT+ 6.5 19.1 N/A 56.1 54.9 39.0 90.3 71.3 71.1 58.6 94.9 MambaTrack 13.3 26.9 N/A 55.8 56.8 39.8 90.1 72.6 72.8 60.3 95.3 *TrackSSM 5.1 17.4 N/A 52.7 53.5 41.0 88.2 74.4 74.5 62.4 95.3 SNN (ours)  SpikingMOT-SY 23 M
+
+3.6 2.2 4×1 40.2 40.1 26.2 73.1 48.8 50.4 39.7 72.3 3.6 1.6 1×1 41.5 42.6 27.6 73.8 49.4 51.3 40.6 72.8 SpikingMOT-SY 69 M
+
+3.6 3.2 4×1 45.2 45.0 30.4 76.6 54.7 54.7 45.1 89.1 3.6 2.3 1×1 46.6 47.1 32.2 79.1 55.4 56.7 46.4 89.1 SpikingMOT-YL 104 M
+
+3.6 5.4 4×1 53.7 52.7 36.1 91.1 74.9 75.8 63.6 95.4 
+
+3.6 3.6 1×1 56.5 55.7 39.8 91.2 74.9 75.9 63.7 95.4 
+
+Table 1: Comparison of performance and efficiency across tracking methods. Para. and Eng. denote parameters (M) and energy (mJ), respectively; T and D represent the timestep and maximum integer value emitted during training. Results marked with ∗ are reproduced by us. SY means SpikeYOLO, YL means YOLOX. All metrics are reported in percentage (%). Para. 
+
+counts only the learnable parameters of the motion predictor, while Eng. reports per-frame energy under the corresponding detector. The top two comparable results are highlighted in bold and underlined, respectively. Same for subsequent tables. 
+
+# Experiments 
+
+Implementation Details 
+
+Metrics. Following standard evaluation protocols, we report HOTA (Luiten et al. 2021), MOTA (Bernardin and Stiefel-hagen 2008), IDF1 (Ristani et al. 2016), AssA, MOTP, and Energy (cf. Supp C) . HOTA serves as the metric by jointly assessing detection and association quality. MOTA summa-rizes false positives, false negatives, and identity switches, while IDF1 evaluates identity preservation over complete trajectories. AssA isolates the accuracy of associations, and MOTP measures bounding-box localization precision. 
+
+Training. All spiking layers employ soft-reset LIF neu-rons, whose membrane states are initialized independently for each tracklet (cf. Supp D.1, D.2) . We use a history length of H = 5 and K = 8 pseudo-trajectory bases. The loss weights are set to α = 1 .0, β = 10 −3, μ = 10 −2, and 
+
+ϵ = 10 −6 (cf. Supp D.3) . For fair comparison, the training schedules and association hyperparameters follow MambaT-rack (Xiao et al. 2024a) and TrackSSM (Hu et al. 2026). Since the publicly available SpikeYOLO (Luo et al. 2024b) models were not trained on SportsMOT or SeaDroneSee, we initialize them from COCO-pretrained (Lin et al. 2014) weights and fine-tune the SY 23 M and SY 69 M variants sepa-rately on each dataset. The detection head is adapted to the target category, while the original SpikeYOLO optimization and augmentation protocol is retained. The detector and mo-tion predictor are trained separately, and the best validation checkpoint is used for tracking evaluation. All experiments are conducted on a single NVIDIA RTX 3080Ti GPU. 
+
+Benchmark Results 
+
+Tables 1 and 2 compare SpikingMOT with representative KF-based (Zhong et al. 2026; Zhang et al. 2022), ANN-based (Pang et al. 2021; Zhou et al. 2022; Sun et al. 2020; Xiao et al. 2024b; Khanna et al. 2025; Huang et al. 2025; Hu et al. 2026), and spike-driven trackers across four bench-marks with substantially different motion characteristics. 
+
+DanceTrack (Sun et al. 2022) is association-sensitive because dancers exhibit similar appearances, frequent crossings, and highly non-linear movements. SpikingMOT achieves the strongest HOTA, although it does not obtain the highest MOTA. This discrepancy mainly arises from more reliable temporal association rather than simply retaining more detections. By representing motion through selectively activated pseudo-trajectory bases, SpikingMOT can adapt between different local motion patterns instead of forcing rapidly changing trajectories into a dense transition model. 
+
+SportsMOT (Cui et al. 2023) contains rapid accelera-tion, abrupt direction changes, and visually similar players, making motion prediction a central bottleneck. SpikingMOT achieves the best overall balance of HOTA, IDF1, and AssA, Tracker Efficiency SeaDroneSee MOT17 Para. Eng. T×D HOTA ↑ IDF1 ↑ MOTP ↑ MOTA ↑ HOTA ↑ IDF1 ↑ AssA ↑ MOTA ↑
+
+> KF
+
+DeepSORT w/ ECC N/A N/A N/A 66.6 77.2 18.8 80.0 - - - -ByteTrack N/A N/A N/A 65.0 77.3 20.9 76.9 62.8 76.8 62.1 78.7 DeepSORT N/A N/A N/A 62.7 72.0 20.1 77.2 63.8 78.3 62.2 80.3 
+
+OC-SORT N/A N/A N/A 60.8 69.2 18.5 72.4 63.2 77.5 63.4 78.0 FairMOT R34 N/A N/A N/A - 40.8 27.3 30.5 - - - -FairMOT D34 N/A N/A N/A - 43.8 20.9 36.5 59.3 72.3 58.0 73.7 ANN  *MambaTrack 13.3 26.9 N/A 68.5 76.8 36.2 79.8 60.1 72.9 58.4 77.1 Tracktor 60.9 111.3 N/A 46.1 49.9 21.4 47.8 52.2 64.7 51.0 67.8 Tracktor++ 87.0 114.4 N/A - 80.5 20.1 71.9 - - - -SNN (ours)  SpikingMOT-SY 23 M
+
+3.6 2.2 4×1 50.3 55.7 23.8 52.5 52.9 64.0 51.0 69.2 3.6 1.6 1×1 50.5 55.9 23.9 52.8 52.7 63.9 50.8 69.1 SpikingMOT-SY 69 M
+
+3.6 3.2 4×1 59.7 64.2 31.9 61.8 54.1 61.2 49.9 72.2 3.6 2.3 1×1 59.8 64.3 32.4 62.0 53.8 61.0 49.9 72.1 SpikingMOT-YL 104 M
+
+3.6 5.4 4×1 69.1 79.4 38.8 82.1 61.4 74.4 59.5 78.9 
+
+3.6 3.6 1×1 69.0 78.8 38.2 82.6 61.3 74.3 59.0 78.9 
+
+Table 2: Comparison of performance and efficiency across tracking methods. Para. and Eng. denote parameters (M) and energy (mJ), respectively. SY means SpikeYOLO, YL means YOLOX. All metrics are reported in percentage (%). 
+
+Figure 4: Qualitative comparison of SpikingMOT in DanceTrack and SportsMOT dataset. with its advantage becoming more evident when paired with a stronger detector. As localization becomes reliable, associ-ation increasingly depends on the ability to represent motion hypotheses, which is precisely addressed by SpikingMOT through brain-inspired strategies. 
+
+SeaDroneSee (Varga et al. 2022) presents distinct chal-lenges, including aerial viewpoints, small targets, and camera-induced motion. SpikingMOT remains strong in both tracking and localization, indicating that prediction error pro-vides an effective online reliability signal for selecting ap-propriate motion dynamics under uncertain observations. 
+
+MOT17 (Dendorfer et al. 2021) is dominated by crowded pedestrian scenes and appearance ambiguity, while pedes-trian motion is generally more regular. The result clarifies that adaptive sparse motion modeling is most effective when complex dynamics dominate association errors, but offers less benefit under prolonged occlusion and severe appearance ambiguity. Nevertheless, SpikingMOT achieves comparable performance with substantially lower model complexity and energy consumption, demonstrating its general applicability beyond highly dynamic scenarios. 
+
+Ablation Study 
+
+Sparse ANN alternatives. Table 3a shows that sparsity alone cannot explain the advantage of SpikingMOT. Conventional strategies suppress responses through random masking or parameter shrinkage, without considering the current motion state. In contrast, SpikingMOT adapts its firing pattern to the evolving trajectory, indicating that performance depends not on how many responses are removed, but on whether the retained responses match the current dynamics. 
+
+Core components. Table 3b clarifies the complementary roles of the proposed components. Pseudo-trajectory decom-position provides diverse motion hypotheses, spiking dynam-ics select relevant ones, and prediction-error calibration up-dates this selection using online observations. Together, they form a closed-loop sparse motion inference process. 
+
+Number of motion bases. Table 3c reveals a trade-off between motion diversity and basis redundancy. SR denotes the mean spike firing rate. Too few bases limit expressive-(a) Sparse ANN alternatives.                                                             
+
+> Tracker HOTA ↑MOTA ↑
+> Dense ANN 72.6 95.3 + Dropout 73.6 95.2 +ℓ1Sparsity 72.9 95.1 + Top-kPruning 73.1 95.2
+> SpikingMOT 74.9 95.4
+> (b) Core components.
+> Module HOTA ↑MOTA ↑
+> Spike Decomp. Calib. 72.6 95.3
+> ✓73.3 95.2
+> ✓✓74.1 95.3
+> ✓✓✓74.9 95.4
+> (c) Basis number.
+> KEng. SR HOTA ↑
+> 13.1 22.6 73.3 43.5 17.8 74.6 83.6 15.4 74.9
+> 16 3.9 16.1 74.7 32 4.4 18.7 74.3
+> (d) Neuron types.
+> Neuron HOTA ↑MOTA ↑
+> IF 73.6 95.1 LIF 74.9 95.4
+> PLIF 74.6 95.3 ALIF 74.2 95.2
+
+Table 3: Ablation studies on SportsMOT.                     
+
+> Detector Tracker MOTA ↑IDF1 ↑
+> SY 23 M
+> KF 63.5 44.7 MambaTrack 66.1 50.5
+> SpikingMOT 72.8 51.3
+> SY 69 M
+> KF 83.2 45.5 MambaTrack 88.4 55.9
+> SpikingMOT 89.1 56.7
+> YL 104 M
+> KF 92.0 71.0 MambaTrack 95.3 72.8
+> SpikingMOT 95.4 75.9
+
+Table 4: Detector-wise tracking per-formance of SpikingMOT over KF and MambaTrack on SportsMOT. 0 1 2 3 4
+
+> 23M
+> 69M
+> 104M
+> +0.8
+> +0.7
+> +0.9
+> +0.5
+> +2.3
+> +3.4
+> Gain (pp)
+> ΔHOTA
+> ΔAssA
+
+Figure 5: Detector-wise gain over Mam-baTrack. ness, whereas too many introduce overlapping hypotheses and unnecessary firing. A moderate basis set therefore pro-vides sufficient motion diversity while preserving selective and energy-efficient activation. 
+
+Spiking neuron types. Table 3d shows that neuron dy-namics should remain sufficiently simple for motion predic-tion. IF lacks temporal leakage, while PLIF (Fang et al. 2021) and ALIF (Bellec et al. 2018) introduce additional adap-tive parameters that may overfit limited trajectory histories. LIF provides a better balance by retaining short-term motion memory through fixed leakage without adding unnecessary optimization complexity. 
+
+Generalization across detectors. Table 4 and Fig. 5 eval-uate different motion predictors on SportsMOT while fixing the detector outputs and association protocol. SpikingMOT consistently outperforms the Kalman filter and MambaT-rack across detectors, showing that its gains are not detector-specific. This suggests that as detection noise decreases, mo-tion modeling becomes a more critical bottleneck. By se-lectively activating informative motion bases and adapting them through prediction errors, SpikingMOT better converts accurate detections into reliable identity associations. 
+
+Temporal influence analysis. Given a track history, the reference prediction is obtained from the original sequence. For each historical frame τ , we replace only its observation with temporal interpolation from the remaining history, rerun the model, and measure the influence of τ by the ℓ2 distance between the reference and perturbed predictions. The result-ing influence values are normalized within each model. As shown in Fig. 6, LSTM mainly depends on recent frames, 0 200 400 600 800 1000 1200       
+
+> Pixels
+> 0200 400 600 800 1000 1200
+> Historical frame index
+> SpikingMOT
+> Mamba
+> Transformer
+> 500
+> 0
+> LSTM
+
+Figure 6: Temporal influence of different motion models. 
+
+The upper curve shows the historical displacement in Dance-Track0005, and the lower heatmaps indicate the contribution of each historical frame to the current prediction. Mamba distributes influence broadly, and Transformer ex-hibits scattered responses. In contrast, SpikingMOT forms a sparse yet non-myopic pattern, focusing on salient motion changes while suppressing redundant observations. 
+
+Qualitative results. As shown in Fig. 4, SpikingMOT maintains more consistent identities under crowded interac-tions, abrupt motion changes, and partial occlusions on both benchmarks. Compared with competing trackers, it produces fewer identity switches and more stable trajectories when ap-pearance cues become ambiguous (cf. Supp D.4) .
+
+# Conclusion 
+
+This paper investigates the ASP phenomenon in MOT tra-jectory prediction. We formulate sparse motion modeling through SNNs and propose SpikingMOT, a spike-driven tracker that refines trajectory prediction via motion-basis de-composition and prediction-error calibration. Across diverse benchmarks, SpikingMOT demonstrates significant perfor-mance improvement over ANN baselines with superior ef-ficiency. Our results suggest that MOT trackers should treat sparsity as a learnable principle for motion reasoning. One limitation is that energy consumption is estimated from op-eration counts rather than measured on neuromorphic hard-ware. Future work will pursue deployment on neuromorphic chips (Pei et al. 2019) and evaluation with spike-camera data (Huang et al. 2023) in real-world scenarios. Acknowledgments References 
+
+Bellec, G.; Salaj, D.; Subramoney, A.; Legenstein, R.; and Maass, W. 2018. Long Short-Term Memory and Learning-to-Learn in Networks of Spiking Neurons. In NeurIPS , vol-ume 31. Bergmann, P.; Meinhardt, T.; and Leal-Taixé, L. 2019. Track-ing Without Bells and Whistles. In ICCV , 941–951. Bernardin, K.; and Stiefelhagen, R. 2008. Evaluating Multi-ple Object Tracking Performance: The CLEAR MOT Met-rics. JIVP , 2008: 1–10. Bewley, A.; Ge, Z.; Ott, L.; Ramos, F.; and Upcroft, B. 2016. Simple Online and Realtime Tracking. In ICIP , 3464–3468. Cai, J.; Xu, M.; Li, W.; Xiong, Y.; Xia, W.; Tu, Z.; and Soatto, S. 2022. MeMOT: Multi-Object Tracking with Memory. In 
+
+CVPR , 8090–8100. Cao, J.; Pang, J.; Weng, X.; Khirodkar, R.; and Kitani, K. 2023. Observation-Centric SORT: Rethinking SORT for Robust Multi-Object Tracking. In CVPR , 9686–9696. Carion, N.; Massa, F.; Synnaeve, G.; Usunier, N.; Kirillov, A.; and Zagoruyko, S. 2020. End-to-End Object Detection with Transformers. In ECCV , 213–229. Cui, Y.; Zeng, C.; Zhao, X.; Yang, Y.; Wu, G.; and Wang, L. 2023. SportsMOT: A Large Multi-Object Tracking Dataset in Multiple Sports Scenes. In ICCV , 9921–9931. Dendorfer, P.; Ošep, A.; Milan, A.; Schindler, K.; Cremers, D.; Reid, I.; Roth, S.; and Leal-Taixé, L. 2021. MOTChal-lenge: A Benchmark for Single-Camera Multiple Target Tracking. IJCV , 129(4): 845–881. Dong, Y.; Ding, J.; Xu, Z.; Bu, T.; Yu, Z.; and Huang, T. 2026. PredNext: Explicit Cross-View Temporal Prediction for Unsupervised Learning in Spiking Neural Networks. In 
+
+ICLR .Fang, W.; Yu, Z.; Chen, Y.; Masquelier, T.; Huang, T.; and Tian, Y. 2021. Incorporating Learnable Membrane Time Constant to Enhance Learning of Spiking Neural Networks. In ICCV , 2661–2671. Girshick, R.; Donahue, J.; Darrell, T.; and Malik, J. 2014. Rich Feature Hierarchies for Accurate Object Detection and Semantic Segmentation. In CVPR , 580–587. Gu, A.; and Dao, T. 2024. Mamba: Linear-Time Sequence Modeling with Selective State Spaces. In COLM .Guo, Z.; Zhu, J.; Liu, J.; and Mian, A. S. 2026. Mantis: Mamba-Native Tuning is Efficient for 3D Point Cloud Foun-dation Models. arXiv preprint arXiv:2605.03438 .Hu, B.; Luo, R.; Liu, Z.; Wang, C.; and Liu, W. 2026. TrackSSM: A General Motion Predictor Using a State Space Model. Science China Information Sciences , 69(5): 152105. Hu, Y.; Tang, H.; and Pan, G. 2023. Spiking Deep Residual Networks. TNNLS , 34(8): 5200–5205. Huang, H.-W.; Yang, C.-Y.; Chai, W.; Jiang, Z.; and Hwang, J.-N. 2025. MambaMOT: State-Space Model as Motion Predictor for Multi-Object Tracking. In ICASSP .Huang, T.; et al. 2023. 1000 × Faster Camera and Machine Vision with Ordinary Devices. Engineering , 25: 110–119. Kalman, R. E. 1960. A New Approach to Linear Filtering and Prediction Problems. Journal of Basic Engineering , 82(1): 35–45. Khanna, D.; Bright, J.; Chen, Y.; and Zelek, J. S. 2025. SportMamba: Adaptive Non-Linear Multi-Object Tracking with State Space Models for Team Sports. In CVPRW , 6189– 6199. Kuhn, H. W. 1955. The Hungarian Method for the Assign-ment Problem. Naval Research Logistics Quarterly , 2(1–2): 83–97. Lei, Z.; Yao, M.; Hu, J.; Luo, X.; Lu, Y.; Xu, B.; and Li, G. 2025. Spike2Former: Efficient Spiking Transformer for High-Performance Image Segmentation. In AAAI , vol-ume 39, 1364–1372. Li, C.; Liu, W.; Gong, G.; Ding, X.; and Zhong, X. 2025. SU-YOLO: Spiking Neural Network for Efficient Underwater Object Detection. Neurocomputing , 644: 130310. Lin, T.-Y.; Maire, M.; Belongie, S.; Hays, J.; Perona, P.; Ramanan, D.; Dollár, P.; and Zitnick, C. L. 2014. Microsoft COCO: Common Objects in Context. In ECCV , 740–755. Liu, Q.; Xing, D.; Tang, H.; Ma, D.; and Pan, G. 2021. Event-Based Action Recognition Using Motion Information and Spiking Neural Networks. In IJCAI , 1743–1749. Liu, W.; Deng, Y.; Chen, K.; Zhong, X.; Yu, Z.; and Huang, T. 2025. SOTA: Spike-Navigated Optimal Transport Saliency Region Detection in Composite-Bias Videos. In IJCAI ,1621–1629. Luiten, J.; Osep, A.; Dendorfer, P.; Torr, P.; Geiger, A.; Leal-Taixé, L.; and Leibe, B. 2021. Hota: A higher order metric for evaluating multi-object tracking. IJCV , 129(2): 548–578. Luo, R.; Song, Z.; Ma, L.; Wei, J.; Yang, W.; and Yang, M. 2024a. DiffusionTrack: Diffusion Model for Multi-Object Tracking. In AAAI , volume 38, 3991–3999. Luo, X.; Yao, M.; Chou, Y.; Xu, B.; and Li, G. 2024b. Integer-Valued Training and Spike-Driven Inference Spiking Neural Network for High-Performance and Energy-Efficient Object Detection. In ECCV , Lecture Notes in Computer Science, 253–272. Springer. Lv, W.; Huang, Y.; Zhang, N.; Lin, R.-S.; Han, M.; and Zeng, D. 2024. DiffMOT: A Real-Time Diffusion-Based Multi-ple Object Tracker with Non-Linear Prediction. In CVPR ,19321–19330. Maggiolino, G.; Ahmad, A.; Cao, J.; and Kitani, K. 2023. Deep OC-SORT: Multi-Pedestrian Tracking by Adaptive Re-Identification. In ICIP , 3025–3029. Meinhardt, T.; Kirillov, A.; Leal-Taixé, L.; and Feichten-hofer, C. 2022. TrackFormer: Multi-Object Tracking with Transformers. In CVPR , 8844–8854. Neftci, E. O.; Mostafa, H.; and Zenke, F. 2019. Surrogate Gradient Learning in Spiking Neural Networks: Bringing the Power of Gradient-Based Optimization to Spiking Neural Networks. IEEE Signal Processing Magazine , 36(6): 51–63. Pang, J.; Qiu, L.; Li, X.; Chen, H.; Li, Q.; Darrell, T.; and Yu, F. 2021. Quasi-Dense Similarity Learning for Multiple Object Tracking. In CVPR , 164–173. Pei, J.; Deng, L.; Song, S.; Zhao, M.; Zhang, Y.; Wu, S.; Wang, G.; Zou, Z.; Wu, Z.; He, W.; Chen, F.; Deng, N.; Wu, S.; Wang, Y.; Wu, Y.; Yang, Z.; Ma, C.; Li, G.; Han, W.; Li, H.; Wu, H.; Zhao, R.; Xie, Y.; and Shi, L. 2019. Towards artificial general intelligence with hybrid Tianjic chip architecture. Nature , 572(7767): 106–111. Pouget, A.; Dayan, P.; and Zemel, R. S. 2000. Information Processing with Population Codes. Nature Reviews Neuro-science , 1(2): 125–132. Qu, J.; Gao, Z.; Zhang, T.; Lu, Y.; Tang, H.; and Qiao, H. 2025. Spiking Neural Network for Ultralow-Latency and High-Accurate Object Detection. TNNLS , 36(3): 4934–4946. Rao, R. P. N.; and Ballard, D. H. 1999. Predictive Cod-ing in the Visual Cortex: A Functional Interpretation of Some Extra-Classical Receptive-Field Effects. Nature Neu-roscience , 2(1): 79–87. Redmon, J.; Divvala, S.; Girshick, R.; and Farhadi, A. 2016. You Only Look Once: Unified, Real-Time Object Detection. In CVPR , 779–788. Ren, S.; He, K.; Girshick, R.; and Sun, J. 2015. Faster R-CNN: Towards Real-Time Object Detection with Region Pro-posal Networks. In NeurIPS , 91–99. Rezatofighi, H.; Tsoi, N.; Gwak, J.; Sadeghian, A.; Reid, I.; and Savarese, S. 2019. Generalized Intersection over Union: A Metric and a Loss for Bounding Box Regression. In CVPR ,658–666. Ristani, E.; Solera, F.; Zou, R. S.; Cucchiara, R.; and Tomasi, C. 2016. Performance Measures and a Data Set for Multi-Target, Multi-Camera Tracking. In ECCV Workshops , 17–35. Shan, Y.; Ren, Z.; Wu, H.; Wei, W.; Zhu, R.-J.; Wang, S.; Zhang, D.; Xiao, Y.; Zhang, J.; Shi, K.; et al. 2026. Sd-track: A baseline for event-based tracking via spiking neural networks. In CVPR , 36245–36254. Sun, P.; Cao, J.; Jiang, Y.; Yuan, Z.; Bai, S.; Kitani, K.; and Luo, P. 2022. DanceTrack: Multi-Object Tracking in Uniform Appearance and Diverse Motion. In CVPR , 20993–21002. Sun, P.; Cao, J.; Jiang, Y.; Zhang, R.; Xie, E.; Yuan, Z.; Wang, C.; and Luo, P. 2020. TransTrack: Multiple Object Tracking with Transformer. CoRR , abs/2012.15460. Sun, Y.; Zhang, D.; Zhu, J.; Cheng, H.; Li, Z.; Li, P.; Fang, C.; Dong, Y.; and Chen, L. 2026a. Tri-Efficient Transfer Learning for Point Cloud Videos. In ECCV .Sun, Y.; Zhu, J.; Cheng, H.; Lu, C.; Yang, Z.; Chen, L.; and Wang, Y. 2026b. Align then Adapt: Rethinking Parameter-Efficient Transfer Learning in 4D Perception. TMM .Varga, L. A.; Kiefer, B.; Messmer, M.; and Zell, A. 2022. SeaDronesSee: A Maritime Benchmark for Detecting Hu-mans in Open Water. In WACV , 2260–2270. Wang, S.; Wang, Z.; Li, C.; Qi, X.; and So, H. K.-H. 2025. SpikeMOT: Event-Based Multi-Object Tracking With Sparse Motion Features. IEEE Access , 13: 214–230. Wang, Y.; Sun, Y.; Wang, Q.; Li, P.; Lu, C.; and Zhang, D. 2026. PointRFT: Explicit Reinforcement Fine-Tuning for Point Cloud Few-Shot Learning. In ICME .Wang, Z.; Zheng, L.; Liu, Y.; Li, Y.; and Wang, S. 2020. Towards Real-Time Multi-Object Tracking. In ECCV , 107– 122. Wojke, N.; Bewley, A.; and Paulus, D. 2017. Simple Online and Realtime Tracking with a Deep Association Metric. In 
+
+ICIP , 3645–3649. Xiao, C.; Cao, Q.; Luo, Z.; and Lan, L. 2024a. MambaTrack: A Simple Baseline for Multiple Object Tracking with State Space Model. In ACM MM , 4082–4091. Xiao, C.; Cao, Q.; Zhong, Y.; Lan, L.; Zhang, X.; Luo, Z.; and Tao, D. 2024b. MotionTrack: Learning Motion Predictor for Multiple Object Tracking. Neural Networks , 179: 106539. Xu, Z.; Bu, T.; Hao, Z.; Ding, J.; and Yu, Z. 2025. Proxy Target: Bridging the Gap Between Discrete Spiking Neural Networks and Continuous Control. In NeurIPS , 159158– 159184. Xu, Z.; Shi, X.; Dong, Y.; Huang, Z.; and Yu, Z. 2026. CaRe-BN: Precise Moving Statistics for Stabilizing Spiking Neural Networks in Reinforcement Learning. In ICLR .Yao, M.; Hu, J.; Zhou, Z.; Yuan, L.; Tian, Y.; Xu, B.; and Li, G. 2023. Spike-Driven Transformer. In NeurIPS , volume 36, 64043–64058. Yao, M.; Qiu, X.; Hu, T.; Hu, J.; Chou, Y.; Tian, K.; Liao, J.; Leng, L.; Xu, B.; and Li, G. 2025. Scaling Spike-Driven Transformer with Efficient Spike Firing Approxima-tion Training. TPAMI , 47(4): 2973–2990. Zeng, F.; Dong, B.; Zhang, Y.; Wang, T.; Zhang, X.; and Wei, Y. 2022. MOTR: End-to-End Multiple-Object Tracking with Transformer. In ECCV , 659–675. Zhang, Q.; Cheng, J.; Mao, Q.; Liu, C.; Fang, Y.; Li, Y.; Ge, M.; and Gao, S. 2026. SpikeTrack: A Spike-driven Framework for Efficient Visual Tracking. In CVPR , 6802– 6811. Zhang, Y.; Sun, P.; Jiang, Y.; Yu, D.; Weng, F.; Yuan, Z.; Luo, P.; Liu, W.; and Wang, X. 2022. ByteTrack: Multi-Object Tracking by Associating Every Detection Box. In ECCV ,1–21. Zhang, Y.; Wang, C.; Wang, X.; Zeng, W.; and Liu, W. 2021. FairMOT: On the Fairness of Detection and Re-Identification in Multiple Object Tracking. IJCV , 129(11): 3069–3087. Zhong, P.; Wang, X.; Zeng, D.; Zhou, Q.; He, F.; and Li, S. 2026. SMTrack: End-to-End Trained Spiking Neural Net-works for Multi-Object Tracking in RGB Videos. IEEE In-ternet of Things Journal , 13(9): 18797–18806. Zhou, X.; Wang, D.; and Krähenbühl, P. 2019. Objects as points. arXiv preprint arXiv:1904.07850 .Zhou, X.; Yin, T.; Koltun, V.; and Krähenbühl, P. 2022. Global Tracking Transformers. In CVPR , 8771–8780. Zou, S.; Li, Q.; Ji, W.; Li, J.; Yang, Y.; Li, G.; and Dong, C. 2025. SpikeVideoFormer: An Efficient Spike-Driven Video Transformer with Hamming Attention and O(T ) Complex-ity. In ICML , volume 267, 80805–80821.
