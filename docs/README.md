@@ -18,64 +18,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-23
-- 运行时间：2026-07-23 21:45:46 UTC
+- 最新运行日期：2026-07-24
+- 运行时间：2026-07-24 21:50:30 UTC
 - 运行状态：成功
-- 本次总论文数：14
-- 精读区：7
-- 速读区：7
+- 本次总论文数：8
+- 精读区：3
+- 速读区：5
 
 ### 今日简报（AI）
-1) 今日精读两篇高分论文，聚焦动态视觉跟踪与事件相机特征追踪，分别获10分和9分。  
-2) 最值得关注的是DRGBT-1K大规模基准与GoStop的自适应时间聚合方法，为动态RGBT跟踪和事件特征追踪提供新思路。  
-3) 建议深入理解这两个方向的核心技术，并尝试将基准方法迁移到实际机器人或自动驾驶场景中验证。
-- 详情：[/202607/23/README](/202607/23/README)
+今日精读Koopman Dreamer与Dreamer-CPC两篇高分论文，速读涵盖APIs合成数据、长期任务规划及自动驾驶世界模型。  
+最值得关注的是利用谱约束稳定世界模型隐空间动力学，以及通过世界模型学习多智能体分散式通信。  
+建议下一步深入HyWorldVLA中的混合世界建模如何提升自动驾驶决策鲁棒性，并探索在缺乏真实环境数据时合成样本的可行性。
+- 详情：[/202607/24/README](/202607/24/README)
 
 ### 精读区论文标签
-1. [DRGBT-1K: A Large-scale High-quality Benchmark for Dynamic RGBT Tracking](/202607/23/2607.19772v1-drgbt-1k-a-large-scale-high-quality-benchmark-for-dynamic-rgbt-tracking)  
-   标签：评分：10.0/10、query:vt
-   evidence：动态RGBT视觉跟踪的大规模基准
-2. [GoStop: Reinforcement Learning for Adaptive Temporal Aggregation in Event-Based Feature Tracking](/202607/23/2607.15699v1-gostop-reinforcement-learning-for-adaptive-temporal-aggregation-in-event-based-feature-tracking)  
-   标签：评分：9.0/10、query:vt
-   evidence：特征跟踪，事件相机跟踪，强化学习用于跟踪
-3. [PAVXploreRL: Physical-Action-Visual World Model Reinforcement Learning with Action Exploration](/202607/23/2607.16602v2-pavxplorerl-physical-action-visual-world-model-reinforcement-learning-with-action-exploration)  
+1. [Koopman Dreamer: Spectrally Constrained Latent Dynamics for Stable World-Model Imagination](/202607/24/2607.19719v1-koopman-dreamer-spectrally-constrained-latent-dynamics-for-stable-world-model-imagination)  
    标签：评分：9.0/10、query:world-model
-   evidence：基于强化学习的动作条件世界模型，优化物理合理性和视觉保真度
-4. [WorldScape Policy 2.0: Empowering Steerable World Action Modeling with Reasoning-Augmented Memory](/202607/23/2607.18840v1-worldscape-policy-20-empowering-steerable-world-action-modeling-with-reasoning-augmented-memory)  
-   标签：评分：9.0/10、query:world-model
-   evidence：用于机器人操作的世界动作模型，结合推理增强记忆
-5. [Koopman Dreamer: Spectrally Constrained Latent Dynamics for Stable World-Model Imagination](/202607/23/2607.19719v1-koopman-dreamer-spectrally-constrained-latent-dynamics-for-stable-world-model-imagination)  
-   标签：评分：9.0/10、query:world-model
-   evidence：基于Koopman的潜在动力学谱约束，用于连续控制中稳定的世界模型想象
-6. [ReferTrack: Referring Then Tracking for Embodied Visual Tracking](/202607/23/2607.20061v1-refertrack-referring-then-tracking-for-embodied-visual-tracking)  
-   标签：评分：9.0/10、query:vt
-   evidence：基于语言的指代跟踪
-7. [From Perception to Assistance: Open-Vocabulary Shared Autonomy for Robotic Manipulation](/202607/23/2607.17323v1-from-perception-to-assistance-open-vocabulary-shared-autonomy-for-robotic-manipulation)  
-   标签：评分：8.0/10、query:vt
-   evidence：使用视觉语言模型和可提示视频分割实现语言引导的跟踪
+   evidence：利用谱约束潜动力学进行基于想象的规划
+2. [Dreamer-CPC: Message Learning with World Models for Decentralized Multi-agent Reinforcement Learning](/202607/24/2607.19809v1-dreamer-cpc-message-learning-with-world-models-for-decentralized-multi-agent-reinforcement-learning)  
+   标签：评分：8.0/10、query:world-model
+   evidence：基于世界模型的多智能体强化学习与预测编码
+3. [Streaming Multi-Agent Autoregressive Diffusion Model with World State Registers](/202607/24/2607.21594v1-streaming-multi-agent-autoregressive-diffusion-model-with-world-state-registers)  
+   标签：评分：8.0/10、query:world-model
+   evidence：提出多智能体交互世界模型，维护跨智能体的世界状态，用于规划
 
 ### 速读区论文标签
-1. [Predictive Training with Latent Imagination for Visual Quadruped Navigation](/202607/23/2607.17574v1-predictive-training-with-latent-imagination-for-visual-quadruped-navigation)  
-   标签：评分：8.0/10、query:world-model
-   evidence：隐式想象预测训练，类似世界模型
-2. [Planning with Transformers: Chain of Computation and Structured Context Windows](/202607/23/2607.17710v1-planning-with-transformers-chain-of-computation-and-structured-context-windows)  
-   标签：评分：8.0/10、query:world-model
-   evidence：使用Transformer进行规划，计算链
-3. [Dreamer-CPC: Message Learning with World Models for Decentralized Multi-agent Reinforcement Learning](/202607/23/2607.19809v1-dreamer-cpc-message-learning-with-world-models-for-decentralized-multi-agent-reinforcement-learning)  
-   标签：评分：8.0/10、query:world-model
-   evidence：将世界模型(DreamerV3)与消息学习相结合，用于去中心化多智能体强化学习，利用潜在状态进行通信
-4. [SpikingMOT: A Spike-Driven Multi-Object Tracker](/202607/23/2607.19875v1-spikingmot-a-spike-driven-multi-object-tracker)  
-   标签：评分：8.0/10、query:vt
-   evidence：基于脉冲神经网络的多目标跟踪
-5. [From Language to Navigation Goals: A Vision-Language Approach for Semantic Navigation of Mobile Robots Using RGB-D Perception](/202607/23/2607.13624v1-from-language-to-navigation-goals-a-vision-language-approach-for-semantic-navigation-of-mobile-robots-using-rgb-d-perception)  
-   标签：评分：7.0/10、query:vt
-   evidence：基于视觉语言方法的语义导航，利用自然语言指令
-6. [Environment-free Synthetic Data Generation for API-Calling Agents](/202607/23/2607.16900v2-environment-free-synthetic-data-generation-for-api-calling-agents)  
+1. [Environment-free Synthetic Data Generation for API-Calling Agents](/202607/24/2607.16900v2-environment-free-synthetic-data-generation-for-api-calling-agents)  
    标签：评分：7.0/10、query:world-model
-   evidence：使用LLM作为数字世界模型生成合成轨迹
-7. [Active Inference as a Convex Markov Decision Process](/202607/23/2607.20152v1-active-inference-as-a-convex-markov-decision-process)  
+   evidence：利用大语言模型作为世界模型生成合成智能体轨迹，支持规划相关训练
+2. [Courteous Anticipation: Improving Long-Lived Task Planning in Persistent Shared Environments](/202607/24/2607.20289v1-courteous-anticipation-improving-long-lived-task-planning-in-persistent-shared-environments)  
    标签：评分：7.0/10、query:world-model
-   evidence：主动推理作为凸MDP，利用潜在动力学进行规划
+   evidence：基于模型的预期规划
+3. [HyWorldVLA: A Vision-Language-Action Model with Hybrid World Modeling for Autonomous Driving](/202607/24/2607.20988v1-hyworldvla-a-vision-language-action-model-with-hybrid-world-modeling-for-autonomous-driving)  
+   标签：评分：7.0/10、query:world-model
+   evidence：用于自动驾驶的混合世界模型，融合像素级与潜变量预测以支持规划
+4. [Anticipate Before Acting: Future-State-Conditioned Vision-Language Navigation](/202607/24/2607.18042v2-anticipate-before-acting-future-state-conditioned-vision-language-navigation)  
+   标签：评分：6.0/10、query:world-model
+   evidence：面向视觉语言导航的未来状态条件模型，具有世界模型特质，面向规划
+5. [Deep Reinforcement-Learning-Guided Model Predictive Control for Preventing Overtakes in Autonomous Racing](/202607/24/2607.20973v1-deep-reinforcement-learning-guided-model-predictive-control-for-preventing-overtakes-in-autonomous-racing)  
+   标签：评分：6.0/10、query:world-model
+   evidence：强化学习引导的模型预测控制
 
 
 <div class="dpr-home-promo-card dpr-home-panel">
