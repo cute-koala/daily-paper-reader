@@ -18,46 +18,56 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-24
-- 运行时间：2026-07-24 21:50:30 UTC
+- 最新运行日期：2026-07-25
+- 运行时间：2026-07-25 21:31:50 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：3
+- 本次总论文数：12
+- 精读区：7
 - 速读区：5
 
 ### 今日简报（AI）
-今日精读Koopman Dreamer与Dreamer-CPC两篇高分论文，速读涵盖APIs合成数据、长期任务规划及自动驾驶世界模型。  
-最值得关注的是利用谱约束稳定世界模型隐空间动力学，以及通过世界模型学习多智能体分散式通信。  
-建议下一步深入HyWorldVLA中的混合世界建模如何提升自动驾驶决策鲁棒性，并探索在缺乏真实环境数据时合成样本的可行性。
-- 详情：[/202607/24/README](/202607/24/README)
+今日精读7篇、速读5篇，重点关注满分论文《Koopman Dreamer》和9分《Cross-Modal UAV Object Tracking》。前者提出谱约束潜在动力学实现稳定世界模型想象，后者构建状态感知表征学习与统一基准用于跨模态无人机目标跟踪。建议优先阅读这两篇，分别适用于机器人控制中的长期预测和无人机视觉跟踪任务。
+- 详情：[/202607/25/README](/202607/25/README)
 
 ### 精读区论文标签
-1. [Koopman Dreamer: Spectrally Constrained Latent Dynamics for Stable World-Model Imagination](/202607/24/2607.19719v1-koopman-dreamer-spectrally-constrained-latent-dynamics-for-stable-world-model-imagination)  
+1. [Koopman Dreamer: Spectrally Constrained Latent Dynamics for Stable World-Model Imagination](/202607/25/2607.19719v1-koopman-dreamer-spectrally-constrained-latent-dynamics-for-stable-world-model-imagination)  
+   标签：评分：10.0/10、query:world-model
+   evidence：用于稳定想象规划的潜在世界模型
+2. [Cross-Modal UAV Object Tracking: State-Aware Representation Learning and A Unified Benchmark](/202607/25/2607.18768v1-cross-modal-uav-object-tracking-state-aware-representation-learning-and-a-unified-benchmark)  
+   标签：评分：9.0/10、query:vt
+   evidence：带有状态感知表示学习的跨模态无人机目标跟踪
+3. [Masked Visual Actions for Unified World Modeling](/202607/25/2607.19343v1-masked-visual-actions-for-unified-world-modeling)  
    标签：评分：9.0/10、query:world-model
-   evidence：利用谱约束潜动力学进行基于想象的规划
-2. [Dreamer-CPC: Message Learning with World Models for Decentralized Multi-agent Reinforcement Learning](/202607/24/2607.19809v1-dreamer-cpc-message-learning-with-world-models-for-decentralized-multi-agent-reinforcement-learning)  
+   evidence：统一世界建模用于机器人规划
+4. [Efficient Tracking and Understanding Object Transformations](/202607/25/2607.19743v1-efficient-tracking-and-understanding-object-transformations)  
+   标签：评分：9.0/10、query:vt
+   evidence：通过状态变换追踪物体，提出使用SAM2的FluxGraph
+5. [Dreamer-CPC: Message Learning with World Models for Decentralized Multi-agent Reinforcement Learning](/202607/25/2607.19809v1-dreamer-cpc-message-learning-with-world-models-for-decentralized-multi-agent-reinforcement-learning)  
+   标签：评分：9.0/10、query:world-model
+   evidence：Dreamer-CPC 将世界模型集成到去中心化多智能体强化学习中，并学习消息传递
+6. [HyWorldVLA: A Vision-Language-Action Model with Hybrid World Modeling for Autonomous Driving](/202607/25/2607.20988v1-hyworldvla-a-vision-language-action-model-with-hybrid-world-modeling-for-autonomous-driving)  
+   标签：评分：9.0/10、query:world-model
+   evidence：提出混合世界建模框架用于自动驾驶，融合像素级与潜在预测以实现控制
+7. [DSWorld: A Data Science World Model for Efficient Autonomous Agents](/202607/25/2607.15901v1-dsworld-a-data-science-world-model-for-efficient-autonomous-agents)  
    标签：评分：8.0/10、query:world-model
-   evidence：基于世界模型的多智能体强化学习与预测编码
-3. [Streaming Multi-Agent Autoregressive Diffusion Model with World State Registers](/202607/24/2607.21594v1-streaming-multi-agent-autoregressive-diffusion-model-with-world-state-registers)  
-   标签：评分：8.0/10、query:world-model
-   evidence：提出多智能体交互世界模型，维护跨智能体的世界状态，用于规划
+   evidence：提出了数据科学世界模型，通过预测状态转移来辅助规划，符合规划用世界模型需求。
 
 ### 速读区论文标签
-1. [Environment-free Synthetic Data Generation for API-Calling Agents](/202607/24/2607.16900v2-environment-free-synthetic-data-generation-for-api-calling-agents)  
+1. [Planning as Emergent Behavior in Reinforcement Learning with Relational Hidden States](/202607/25/2607.18589v1-planning-as-emergent-behavior-in-reinforcement-learning-with-relational-hidden-states)  
+   标签：评分：8.0/10、query:world-model
+   evidence：强化学习中的世界模型规划
+2. [Token-Wise Latent Streaming from Slow Reasoners to Fast Planners for Dynamic Vision Language Navigation](/202607/25/2607.16806v1-token-wise-latent-streaming-from-slow-reasoners-to-fast-planners-for-dynamic-vision-language-navigation)  
+   标签：评分：7.0/10、query:vt
+   evidence：视觉语言导航中从慢速VLM到快速规划器的潜在流
+3. [SkyVLaM: Multimodal Large Language Model for UAV Video Understanding in Remote Sensing](/202607/25/2607.17386v1-skyvlam-multimodal-large-language-model-for-uav-video-understanding-in-remote-sensing)  
+   标签：评分：7.0/10、query:vt
+   evidence：用于无人机视频理解的语言条件分割视觉语言模型
+4. [Anticipate Before Acting: Future-State-Conditioned Vision-Language Navigation](/202607/25/2607.18042v2-anticipate-before-acting-future-state-conditioned-vision-language-navigation)  
    标签：评分：7.0/10、query:world-model
-   evidence：利用大语言模型作为世界模型生成合成智能体轨迹，支持规划相关训练
-2. [Courteous Anticipation: Improving Long-Lived Task Planning in Persistent Shared Environments](/202607/24/2607.20289v1-courteous-anticipation-improving-long-lived-task-planning-in-persistent-shared-environments)  
-   标签：评分：7.0/10、query:world-model
-   evidence：基于模型的预期规划
-3. [HyWorldVLA: A Vision-Language-Action Model with Hybrid World Modeling for Autonomous Driving](/202607/24/2607.20988v1-hyworldvla-a-vision-language-action-model-with-hybrid-world-modeling-for-autonomous-driving)  
-   标签：评分：7.0/10、query:world-model
-   evidence：用于自动驾驶的混合世界模型，融合像素级与潜变量预测以支持规划
-4. [Anticipate Before Acting: Future-State-Conditioned Vision-Language Navigation](/202607/24/2607.18042v2-anticipate-before-acting-future-state-conditioned-vision-language-navigation)  
-   标签：评分：6.0/10、query:world-model
-   evidence：面向视觉语言导航的未来状态条件模型，具有世界模型特质，面向规划
-5. [Deep Reinforcement-Learning-Guided Model Predictive Control for Preventing Overtakes in Autonomous Racing](/202607/24/2607.20973v1-deep-reinforcement-learning-guided-model-predictive-control-for-preventing-overtakes-in-autonomous-racing)  
-   标签：评分：6.0/10、query:world-model
-   evidence：强化学习引导的模型预测控制
+   evidence：提出未来状态条件的视觉语言导航，利用未来查询令牌进行潜在规划
+5. [Self-Supervised Learning of Structured Dynamics from Videos](/202607/25/2607.21576v1-self-supervised-learning-of-structured-dynamics-from-videos)  
+   标签：评分：6.0/10、query:vt
+   evidence：从视频中自监督学习结构化动力学，分离相机与物体运动以得到稳健的运动表征
 
 
 <div class="dpr-home-promo-card dpr-home-panel">
