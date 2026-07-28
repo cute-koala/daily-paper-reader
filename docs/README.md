@@ -1,73 +1,106 @@
-<div class="dpr-home-notice-card">
-  <h3 class="dpr-home-notice-title">🚀 Start Here</h3>
-  <ul class="dpr-home-notice-list">
-    <li><a href="#/tutorial/README">使用教程</a></li>
-  </ul>
+<div class="dpr-home-notice-card dpr-home-panel">
+  <div class="dpr-home-notice-header dpr-home-panel-header">
+    <h3 class="dpr-home-notice-title">公告与更新</h3>
+    <a class="dpr-home-notice-tutorial" href="#/tutorial/README">使用教程 <span aria-hidden="true">›</span></a>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-20">07.20</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">反馈功能上线</strong>
+      <span class="dpr-home-notice-entry-summary">新增反馈功能，欢迎大家踊跃反馈各种建议，我们会第一时间查看并协调处理。</span>
+    </div>
+  </div>
+  <div class="dpr-home-notice-entry">
+    <time class="dpr-home-notice-date" datetime="2026-07-19">07.19</time>
+    <div>
+      <strong class="dpr-home-notice-entry-title">首页新增社区统计</strong>
+      <span class="dpr-home-notice-entry-summary">现在可以看到今天看论文的人数和项目加入人数。</span>
+    </div>
+  </div>
+  <div class="dpr-home-site-stats" data-dpr-site-stats hidden aria-live="polite">
+    <span>今天有 <strong class="dpr-home-site-stat-value" data-dpr-daily-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>昨天有 <strong class="dpr-home-site-stat-value" data-dpr-yesterday-readers>--</strong> 人在看论文</span>
+    <span class="dpr-home-site-stat-separator" aria-hidden="true">·</span>
+    <span>已有 <strong class="dpr-home-site-stat-value" data-dpr-fork-count>--</strong> 人加入 Daily Paper Reader</span>
+    <span class="dpr-home-history">
+      <button type="button" class="dpr-home-history-trigger" data-dpr-history-trigger aria-label="查看最近 14 天阅读趋势"><span aria-hidden="true">🔍</span></button>
+      <span class="dpr-home-history-popover" data-dpr-history-popover role="tooltip">
+        <span class="dpr-home-history-header">近 14 天阅读趋势</span>
+        <span class="dpr-home-history-meta">
+          <span data-dpr-history-range>--</span>
+          <span>峰值 <strong data-dpr-history-peak>--</strong></span>
+        </span>
+        <span class="dpr-home-history-chart" data-dpr-history-chart></span>
+      </span>
+    </span>
+  </div>
 </div>
 
-## 每次日报
-- 最新运行日期：2026-07-27
-- 运行时间：2026-07-27 21:51:51 UTC
-- 运行状态：成功
-- 本次总论文数：14
-- 精读区：6
-- 速读区：8
+<div class="dpr-home-dashboard-grid">
+<section class="dpr-home-dashboard-card dpr-home-report-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">2026-07-28</span>
+      <h3 class="dpr-home-dashboard-title">今日汇总</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">共 17 篇</strong>
+  </div>
+  <dl class="dpr-home-dashboard-stats">
+    <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>8</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>9</dd></div>
+  </dl>
+  <p class="dpr-home-dashboard-body">最近更新：2026-07-28 21:39:29 UTC<br>状态：成功</p>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-brief-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">合并后生成</span>
+      <h3 class="dpr-home-dashboard-title">今日简报</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">AI</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<p>今日共处理17篇论文，精读8篇，其中最高分10分聚焦触觉世界模型与无人机鲁棒跟踪两大方向。最值得关注的是《FeelWorld》提出的层级接触预测规划，以及《Counterfactual Motion Reliability Learning》对无人机追踪的可靠性提升。建议普通读者优先了解触觉感知在机器人操作中的应用，以及无校准多相机室内人员跟踪的实用方案。</p>
+  </div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-deep-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">精读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">8 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="FeelWorld: Visuo-Tactile World Model for Hierarchical Contact Prediction and Planning">FeelWorld: Visuo-Tactile World Model for Hierarchical Contact Prediction and Planning</span></li><li><span class="dpr-home-dashboard-paper-title" title="Counterfactual Motion Reliability Learning for Robust UAV Tracking">Counterfactual Motion Reliability Learning for Robust UAV Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="Robust 6-DoF Object Pose Tracking with Built-In Recovery under Occlusions and Rapid Object Motions">Robust 6-DoF Object Pose Tracking with Built-In Recovery under Occlusions and Rapid Object Motions</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vt <strong>4</strong></span><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span></div>
+</section>
+<section class="dpr-home-dashboard-card dpr-home-skim-card">
+  <div class="dpr-home-dashboard-header">
+    <div>
+      <span class="dpr-home-dashboard-kicker">今日累计</span>
+      <h3 class="dpr-home-dashboard-title">速读推荐</h3>
+    </div>
+    <strong class="dpr-home-dashboard-count">9 篇</strong>
+  </div>
+  <div class="dpr-home-dashboard-body">
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Calibration-Free 3D Multi-Camera People Tracking for Indoor Environment">Calibration-Free 3D Multi-Camera People Tracking for Indoor Environment</span></li><li><span class="dpr-home-dashboard-paper-title" title="WCM: World-Cognition Model for Generalizable Human-Robot Interaction">WCM: World-Cognition Model for Generalizable Human-Robot Interaction</span></li><li><span class="dpr-home-dashboard-paper-title" title="Action from Adjacent Set in Physical Space Outperforms the Best Prediction in World Models">Action from Adjacent Set in Physical Space Outperforms the Best Prediction in World Models</span></li></ul>
+  </div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>5</strong></span><span class="dpr-home-dashboard-tag">vt <strong>4</strong></span></div>
+</section>
+</div>
 
-### 今日简报（AI）
-今日完成14篇文献精读与速读，重点攻克2篇9分精读论文。最值得关注的是动作条件世界模型在机器人超声引导中的应用，以及可控世界模型的可辨识性理论。建议普通读者优先精读这两篇，并后续关注时序逻辑与规划方法的结合方向。
-- 详情：[/202607/27/README](/202607/27/README)
-
-### 精读区论文标签
-1. [Action-Conditioned World Model for Goal Plane Probe Guidance in Robotic Ultrasound](/202607/27/2607.21918v1-action-conditioned-world-model-for-goal-plane-probe-guidance-in-robotic-ultrasound)  
-   标签：评分：9.0/10、query:world-model
-   evidence：动作条件世界模型用于超声探头引导规划
-2. [On the Identifiability of Controlled World Models](/202607/27/2607.22430v1-on-the-identifiability-of-controlled-world-models)  
-   标签：评分：9.0/10、query:world-model
-   evidence：可控世界模型的可辨识性分析用于规划与控制
-3. [Robot-Factored World Models via Robot Rendering](/202607/27/2607.22535v1-robot-factored-world-models-via-robot-rendering)  
-   标签：评分：9.0/10、query:world-model
-   evidence：通过机器人渲染实现机器人分解的世界模型用于控制
-4. [Unified Prediction and Planning via Conflict-Aware Disjoint Parameter Training](/202607/27/2607.19971v1-unified-prediction-and-planning-via-conflict-aware-disjoint-parameter-training)  
-   标签：评分：8.0/10、query:world-model
-   evidence：通过冲突感知的分离参数训练实现统一预测与规划，适用于世界模型
-5. [Safe Learning Predictive Control for Ego-World Robotic Systems](/202607/27/2607.22225v1-safe-learning-predictive-control-for-ego-world-robotic-systems)  
-   标签：评分：8.0/10、query:world-model
-   evidence：结合SVGP在线学习潜在世界策略与滚动时域控制（MPC）
-6. [Offline Vision-Language Navigation with Geometric Goal Localization for Outdoor Environments](/202607/27/2607.22226v1-offline-vision-language-navigation-with-geometric-goal-localization-for-outdoor-environments)  
-   标签：评分：8.0/10、query:vt
-   evidence：离线视觉语言导航，结合几何目标定位用于室外环境
-
-### 速读区论文标签
-1. [Planning with Transformers: Chain of Computation and Structured Context Windows](/202607/27/2607.17710v1-planning-with-transformers-chain-of-computation-and-structured-context-windows)  
-   标签：评分：7.0/10、query:world-model
-   evidence：基于Transformer的规划，链式计算和结构化上下文窗口
-2. [STeP: Signal Temporal Logic for Precise Specifications for Action Generation with Vision Language Models](/202607/27/2607.18580v1-step-signal-temporal-logic-for-precise-specifications-for-action-generation-with-vision-language-models)  
-   标签：评分：7.0/10、query:world-model
-   evidence：使用信号时序逻辑与视觉语言模型的分层框架，实现精确动作生成
-3. [STL-GCS: A Planner-Controller Framework for Signal Temporal Logic via Graphs of Time-varying Convex Sets](/202607/27/2607.19196v1-stl-gcs-a-planner-controller-framework-for-signal-temporal-logic-via-graphs-of-time-varying-convex-sets)  
-   标签：评分：7.0/10、query:world-model
-   evidence：轨迹规划与控制框架用于信号时序逻辑
-4. [Conformal Constraint Tightening for Chance-Constrained Motion Planning with Unknown Dynamics](/202607/27/2607.22409v1-conformal-constraint-tightening-for-chance-constrained-motion-planning-with-unknown-dynamics)  
-   标签：评分：7.0/10、query:world-model
-   evidence：使用共形预测处理未知动力学的规划方法
-5. [Reinforcement Learning: From Algorithms To Foundation Models](/202607/27/2607.17560v1-reinforcement-learning-from-algorithms-to-foundation-models)  
-   标签：评分：6.0/10、query:world-model
-   evidence：强化学习从算法到基础模型，涵盖世界模型与规划
-6. [Beyond Fixed Goal Delivery: Online POMDP Planning for Target Interception in Crowds](/202607/27/2607.18517v1-beyond-fixed-goal-delivery-online-pomdp-planning-for-target-interception-in-crowds)  
-   标签：评分：6.0/10、query:world-model
-   evidence：在线POMDP规划用于人群中的目标拦截
-7. [Stochastic Multi-Objective Kinodynamic Planning Against Adversaries](/202607/27/2607.19284v1-stochastic-multi-objective-kinodynamic-planning-against-adversaries)  
-   标签：评分：6.0/10、query:world-model
-   evidence：随机多目标运动规划，使用蒙特卡洛 rollout 对抗对手
-8. [Bridging the Gap Between Plausibility and Admissibility: Constraint-Aware Flow Maps for Dynamic Graph Systems](/202607/27/2607.21421v1-bridging-the-gap-between-plausibility-and-admissibility-constraint-aware-flow-maps-for-dynamic-graph-systems)  
-   标签：评分：6.0/10、query:world-model
-   evidence：生成未来轨迹并施加约束，类似世界模型预测
-
-
-<div class="dpr-home-promo-card">
-  <h3 class="dpr-home-promo-title">💬 社区与支持</h3>
-  <ul class="dpr-home-promo-list">
-    <li>欢迎 Star / Fork / Issue / PR</li>
-    <li>QQ群：583867967（欢迎交流，已有：1151人）</li>
-  </ul>
+<div class="dpr-home-promo-card dpr-home-panel">
+  <div class="dpr-home-panel-header">
+    <h3 class="dpr-home-promo-title">社区与支持</h3>
+  </div>
+  <p class="dpr-home-promo-copy">欢迎通过 Star、Fork、Issue 或 PR 一起完善 Daily Paper Reader。</p>
+  <div class="dpr-home-promo-meta">
+    <span>QQ群 <strong>583867967</strong></span>
+    <span class="dpr-home-promo-separator" aria-hidden="true">·</span>
+    <span>已有 <strong>1,491</strong> 人参与交流</span>
+  </div>
 </div>
