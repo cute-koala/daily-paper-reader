@@ -1,0 +1,863 @@
+Title: Semantic-Aware Temporal Adaptation for UAV Anti-UAV Tracking
+
+URL Source: https://arxiv.org/pdf/2607.26511v1
+
+Published Time: Thu, 30 Jul 2026 00:33:19 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# Semantic-Aware Temporal Adaptation for UAV Anti-UAV Tracking 
+
+Xiaozhen Qiao, Da Zhang, Yubin Guo, Junyu Gao, Zhiyuan Zhao, and Xuelong Li, Fellow, IEEE 
+
+Abstract —UAV Anti-UAV tracking is an emerging low-altitude security task for localizing an adversarial UAV using the onboard camera of a moving observer UAV. It differs from conventional UAV tracking and ground-based Anti-UAV tracking because both the camera platform and the target move simultaneously. This dual-dynamic setting induces rapid viewpoint changes, motion blur, scale variation, and visually similar distractors, making reliable appearance matching difficult. Under such rapidly changing conditions, fixed visual representations are often insufficient because target appearance becomes unreliable and feature distributions may deviate from the training domain. The target language description remains stable across frames and can therefore serve as a semantic anchor for temporal state propa-gation, while online feature-distribution alignment can reduce video-specific test-time shifts. In this paper, we propose SATA-Track , a Semantic-Aware Temporal Adaptation framework for UAV Anti-UAV tracking. SATATrack introduces Semantic-Aware Context Propagation (SACP), which uses the target description to guide temporal context propagation across backbone stages and preserve target identity under rapid appearance changes. An aux-iliary contrastive regularizer is used during training to discourage responses to semantically similar background regions. During in-ference, Temporal-Aware Distribution Alignment (TADA) aligns feature distributions online without updating model parameters, combining recent-frame estimates with training-time statistics for stability. SATATrack achieves state-of-the-art performance on the UAV-Anti-UAV benchmark while remaining competitive in Anti-UAV and UAV object tracking tasks. The code will be available at https://github.com/XiaozhenQiao/SATATrack. 
+
+Index Terms —UAV Anti-UAV tracking, Vision-language track-ing, Temporal adaptation, State-space model. 
+
+I. I NTRODUCTION 
+
+# UAV Anti-UAV tracking is an important problem for low-altitude security and AI-driven aerial perception [1], [2], where a moving observer UAV must localize an adversarial UAV during air-to-air motion [3]. It differs from conventional UAV object tracking, which mainly studies UAV-mounted cameras observing ground objects such as vehicles or pedes-trians [4]–[7], and from ground-based Anti-UAV tracking, which typically observes flying UAVs with static or limited-motion sensors [8]–[12]. In UAV Anti-UAV tracking, both the camera platform and the target move simultaneously,                               
+
+> Manuscript received XXXX XX, XXXX; revised XXXX XX, XXXX. X. Qiao is with the School of Information Science and Technology, University of Science and Technology of China, Hefei 230026, China. This work was done during aresearch internship at the Institute of Artificial Intelligence (TeleAI), China Telecom, P. R. China (e-mail: xi-aozhennnqiao@mail.ustc.edu.cn). D. Zhang and J. Gao are with Northwestern Polytechnical University, Xi’an 710072, China, and also with the Institute of Artificial Intelligence (TeleAI), China Telecom, P. R. China. Y. Guo is with the University of Science and Technology of China, Hefei, China, and also with the Institute of Artificial Intelligence (TeleAI), China Telecom, P. R. China. Z. Zhao and X. Li are with the Institute of Artificial Intelligence (TeleAI), China Telecom, P. R. China. Corresponding author: Xuelong Li (e-mail: xuelong li@ieee.org).
+
+resulting in severe dual-dynamic disturbance, rapid viewpoint transition, background turbulence, motion blur, and abrupt scale variation. The target UAV is often tiny, texture-poor, and visually similar to background objects or other flying distractors, making reliable appearance matching difficult. Existing trackers are not well matched to this air-to-air tracking problem. When a UAV appears small or blurred among flying distractors, a tracker must match the current frame while deciding which past evidence remains trustworthy. Pure visual trackers with strong convolutional or Transformer backbones [13]–[17] can accumulate wrong responses once appearance cues become ambiguous. Vision-language trackers bring useful semantic priors [18]–[26], but the language cue is mostly consumed at the matching or query stage. Recent state-space trackers improve efficient temporal propagation [27]– [32], and MambaSTS [3] further provides a strong UAV-Anti-UAV baseline with spatial-temporal-semantic learning. Yet even these models fuse semantics as an extra feature while the state transition itself stays driven by visual observations, leaving propagated states vulnerable to distractor contamina-tion. Another difficulty arises from test-time feature shifts, since fixed normalization statistics from generic training data may mismatch video-specific aerial distributions, while online parameter updates can amplify errors from unreliable predic-tions [33], [34]. These observations suggest two requirements: temporal memory should be conditioned on target identity, and test-time adaptation should be performed without modifying learned weights. Building on this motivation, we propose SATATrack , aSemantic-Aware Temporal Adaptation framework for UAV Anti-UAV tracking. SATATrack first introduces Semantic-Aware Context Propagation (SACP), which uses the target description to guide state-space context propagation across backbone stages. Specifically, SACP injects the target semantic embedding into the temporal update so that the propagated state can emphasize target-relevant evidence and suppress distractor cues when visual appearance changes abruptly. The updated context is further injected into the visual stream at multiple feature levels, providing persistent semantic guidance rather than a one-shot language cue. An auxiliary contrastive regularizer discourages responses to semantically similar back-ground regions during training. During inference, Temporal-Aware Distribution Alignment (TADA) aligns feature distribu-tions online without updating model parameters. It combines recent-frame estimates with training-time statistics, allowing the tracker to adapt to each test video while preserving the discriminative knowledge learned offline. The resulting tracker targets both identity drift and video-specific feature shifts in dynamic UAV-to-UAV tracking. We conduct our main evaluation using the UAV-Anti-UAV benchmark [3]. We also report results on Anti-UAV318 [8], arXiv:2607.26511v1 [cs.CV] 29 Jul 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2Template Image Search Frame                         
+
+> Visual Encoder
+> Visual Features
+> Tracking Head
+> Template Image Search Frame
+> Visual Encoder
+> Visual Features
+> Tracking Head
+> Awhite fixed -
+> w i n g U A V
+> flying over the
+> rural area .
+> Text Prompt
+> Text
+> Encoder
+> Semantic
+> Features
+> Cross -modal Fusion
+> Template Image Search Frame
+> Visual Encoder
+> Visual Features
+> Tracking Head
+> Text Prompt
+> Text Encoder
+> Semantic Features
+> SACP
+> Semantic -Aware Context Propagation
+> TADA
+> Test time adaptation
+> (a) Traditional Visual Trackers (b) Vision -Language Trackers (c) SATATrack
+> (d)
+> (e)
+> Awhite fixed -
+> w i n g U A V
+> flying over the
+> rural area .
+
+Fig. 1. (a) Traditional visual trackers. (b) Existing vision-language trackers. (c) The proposed SATATrack, which adds SACP and TADA. (d) Radar of the five UAV-Anti-UAV metrics. (e) Radar of attribute-wise AUC on UAV-Anti-UAV. 
+
+DUT Anti-UAV [9], UAV123 [4], and UAVDT [5] to examine whether the tracker remains robust in related Anti-UAV and UAV object tracking tasks. SATATrack achieves state-of-the-art performance on UAV-Anti-UAV and competitive results on the additional benchmarks, as previewed in Fig. 1. The main contributions of this work are summarized below.  
+
+> •
+
+We propose SATATrack, a vision-language tracker for UAV Anti-UAV tracking that combines target-language-guided temporal modeling with inference-time feature-distribution alignment.  
+
+> •
+
+We design SACP, which conditions the state-space tem-poral update on the target language, letting semantics control what the propagated memory retains rather than serving as a one-shot matching cue.  
+
+> •
+
+We introduce TADA, a lightweight inference-time adap-tation scheme that aligns feature distributions online without updating model parameters.  
+
+> •
+
+We conduct comprehensive experiments centered on UAV-Anti-UAV, showing state-of-the-art performance on this benchmark and competitive results on related Anti-UAV and UAV object tracking tasks. II. R ELATED WORK 
+
+A. UAV and Anti-UAV Tracking 
+
+Generic single-object tracking has progressed rapidly with large-scale benchmarks and stronger matching architectures. Benchmarks such as GOT-10k [35], LaSOT [36], and Track-ingNet [37] provide diverse training and evaluation sources for learning category-agnostic target representations. Based on these data, Siamese trackers [13], [15], discriminative online trackers [14], [38], and Transformer-based trackers [16], [17], [39] have improved appearance matching, target-background discrimination, and temporal relation modeling. UAV tracking further stresses these models with low-altitude camera motion, viewpoint change, scale variation, and motion blur. Aerial benchmarks such as UAV123 [4], UAVDT [5], VisDrone [6], and WebUAV-3M [7] study generic objects captured by UAV-mounted cameras, while aerial trackers such as HiFT [40], TCTrack [41], adaptive background-aware tracking [42], SLA-ViT [43], and occlusion-robust UAV tracking [44] exploit hierarchical features, temporal contexts, background modeling, and efficient Transformer designs for aerial scenarios. Anti-UAV tracking differs from generic UAV object tracking be-cause the target is itself an unauthorized UAV, often appearing as a tiny, texture-poor object against cluttered sky, building, or vegetation backgrounds. Anti-UAV benchmarks such as Anti-UAV318 [8], DUT Anti-UAV [9], Anti-UAV410 [10], Anti-UAV600 [11], and MM-UAV [12] introduce visible, infrared, and multi-modal settings for drone detection and tracking, cov-ering target disappearance, low contrast, thermal ambiguity, and long-term re-localization. Recent surveys also highlight the importance of robust benchmarking for practical counter-UAV systems [45]. However, most existing Anti-UAV datasets are captured by static or limited-motion ground sensors. The UAV-Anti-UAV benchmark [3] moves one step further by introducing an air-to-air setting, where both the observer UAV and the target UAV move simultaneously. This dual-dynamic configuration causes severe relative motion, abrupt background changes, frequent scale variation, and stronger target-background ambiguity, making direct transfer from ei-ther generic UAV tracking or ground-based Anti-UAV tracking insufficient. 
+
+B. Vision-Language Tracking 
+
+Vision-language tracking introduces semantic descriptions to complement visual appearance, providing target-level pri-ors when purely visual evidence becomes ambiguous. Early language-guided tracking studies [18] show that natural lan-guage can make target specification more flexible than box-only initialization, especially when multiple visually similar objects exist in the search region. Large-scale language and vision-language models such as BERT [46] and CLIP [47] fur-JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+ther improve the quality of textual and cross-modal represen-tations. Building on these representations, VLT TT [19] diverts attention to language-relevant visual regions, JointNLT [20] studies joint visual grounding and tracking, CiteTracker [21] correlates image and text cues for target localization, and All-in-One [22] and UVLTrack [23] pursue unified formulations across visual and vision-language tracking. Recent methods further explore how language should interact with tracking dynamics. SUTrack [24] simplifies unified tracking with multi-source inputs, DUTrack [25] studies dynamic language adap-tation, and ATCTrack [26] aligns target-context cues with dy-namic target states. These methods demonstrate that semantic cues can improve robustness when appearance alone is un-reliable. Nevertheless, most existing vision-language trackers utilize language primarily at the matching stage for cross-modal alignment, query enhancement, or feature fusion, with-out explicitly leveraging it to guide the temporal evolution of the tracker. This limitation is particularly critical in UAV anti-UAV tracking, where target descriptions remain stable across frames, whereas visual observations often suffer from severe scale reduction, motion blur, or background confusion from UAV-like structures. Consequently, language information is most informative when maintained as a persistent temporal cue throughout tracking. 
+
+C. Temporal Modeling and Adaptation 
+
+Temporal modeling is essential for UAV anti-UAV track-ing, as single-frame observations often provide insufficient evidence for stable localization. Classical trackers address this via online appearance updating or discriminative optimization, including ECO [38], ATOM [14], and Siamese matching frameworks [13]. Transformer-based methods improve tem-poral reasoning through global attention [39], [48], while temporal Transformers such as TrDiMP [49], STARK [50], TCTrack [41], and ODTrack [17] further aggregate cross-frame context for robust tracking. However, their temporal memory is mainly driven by visual similarity and prediction confidence, which can be unreliable under abrupt motion, scale variation, or UAV-like distractors, leading to drift. State-space models offer an efficient alternative for long-sequence model-ing. Mamba [27] and Vision Mamba [28] introduce selective state-space dynamics for linear-time sequence modeling with input-dependent transitions, and recent tracking methods in-cluding MambaNUT [29], MambaLCT [30], MCITrack [31], and MambaTrack [32] demonstrate their effectiveness in UAV and video tracking. In particular, MambaSTS [3] integrates spatial, temporal, and semantic modeling within a Mamba framework, but existing semantic SSM trackers still treat language as an auxiliary cue rather than using it to directly steer state transitions. SATATrack addresses this limitation by conditioning state-space updates on target descriptions, enabling semantic guidance to influence temporal propaga-tion across the visual hierarchy. Beyond temporal modeling, aerial tracking also suffers from significant domain shift due to variations in sensor characteristics, illumination, altitude, scale, and background statistics. Direct online adaptation is often unstable, as unreliable predictions may accumulate and amplify drift, especially for small or intermittently occluded targets. To mitigate this, SATATrack adopts a conservative test-time adaptation strategy that recalibrates feature statistics using recent observations while keeping model parameters fixed, complementing semantic-aware propagation by preserv-ing target identity while reducing feature distribution mismatch without gradient-based updates. III. M ETHOD 
+
+In this section, we present the proposed framework in detail. We first provide an overview of the overall pipeline, and then describe the backbone, the semantic-aware context propagation module, and the loss function used during training, including semantic-discriminative contrastive learning. Finally, we intro-duce the temporal-aware distribution alignment module that operates purely at test time to bridge the domain gap between training and inference. 
+
+A. Overview 
+
+The overall architecture of the proposed framework is illustrated in Fig. 2. Given a template image Z ∈ RHz ×Wz ×3, a search image Xt ∈ RHx×Wx×3 at time step t, and a semantic description of the target, our goal is to accurately localize the UAV in the search region. The framework consists of three components: a backbone for visual feature extraction, a semantic-aware context propagation module for temporal modeling, and a localization head. During training, semantic-discriminative contrastive learning further sharpens the sep-aration between the target UAV and confusing background regions. At test time, a temporal-aware distribution alignment module recalibrates the feature statistics on the fly to bridge the gap between the training and inference domains, without updating any learned parameters. Specifically, the template and search images are first divided into non-overlapping patches and fed into a shared backbone network. Let Fi−1 
+
+> t
+
+denote the visual tokens before the i-th backbone block, and let Ci−1
+
+> t
+
+denote the propagated context tokens at the same stage. The semantic description is encoded into a global semantic embed-ding, which is used to modulate the state-space update in the propagation branch. At each stage, the semantic-aware context propagation module first updates the propagated context with historical hidden states, then injects the updated context into the visual stream, and finally delivers the refined features to the localization head. 
+
+B. Backbone 
+
+We adopt Fast-iTPN as the visual backbone because its narrow-and-deep architecture provides multi-level representa-tions that are well suited to stage-wise context propagation. The template image Z and the search image Xt are first tokenized into patch embeddings and then processed by a stack of backbone blocks. For the i-th block, we denote the input visual tokens by Fi−1 
+
+> t
+
+∈ RK×d and the output by Fit ∈ RK×d.Each backbone stage is associated with a propagation branch, enabling temporal context to be injected at multiple feature levels rather than only at the final layer. In addition, we JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4⋯
+
+Output 
+
+T=t -1
+
+T=t 
+
+T=t+1 
+
+> Tracking Head
+> Residual
+> fusion
+
+Time: T=t -1 T=t T=t+1 
+
+> SACP
+> State
+> Update
+> Semantic
+> Modulation
+> Context
+> Refinement
+> SACP
+> State
+> Update
+> Semantic
+> Modulation
+> Context
+> Refinement
+> SACP
+> State
+> Update
+> Semantic
+> Modulation
+> Context
+> Refinement
+
+Patch Embedding 
+
+Video clip Template Image 
+
+Vision Encoder 
+
+Text description      
+
+> Inject Extract Inject Extract Inject Extract
+> Semantic Guidance
+
+## ⨁
+
+## ⋯
+
+Text 
+
+Encoder Hidden   
+
+> State H
+> Hidden
+> State H
+
+TADA 
+
+> Train
+> Domain
+> Test
+> Domain
+> Align
+
+Fig. 2. Overview of the proposed pipeline. Given a template image, a search image, and a semantic description of the target, the framework extracts multi-level visual features with the backbone, propagates target-aware temporal context across stages, and predicts the target location with the localization head. 
+
+employ a CLIP text encoder to transform the target description into a global semantic embedding s ∈ Rds , which serves as the guidance signal for the subsequent context propagation module. Therefore, the framework leverages both appearance cues from Fast-iTPN and semantic cues from CLIP for anti-UAV tracking. 
+
+C. Semantic-Aware Context Propagation 
+
+To model long-range temporal dependencies while suppress-ing distractors, we introduce the SACP module, illustrated in Fig. 3. Unlike conventional SSM-based propagation [27], which updates hidden states solely according to visual observa-tions, SACP incorporates target semantics into the state update process, thereby producing target-aware temporal context. As shown in Fig. 3, each propagation stage proceeds in three steps: a semantic-aware state-space update of the propagated context, injection of the updated context into the visual stream, and a write-back of the current visual evidence to the propaga-tion branch. For the i-th propagation stage, let Fi−1
+
+t ∈ RK×d
+
+be the visual tokens from the backbone and Ci−1
+
+t ∈ RK×d
+
+be the context tokens. Given the hidden state Hit−1 from the previous frame, SACP first applies a semantic-aware state-space update: 
+
+¯Cit, Hit = SACP i(Ci−1
+
+t , Hit−1, s), (1) where s denotes the semantic embedding of the target and the internal operations of SACP i are detailed from Eq. (5) to Eq. (13). The updated context is then injected into the visual stream: 
+
+˜Fi−1
+
+t = Fi−1
+
+t + Attn i
+
+in (Fi−1
+
+t , ¯Cit, ¯Cit), (2) 
+
+Fit = Block i( ˜Fi−1
+
+t ). (3) The current visual evidence is then written back to the prop-agation branch: 
+
+Cit = Attn i
+
+out ( ¯Cit, Fit, Fit) + ¯Cit. (4) By repeating the above process across backbone stages and video frames, SACP continuously propagates target-aware Semantic Feature 𝑓 !                        
+
+> ⋯
+> Context Feature 𝑐
+> ⋯
+> Previous Hidden State 𝐻 "
+> ⋯
+> Branch Split
+> Update Branch Modulation Branch
+> Semantic Modulation
+> Selective State -Space Scan
+> ⋯
+> Adapter
+> Updated Hidden State Semantic Aware Context
+> ⋯⋯
+> Modulated A
+> ⋯
+> Modulated Δ
+> ⋯
+> Update
+> Inputs
+> State Scan
+> 𝑐 #𝑐 $𝑐 %𝑐 &
+> 𝑘 =1𝑘 =2𝑘 =3𝑘 =𝐾
+> ⋯
+> ⋯
+> ⋯
+> Concat
+> Semantic feature
+> Context Feature
+> Modulation
+> Network
+> Sigmoid
+> Exponential
+
+Fig. 3. Pipeline of the proposed SACP module, where the target semantics modulate the state-space update to produce target-aware temporal context. 
+
+temporal context and provides more reliable guidance for UAV localization. We now detail the internal SACP i operator, where semantic cues are injected directly into the selective state-space dynamics. Given the input context sequence Ci−1
+
+t ,we first project it into two branches: 
+
+[Uit, Vit] = Win Ci−1
+
+t , (5) where Uit, Vit ∈ RK×dm denote the state-update branch and the output-modulation branch, respectively. Meanwhile, the semantic embedding is projected into the SSM hidden space: 
+
+s′ = Wss + bs, (6) where Ws ∈ Rdm×ds and bs ∈ Rdm are learnable parameters. The key design question is where target semantics should enter this recurrence. In a selective state-space model, the hidden state hit,k serves as a temporal memory, and two quan-tities govern how this memory evolves: the input-dependent JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+step size ∆ and the state-transition matrix Ai, which together form the discrete transition ¯A = exp( ∆A i) and the input gain ¯B = ∆B . Their roles are complementary. The step size ∆ behaves as a write/forget gate : as ∆ → 0 we have 
+
+¯A → I and ¯B → 0, so the current observation is ignored and the existing memory is preserved, whereas as ∆ grows we have ¯A → 0 and the state is overwritten by the current token. The matrix Ai instead sets the retention timescale ,i.e., how slowly accumulated context decays once it has been written. We therefore inject semantics precisely into these two controls rather than fusing it as an auxiliary feature: the target description decides which observations are allowed to write into the temporal memory (through ∆) and how long target-consistent context is retained (through Ai). Under this view, the target language is no longer a per-frame matching cue but a direct controller of the temporal memory itself, a control locus left untouched by prior vision-language trackers. Concretely, for each token uit,k ∈ Rdm in Uit, the selective scan first computes a data-dependent step size 
+
+∆it,k = Softplus( W∆uit,k + b∆). (7) Semantic conditioning is injected into two complementary components with distinct temporal roles. At the token level, we modulate the write strength by a semantic gate conditioned on the projected embedding s′,
+
+git,k = σ  MLP([ uit,k ; s′]) ,
+
+˜∆it,k = ∆it,k ⊙ (1 + η git,k ), (8) which adaptively amplifies tokens consistent with the target semantics while suppressing distractors. At the sequence level, we modulate the retention dynamics by conditioning the log-parameterized transition matrix on the stable target description, 
+
+˜Ai = − exp  ai + WAs + bA
+
+, (9) where the additive formulation preserves the stability of the exponential parameterization while enabling semantic control over channel-wise decay rates. The remaining recurrence then follows the standard dis-cretized state-space update with the semantically modulated transition, 
+
+¯Ait,k = exp( ˜∆it,k ˜Ai), ¯Bit,k = ˜∆it,k Bit,k , (10) 
+
+hit,k = ¯Ait,k ⊙ hit−1,k + ¯Bit,k ⊙ uit,k , (11) 
+
+yit,k = Rit,k hit,k + Diuit,k , (12) where Bit,k , Rit,k , and Di are the remaining SSM parameters. The output context token is then obtained by 
+
+¯cit,k = Wo(yit,k ⊙ ϕ(vit,k )) , (13) where vit,k is the corresponding token in Vit, ϕ(·) denotes the SiLU activation function, and Wo is a learnable output projection. Stacking all output tokens yields ¯Cit. Because semantics are injected by modulating the scan dynamics rather than by introducing heavy cross-modal interaction, SACP pre-serves the efficiency of SSM-based tracking while improving robustness in cluttered anti-UAV scenarios. 
+
+D. Loss Function 
+
+For training, we optimize the network with a localization loss and a semantic-discriminative contrastive loss. The local-ization loss is defined as 
+
+Lt = λf Lfocal + λgLGIoU (ˆbt, b∗ 
+
+> t
+
+) + λℓ1 Lℓ1 (ˆbt, b∗ 
+
+> t
+
+), (14) where LGIoU follows the generalized IoU loss [51], and b∗
+
+> t
+
+denotes the ground-truth box at frame t.In addition, to enhance the semantic discriminability be-tween the target UAV and confusing background regions, we introduce SDC. Let Ft ∈ RHW ×d denote the propagated feature map. According to the ground-truth box, we first obtain a target feature v+ 
+
+> t
+
+by masked average pooling over the target region. We then project the target feature and the semantic embedding into a shared contrastive space: 
+
+zvt = ψv (v+ 
+
+> t
+
+), zst = ψs(s), (15) where ψv (·) and ψs(·) are learnable projection heads for visual and semantic features, respectively. To construct hard negatives, we project all background patches into the same space and select the top-M patches that are most similar to the semantic embedding: 
+
+N − 
+
+> t
+
+= TopK 
+
+
+
+sim  ψv (v− 
+
+> t,j
+
+), zst
+
+
+
+, (16) where v− 
+
+> t,j
+
+denotes the j-th background patch feature and 
+
+sim( ·, ·) denotes cosine similarity. For brevity, we define 
+
+s+ 
+
+> t
+
+= sim( zvt , zst )/τ, s− 
+
+> t,n
+
+= sim( z−
+
+> t,n
+
+, zst )/τ, (17) where z− 
+
+> t,n
+
+∈ N − 
+
+> t
+
+. The contrastive loss is formulated as 
+
+Lt 
+
+> sdc
+
+= − log exp( s+ 
+
+> t
+
+)exp( s+ 
+
+> t
+
+) + PMn=1 exp( s−
+
+> t,n
+
+) , (18) where τ is the temperature parameter. The overall training objective is 
+
+L =
+
+> T
+
+X
+
+> t=1
+
+ Lt + λsdc Lt
+
+> sdc
+
+ , (19) where λsdc is the balancing weight and T is the number of supervised search frames. By explicitly mining semantically confusing background patches, the proposed contrastive loss improves representation discriminability and further alleviates distractor interference in anti-UAV tracking. 
+
+E. Temporal-Aware Distribution Alignment 
+
+Tracking models trained on large-scale generic datasets often suffer from feature distribution shifts at test time in anti-UAV scenarios with distinct illumination, background clutter, and atmospheric conditions [52]–[55]. To bridge this gap without retraining, we propose TADA, a lightweight test-time adaptation strategy that recalibrates Batch Normalization (BN) statistics on the fly while leaving all learned parameters frozen. The overall procedure is summarized in Algorithm 1. Given an input feature map X ∈ RB×C×H×W , stan-dard BN normalizes with the training-time running statistics 
+
+μrun , σ2run ∈ RC :
+
+ˆX = X − μrun 
+
+pσ2run + ϵ , (20) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+Algorithm 1 TADA at frame t
+
+Require: BN input X ∈ RB×C×H×W ; frozen running stats 
+
+μrun , σ2run and affine γ, β; FIFO queues Qμ, Qσ of size 
+
+L; top ratio ρ; base blend λ0 = n/ (n + N ); output blend 
+
+α
+
+Ensure: adapted output Y 
+
+> 1:
+
+eh,w ← 1
+
+> C
+
+P 
+
+> c
+
+X2 
+
+> c,h,w
+
+{per-location energy } 
+
+> 2:
+
+Ωt ← top-ρ locations with the highest eh,w  
+
+> 3:
+
+μt, σ2 
+
+> t
+
+← statistics computed within Ωt only  
+
+> 4:
+
+if drift-rejection test on (μt, σ2 
+
+> t
+
+) fails then  
+
+> 5:
+
+reuse the previous adapted statistics {skip outlier frame } 
+
+> 6:
+
+else  
+
+> 7:
+
+push μt, σ2 
+
+> t
+
+into Qμ, Qσ (pop oldest if full)  
+
+> 8:
+
+end if  
+
+> 9:
+
+¯μt ← mean( Qμ), ¯σ2 
+
+> t
+
+← mean( Qσ ) {temporal smooth-ing } 
+
+> 10:
+
+λ ← λ0 · ct {confidence gate, Eq. (24) } 
+
+> 11:
+
+μ∗ ← λ ¯μt + (1 − λ)μrun  
+
+> 12:
+
+σ2∗ ← λ ¯σ2 
+
+> t
+
++ (1 − λ)σ2run {train/test interpolation } 
+
+> 13:
+
+clip μ∗, σ2∗ to safe ranges  
+
+> 14:
+
+Ytada ← γ ⊙ (X − μ∗)/√σ2∗ + ϵ + β 
+
+> 15:
+
+Yrun ← γ ⊙ (X − μrun )/pσ2run + ϵ + β 
+
+> 16:
+
+Y ← (1 − α) Yrun + α Ytada {output blending, Eq. (26) } 
+
+> 17:
+
+return Y {applied to the center and size BN branches }
+
+which fails to generalize once the test distribution shifts. A naive substitution by per-frame statistics computed over the entire feature map is unreliable, however, because the small UAV occupies only a few locations and the statistics are easily dominated by background clutter. We therefore estimate the per-frame statistics from the most informative locations only. For each spatial location of X we measure its energy 
+
+eh,w = 1
+
+> C
+
+P 
+
+> c
+
+X2
+
+> c,h,w
+
+, keep the top-ρ fraction of locations with the highest energy as a set Ωt, and compute the current-frame statistics μt, σ2 
+
+> t
+
+only within Ωt. Even so, single-frame estimates remain noisy under rapid illumination changes and transient occlusions, so we maintain two FIFO queues of size 
+
+L over the recent per-frame statistics, 
+
+Qμ = {μt−L+1 , . . . , μt}, Qσ = {σ2
+
+> t−L+1
+
+, . . . , σ2 
+
+> t
+
+}, (21) and obtain temporally smoothed estimates by simple averag-ing, 
+
+¯μt = 1
+
+|Q μ|
+
+X
+
+> μ∈Q μ
+
+μ, ¯σ2 
+
+> t
+
+= 1
+
+|Q σ |
+
+X
+
+> σ2∈Q σ
+
+σ2, (22) which suppress transient noise while tracking the evolving target distribution. The adapted statistics are then a convex combination of the smoothed test estimates and the training statistics, 
+
+μ∗ = λ ¯μt + (1 − λ)μrun , σ2∗ = λ ¯σ2 
+
+> t
+
++ (1 − λ)σ2run , (23) where the base mixing weight λ0 = n/ (n + N ) controls the trade-off: a smaller value favors training stability, while a larger one pushes the normalization toward the test-time distribution. To avoid over-adapting on ambiguous frames, we gate this weight by a per-channel confidence factor ct ∈ (0 , 1] 
+
+that decays as the smoothed mean departs from the training mean, 
+
+ct = exp 
+
+
+
+−   | ¯μt − μrun |/(κ σrun + ϵ) 2
+
+, λ = λ0 ct,
+
+(24) where κ is a scale hyperparameter and σrun = pσ2run ;the gated λ is the weight used in Eq. (23). The adapted output applies the recalibrated normalization followed by the inherited affine transform, 
+
+Ytada = γ ⊙ X − μ∗
+
+√σ2∗ + ϵ + β, (25) where γ, β ∈ RC are the learnable affine parameters inherited from training. Rather than overwriting the original normaliza-tion, we return a convex blend of the adapted output and the standard BN output Yrun = γ ⊙ ˆX + β obtained from the frozen running statistics, 
+
+Y = (1 − α) Yrun + α Ytada , (26) where the output coefficient α ∈ [0 , 1] balances stability and adaptation: α = 0 recovers standard BN, while α = 1 uses the fully adapted output. We apply this adaptation to the BN layers of both the center and size branches of the localization head, since test-time distribution shifts affect target localization and scale estimation jointly. We additionally adopt two safeguards detailed in the supplementary material: a drift-rejection test that skips clearly outlying frames before they enter the queues, and clipping on the adapted statistics and outputs. TADA is feed-forward, gradient-free, and incurs negligible cost, yet aligns the feature distribution with the current anti-UAV video through temporal smoothing, train/test interpolation, and out-put blending, while preserving model stability. IV. E XPERIMENTS 
+
+In this section, we describe the datasets, evaluation metrics, and implementation details, and then present comparisons with state-of-the-art trackers, ablation studies, and qualitative analyses. 
+
+A. Datasets and Evaluation Metrics 
+
+Datasets. We evaluate the proposed framework on three anti-UAV tracking benchmarks: Anti-UAV318 [8], DUT Anti-UAV [9], and UAV-Anti-UAV [3]. Anti-UAV318 is a large-scale RGB-T benchmark for ground-to-air UAV tracking with visible and invisible target states. DUT Anti-UAV provides visible-light detection and tracking subsets with precise an-notations for small UAV targets in short- and long-term videos. UAV-Anti-UAV targets the UAV-to-UAV tracking set-ting, where both the camera platform and target UAV undergo rapid motion, resulting in stronger dual-dynamic disturbance, background change, and target scale variation. We adopt a two-stage training protocol: the tracker is first pretrained on the combination of LaSOT [36], GOT-10k [35], TrackingNet [37], and COCO [63] with equal sampling ratios to acquire general appearance and matching representations, and then finetuned on the anti-UAV training data together with the natural-language target description. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+TABLE I OVERALL COMPARISON WITH STATE -OF -THE -ART TRACKERS ON THREE ANTI -UAV TRACKING BENCHMARKS . AUC DENOTES SUCCESS AUC, OP50  
+
+> AND
+
+OP75 DENOTE OVERLAP PRECISION AT THRESHOLDS 0.50 AND 0.75, P RE DENOTES PRECISION , AND N PRE DENOTES NORMALIZED PRECISION .AVG . AUC AND AVG . P RE ARE COMPUTED OVER ALL THREE BENCHMARKS WHEN THE CORRESPONDING SCORES ARE AVAILABLE . A LL RESULTS ARE REPORTED IN PERCENTAGES . T HE ∆ ROW REPORTS THE GAP BETWEEN OURS AND THE BEST COMPETING TRACKER IN EACH COLUMN , SHOWN IN RED WHEN OURS IS HIGHER AND BLUE WHEN OURS IS LOWER .
+
+Tracker Venue UAV-Anti-UAV [3] Anti-UAV318 [8] DUT Anti-UAV [9] Average AUC(%) ↑ OP50(%) ↑ OP75(%) ↑ Pre(%) ↑ nPre(%) ↑ AUC(%) ↑ Pre(%) ↑ AUC(%) ↑ Pre(%) ↑ AUC(%) ↑ Pre(%) ↑
+
+Pure vision trackers 
+
+SiamMask [56] CVPR’19 18.50 22.02 8.17 29.48 36.04 38.60 49.90 44.70 64.00 33.93 47.79 SiamRPN++ [15] CVPR’19 18.81 22.46 9.94 29.16 36.59 45.70 57.60 58.20 77.00 40.90 54.59 SiamFC++ [57] AAAI’20 20.35 23.91 13.18 29.40 38.40 44.00 56.10 52.50 72.40 38.95 52.63 SiamBAN [58] CVPR’20 19.53 22.53 12.55 29.37 37.15 40.50 52.70 51.40 69.30 37.14 50.46 SiamCAR [59] CVPR’20 20.47 23.84 11.07 31.71 38.02 48.10 61.40 52.60 70.30 40.39 54.47 LightTrack [60] CVPR’21 19.31 20.78 10.58 27.80 35.66 44.90 55.90 47.50 60.60 37.24 48.10 SiamGAT [61] CVPR’21 17.14 19.31 7.37 27.33 30.89 42.90 58.30 52.80 72.90 37.61 52.84 AutoMatch [62] ICCV’21 21.14 24.63 13.01 31.39 38.88 47.50 59.70 57.80 74.10 42.15 55.06 HiFT [40] ICCV’21 17.09 19.30 8.26 25.50 33.91 41.70 54.20 39.70 55.30 32.83 45.00 TCTrack [41] CVPR’22 17.24 19.98 9.10 27.06 33.33 42.40 55.20 46.10 64.10 35.25 48.79 OSTrack [16] ECCV’22 29.63 34.38 24.87 39.37 47.54 67.22 85.40 61.68 82.75 52.84 69.17 Aba-ViTrack [42] ICCV’23 28.10 32.46 22.29 37.40 45.67 53.50 66.50 60.10 80.00 47.23 61.30 ODTrack [17] AAAI’24 36.17 42.58 30.38 48.37 55.43 63.69 83.36 64.68 87.39 54.85 73.04 MambaNUT [29] IROS’25 25.12 29.50 18.59 34.80 43.09 53.90 66.80 54.00 69.90 44.34 57.17 SGLATrack [43] CVPR’25 25.49 29.06 20.22 33.94 42.41 54.72 67.83 55.76 74.78 45.32 58.85 ORTrack [44] CVPR’25 26.71 30.70 20.84 36.70 44.32 58.80 74.10 57.60 77.60 47.70 62.80 MambaLCT [30] AAAI’25 38.88 45.29 33.03 51.97 57.97 64.24 85.87 62.95 84.98 55.36 74.27 MCITrack-B224 [31] AAAI’25 34.90 41.23 27.92 47.54 54.17 66.51 82.76 65.93 84.37 55.78 71.56 
+
+Vision-language trackers 
+
+CiteTracker-256 [21] ICCV’23 26.78 30.74 21.76 35.64 44.10 54.50 67.00 55.30 71.90 45.53 58.18 UVLTrack [23] AAAI’24 33.78 40.41 26.11 46.89 53.91 63.95 80.62 60.31 80.73 52.68 69.41 MambaTrack [32] ICASSP’25 27.69 32.29 21.28 38.07 45.53 57.67 73.00 61.99 84.91 49.12 65.33 DUTrack-256 [25] CVPR’25 38.61 45.88 31.77 52.37 59.15 56.93 74.72 63.84 86.66 53.13 71.25 ATCTrack [26] ICCV’25 37.24 44.96 29.56 50.63 58.42 65.03 80.54 63.59 81.53 55.29 70.90 MambaSTS [3] arXiv’25 44.03 54.36 33.03 61.35 68.30 62.50 84.40 61.30 82.20 55.94 75.98 
+
+Ours - 46.40 54.94 38.63 62.39 68.64 67.27 84.13 66.36 87.11 60.01 77.88 
+
+∆ +2.37 +0.58 +5.60 +1.04 +0.34 +0.05 -1.74 +0.43 -0.28 +4.07 +1.90 
+
+TABLE II ATTRIBUTE -BASED AUC COMPARISON ON UAV-A NTI -UAV. T HE ∆ ROW REPORTS THE GAP BETWEEN OURS AND THE BEST COMPETING TRACKER IN EACH COLUMN , SHOWN IN RED WHEN OURS IS HIGHER AND BLUE WHEN OURS IS LOWER .Tracker FM MB SO OV SD ARV Avg. MambaLCT [30] 33.12 32.11 24.69 29.27 32.33 36.98 31.42 MCITrack-B224 [31] 29.71 28.68 21.48 26.94 28.81 33.37 28.17 DUTrack-256 [25] 32.68 31.43 23.65 29.00 32.71 37.25 31.12 MambaSTS [3] 38.55 37.08 30.66 34.31 38.28 42.82 36.95 
+
+Ours 40.19 39.88 31.67 35.06 41.32 45.10 38.87 
+
+∆ +1.64 +2.80 +1.01 +0.75 +3.04 +2.28 +1.92 
+
+Evaluation Metrics. Following the one-pass evaluation (OPE) protocol, we report AUC and precision (Pre) on Anti-UAV318 and DUT Anti-UAV. For UAV-Anti-UAV, we follow its offi-cial protocol and report five metrics: success AUC, overlap precision at thresholds 0.50 and 0.75 (OP50 and OP75), precision (Pre), and normalized precision (nPre). All metrics are reported in percentages, and higher values indicate better performance. 
+
+B. Implementation Details 
+
+Model Configuration. We adopt Fast-iTPN-Base [64] as the visual backbone, initialized from its CLIP-distilled pretraining, 
+
+TABLE III GENERALIZATION COMPARISON ON UAV TRACKING BENCHMARKS . T HE 
+
+∆ ROW REPORTS THE GAP BETWEEN OURS AND THE BEST COMPETING TRACKER IN EACH COLUMN , SHOWN IN RED WHEN OURS IS HIGHER AND BLUE WHEN OURS IS LOWER .Tracker UAV123 [4] UAVDT [5] AUC(%) ↑ Pre(%) ↑ AUC(%) ↑ Pre(%) ↑
+
+SGLATrack [43] 66.73 87.22 58.96 80.66 MambaLCT [30] 69.15 90.97 64.93 85.14 MCITrack [31] 69.75 90.48 63.23 82.76 DUTrack [25] 68.10 90.77 64.83 87.73 
+
+MambaTrack [32] 66.82 89.60 57.05 80.30 
+
+Ours 70.28 92.31 65.80 86.93 
+
+∆ +0.53 +1.34 +0.87 -0.80 
+
+with a patch stride of 16 and a drop-path rate of 0.1. The template and search region are resized to 112 ×112 and 224 ×
+
+224 with context factors of 2.0 and 4.0, respectively, and three templates plus two search frames are sampled per training pair within a temporal window of 400 frames. The SACP module is inserted at four interaction points across the backbone with a 512 -dimensional neck, and a frozen CLIP [47] ViT-B/32 text encoder produces the 512 -dim semantic embedding that modulates the visual stream in a gated manner. 
+
+Training. The framework is optimized in two stages with JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8Small Object      
+
+> Motion Blur
+> Fast Motion ODTrack MambaLCT MCITrack MambaTrack Ours
+
+Fig. 4. Qualitative comparison with ODTrack, MambaLCT, MCITrack, and MambaTrack on UAV-Anti-UAV sequences involving fast motion, motion blur, and small objects. Our method maintains tighter and more stable localization when baseline trackers drift, lag behind, or produce loose boxes. (a) (b) (c) 
+
+(d) (e) (f) 
+
+Fig. 5. Temporal stability comparison on three representative UAV-Anti-UAV sequences. The first row shows frame-wise IoU curves, and the second row shows center location error (CLE) curves. Our tracker maintains smoother IoU responses and lower CLE values than MambaLCT and MCITrack-B224. 
+
+AdamW (weight decay 10 −4, gradient clipping 0.1) and a step learning-rate schedule. In Stage I, the tracker is pretrained for 
+
+300 epochs with a base learning rate of 4×10 −4 and a backbone multiplier of 0.1, decayed by 10 at epoch 240 . In Stage II, the model is finetuned on the UAV-Anti-UAV training split for 
+
+100 epochs with the base learning rate reduced to 1 × 10 −4
+
+and dropped at epoch 80 ; all BN layers are frozen so that the Stage-I running statistics are preserved for test-time adaptation by TADA, and the semantic-discriminative contrastive loss is enabled with a weight of 0.2, while the focal, GIoU, and 
+
+ℓ1 losses use weights of 1.0, 2.0, and 5.0, respectively. All training is performed on four NVIDIA H100 GPUs with a total batch size of 64 .
+
+TABLE IV EFFICIENCY COMPARISON ON THE UAV-A NTI -UAV BENCHMARK .Tracker Backbone AUC(%) ↑ Params(M) FPS ↑
+
+ODTrack [17] ViT-B 36.17 92.83 38.61 MambaLCT [30] HiViT-B 38.88 72.78 97.08 
+
+MCITrack-B224 [31] Fast-iTPN-B 34.90 107.15 43.32 MambaTrack [32] Vim-S 27.69 221.47 48.11 
+
+Ours Fast-iTPN-B 46.40 189.87 41.91 
+
+C. Comparison with State-of-the-Art Methods 1) Overall Performance: We compare the proposed tracker with representative pure-vision and vision-language trackers in Tab. I. On UAV-Anti-UAV, our method ranks first on all five metrics, achieving 46 .40% AUC and 38 .63% OP75. Compared with the strongest competitor MambaSTS, it improves AUC JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+by +2 .37% and, most notably, OP75 by +5 .60% , suggesting more accurate box localization under fast relative motion and frequent scale changes. The advantage over MambaLCT and MCITrack indicates that SACP is more robust than purely visual temporal state modeling in UAV-to-UAV tracking. On Anti-UAV318 and DUT Anti-UAV, our method also obtains the best AUC scores of 67 .27% and 66 .36% , respectively. ODTrack attains a slightly higher precision on DUT Anti-UAV, whose ground-based sequences contain larger and slower targets that favor its video-level temporal token propagation; our gains are instead concentrated on the harder UAV-to-UAV setting, and our method still achieves the best average per-formance over the three benchmarks, with 60 .01% AUC and 
+
+77 .88% precision. This cross-benchmark consistency shows that the proposed framework benefits both UAV-mounted and ground-based anti-UAV tracking, where domain shift, small targets, and distractors remain common challenges. 
+
+2) Attribute-Based Analysis: Attribute-level results in Tab. II provide a finer view of where the proposed tracker improves over existing UAV-to-UAV trackers. Our method obtains the best average AUC of 38 .87% , surpassing the strongest competitor MambaSTS by +1 .92% , and ranks first on all six attributes: fast motion (FM), motion blur (MB), small object (SO), out-of-view (OV), similar distractor (SD), and aspect-ratio variation (ARV). This all-attribute lead is important because UAV-Anti-UAV sequences rarely contain an isolated challenge; rapid ego-motion often co-occurs with blur, scale change, and background distractors. Therefore, the result suggests that the proposed semantic-aware temporal propagation improves the overall stability of the tracker rather than only overfitting to a single failure mode. The largest gain appears on similar distractors, where our method reaches 
+
+41 .32% AUC and improves over MambaSTS by +3 .04% . This is the most direct empirical signature of the SACP mechanism in Sec. III-C: visually similar UAV-like regions tend to be writ-ten into the temporal memory of pure-vision trackers and grad-ually contaminate the propagated state, whereas the semantic write gate in SACP down-weights such distractor tokens at the moment of state update, so the propagated context stays anchored to the described target rather than to look-alike back-ground. That the attribute most directly tied to target-identity confusion benefits the most is consistent with our central claim that semantics should control what the temporal memory retains, not merely match appearance within a single frame. The gains on motion blur ( 39 .88% , +2 .80% ) and aspect-ratio variation ( 45 .10% , +2 .28% ) further show that the tracker remains reliable when frame-level appearance is degraded or box geometry changes sharply. In these cases, propagated semantic context helps preserve identity, while TADA reduces video-specific feature-statistic mismatch caused by changing viewpoints and background distributions. For fast motion, the improvement of +1 .64% indicates that temporal context alle-viates the lagging and response-shift problem caused by large inter-frame displacement. For out-of-view, the gain is smaller (+0 .75% ), which is reasonable because no tracker can fully recover missing visual evidence without an explicit long-term re-detection branch; nevertheless, the improvement suggests that the propagated state remains useful when the target is only partially absent or quickly reappears. The smallest gain is observed on small objects ( +1 .01% ), where the UAV occupies only a few pixels and both semantic and visual cues have limited spatial evidence to exploit. This remaining gap reveals a limitation of the current framework and motivates future designs with stronger tiny-target localization or re-detection mechanisms. 
+
+3) Qualitative Results: We provide qualitative comparisons with ODTrack, MambaLCT, MCITrack, and MambaTrack on representative UAV-to-UAV scenarios in Fig. 4. The selected cases cover fast motion, motion blur, and small objects, which are common failure modes in UAV-Anti-UAV tracking and also correspond to the attributes analyzed in Tab. II. Under fast motion, several baselines lag behind the target or shift toward nearby high-response background regions because the inter-frame displacement is large and the search region changes rapidly. Under motion blur, the target boundary becomes less discriminative, causing loose boxes or box-center deviation. For small objects, the target occupies only a few pixels, so local texture and shape cues are weak and the tracker can easily confuse the UAV with clutter or structured background patterns. In contrast, our tracker produces boxes that remain more tightly aligned with the target across these representative cases. The improvement is visible not only in the box center but also in box scale: the predicted boxes are less likely to expand onto background regions or collapse around partial target responses. This behavior is consistent with the design of SACP, where the target description is used to guide tem-poral context propagation and preserve identity when visual evidence becomes unstable. TADA further helps keep the localization head calibrated to the current video, which is useful when blur, illumination, or viewpoint changes alter the feature distribution. Therefore, the qualitative results provide a visual explanation for the attribute-level gains: the proposed method does not merely produce occasional better boxes, but maintains target-consistent localization under the typical degradation patterns of UAV-to-UAV tracking. 
+
+4) Temporal Stability Analysis: To evaluate temporal ro-bustness, we visualize the frame-wise IoU and center location error (CLE) on three representative UAV-Anti-UAV sequences in Fig. 5. IoU reflects the quality of box overlap, while CLE measures the center-position error; together, they reveal whether a tracker is both spatially accurate and temporally stable. Compared with MambaLCT and MCITrack-B224, our tracker maintains smoother IoU curves over long sequences and avoids abrupt collapses during challenging intervals. In contrast, the baselines frequently exhibit sudden drops in IoU accompanied by sharp increases in CLE, which indicates target drift or temporary target loss. These failures usually occur when the target undergoes rapid displacement, becomes blurred, or passes through visually confusing background regions. The curves also show that our advantage is not limited to isolated frames. Across the selected sequences, the CLE of our tracker remains below 18 pixels, whereas the baselines often reach the clipped upper range of the plot after drift. This suggests that our method better controls error accumulation: even when individual frames are ambiguous, the propagated temporal state prevents the tracker from quickly jumping to JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 Base 
+
+> +SACP
+> +SDC
+> +TADA
+> 30
+> 35
+> 40
+> 45
+> 50
+> Score (%)
+> 46.40
+> AUC
+> Base
+> +SACP
+> +SDC
+> +TADA
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 54.94
+> OP50
+> Base
+> +SACP
+> +SDC
+> +TADA
+> 25
+> 30
+> 35
+> 40
+> 45
+> 38.63
+> OP75
+> Base
+> +SACP
+> +SDC
+> +TADA
+> 40
+> 50
+> 60
+> 70
+> 62.39
+> Pre
+> Base
+> +SACP
+> +SDC
+> +TADA
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75
+> 68.64
+> nPre
+
+Fig. 6. Bar-chart visualization of the component ablation on UAV-Anti-UAV. Each panel shows one metric under progressively added components, from the baseline to the full model. Baseline Ours w/o TADA Ours Baseline Ours w/o TADA Ours        
+
+> t-3t-2t-1tt+1 t+2 t+3 t+4
+
+Fig. 7. Response-map visualization over short UAV-Anti-UAV video clips (eight consecutive frames each), comparing the pure-vision baseline, Ours w/o TADA, and the full model. The baseline progressively leaks response onto distractor regions, while SACP keeps it anchored to the target. Yellow boxes denote ground truth, and red boxes denote predictions. 
+
+distractors or stale background responses. SACP contributes by carrying target-aware context across frames, and TADA further stabilizes the localization head by adapting feature statistics to the current video without updating model parameters. The temporal-stability visualization therefore complements the average metrics in Tab. I: the performance gain comes from fewer catastrophic drifts and more consistent localization throughout the sequence, which is critical for UAV-to-UAV tracking where downstream control decisions depend on stable frame-by-frame estimates. 
+
+5) Generalization to UAV Tracking: To assess whether the proposed design over-specializes to anti-UAV data, we further evaluate it on generic UAV tracking benchmarks in Tab. III. UAV123 contains diverse low-altitude tracking videos captured from UAV-mounted cameras, while UAVDT focuses on traffic-related aerial scenes with frequent scale changes, camera motion, and background clutter. These benchmarks differ from UAV-Anti-UAV because the tracked targets are mostly ground objects rather than flying UAVs, so strong performance on them indicates whether the learned temporal representation can transfer beyond the anti-UAV category. On UAV123, our method achieves the best AUC of 70 .28% and precision of 92 .31% , outperforming MCITrack in AUC and MambaLCT in precision. On UAVDT, it obtains the best AUC of 65 .80% and remains close to DUTrack in precision ( 86 .93% 
+
+vs. 87 .73% ). The slightly lower precision on UAVDT suggests that DUTrack can still be competitive in center localization for traffic-like targets, but our higher AUC indicates better overall overlap quality and scale estimation. Overall, these results show that the proposed modules do not sacrifice generic UAV tracking ability for anti-UAV specialization. Instead, semantic-aware temporal propagation and conservative test-time align-ment learn transferable robustness to UAV camera motion, scale variation, and background changes, which are shared across both anti-UAV and generic UAV tracking scenarios. 
+
+6) Efficiency Comparison: Besides tracking accuracy, run-time efficiency is critical for UAV-to-UAV tracking because the tracker must process rapidly changing aerial videos. As JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 (a) (b) (c) (d)        
+
+> Fig. 8. Hyperparameter sensitivity analysis of TADA on UAV-Anti-UAV. From left to right, (a) to (d) vary the candidate number N, current-frame weight n,output blending coefficient α, and top-kratio ρ, respectively. We report AUC, OP50, and precision.
+
+shown in Tab. IV, our method achieves the highest AUC of 
+
+46 .40% while running at 41 .91 FPS, meeting real-time require-ments. The reported 189 .87 M parameters include the frozen CLIP text encoder, whereas only 126 .44 M parameters are trainable; moreover, each target description is encoded once per sequence rather than per frame, so the text branch adds negligible per-frame cost. Although MambaLCT runs faster, our method improves AUC by +7 .52% ; and compared with MambaTrack, our method uses fewer parameters ( 189 .87 Mvs. 221 .47 M) while obtaining substantially higher accuracy (+18 .71% AUC). These results show that the proposed frame-work provides a favorable accuracy-efficiency trade-off for UAV-to-UAV tracking. 
+
+D. Ablation Study 
+
+We design a series of ablation studies to isolate the con-tribution of each component. Unless otherwise specified, all ablation results are evaluated on UAV-Anti-UAV with the same training and evaluation protocol as the main comparison. 
+
+1) Component Analysis: As shown in Fig. 6, SACP brings the largest improvement, increasing AUC from 35 .84% to 
+
+42 .37% and precision from 47 .90% to 59 .86% . This con-firms that SACP is the key component for handling rapid target-camera motion. Adding SDC improves AUC to 44 .07% 
+
+and nPre to 68 .40% , indicating stronger target-background discrimination. With TADA, the full model reaches 46 .40% 
+
+AUC, 62 .39% precision, and 68 .64% nPre. Overall, most of the gain comes from SACP, while SDC and TADA act as complementary refinements that sharpen discrimination and improve test-time robustness, respectively. To explain the component-level improvements, we visualize decoder response maps over short video clips in Fig. 7. Each clip contains eight consecutive frames, and we compare three variants: the pure-vision baseline, Ours w/o TADA, and the full model. The yellow boxes denote ground-truth annotations, while the red boxes denote predicted bounding boxes. The key pattern to read across the eight frames is temporal: the baseline gradually leaks response onto distracting regions and drifts away from the target, which is the visual footprint of a propagated state being progressively contaminated by distractor evidence. With SACP and SDC, Ours w/o TADA keeps the response anchored to the true target throughout the clip, indicating that the semantic write gate suppresses distractor tokens at the moment of state update and prevents this contamination from accumulating, rather than merely improving a single AUC (%) OP50 (%) OP75 (%) Pre (%) nPre (%)          
+
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> Gain over baseline (%)
+> +8.2
+> +12.0
+> +3.4
+> +13.7 +14.1
+> Text fusion only w/o Δmodulation w/o Amodulation Full SACP
+> Fig. 9. Ablation of SACP designs on UAV-Anti-UAV without TADA. The plot reports metric gains over the baseline for different semantic injection strategies.
+
+frame. Adding TADA keeps these response peaks compact and consistent across consecutive frames, especially under rapid appearance and background changes, which reflects its role in stabilizing predictions when individual frames are ambiguous. Overall, the response maps mirror the quantitative component analysis: SACP and SDC drive target discrimination, while TADA contributes cross-frame consistency at test time. 
+
+2) SACP Design Analysis: Fig. 9 compares different se-mantic injection designs, evaluated on the SACP+SDC con-figuration without TADA. The baseline reaches 35 .84% AUC, 
+
+42 .08% OP50, 29 .86% OP75, 47 .90% precision, and 54 .29% 
+
+nPre. Direct text fusion improves these results to 40 .32% ,
+
+49 .86% , 30 .41% , 56 .72% , and 63 .58% , respectively, showing that target semantics already provide useful discrimination cues. However, it remains clearly weaker than our full design, in which semantics modulate both the write gate ∆ and the retention matrix A, reaching 44 .07% AUC, 54 .09% OP50, 
+
+33 .25% OP75, 61 .60% precision, and 68 .40% nPre. Disabling the semantic modulation of the write gate ∆ or of the state-transition matrix A lowers AUC to 43 .51% and 42 .90% ,respectively; the larger drop from removing A modulation indicates that controlling how long target-consistent context is retained is at least as important as controlling what is written into the temporal memory. Crucially, every modulation variant outperforms direct text fusion ( 40 .32% ) by a clear margin, which confirms our central design principle: target seman-tics should govern the selection dynamics of the temporal memory—its write gate and retention timescale—rather than merely be fused as an auxiliary appearance feature. 
+
+3) TADA Analysis: We analyze TADA from two comple-mentary angles: the contribution of its key components, and JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12                                    
+
+> TABLE V ABLATION STUDY OF KEY COMPONENTS IN TADA ON UAV-A NTI -UAV. Variant AUC(%) OP50(%) OP75(%) Pre(%) nPre(%) w/o TADA 44.07 54.09 33.25 61.60 68.40 w/o top-kstatistics 43.34 53.67 32.59 60.98 67.71 w/o temporal queue 45.51 53.82 38.03 61.01 67.53 Center-only adaptation 43.84 53.84 33.03 61.26 68.15 Size-only adaptation 45.72 54.14 38.21 61.24 67.90
+> Full TADA 46.40 54.94 38.63 62.39 68.64
+
+its sensitivity to the main hyperparameters. 
+
+Component contribution. Tab. V studies the contribution of the core components in TADA. Compared with the model without TADA, the full strategy improves AUC from 44 .07% 
+
+to 46 .40% and OP75 from 33 .25% to 38 .63% , showing that test-time distribution alignment strengthens inference-time robustness. Among the core components, removing the top-k statistics causes the largest degradation (AUC 43 .34% ,OP75 32 .59% ): estimating the adaptation statistics only from the most informative spatial locations, rather than the entire feature map, is essential for avoiding noisy background-dominated statistics. The temporal queue in Eqs. (21) and (22), which smooths per-frame statistics over a short window, mainly improves the high-overlap regime (OP75 38 .03% with-out it). Adapting both the center and size branches of the localization head is also more effective than adapting either branch alone, as shown by the center-only and size-only vari-ants. The remaining lightweight safeguards (confidence gate, drift rejection, statistic clipping, and output regularization) each contribute a small and consistent gain; we report their individual effects in the supplementary material. 
+
+Hyperparameter sensitivity. We further analyze the sensi-tivity of the proposed TADA module to four key hyperpa-rameters on UAV-Anti-UAV, as shown in Fig. 8. For each hyperparameter, we vary its value while keeping the others fixed, and report AUC, OP50, and precision. Overall, TADA is relatively stable within a reasonable range of hyperparameter values, while overly aggressive choices may lead to perfor-mance degradation. The candidate number N and current-frame weight n together determine the base blending weight 
+
+λ0 = n/ (n+N ) in Eq. (23). In Fig. 8(a), the candidate number 
+
+N achieves the best performance at N = 8 , with an AUC of 
+
+46 .40% , OP50 of 54 .94% , and precision of 62 .39% . Increasing 
+
+N does not consistently improve the results, suggesting that introducing too many candidates may bring noisy statistics into the test-time adaptation process. In Fig. 8(b), the per-formance improves as the current-frame weight n increases from 1 to 6, and then becomes saturated. This indicates that emphasizing reliable current-frame observations is beneficial, but an excessively large weight provides limited additional gain. In Fig. 8(c), larger output blending coefficients α in Eq. (26) generally lead to better AUC, and the best result in this sweep is obtained when α = 1 .0. This suggests that the adapted prediction is more reliable than the original output on UAV-Anti-UAV. In Fig. 8(d), the best AUC is obtained at the top-k ratio ρ = 0.20 , while larger ratios gradually reduce performance. This observation indicates that using a Out of View           
+
+> Similar Distractor
+> Small Object
+> Motion blur
+> GTOurs
+> Fig. 10. Representative challenging cases where our tracker may still produce inaccurate localization on UAV-Anti-UAV, including out-of-view, similar distractors, severe motion blur, and extremely small objects.
+
+compact set of high-energy spatial responses is important for suppressing noisy background statistics during adaptation. Based on these observations, we use N = 8 , n = 6 , α = 1 .0,and ρ = 0 .20 as the final hyperparameter values for TADA on UAV-Anti-UAV, and the final reported model follows the configuration that achieves 46 .40% AUC. V. D ISCUSSION 
+
+A. Failure Cases Analysis 
+
+Representative failure cases are illustrated in Fig. 10. Al-though the proposed framework improves robustness in most UAV-to-UAV tracking scenarios, failures may still occur under challenging conditions including out-of-view targets, visually similar distractors, severe motion blur, and extremely small ob-jects. In out-of-view scenarios, the target is temporarily absent from the observation, requiring the tracker to rely on historical states and appearance priors for re-localization. When the target reappears after a long absence or from an unexpected location, such priors may become outdated, leading to inaccu-rate recovery in some cases. Ambiguities introduced by similar distractors remain another challenge. While semantic guidance improves discrimination against look-alike objects, multiple UAV-like instances or structured background patterns may still produce responses comparable to the true target, occasion-ally resulting in incorrect but visually plausible localization. Severe motion blur further degrades boundary and texture information, reducing the reliability of both classification confidence and box regression. For extremely small targets, the object occupies only a few pixels, making localization highly sensitive to small prediction errors, which can significantly affect IoU-based evaluation. These cases indicate remaining limitations rather than systematic failures. SACP is effective in preserving target identity over time but is not designed for long-term re-detection when the target is absent for extended JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+periods. Similarly, TADA alleviates feature distribution shift but cannot recover spatial details lost under severe blur or extreme scale reduction. 
+
+B. Future Work 
+
+These limitations suggest several directions for future work. A long-term memory and re-detection branch could improve recovery after target disappearance, while instance-level se-mantic memory or stronger distractor-aware matching could better distinguish visually similar UAVs. Tiny and blurred targets may benefit from super-resolution-assisted feature en-hancement, uncertainty-aware box prediction, or localization heads designed for small aerial objects. Beyond visual track-ing, integrating SATATrack with multi-modal sensing and closed-loop UAV control is an important step toward real-world anti-UAV systems, where tracking confidence should interact with path planning, camera control, and interception decisions. VI. C ONCLUSION 
+
+In this paper, we study UAV anti-UAV tracking, a chal-lenging air-to-air tracking scenario characterized by dual-dynamic motion, rapid background changes, tiny UAV targets, and severe target-distractor ambiguity. We propose SATA-Track , a Semantic-Aware Temporal Adaptation framework that integrates language-guided temporal modeling with test-time feature distribution alignment. Specifically, SACP in-jects semantic descriptions into state-space temporal updates and propagates target-aware context across backbone stages; TADA adapts normalization statistics at test time via temporal smoothing and train-test statistic blending without updating model parameters; and an auxiliary contrastive regularizer mines semantically confusing background patches as hard negatives during training. Extensive experiments validate the effectiveness of SATATrack in terms of performance, general-ization, efficiency, and robustness under diverse UAV tracking conditions. REFERENCES [1] H. An, W. Hu, S. Huang, S. Huang, R. Li, Y. Liang, J. Shao, Y. Song, Z. Wang, C. Yuan, C. Zhang, H. Zhang, W. Zhuang, and X. Li, “AI flow: Perspectives, scenarios, and approaches,” Vicinagearth , vol. 3, no. 1, p. 1, 2026. [2] X. Chen, J. Luo, J. Xu, F. Yi, C. Zhang, and X. Li, “Generative video compression: Towards 0.01% compression rate for video transmission,” 
+
+Vicinagearth , vol. 3, no. 1, p. 7, 2026. [3] C. Zhang, L. Liu, Z. Zhang, Y. Wang, H. Wen, X. Zhou, S. Ge, and Y. Wang, “How far are modern trackers from uav-anti-uav? a million-scale benchmark and new baseline,” arXiv preprint arXiv:2512.07385 ,2025. [4] M. Mueller, N. Smith, and B. Ghanem, “A benchmark and simulator for UAV tracking,” in ECCV , 2016, pp. 445–461. [5] H. Yu, G. Li, W. Zhang et al. , “The unmanned aerial vehicle benchmark: Object detection and tracking,” in ECCV , 2018, pp. 370–386. [6] P. Zhu, L. Wen, D. Du, X. Bian, H. Fan, Q. Hu, and H. Ling, “Detection and tracking meet drones challenge,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 11, pp. 7380–7399, 2021. [7] C. Zhang, G. Huang, L. Liu, S. Huang, Y. Yang, X. Wan, S. Ge, and D. Tao, “Webuav-3m: A benchmark for unveiling the power of million-scale deep uav tracking,” IEEE TPAMI , vol. 45, no. 7, pp. 9186–9205, 2023. [8] N. Jiang, K. Wang, X. Peng, X. Yu, Q. Wang, J. Xing, G. Li, G. Guo, Q. Ye, J. Jiao et al. , “Anti-uav: A large-scale benchmark for vision-based uav tracking,” IEEE TMM , vol. 25, pp. 486–500, 2021. [9] J. Zhao, J. Zhang, D. Li, and D. Wang, “Vision-based anti-uav detection and tracking,” IEEE TITS , vol. 23, no. 12, pp. 25 323–25 334, 2022. [10] B. Huang, J. Li, J. Chen, G. Wang, J. Zhao, and T. Xu, “Anti-uav410: A thermal infrared benchmark and customized scheme for tracking drones in the wild,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2023. [11] X.-F. Zhu, T. Xu, J. Zhao, J.-W. Liu, K. Wang, G. Wang, J. Li, Q. Wang, L. Jin, Z. Zhu et al. , “Evidential detection and tracking collaboration: New problem, benchmark and algorithm for robust anti-uav system,” 
+
+arXiv preprint arXiv:2306.15767 , 2023. [12] T. Xu, J. Gu, X. Zhu, X. Wu, and J. Kittler, “A tri-modal dataset and a baseline system for tracking unmanned aerial vehicles,” arXiv preprint arXiv:2511.18344 , 2025. [13] L. Bertinetto, J. Valmadre, J. F. Henriques et al. , “Fully-convolutional siamese networks for object tracking,” in ECCV , 2016, pp. 850–865. [14] M. Danelljan, G. Bhat, F. S. Khan, and M. Felsberg, “Atom: Accurate tracking by overlap maximization,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, pp. 4660–4669. [15] B. Li, W. Wu, Q. Wang, F. Zhang, J. Xing, and J. Yan, “Siamrpn++: Evolution of siamese visual tracking with very deep networks,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, pp. 4282–4291. [16] B. Ye, H. Chang, B. Ma, S. Shan, and X. Chen, “Joint feature learning and relation modeling for tracking: A one-stream framework,” in European Conference on Computer Vision , 2022, pp. 341–357. [17] Y. Zheng, B. Zhong, Q. Liang, Z. Mo, S. Zhang, and X. Li, “Odtrack: Online dense temporal token learning for visual tracking,” in Proceed-ings of the AAAI conference on artificial intelligence , vol. 38, no. 7, 2024, pp. 7588–7596. [18] X. Wang, X. Shu, Z. Zhang, B. Jiang, Y. Wang, Y. Tian, and F. Wu, “To-wards more flexible and accurate object tracking with natural language: Algorithms and benchmark,” in IEEE CVPR , 2021, pp. 13 763–13 773. [19] M. Guo, Z. Zhang, H. Fan, and L. Jing, “Divert more attention to vision-language tracking,” NeurIPS , 2022. [20] L. Zhou, Z. Zhou, K. Mao, and Z. He, “Joint visual grounding and track-ing with natural language specification,” Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 23 151– 23 160, 2023. [21] X. Li, Y. Huang, Z. He, Y. Wang, H. Lu, and M.-H. Yang, “Citetracker: Correlating image and text for visual tracking,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 9974–9983. [22] C. Zhang, X. Sun, Y. Yang, L. Liu, Q. Liu, X. Zhou, and Y. Wang, “All in one: Exploring unified vision-language tracking with multi-modal alignment,” in Proceedings of the 31st ACM International Conference on Multimedia , 2023, pp. 5552–5561. [23] Y. Ma, Y. Tang, W. Yang, T. Zhang, J. Zhang, and M. Kang, “Unifying visual and vision-language tracking via contrastive learning,” arXiv preprint arXiv:2401.11228 , 2024. [24] X. Chen, B. Kang, W. Geng, J. Zhu, Y. Liu, D. Wang, and H. Lu, “Sutrack: Towards simple and unified single object tracking,” in AAAI ,vol. 39, no. 2, 2025, pp. 2239–2247. [25] X. Li, B. Zhong, Q. Liang, Z. Mo, J. Nong, and S. Song, “Dynamic updates for language adaptation in visual-language tracking,” in CVPR ,2025, pp. 19 165–19 174. [26] X. Feng, S. Hu, X. Li, D. Zhang, M. Wu, J. Zhang, X. Chen, and K. Huang, “Atctrack: Aligning target-context cues with dynamic target states for robust vision-language tracking,” in ICCV , 2025, pp. 19 850– 19 861. [27] A. Gu and T. Dao, “Mamba: Linear-time sequence modeling with selective state spaces,” arXiv preprint arXiv:2312.00752 , 2023. [28] L. Zhu, B. Liao, Q. Zhang, X. Wang, W. Liu, and X. Wang, “Vision mamba: Efficient visual representation learning with bidirectional state space model,” arXiv preprint arXiv:2401.09417 , 2024. [29] Y. Wu, X. Yang, X. Wang, H. Ye, D. Zeng, and S. Li, “Mambanut: Nighttime uav tracking via mamba-based adaptive curriculum learning,” in 2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2025, pp. 18 864–18 871. [30] X. Li, B. Zhong, Q. Liang, G. Li, Z. Mo, and S. Song, “Mambalct: Boosting tracking via long-term context state space model,” in Proceed-ings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 5, 2025, pp. 4986–4994. [31] B. Kang, X. Chen, S. Lai, Y. Liu, Y. Liu, and D. Wang, “Exploring enhanced contextual information for video-level object tracking,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 4, 2025, pp. 4194–4202. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 14 
+
+[32] C. Zhang, L. Liu, H. Wen, X. Zhou, and Y. Wang, “Mambatrack: Exploiting dual-enhancement for night uav tracking,” in ICASSPP .IEEE, 2025, pp. 1–5. [33] X. Qiao, P. Huang, J. Yuan, X. Guo, B. Ye, C. Xue, Y. Zheng, Z. Sun, and X. Li, “Bidirectional prototype-reward co-evolution for test-time adaptation of vision-language models,” IEEE Transactions on Multimedia , 2026. [34] X. Qiao, J. Zhao, Y. Jiang, X. Guo, Z. Sun, H. Zhang, and X. Li, “Class-aware prototype learning with negative contrast for test-time adaptation of vision-language models,” arXiv preprint arXiv:2510.19802 , 2025. [35] L. Huang, X. Zhao, and K. Huang, “Got-10k: A large high-diversity benchmark for generic object tracking in the wild,” IEEE TPAMI ,vol. 43, no. 5, pp. 1562–1577, 2019. [36] H. Fan, L. Lin, F. Yang et al. , “Lasot: A high-quality benchmark for large-scale single object tracking,” in CVPR , 2019, pp. 5374–5383. [37] M. Muller, A. Bibi, S. Giancola, S. Alsubaihi, and B. Ghanem, “Track-ingnet: A large-scale dataset and benchmark for object tracking in the wild,” in ECCV , 2018, pp. 300–317. [38] M. Danelljan, G. Bhat, F. Shahbaz Khan, and M. Felsberg, “Eco: Efficient convolution operators for tracking,” in CVPR , 2017, pp. 6638– 6646. [39] X. Chen, B. Yan, J. Zhu, D. Wang, X. Yang, and H. Lu, “Transformer tracking,” in CVPR , 2021, pp. 8126–8135. [40] Z. Cao, C. Fu, J. Ye, B. Li, and Y. Li, “Hift: Hierarchical feature transformer for aerial tracking,” in ICCV , 2021, pp. 15 457–15 466. [41] Z. Cao, Z. Huang, L. Pan, S. Zhang, Z. Liu, and C. Fu, “Tctrack: Temporal contexts for aerial tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 14 798–14 808. [42] S. Li, Y. Yang, D. Zeng, and X. Wang, “Adaptive and background-aware vision transformer for real-time uav tracking,” in ICCV , 2023, pp. 13 989–14 000. [43] C. Xue, B. Zhong, Q. Liang, Y. Zheng, N. Li, Y. Xue, and S. Song, “Similarity-guided layer-adaptive vision transformer for uav tracking,” in Proceedings of the Computer Vision and Pattern Recognition Confer-ence , 2025, pp. 6730–6740. [44] Y. Wu, X. Wang, X. Yang, M. Liu, D. Zeng, H. Ye, and S. Li, “Learning occlusion-robust vision transformers for real-time uav tracking,” in Pro-ceedings of the Computer Vision and Pattern Recognition Conference ,2025, pp. 17 103–17 113. [45] Y. Dong, F. Wu, S. Zhang, G. Chen, Y. Hu, M. Yano, J. Sun, S. Huang, F. Liu, Q. Dai et al. , “Securing the skies: A comprehensive survey on anti-uav methods, benchmarking, and future directions,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 6659–6673. [46] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “Bert: Pre-training of deep bidirectional transformers for language understanding,” arXiv preprint arXiv:1810.04805 , 2018. [47] A. Radford, J. W. Kim, C. Hallacy, and et al. , “Learning transferable visual models from natural language supervision,” in International Conference on Machine Learning , 2021, pp. 8748–8763. [48] A. Dosovitskiy, L. Beyer, A. Kolesnikov, and et al. , “An image is worth 16x16 words: Transformers for image recognition at scale,” in 
+
+International Conference on Learning Representations , 2020. [49] N. Wang, W. Zhou et al. , “Transformer meets tracker: Exploiting temporal context for robust visual tracking,” in CVPR , 2021, pp. 1571– 1580. [50] B. Yan, H. Peng, J. Fu, D. Wang, and H. Lu, “Learning spatio-temporal transformer for visual tracking,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 10 448–10 457. [51] H. Rezatofighi, N. Tsoi, J. Gwak, A. Sadeghian, I. Reid, and S. Savarese, “Generalized intersection over union: A metric and a loss for bound-ing box regression,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2019, pp. 658–666. [52] X. Li, “Positive-incentive noise,” IEEE TNNLS , vol. 35, no. 6, pp. 8708– 8714, 2024. [53] H. Zhang, S. Huang, Y. Guo, and X. Li, “Variational positive-incentive noise: How noise benefits models,” IEEE TPAMI , vol. 47, no. 9, pp. 8313–8320, 2025. [54] R. Zaveri, S. Patel, Y. Gu, and G. Doretto, “Improving accuracy and generalization for efficient visual tracking,” in Proceedings of the Winter Conference on Applications of Computer Vision , 2025, pp. 9450–9460. [55] Z. Shao, Y. Hu, B. Fan, and H. Liu, “Pura: Parameter update-recovery test-time adaption for rgb-t tracking,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 22 089–22 098. [56] Q. Wang, L. Zhang, L. Bertinetto, W. Hu, and P. H. Torr, “Fast online object tracking and segmentation: A unifying approach,” in CVPR , 2019, pp. 1328–1338. [57] Y. Xu, Z. Wang, Z. Li, Y. Yuan, and G. Yu, “Siamfc++: Towards robust and accurate visual tracking with target estimation guidelines,” in AAAI ,vol. 34, no. 07, 2020, pp. 12 549–12 556. [58] Z. Chen, B. Zhong, G. Li, S. Zhang, and R. Ji, “Siamese box adaptive network for visual tracking,” in CVPR , 2020, pp. 6667–6676. [59] D. Guo, J. Wang et al. , “Siamcar: Siamese fully convolutional classifica-tion and regression for visual tracking,” in CVPR , 2020, pp. 6269–6277. [60] B. Yan, H. Peng, K. Wu, D. Wang, J. Fu, and H. Lu, “Lighttrack: Finding lightweight neural networks for object tracking via one-shot architecture search,” in CVPR , 2021, pp. 15 180–15 189. [61] D. Guo, Y. Shao, Y. Cui, Z. Wang, L. Zhang, and C. Shen, “Graph attention tracking,” in CVPR , 2021, pp. 9543–9552. [62] Z. Zhang, Y. Liu, X. Wang et al. , “Learn to match: Automatic matching network design for visual tracking,” in ICCV , 2021, pp. 13 339–13 348. [63] T.-Y. Lin, M. Maire, S. Belongie et al. , “Microsoft coco: Common objects in context,” in ECCV , 2014, pp. 740–755. [64] Y. Tian, L. Xie, J. Qiu, J. Jiao, Y. Wang, Q. Tian, and Q. Ye, “Fast-itpn: Integrally pre-trained transformer pyramid network with token migra-tion,” IEEE Transactions on Pattern Analysis and Machine Intelligence ,vol. 46, no. 12, pp. 9766–9779, 2024.
