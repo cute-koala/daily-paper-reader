@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-07-30</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-01</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 9 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 11 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>6</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>5</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>6</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-07-30 21:42:42 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-01 21:23:16 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,9 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精选9篇论文，重点聚焦世界模型预测控制与无人机对抗跟踪两大方向。</p>
-<p>最值得关注的是《Temporal-Distance JEPA》提出的规划感知表示学习（9.0分）和《Semantic-Aware Temporal Adaptation》的无人机反无人机跟踪语义适应方法（9.0分）。</p>
-<p>建议优先精读这两篇高分论文，理解如何通过时序距离和语义适应提升复杂动态场景下的控制与感知能力。</p>
+<p>今日精读聚焦世界模型与动作决策，11篇论文中5篇精读、6篇速读，核心围绕可泛化的具身智能规划。最值得关注的是《World Action Planner》与《LeapBot-WA》两篇满分/高分工作，均以动作条件世界模型提升决策泛化性。若想快速入门，可从《DeVA》《CG-World》《Mental World Modeling》三篇速读入手，分别覆盖物理引导、大规模数据集与心智建模方向。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -73,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">6 篇</strong>
+    <strong class="dpr-home-dashboard-count">5 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Temporal-Distance JEPA: Plan-Aware Representation Learning for Latent World Model Predictive Control">Temporal-Distance JEPA: Plan-Aware Representation Learning for Latent World Model Predictive Control</span></li><li><span class="dpr-home-dashboard-paper-title" title="Semantic-Aware Temporal Adaptation for UAV Anti-UAV Tracking">Semantic-Aware Temporal Adaptation for UAV Anti-UAV Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="ActSWM: Action-Sensitive World Models for Long-Horizon Planning in Open-World Games">ActSWM: Action-Sensitive World Models for Long-Horizon Planning in Open-World Games</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="World Action Planner: Generalizable Decision-Making with Action-Conditioned World Models">World Action Planner: Generalizable Decision-Making with Action-Conditioned World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="LeapBot-WA: World-Anchor Action Models via Predictive Latent Alignments">LeapBot-WA: World-Anchor Action Models via Predictive Latent Alignments</span></li><li><span class="dpr-home-dashboard-paper-title" title="QQWorld: Quantile-Quantile Matching for World Model Regularization">QQWorld: Quantile-Quantile Matching for World Model Regularization</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>5</strong></span><span class="dpr-home-dashboard-tag">vt <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>5</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -86,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">3 篇</strong>
+    <strong class="dpr-home-dashboard-count">6 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Learning Traversability-Aware Global Planners for Long Horizon Off-Road Navigation">Learning Traversability-Aware Global Planners for Long Horizon Off-Road Navigation</span></li><li><span class="dpr-home-dashboard-paper-title" title="False Prophets: On the Security of World Models in Agentic Systems">False Prophets: On the Security of World Models in Agentic Systems</span></li><li><span class="dpr-home-dashboard-paper-title" title="DLAM: Distributional Latent Actions with Temporal Constraints">DLAM: Distributional Latent Actions with Temporal Constraints</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="DeVA: Decoupled Video-Action Model with physical guidance for robot policy learning">DeVA: Decoupled Video-Action Model with physical guidance for robot policy learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="CG-World: A Large-Scale World-State Dataset and Protocol for World Models">CG-World: A Large-Scale World-State Dataset and Protocol for World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Mental World Modeling">Mental World Modeling</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>5</strong></span><span class="dpr-home-dashboard-tag">vt <strong>1</strong></span></div>
 </section>
 </div>
 
