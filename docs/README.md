@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-02</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-03</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 6 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>3</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>4</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>4</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-02 20:43:50 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-03 21:55:49 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日推荐覆盖模型预测控制与世界模型两大方向，共6篇论文，其中2篇精读、3篇速读。最值得关注的是自适应学习结合无遗憾MPC的跟踪方法，以及大规模世界状态数据集CG-World。建议先精读这两篇高分论文，再延伸看视频世界模型WONDER等速读工作。</p>
+<p>今日精读聚焦自动驾驶世界模型与鲁棒控制，另有机器人模拟与量子搜索等世界模型应用值得速览。</p>
+<p>最值得关注的是《Auto-JEPA》与《Tube MPC》（均9.0分），前者以连续意图潜变量驱动端到端驾驶，后者结合Koopman模型与收缩度量提升控制鲁棒性。</p>
+<p>建议普通读者优先追踪世界模型在决策与控制中的落地潜力，并留意低成本仿真数据集的后续扩展。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -71,12 +73,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">3 篇</strong>
+    <strong class="dpr-home-dashboard-count">4 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Self-Adaptive Learning and Model Predictive Control for Tracking Unknown Dynamics with No Regret">Self-Adaptive Learning and Model Predictive Control for Tracking Unknown Dynamics with No Regret</span></li><li><span class="dpr-home-dashboard-paper-title" title="CG-World: A Large-Scale World-State Dataset and Protocol for World Models">CG-World: A Large-Scale World-State Dataset and Protocol for World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="QuantWAMs: Calibrating at the Right Granularity for World Action Models">QuantWAMs: Calibrating at the Right Granularity for World Action Models</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Auto-JEPA: A Latent World Model of Continuous Intent for End-to-End Autonomous Driving">Auto-JEPA: A Latent World Model of Continuous Intent for End-to-End Autonomous Driving</span></li><li><span class="dpr-home-dashboard-paper-title" title="Tube MPC for Bilinear Koopman Models using Robust Control Contraction Metrics">Tube MPC for Bilinear Koopman Models using Robust Control Contraction Metrics</span></li><li><span class="dpr-home-dashboard-paper-title" title="ST-WAM: Semantic-Temporal World Action Model for Robust Manipulation under Visual Distribution Shifts">ST-WAM: Semantic-Temporal World Action Model for Robust Manipulation under Visual Distribution Shifts</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -84,12 +86,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">3 篇</strong>
+    <strong class="dpr-home-dashboard-count">4 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Wonder: Video World Model Done Better">Wonder: Video World Model Done Better</span></li><li><span class="dpr-home-dashboard-paper-title" title="Schrödinger&#x27;s Cat: Probabilistic Representation and Prediction of Potential Scene Kinematics">Schrödinger&#x27;s Cat: Probabilistic Representation and Prediction of Potential Scene Kinematics</span></li><li><span class="dpr-home-dashboard-paper-title" title="DLAM: Distributional Latent Actions with Temporal Constraints">DLAM: Distributional Latent Actions with Temporal Constraints</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="CG-World: A Large-Scale World-State Dataset and Protocol for World Models">CG-World: A Large-Scale World-State Dataset and Protocol for World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="BWM: A Low-Cost High-Fidelity World Simulator for Robot Learning">BWM: A Low-Cost High-Fidelity World Simulator for Robot Learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="DreamQAS: Learning a Decision-Useful World Model for VQE-Efficient Quantum Architecture Search">DreamQAS: Learning a Decision-Useful World Model for VQE-Efficient Quantum Architecture Search</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span></div>
 </section>
 </div>
 
