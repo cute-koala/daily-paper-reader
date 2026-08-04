@@ -1,0 +1,520 @@
+Title: FedWorld: Scope-Aware Federation of Agent World Models
+
+URL Source: https://arxiv.org/pdf/2608.01561v1
+
+Published Time: Tue, 04 Aug 2026 01:40:14 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# FedWorld: Scope-Aware Federation of Agent World Models 
+
+## Yuchao Hou 
+
+Shanxi Key Laboratory of Cryptography and Data Security, Shanxi Normal University, Taiyuan, China 
+
+Abstract 
+
+Large language model (LLM) agents learn world dynamics from local interaction experience to support subsequent plan-ning and action selection. However, the experience available to a single client is often incomplete, which motivates sharing knowledge across clients. Existing federated methods mainly aggregate model parameters, while agent memory-sharing methods commonly pool trajectories, memories, or rules with-out checking whether they remain valid for each client. This assumption is problematic because the same abstract action may produce different effects under different policies, envi-ronments, or exception conditions. Consequently, a rule sup-ported by most clients may overwrite correct knowledge held by a minority client. To address this problem, we propose 
+
+FedWorld , a scope-aware federated world-model protocol that exchanges structured abstract transition rules. Each client converts private transitions into normalized rules, and the server aligns related rules to identify each rule supporting and contradicting evidence across clients. The resulting evidence determines whether a rule is shared, cluster-specific, private, or unresolved. Each target client retains its local rules and accepts federated updates only for uncovered cases whose in-ferred scope is compatible; ambiguous rules are withheld. Ex-periments on τ -bench and ALFWorld show that FedWorld 
+
+reduces negative transfer under conflicting dynamics while retaining useful cross-client transfer, leading to fewer state re-gressions, repeated actions, and excess steps, as well as higher task success. 
+
+## Introduction 
+
+Large language model (LLM) agents increasingly use past in-teractions to predict what their actions will change. A retail-support agent, for example, must know whether cancelling an order after shipment leads to a refund or store credit, while an embodied agent must know how moving or heating an object changes its state. The same need arises in web navigation and software tasks, where one incorrect state prediction can mis-lead all later actions (Liu et al. 2024; Qin et al. 2024; Zhou et al. 2024; Deng et al. 2023; Jimenez et al. 2024; Yao et al. 2024; Shridhar et al. 2021). We use world model to describe this persistent knowledge of how a state and an action lead to an effect. This meaning follows model-based reinforce-ment learning, where transition knowledge supports plan-
+
+Copyright © 2027, Association for the Advancement of Artificial Intelligence (www.aaai.org). All rights reserved. 
+
+ning and policy improvement (Ha and Schmidhuber 2018; Hafner et al. 2019, 2020; Schrittwieser et al. 2020). LLM agents may store such knowledge in trajectories, reflections, memories, retrieved records, or symbolic action rules (Yao et al. 2023; Shinn et al. 2023; Zhao et al. 2024; Park et al. 2023; Lewis et al. 2020). However, the transition knowledge stored by a single client is usually incomplete. Each client encounters only a limited range of policies, exceptions, object states, and action out-comes, so other clients may hold rules that fill its missing cases. Federation offers a way to share this knowledge with-out centralizing raw trajectories. Existing federated learning methods mainly achieve such collaboration by aggregating model parameters (McMahan et al. 2017; Li et al. 2020; Karimireddy et al. 2020), while personalized methods retain local or clustered components to accommodate client dif-ferences (Smith et al. 2017; Dinh, Tran, and Nguyen 2020; Ghosh et al. 2020; Li et al. 2021a). These methods can com-bine what clients have learned, but they do not decide whether a specific transition rule from one client also holds for an-other. This missing validity check matters because the same action can follow different dynamics across clients. Under one retail policy, cancelling an order may lead to a refund, while another policy may issue store credit. In a household environment, heating, cooling, or moving an object may also produce different effects depending on its current state or receptacle. These cases share the same abstract action but not the same transition rule. If they are pooled without pre-serving the conditions that separate them, a rule supported by most clients may become incorrect for a minority client. Cross-client rule sharing therefore has two different out-comes. A compatible rule can fill a missing part of the tar-get client’s world model. An incompatible rule can instead replace knowledge that is already correct. Existing agent memory methods mainly retrieve experience according to semantic relevance or similarity (Yao et al. 2023; Shinn et al. 2023; Zhao et al. 2024; Lewis et al. 2020). Such relevance helps identify related situations, but it does not show whether they obey the same transition dynamics. Safe federation must therefore determine both which rules are related and where each rule remains valid. We formulate scope-aware federa-tion of agent world models as a distinct federation setting in which the exchanged objects are discrete transition rules rather than continuous model parameters. At the rule level, arXiv:2608.01561v1 [cs.HC] 3 Aug 2026 averaging does not resolve heterogeneity: a transition is ei-ther applicable to a target client under its conditions or it is not. The central objective is therefore to identify whether each rule is shared, cluster-specific, private, or unresolved before it can affect the target client. This formulation sepa-rates useful cross-client gap filling from the negative transfer caused by scope-incompatible rules. To address this problem, we propose FedWorld , a proto-col that exchanges structured abstract transition rules rather than model parameters, raw trajectories, or free-form memo-ries. Each client maps its private transitions into normalized rules, which makes related experience comparable across clients. The server aligns these rules and gathers support-ing and contradicting evidence from eligible clients. Based on this evidence, FedWorld identifies each rule as shared, cluster-specific, private, or unresolved. Each target client uses the inferred scope to admit only compatible federated rules for uncovered cases while preserving its existing local knowl-edge. This allows cross-client experience to fill local gaps without assuming that every shared rule is valid for every client. The main contributions are as follows: 
+
+• We formulate scope-aware federation of agent world mod-els, where clients exchange discrete transition rules whose validity may be shared, cluster specific, private, or unre-solved. This setting makes rule applicability, rather than parameter averaging, the central federation objective. 
+
+• We characterize rule-scope mismatch and its resulting strict conflict negative transfer, in which a majority sup-ported rule can overwrite correct knowledge held by a minority client. 
+
+• We instantiate this formulation with FedWorld , which aligns abstract transition rules, infers their valid scope, and uses a local-first compiler to fill compatible knowl-edge gaps without replacing existing local rules. 
+
+## Related Work 
+
+Federated learning enables multiple clients to benefit from decentralized private data without sharing raw samples. Fe-dAvg establishes the basic parameter-aggregation frame-work, while later methods address statistical and system het-erogeneity through proximal regularization, normalized ag-gregation, control variates, dynamic regularization, and local feature statistics (McMahan et al. 2017; Li et al. 2020; Wang et al. 2020; Karimireddy et al. 2020; Acar et al. 2021; Li et al. 2021b). Personalized federated learning further allows clients to retain clustered, partially shared, or client-specific parameters when a single global model is insufficient (Smith et al. 2017; Dinh, Tran, and Nguyen 2020; Ghosh et al. 2020; Li et al. 2021a). This decentralized setting also ap-pears when deployed agents build world models from private local interactions. Since each client observes only part of the available policies, exceptions, and state transitions, federat-ing local world models can extend their coverage without centralizing raw trajectories. The shared object, however, is no longer limited to trainable parameters. World mod-els encode how actions change the environment and support planning through predicted state transitions (Ha and Schmid-huber 2018; Hafner et al. 2019, 2020; Schrittwieser et al. 2020). Language-agent systems represent similar knowledge through reasoning traces, reflections, memories, experience libraries, and retrieved records (Yao et al. 2023; Shinn et al. 2023; Zhao et al. 2024; Park et al. 2023; Lewis et al. 2020; Karpukhin et al. 2020), while agent benchmarks evaluate its effect on tool use, web navigation, software engineering, and embodied control (Liu et al. 2024; Qin et al. 2024; Zhou et al. 2024; Deng et al. 2023; Jimenez et al. 2024; Mialon et al. 2024; Yao et al. 2024; Shridhar et al. 2021). Existing memory and retrieval methods usually select experience by similar-ity or relevance, but related records may still follow differ-ent dynamics across clients. Conventional federated methods likewise do not determine where an explicit transition rule remains valid. In contrast, FedWorld exchanges structured abstract transition rules and treats heterogeneity as a scope-identification problem, so a rule affects a target client only when its inferred scope permits transfer. 
+
+## Problem Setup and Scope Formulation 
+
+We consider K clients indexed by K = {1, . . . , K }. Client 
+
+k observes a private set of transitions, 
+
+Dk = {(st, a t, s t+1 )}, (1) generated under its own environment, policy, or business-rule configuration. Since these transitions may contain client-specific states and arguments, they cannot be compared or exchanged directly. We therefore introduce a normalization map 
+
+ϕk : Dk → Z , (2) which converts each detailed transition into an abstract record 
+
+z = ( a, x, c, e, ε ) ∈ A × X × C × E × R . (3) Here, a denotes the abstract action type, x the normalized pre-state, c the normalized condition set, e the abstract effect, and ε the normalized exception structure. Client k keeps both the detailed transitions required for local execution and the corresponding abstract rule store: 
+
+LWM k = ( Ddetail  
+
+> k
+
+, A k), (4) 
+
+Ak = {ϕk(d) : d ∈ Dk}. (5) Only Ak is shared during federation. Raw trajectories, entity identifiers, tool arguments, detailed states, and the mapping from detailed transitions to abstract rules remain on the client. Once the local abstract stores are available, we form the federated rule store 
+
+F = [
+
+> k∈K
+
+Ak. (6) The main difficulty is that membership in F does not make a rule valid for every client. Let Rok = {match , compatible }.For an abstract query u from target client k, naive federation considers all aligned candidates: 
+
+Fall (k, u ) = {g ∈ F : rel( u, g ) ∈ R ok }. (7) This candidate set captures semantic compatibility, but it does not account for the clients on which each rule is valid. We address this gap by estimating a scope map 
+
+σ : F → { shared , cluster , private , unresolved }, (8) and retaining only candidates whose inferred scope is com-patible with the target client: 
+
+FFW (k, u ) = {g : g ∈ Fall (k, u ),
+
+Compat( k, σ (g)) = 1 }. (9) 
+
+Definition 1 (FedWorld ). We define FedWorld as the fed-erated agent world-model protocol 
+
+FedWorld .
+
+= ( ϕ, rel , σ, Compat , Compile) , (10) 
+
+where ϕ abstracts private transitions, rel aligns query and candidate rules, σ infers the valid scope of each candi-date, Compat checks its applicability to the target client, and Compile converts an admissible rule into an executable world-model update. A rule in Fall (k, u ) \ FFW (k, u ) may still provide cross-client evidence, but it cannot be used by target client k.
+
+## Proposed Method 
+
+Overview and Design Intuition 
+
+We design FedWorld as a local-first, scope-aware protocol for federating agent world models. As shown in Figure 1, each client keeps detailed trajectories local and shares only normalized abstract rules. The server aligns related rules and infers their valid scope from cross-client evidence. Since the same action may follow different dynamics across policies or environments, the target client consults federated rules only when its local store lacks coverage. The compiler then admits scope-compatible candidates and withholds unresolved or incompatible rules, allowing cross-client experience to fill local gaps without replacing correct local knowledge. 
+
+Problem Definition and Objective 
+
+For target client k, FedWorld receives the local abstract store Ak, the federated store F = S 
+
+> j
+
+Aj , and a query rule 
+
+r. The query specifies an abstract pre-state, action, and con-dition set, while its effect is unknown. The protocol returns a predicted effect ˆe, a compiled instruction ˆIk(r), or absten-tion. We write the runtime interface as 
+
+xk
+
+.
+
+= ( Ak, F, r, k ), Ψ( xk) ∈ { ˆe, ˆIk(r), abstain },
+
+(11) where Ψ denotes the prediction and compilation procedure. The target index k is part of the input because the same federated rule may be valid for one client but invalid for another. The objective balances three requirements. The protocol should predict the correct effect, avoid damaging correct local knowledge, and abstain only when no reliable rule is available: 
+
+min  
+
+> Ψ
+
+E(k,r,e ) [1{ˆeΨ(k, r )̸ = e}]+ λntr E(k,r,e ) [1{LWM k(r) = e, ˆeΨ(k, r )̸ = e}]+ λabs E(k,r ) [1{Ψ( k, r ) = abstain }] , (12) where e is the ground-truth abstract effect. The coefficients 
+
+λntr , λ abs ≥ 0 control the penalties for harmful overwrite and abstention. The harmful-overwrite term is important be-cause a retrieved rule should not replace a local prediction that is already correct. We impose two constraints to reflect this objective: 
+
+u ∈ Ak ⇒ ˆeΨ(k, r ) = LWM k(u), (13) 
+
+g / ∈ FFW (k, u ) ⇒ g / ∈ Compile k(u). (14) Equation (13) gives priority to an existing local rule. Equa-tion (14) prevents a federated candidate from affecting the target unless it passes scope filtering. A rule may therefore remain visible as cross-client evidence without becoming an executable instruction. Together, these constraints define a target-conditioned world model: 
+
+cWFedWorld ,k (r) =  u, Cu, σ, F FW (k, u ), ˆe, ˆIk
+
+, (15) where u = key( r), Cu is the aligned candidate bucket, σ is the scope function, and FFW (k, u ) contains the candidates ad-mitted for client k. Thus, FedWorld does not simply enlarge the local memory. It controls which cross-client transitions may influence a particular client. 
+
+M1: Abstract Rule Mapping 
+
+Detailed transitions cannot be compared directly because clients use different entities, arguments, and surface descrip-tions. We address this mismatch by mapping each transition into a common abstract representation. For rule r, we define the identity key 
+
+key( r) =  Norm( Spre ), Norm( A), Norm( C), (16) where Spre is the pre-state, A is the action, and C is the condition set. The function Norm( ·) maps client-specific fields into a controlled abstract vocabulary. 
+
+M2: Cross-Client Rule Alignment 
+
+The abstract key identifies potentially related rules, but it does not establish that they have the same meaning or effect. We therefore assign a relation label to target key u and candidate rule g ∈ F :
+
+rel( u, g ) ∈ { match , compatible , conflict , unresolved }.
+
+(17) A matched rule describes the same abstract transition, while a compatible rule can be used under the target condi-tions. A conflict label indicates incompatible conditions or effects. An unresolved label is used when the available repre-sentation does not support a reliable decision. Only matched and compatible rules proceed to scope inference. This alignment step is necessary because action names alone are not reliable. The same action may hide different conditions or effects, while different expressions may de-scribe the same transition. Appendix ?? evaluates the con-trolled vocabulary used for this comparison. Unlike nearest-neighbor retrieval (Karpukhin et al. 2020; Lewis et al. 2020), 
+
+FedWorld does not admit a candidate based on similarity alone. The relation label and the inferred scope must both support transfer. Local Clients Client 1 Client 2 Layer 1: Local Detail (Private)  
+
+> Layer 1: Local Detail (Private) (state_pre, action, condition, state_post) (state_pre, action, condition, state_post)
+> Detail-to-Abstract Mapping Detail-to-Abstract Mapping Layer 2: Local Abstract Layer 2: Local Abstract
+> (norm_state_pre, action_type, condition_vocab, effect_type) (norm_state_pre, action_type, condition_vocab, effect_type)
+> Strict Privacy Boundary: Raw Data Never Leaves
+
+Layer 3: Federated Abstract (Global) Rule Alignment & Scope Inference SHARED CLUSTER PRIVATE UNRESOLVED Gap Detection Instruction Compilation SKIPPED / Never Broadcast Scope-Filtered Instruction Updates Figure 1: FedWorld framework. 
+
+M3: Scope Inference 
+
+Rule alignment produces comparable candidate groups. We use the evidence within each group to estimate where a rule remains valid. For candidate rule r, let n+ 
+
+> r
+
+and n− 
+
+> r
+
+denote the numbers of supporting and contradicting observations. We compute the Laplace-smoothed confidence 
+
+qr = n+ 
+
+> r
+
++ 1 
+
+n+ 
+
+> r
+
++ n− 
+
+> r
+
++ 2 . (18) The smoothing term prevents a small evidence set from pro-ducing an extreme confidence value. We also count evidence at the client level. Let K+ 
+
+> r
+
+, K− 
+
+> r
+
+,and Keligible  
+
+> r
+
+denote the supporting, contradicting, and eligi-ble client sets. A client is eligible only when the precondition of rule r can occur under its configuration. We define 
+
+pr = |K+ 
+
+> r
+
+||Keligible  
+
+> r
+
+| , ρ− 
+
+> r
+
+= |K− 
+
+> r
+
+||Keligible  
+
+> r
+
+| . (19) The same evidence is evaluated within client clusters to identify cluster-specific rules. A rule supported only by its source client remains private. When the evidence does not support any of these assignments, FedWorld marks the rule as unresolved. Such rules remain in the federated store for later evidence updates, but they cannot affect execution. Us-ing Keligible  
+
+> r
+
+in the denominator also avoids penalizing a rule for clients on which its precondition cannot occur. 
+
+M4: Gap Detection and Compilation 
+
+Scope inference determines where each federated rule is valid, but a valid rule is used only when the target client lacks local coverage. M4 therefore applies the local-first policy to decide whether federation is needed for the current query. For target client k, let κk(u) ∈ [0 , 1] denote the reliability of a lo-cal rule, estimated from its observation support, consistency, or local verification. If u ∈ Ak and κk(u) ≥ τloc , FedWorld 
+
+preserves the local prediction. Otherwise, the rule is treated as uncovered or uncertain, and the client consults the target-compatible candidate set FFW (k, u ). Otherwise, it searches the target-compatible candidate set 
+
+FFW (k, u ) = g ∈ F : rel( u, g ) ∈ R ok ,
+
+Compat( k, σ (g)) = 1 , (20) where Rok = {match , compatible }.We define a local gap as a key that is absent from Ak
+
+but has at least one candidate in FFW (k, u ). When several candidates remain, FedWorld ranks them by relation type, scope specificity, and qr . The compiler rewrites the selected abstract effect into the vocabulary used by target client k.When no candidate passes the filter, the client uses a lo-cal backoff if one is available and otherwise abstains. This rule allows compatible knowledge to fill a local gap with-out exposing the client to an incompatible majority effect. Algorithm 1 summarizes the runtime procedure. 
+
+## Theoretical Analysis 
+
+Let F be the federated abstract store and let u be a query from target client k. We define the aligned candidate set as 
+
+Fall (k, u ) = {g ∈ F : rel( u, g ) ∈ R ok }, (21) and the scope-compatible subset as 
+
+FFW (k, u ) = {g ∈ Fall (k, u ) : Compat( k, σ (g)) = 1 }.
+
+(22) By construction, 
+
+FFW (k, u ) ⊆ Fall (k, u ) (23) for every target query. Let ˆymi ∈ { 0, 1} indicate whether method m predicts evaluation record i correctly. For a reference method b, paired Algorithm 1 FedWorld prediction and update filtering for target client k
+
+Require: Local store Ak, federated store F , target client k,query rule r
+
+Ensure: Predicted effect, compiled instruction, or absten-tion  
+
+> 1:
+
+u ← key( r) 
+
+> 2:
+
+if u ∈ Ak then  
+
+> 3:
+
+return LWM k(u) 
+
+> 4:
+
+end if  
+
+> 5:
+
+C ← { g ∈ F : rel( u, g ) ∈ R ok } 
+
+> 6:
+
+Ck ← ∅ 
+
+> 7:
+
+for all g ∈ C do  
+
+> 8:
+
+Infer σ(g) from K+ 
+
+> g
+
+, K − 
+
+> g
+
+, K eligible  
+
+> g
+> 9:
+
+if Compat( k, σ (g)) = 1 and g activates for r then  
+
+> 10:
+
+Ck ← C k ∪ { g} 
+
+> 11:
+
+end if  
+
+> 12:
+
+end for  
+
+> 13:
+
+if Ck̸ = ∅ then  
+
+> 14:
+
+Rank Ck by relation, scope specificity, and qg 
+
+> 15:
+
+g⋆ ← highest-ranked candidate  
+
+> 16:
+
+return Compile k(g⋆) 
+
+> 17:
+
+end if  
+
+> 18:
+
+if LWM k provides a local backoff for u then  
+
+> 19:
+
+return local backoff  
+
+> 20:
+
+end if  
+
+> 21:
+
+return abstain negative and positive transfer are 
+
+NTR( m, b ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+I[ˆ ybi = 1 , ˆymi = 0] , (24) 
+
+PTR( m, b ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+I[ˆ ybi = 0 , ˆymi = 1] . (25) We further define 
+
+NetTransfer( m, b ) = PTR( m, b ) − NTR( m, b ). (26) Let p+ denote the fraction of cases where b is wrong and a correct compatible rule is available, and p− the fraction where b is correct but an incompatible rule may overwrite it. For method m, βm is the rate of withholding correct com-patible rules, while αm is the rate of activating incompatible rules. 
+
+Theorem 1 (Protection–transfer trade-off) . Fix the abstrac-tion map, relation classifier, candidate ordering, and com-piler. Assume that admitting a correct scope-compatible rule resolves a transferable record, while an error on a protected record occurs exactly when a scope-incompatible rule is ac-tivated. Then 
+
+PTR( m, b ) = (1 − βm)p+, (27) 
+
+NTR( m, b ) = αmp−, (28) 
+
+NetTransfer( m, b ) = (1 − βm)p+ − αmp−. (29) 
+
+Consequently, FedWorld achieves higher net transfer than NaiveUnion when 
+
+(αNU − αFW )p− > (βFW − βNU )p+. (30) Theorem 1 makes the cost of scope filtering explicit. A stricter filter is beneficial when the harmful overwrites it prevents exceed the useful transfers it withholds. Thus, the objective is not to minimize negative transfer alone, since a method could do so by rejecting all federated rules. In-stead, FedWorld should reduce incompatible activations while retaining enough compatible rules to obtain positive net transfer. The proof is provided in Appendix. 
+
+## Experiments 
+
+Benchmarks and client construction. We evaluate Fed-World on τ -bench and ALFWorld. τ -bench contains retail and airline interactions governed by different business poli-cies (Yao et al. 2024). As a result, the same tool action may produce different outcomes across policy profiles. ALFWorld provides text-based household tasks with physical and sym-bolic state transitions (Shridhar et al. 2021). Its action effects may vary with object states, receptacle constraints, and envi-ronment layouts. The two benchmarks therefore cover policy-dependent and environment-dependent transition conflicts. We construct 11 τ -bench clients from six retail and five air-line policy profiles, and 12 ALFWorld clients from distinct household transition profiles. 
+
+Data partition and evaluation splits. We partition ab-stract identity keys rather than raw trajectories. For each client, 60% of eligible keys are used for the local rule store, 20% for validation, and 20% for held-out evaluation, prevent-ing the same normalized rule from appearing in both local and cross-client test sets. The offline evaluation includes six splits. S0 covers locally available rules, S3 tests cross-client gap filling, and S4 contains conflict cases. S4strict denotes cases where the target effect differs from the federated ma-jority, while S4trivial denotes agreement with the majority. S5 mixes held-out local and cross-client cases. Full split def-initions and record counts are provided in Appendix. We select |K+ 
+
+> r
+
+| ≥ 3, p r ≥ 0.60 , ρ − 
+
+> r
+
+≤ 0.10 on the validation set and use the same values for both benchmarks. New domains may recalibrate them on a small validation set. Results are averaged over five fixed client-partition seeds. 
+
+Comparison methods. We evaluate six method configu-rations, denoted B0–B5. B0 uses no world model and mea-sures the fixed controller without stored transition knowl-edge. B1, denoted LocalWM , uses only the target client’s detailed local experience. B2 keeps the target client’s nor-malized abstract rules but introduces no cross-client shar-ing. B3, denoted NaiveUnion , pools abstract rules from all clients without relation alignment or scope filtering (Xu et al. 2025). B4 aligns related cross-client rules but does not check whether their scope is compatible with the target client (Chen et al. 2026). B5 is the complete FedWorld protocol, in-cluding abstract rule mapping, cross-client alignment, scope inference, and local-first compilation. We also report central-ized detailed retrieval (CDR). CDR searches pooled detailed records from all clients and therefore has access to informa-tion that remains local under the federated methods. We use it as a centralized reference rather than a privacy-preserving baseline. Method S0 S3 S4 strict S4 trivial S5                                                                        
+
+> τ-bench
+> B0 0.332 0.254 0.306 0.221 0.246 B1 0.846 0.712 0.694 0.731 0.681 B2 0.804 0.665 0.625 0.702 0.640 B3 0.821 0.794 0.556 0.913 0.752 B4 0.836 0.812 0.611 0.932 0.773 B5 0.846 0.836 0.722 0.924 0.803
+> CDR 0.828 0.807 0.583 0.918 0.781
+> ALFWorld
+> B0 0.284 0.211 0.243 0.228 0.205 B1 0.812 0.574 0.653 0.704 0.548 B2 0.759 0.528 0.583 0.661 0.497 B3 0.774 0.724 0.431 0.906 0.688 B4 0.796 0.752 0.493 0.928 0.716 B5 0.812 0.786 0.681 0.922 0.748
+> CDR 0.789 0.744 0.458 0.914 0.721
+
+Table 1: Main offline exact-match results over five client-partition seeds. Best results are shown in bold. 
+
+Offline evaluation. Offline evaluation measures abstract next-state prediction using exact match after determinis-tic normalization. We also report paired positive and neg-ative transfer to distinguish useful gap filling from harm-ful overwrite. Given method m and reference method b,
+
+PTR( m, b ) = 1
+
+> N
+
+PNi=1 I[bi = 0 ∧ mi = 1] ,NTR( m, b ) = 
+
+> 1
+> N
+
+PNi=1 I[bi = 1 ∧ mi = 0] . PTR counts reference errors corrected by method m, whereas NTR counts correct ref-erence predictions broken by method m. We further report 
+
+NetTransfer = PTR − NTR . Unless otherwise stated, B1 serves as the reference because it represents the target client’s original local knowledge. 
+
+Online evaluation. We execute all online episodes with the same rule-conditioned controller and action budget. State re-gression counts actions whose observed post-state reverses the predicted transition. Repeated action counts consecutive executions of the same action argument pair without an in-tervening state change. Excess steps measures the number of actions beyond the shortest valid plan, while task success is determined by the benchmark terminal predicate. We execute 400 τ -bench episodes and 600 ALFWorld episodes for each partition seed. 
+
+Additional results. The appendix reports the complete split level results, client and record statistics, seed level sta-bility, scope distribution, alignment analysis, and representa-tive conflict cases. It also provides the detailed experimental protocol and supporting proofs. 
+
+Offline World-Model Accuracy 
+
+Table 1 reports the main offline results. B1 performs well on S0 because these rules are already present in the target client’s local store. Its accuracy falls from 0.846 to 0.712 on τ -bench and from 0.812 to 0.574 on ALFWorld when evaluation moves from S0 to S3. The drops of 13.4 and 23.8 percentage points confirm that local experience is useful but incomplete. B5 preserves the B1 result on S0 because its                       
+
+> Benchmark nB1 B3 B5 PTR NTR Net
+> τ-bench 72 0.694 0.556 0.722 0.056 0.194 −0.138
+> ALFWorld 144 0.653 0.431 0.681 0.028 0.250 −0.222
+
+Table 2: Strict-conflict transfer relative to B1. B1, B3, and B5 report exact match. B3 B5 
+
+> −0.2
+> 0.0
+> 0.2
+> Transfer rate
+> Net -0.138
+> Net +0.028
+
+(a) τ-bench strict   
+
+> B3 B5
+> Net +0.182 Net +0.193
+
+(b) τ-bench compatible  
+
+> B3 B5
+> −0.2
+> 0.0
+> 0.2
+> Transfer rate
+> Net -0.222
+> Net +0.028
+
+(c) ALFWorld strict   
+
+> B3 B5
+> Net +0.202 Net +0.218
+
+(d) ALFWorld compatible  
+
+> PTR NTR
+
+Figure 2: Paired transfer under conflicting dynamics. local-first policy does not replace an existing local rule. The benefit appears when local coverage is absent. On S3, B5 im-proves over B1 by 12.4 points on τ -bench and 21.2 points on ALFWorld. The gains remain on the held-out S5 split, where B5 improves by 12.2 and 20.0 points. These results show that scope filtering does not prevent useful cross-client transfer. The results on S4 reveal why unrestricted sharing is unsafe. B3 performs well when the target agrees with the majority, but its accuracy falls below B1 on strict conflicts. Relation alignment in B4 reduces some errors, yet B4 remains be-low B1 on S4strict . B5 obtains the highest strict-conflict accuracy on both benchmarks. On S4trivial , B4 is only 0.8 and 0.6 points above B5. This small difference is the cost of withholding uncertain rules, while the strict-conflict gains are substantially larger. CDR is not consistently better than the federated methods. Although it accesses detailed pooled records, it does not prevent client-specific transitions from being retrieved for the wrong target. The comparison indi-cates that access to more detailed experience does not replace target-conditioned scope control. 
+
+Scope Filtering under Conflicting Dynamics 
+
+The strict-conflict split isolates cases in which the feder-ated majority disagrees with the correct target effect. Table 2 shows that B3 loses 13.8 EM points relative to B1 on τ -bench Metric B0 B1 B3 B4 B5                                                  
+
+> τ-bench
+> State regression ↓0.284 0.218 0.196 0.174 0.121
+> Repeated action ↓0.246 0.181 0.164 0.147 0.094
+> Excess steps ↓2.84 2.37 2.12 1.93 1.46
+> Task success ↑0.438 0.512 0.548 0.571 0.624
+> ALFWorld
+> State regression ↓0.331 0.247 0.219 0.192 0.128
+> Repeated action ↓0.289 0.203 0.184 0.158 0.101
+> Excess steps ↓4.18 3.46 3.08 2.71 1.98
+> Task success ↑0.364 0.447 0.486 0.518 0.593
+
+Table 3: Online execution under the fixed rule-conditioned controller. and 22.2 points on ALFWorld. Its negative-transfer rate is much higher than its positive-transfer rate, giving net trans-fer values of −0.138 and −0.222 . B5 recovers 16.6 points over B3 on τ -bench and 25.0 points on ALFWorld. It also exceeds B1 by 2.8 points on both benchmarks. The gain over B1 comes from cluster-specific and private rules that safely fill cases not resolved by the local lookup. Thus, local-first prediction does not reduce B5 to a local-only model. Figure 2 separates positive and negative transfer for strict-conflict and compatible-majority cases. B3 transfers useful rules when the target follows the majority, but the same policy produces substantial negative transfer for minority clients. B5 retains the compatible gain while sharply reducing the overwrite risk. Scope filtering therefore changes which rules may be used rather than disabling federation. 
+
+Online Execution Quality 
+
+A correct abstract transition is useful only when it improves the agent’s actions. Table 3 and Figure 3 report the online results under the fixed controller. Relative to B1, B5 reduces state regression by 44.5% on τ -bench and 48.2% on ALF-World. Repeated actions fall by 48.1% and 50.2%, while ex-cess steps fall by 38.4% and 42.8%. Task success increases by 11.2 and 14.6 percentage points. B3 and B4 improve over B1 on average because they provide additional cross-client rules. However, their remaining conflict errors lead to more regressions, repeated actions, and excess steps than B5. The online results connect scope errors to agent behavior: an incompatible transition does not cause only an offline pre-diction mistake, but can also send the controller into repeated or regressive actions. 
+
+Stability across Client Partitions 
+
+Figure 4 shows the corresponding per-seed distributions for representative online metrics. The advantage of B5 appears across the partition seeds rather than being produced by one favorable split. On both benchmarks, its median state regres-sion rate is lower, while its median task success is higher. The spread of B5 remains comparable to or smaller than the competing methods. Scope filtering therefore does not ob-tain its average improvement by accepting unstable rules on a small number of client assignments. The consistent direction B0 B1 B3 B4 B5 0.0 0.1 0.2 0.3 0.4 
+
+State regression ↓    
+
+> B0 B1 B3 B4 B5 0.0 0.1 0.2 0.3
+
+Repeated action ↓    
+
+> B0 B1 B3 B4 B5 01234
+
+Excess steps ↓    
+
+> B0 B1 B3 B4 B5 0.0 0.2 0.4 0.6
+
+Task success ↑ 
+
+> τ-bench ALFWorld
+
+Figure 3: Online execution results. 
+
+Figure 4: Per-seed execution stability. across seeds is especially important for ALFWorld, where client profiles contain wider variation in object states and transition preconditions. 
+
+## Conclusion 
+
+We introduced FedWorld , a scope-aware federated world model that preserves local rules while enabling safe cross-client transfer. A limitation is that FedWorld assumes suffi-ciently specified, deterministic abstract transitions and does not yet model partial observability, stochastic effects, or tem-porally extended actions. Future work will learn this abstrac-tion automatically for web and software agents while retain-ing reliable abstention under uncertain evidence. References 
+
+Acar, D. A. E.; Zhao, Y.; Navarro, R. M.; Mattina, M.; What-mough, P. N.; and Saligrama, V. 2021. Federated Learning Based on Dynamic Regularization. In International Confer-ence on Learning Representations .Chen, C.; Zhu, K.; Chen, Z.; Zhou, Z.; Diao, S.; Lu, Y.; Li, T.; Li, M.; and Song, D. 2026. Is Decentralized LLM Agent RL Robust to Heterogeneity? An Asymmetric Tale. arXiv preprint .Deng, X.; Gu, Y.; Zheng, B.; Chen, S.; Stevens, S.; Wang, B.; Sun, H.; and Su, Y. 2023. Mind2Web: Towards a Gener-alist Agent for the Web. In Advances in Neural Information Processing Systems , volume 36, 28091–28114. Dinh, C. T.; Tran, N. H.; and Nguyen, T. D. 2020. Per-sonalized Federated Learning with Moreau Envelopes. In 
+
+Advances in Neural Information Processing Systems .Ghosh, A.; Chung, J.; Yin, D.; and Ramchandran, K. 2020. An Efficient Framework for Clustered Federated Learning. In Advances in Neural Information Processing Systems .Ha, D.; and Schmidhuber, J. 2018. Recurrent World Models Facilitate Policy Evolution. In Advances in Neural Informa-tion Processing Systems .Hafner, D.; Lillicrap, T.; Ba, J.; and Norouzi, M. 2020. Dream to Control: Learning Behaviors by Latent Imagination. In 
+
+International Conference on Learning Representations .Hafner, D.; Lillicrap, T.; Fischer, I.; Villegas, R.; Ha, D.; Lee, H.; and Davidson, J. 2019. Learning Latent Dynamics for Planning from Pixels. In International Conference on Machine Learning , 2555–2565. Jimenez, C. E.; Yang, J.; Wettig, A.; Yao, S.; Pei, K.; Press, O.; and Narasimhan, K. 2024. SWE-bench: Can Language Models Resolve Real-World GitHub Issues? In International Conference on Learning Representations .Karimireddy, S. P.; Kale, S.; Mohri, M.; Reddi, S. J.; Stich, S. U.; and Suresh, A. T. 2020. SCAFFOLD: Stochastic Con-trolled Averaging for Federated Learning. In International Conference on Machine Learning .Karpukhin, V.; Oguz, B.; Min, S.; Lewis, P.; Wu, L.; Edunov, S.; Chen, D.; and Yih, W.-t. 2020. Dense Passage Retrieval for Open-Domain Question Answering. In Conference on Empirical Methods in Natural Language Processing , 6769– 6781. Lewis, P.; Perez, E.; Piktus, A.; Petroni, F.; Karpukhin, V.; Goyal, N.; Kuttler, H.; Lewis, M.; Yih, W.-t.; Rocktaschel, T.; Riedel, S.; and Kiela, D. 2020. Retrieval-Augmented Gen-eration for Knowledge-Intensive NLP Tasks. In Advances in Neural Information Processing Systems .Li, T.; Hu, S.; Beirami, A.; and Smith, V. 2021a. Ditto: Fair and Robust Federated Learning Through Personalization. In 
+
+International Conference on Machine Learning .Li, T.; Sahu, A. K.; Zaheer, M.; Sanjabi, M.; Talwalkar, A.; and Smith, V. 2020. Federated Optimization in Heteroge-neous Networks. Proceedings of Machine Learning and Systems , 2: 429–450. Li, X.; Jiang, M.; Zhang, X.; Kamp, M.; and Dou, Q. 2021b. FedBN: Federated Learning on Non-IID Features via Lo-cal Batch Normalization. In International Conference on Learning Representations .Liu, X.; Yu, H.; Zhang, H.; Xu, Y.; Lei, X.; Lai, H.; Gu, Y.; Ding, H.; Men, K.; Yang, K.; et al. 2024. AgentBench: Evaluating LLMs as Agents. In International Conference on Learning Representations .McMahan, H. B.; Moore, E.; Ramage, D.; Hampson, S.; and Aguera y Arcas, B. 2017. Communication-Efficient Learning of Deep Networks from Decentralized Data. In International Conference on Artificial Intelligence and Statistics , 1273– 1282. Mialon, G.; Fourrier, C.; Wolf, T.; LeCun, Y.; and Scialom, T. 2024. GAIA: A Benchmark for General AI Assistants. In 
+
+International Conference on Learning Representations .Park, J. S.; O’Brien, J.; Cai, C. J.; Morris, M. R.; Liang, P.; and Bernstein, M. S. 2023. Generative Agents: Interactive Simulacra of Human Behavior. In ACM Symposium on User Interface Software and Technology .Qin, Y.; Liang, S.; Ye, Y.; Zhu, K.; Yan, L.; Lu, Y.; Lin, Y.; Cong, X.; Tang, X.; Qian, B.; et al. 2024. ToolLLM: Facili-tating Large Language Models to Master 16000+ Real-World APIs. In International Conference on Learning Representa-tions .Schrittwieser, J.; Antonoglou, I.; Hubert, T.; Simonyan, K.; Sifre, L.; Schmitt, S.; Guez, A.; Lockhart, E.; Hassabis, D.; Graepel, T.; et al. 2020. Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model. Nature , 588(7839): 604–609. Shinn, N.; Cassano, F.; Berman, E.; Gopinath, A.; Narasimhan, K.; and Yao, S. 2023. Reflexion: Language Agents with Verbal Reinforcement Learning. In Advances in Neural Information Processing Systems .Shridhar, M.; Yuan, X.; Cote, M.-A.; Bisk, Y.; Trischler, A.; and Hausknecht, M. 2021. ALFWorld: Aligning Text and Embodied Environments for Interactive Learning. In 
+
+International Conference on Learning Representations .Smith, V.; Chiang, C.-K.; Sanjabi, M.; and Talwalkar, A. S. 2017. Federated Multi-Task Learning. In Advances in Neural Information Processing Systems .Wang, J.; Liu, Q.; Liang, H.; Joshi, G.; and Poor, H. V. 2020. Tackling the Objective Inconsistency Problem in Het-erogeneous Federated Optimization. In Advances in Neural Information Processing Systems , volume 33, 7611–7623. Xu, W.; Liang, Z.; Mei, K.; Gao, H.; Tan, J.; and Zhang, Y. 2025. A-MEM: Agentic Memory for LLM Agents. In 
+
+Advances in Neural Information Processing Systems , vol-ume 38. Yao, S.; Shinn, N.; Razavi, P.; and Narasimhan, K. 2024. tau-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains. arXiv preprint arXiv:2406.12045 .Yao, S.; Zhao, J.; Yu, D.; Du, N.; Shafran, I.; Narasimhan, K.; and Cao, Y. 2023. ReAct: Synergizing Reasoning and Acting in Language Models. In International Conference on Learning Representations .Zhao, A.; Huang, D.; Xu, Q.; Lin, M.; Liu, Y.-J.; and Huang, G. 2024. ExpeL: LLM Agents Are Experiential Learners. In AAAI Conference on Artificial Intelligence , volume 38, 19632–19642. Zhou, S.; Xu, F. F.; Zhu, H.; Zhou, X.; Lo, R.; Sridhar, A.; Cheng, X.; Ou, T.; Bisk, Y.; Fried, D.; et al. 2024. WebArena: A Realistic Web Environment for Building Au-tonomous Agents. In International Conference on Learning Representations .

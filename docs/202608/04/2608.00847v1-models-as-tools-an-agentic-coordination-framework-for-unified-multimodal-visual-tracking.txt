@@ -1,0 +1,1241 @@
+Title: Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking
+
+URL Source: https://arxiv.org/pdf/2608.00847v1
+
+Published Time: Tue, 04 Aug 2026 00:53:41 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking 
+
+Wenrui Cai 1,2 †, Yuzhe Li 1,2 †, Qingjie Liu 1,2,3* , Yunhong Wang 1,2,3 
+
+> 1
+
+State Key Laboratory of Virtual Reality Technology and System, Beihang University. 
+
+> 2
+
+School of Computer Science and Engineering, Beihang University. 
+
+> 3
+
+Hangzhou Innovation Institute, Beihang University. *Corresponding author(s). E-mail(s): qingjie.liu@buaa.edu.cn; 
+
+> †
+
+Equal Contribution 
+
+Abstract 
+
+Most current visual trackers adopt a matching-based one-stream Transformer architecture trained exclusively on visual tracking datasets, whose performance gains depend heavily on the length of the input context, and have now reached a bottleneck. While high-performance tracking increasingly relies on foundation models, existing methods use them monolithically, adapting a foundation model into a tracker or modify a segmentation foundation model into a tracking pipeline, which fails to exploit complementary strengths. Matching-based trackers excel at instance-level correspondence but lack semantic discrimination and fine-grained foreground perception, whereas segmentation foundation models produce precise masks yet struggle with instance discrimination and multimodal extension. Both paradigms also lack error-correction capabilities for long-term tracking. To address these issues, we propose ACTrack, an agentic coordination framework that treats heterogeneous models as invo-cable tools under an event-triggered mechanism. ACTrack coordinates a Tracker-based Instance Matching Tool for target discrimination, a SAM3 Motion Tool for mask-derived motion priors, a SAM3 Perception Tool for detecting distractors and instance-conflict cues, and a VLM Reprompt Tool activated only under persistent conflict to mitigate error accumulation. We design a complete tool-invocation trigger mechanism and an inter-tool coordination mechanism, enabling the comple-mentary strengths of different model tools to be fully integrated. Experiments show that ACTrack substantially surpasses the strongest and the largest trackers on eight RGB benchmarks including LaSOT, GOT-10K, and TrackingNet. Furthermore, a parameter-efficient adaptation strategy enables parameter sharing and reuse across tools, achieving unified multimodal tracking with only 30% train-able parameters while substantially outperforming prior methods on multimodal benchmarks such as LasHeR, VisEvent, TNL2K, and DepthTrack. 
+
+Keywords: Unified Multimodal Visual Tracking, Models as Tools, Agentic Coordination, Parameter-Efficient Adaptation 
+
+## 1 Introduction 
+
+Visual object tracking aims to localize an arbi-trary target throughout a video sequence from its initial annotation. Recent trackers have largely fol-lowed a matching-based one-stream Transformer paradigm, where template and search regions are jointly encoded and the target is localized 1arXiv:2608.00847v1 [cs.CV] 1 Aug 2026 through discriminative correspondence [1, 2]. This paradigm has produced strong progress through sequence-level prediction and autoregressive local-ization [3, 4], online target queries and updated auxiliary templates [5–7], and richer video-level context propagation [8–10]. However, robust tracking requires more than matching, a tracker is supposed to preserve the annotated instance, perceive fine foreground boundaries, recover from target disappearance, reject similar distractors, and adapt to multimodal inputs. When all these capabilities are compressed into a single prediction stream trained mainly on tracking data, further gains in performance are prone to hitting a fundamental bottleneck, and become increasingly dependent on context length and model scale [5, 9, 11]. Foundation models provide a natural route beyond this bottleneck. Large pretrained visual encoders offer transferable representations [12], and parameter-efficient tuning makes it practi-cal to adapt such backbones to tracking without full fine-tuning [13, 14]. Recent scalable trackers further show the benefit of lightweight adapta-tion and spatio-temporal tuning [15]. Meanwhile, SAM-style models introduce promptable mask prediction, context memory, and fine-grained fore-ground perception [16]; SAM3 further strengthens concept-level segmentation and general visual per-ception [17]. Recent SAM-based trackers show that segmentation models can provide useful motion and mask priors [18] and distractor-aware memory [19]. However, most existing uses of foun-dation models remain monolithic: a foundation model is converted into a matching tracker, or a segmentation model is modified into a com-plete tracking pipeline. Such designs obscure the fact that different models are trained for different objectives and therefore fail in different ways. This dilemma raises a central question: Can visual tracking be improved by coordinating dif-ferent models as tools, rather than forcing their capabilities into one tracker? In this paper, we observe that matching-based trackers are effective at instance-level correspondence across frames, but they can drift to similar objects and often lack semantic discrimination and fine-grained fore-ground awareness. SAM3 provides strong mask-level perception and motion priors, but may follow a semantically plausible object extent instead of the annotated instance, and its memory can be contaminated by incorrect results, leading to error accumulation. Vision-language model pro-vides high-level semantic understanding [20–26], making it well suited for judging and arbitrating among ambiguous candidate hypotheses; however, using VLMs densely for frame-by-frame localiza-tion is computationally expensive and unstable for localization. These complementary strengths and weaknesses suggest that the key is not to replace the tracker with another model, but to decide when each model should provide the evidence it excels at, and to enable mutual error correction and verification. Based on the observation, we propose 
+
+ACTrack , an agentic coordination framework that treats models as invocable tools for visual tracking. The agentic nature of ACTrack lies in its explicit tool coordination, conflict-aware arbi-tration, and event-triggered intervention: instead of asking every model to process every frame, ACTrack lets efficient visual model tools han-dle routine localization, monitors disagreement among tools, and invokes high-level semantic reasoning only when persistent conflict suggests that the current evidence has become unreliable. ACTrack coordinates a Tracker-based Instance Matching Tool , a SAM3-based Motion Tool , aSAM3-based Perception Tool , and a VLM-based 
+
+Reprompt Tool . The instance matching tool pro-vides default bounding box localization of the target. The motion tool generates mask-derived motion priors that re-anchor the search region, while the perception tool detects similar instances within the search region and determines whether the motion tool and the instance matching tool are in conflict. Persistent conflicts indicate that cross-tool coordination has become unreliable; therefore, the VLM Reprompt Tool is invoked to determine which tool output is more reliable and to refresh the states of another tool. Beyond the application to RGB tracking, the same tool-coordination framework in ACTrack can also support multimodal tracking. Exist-ing unified multimodal trackers aim to cover RGB, RGB-D, RGB-T, RGB-Event, and RGB-Language settings through a single architec-ture [27–29]. ACTrack is complementary to these efforts. Instead of requiring SAM3 to natively process every modality, We further introduce ACTrack-EM, which adapts the SAM3 visual backbone into a unified multimodal tracker 2through parameter-efficient fine-tuning, while keeping the cross-tool coordination procedure unchanged. This design decouples modality adap-tation from tool coordination: the Instance Match-ing Tool handles heterogeneous RGB and RGB-X (D/T/E) inputs, whereas the remaining tools con-tinue to operate on the RGB stream. With the parameter-efficient fine-tuning design, ACTrack-EM substantially reduces the overall parameter count, supports unified tracking across all modal-ities, and fully preserves the coordination advan-tages of ACTrack. Our experiments show that, in both RGB and multimodal tracking, ACTrack and ACTrack-EM substantially outperform all pre-vious state-of-the-art trackers across all model scales. Our contributions are summarized as follows. 
+
+(1) We analyze the strengths and failure modes of heterogeneous models as tracking tools, and formulate visual tracking as agentic tool coor-dination rather than a monolithic tracker. (2) 
+
+We propose ACTrack, a tool-coordinated track-ing framework in which matching-based tracking, SAM3-based motion and perception, and VLM reprompting interact through search-region re-anchoring, instance-conflict detection, and prompt renewal. (3) We develop a parameter-efficient uni-fied multimodal version ACTrack-EM, enabling tool sharing and reuse across RGB and RGB-X tracking while substantially reducing additional parameters. (4) Extensive experiments show that ACTrack achieves highly competitive performance across standard RGB and multimodal bench-marks, demonstrating the effectiveness of coordi-nated tools over isolated model scaling. 
+
+## 2 Related Work 
+
+2.1 Matching-Based Visual Tracking 
+
+Most modern visual trackers are built on a match-ing principle: the target specified in the first frame is represented by a template, and later frames are searched by comparing this template with candi-date regions. Siamese trackers make this principle explicit [30, 31]. One-stream Transformer trackers generalize template-search matching from local correla-tion to global attention-based relation modeling. TransT uses self-attention and cross-attention to fuse template and search features [32], and STARK models spatial-temporal dependencies with a Transformer encoder-decoder [33]. One-stream trackers further merge feature extraction and relation modeling by jointly encoding tem-plate and search tokens, as in OSTrack [1] and MixFormer [2]. Recent trackers extend the match-ing paradigm with autoregressive prediction [3, 4], online query propagation [5, 7], historical prompts [8], and richer video-level context propa-gation [9, 10]. However, their evidence is still con-centrated in one prediction stream, so occlusion, similar distractors, or unreliable historical states can produce temporally smooth but semantically incorrect boxes. ACTrack therefore treats such trackers as replaceable Instance Matching Tools ,whose box-level evidence can be coordinated with complementary tools. 
+
+2.2 Tracking with Visual Foundation Models 
+
+Visual foundation models provide transferable representations and promptable perception capa-bilities that go beyond tracking-only training. One line of work adapts pretrained visual backbones into trackers. LoRAT applies low-rank adapta-tion to visual tracking, making it possible to train larger pretrained backbones with reduced cost [13]. SPMTrack further explores spatio-temporal parameter-efficient tuning and mixture-of-experts for scalable tracking [15]. HIPTrack shows that high-quality historical prompts can improve tracking by injecting target history into the tracking process [8]. These methods use foun-dation models mainly as strong representation backbones or promptable tracking components. Another line uses segmentation foundation models as tracking components. SAM2 extends promptable segmentation from images to videos with a streaming memory mechanism [16], and SAM3 further introduces concept-level prompt-able segmentation [17]. SAM-based trackers improve their suitability for visual tracking by adding tracking-oriented memory or motion mod-eling. SAMURAI introduces motion-aware mem-ory selection for zero-shot visual tracking with SAM2 [18], while DAM4SAM and SAM2.1++ [19] incorporates distractor-aware memory to reduce drift under similar objects. These works show that segmentation foundation models can pro-vide useful masks, motion cues, and foreground 3priors. ACTrack uses SAM3 in a different role: it is not converted into the entire tracker, but invoked as a Motion Tool and a Perception Tool 
+
+that supplies mask-derived motion boxes, search-region anchors, and instance-conflict evidence for a matching-based tracker. 
+
+2.3 Multimodal and Unified Multimodal Tracking 
+
+Multimodal tracking introduces auxiliary modal-ities such as thermal, depth, event, or language to improve robustness under low illumination, occlusion, fast motion, and appearance ambigu-ity. RGB-T tracking is supported by benchmarks such as LasHeR [34], RGB-D tracking by Depth-Track [35], and RGB-Event tracking by VisEv-ent [36]. Methodologically, many multimodal trackers are designed for a specific RGB-X setting. ProTrack prompts RGB trackers with multimodal information [37], ViPT uses visual prompts to adapt pretrained RGB trackers to RGB-D, RGB-T, and RGB-E tracking [38], and eMoE-Tracker focuses on event-guided tracking [39]. Other meth-ods, such as SDSTrack [40] and OneTracker [41], learn stronger modality fusion or efficient adapta-tion for multimodal tracking. Unified multimodal tracking sets a more demanding objective: one architecture, and prefer-ably one shared parameter set, should support RGB, RGB-D, RGB-T, RGB-Event, and RGB-Language tracking rather than training separate trackers for each modality. SeqTrackV2 formulates tracking in RGB and other modalities in a unified sequence-to-sequence framework [27]. UnTrack explicitly studies single-model and any-modality video object tracking [42]. SUTrack further targets simple and unified single object tracking across RGB and RGB-X settings [28], and Uni-MDTrack learns decoupled memory and dynamic states for all-modality tracking [29]. ACTrack is comple-mentary to these trackers. It does not require all modalities to be fused inside every tool; instead, multimodal capability is exposed through the Instance Matching Tool interface, while motion, perception, and reprompting tools are coordinated in the same way. 
+
+2.4 VLMs in Tracking 
+
+Large Vision-Language Models further enable tar-get description generation, prompt refinement, and high-level comparison between ambiguous candidates. ChatTracker uses a VLM to gener-ate high-quality target descriptions and iteratively refine ambiguous descriptions with tracking feed-back [21]. However, using a VLM as a dense frame-by-frame localizer is expensive and can introduce unstable decisions. Elysium [43] and Merlin [22] ubstantially underperforms existing trackers on tracking datasets such as LaSOT [44]. VPTrack [23] leverages the language understand-ing capability of VLM and performs well in RGB-Language tracking, but it still significantly under-performs existing best trackers on TNL2K [45]. Unlike previous methods, our ACTrack uses a VLM as Reprompt Tool rather than a tracker. The tool is invoked only when persistent conflict sug-gests that visual tools disagree about the target identity, and its output is used to refresh the state in the visual tools. This design keeps dense local-ization inside efficient visual tools while allowing semantic reasoning to enter the loop when the shared target state becomes unreliable. 
+
+## 3 Method 
+
+3.1 Models as Tools 
+
+This paper starts from a simple observation: mod-ern visual models are not equally reliable under all tracking scenarios. A segmentation founda-tion model, a matching-based tracker, and a VLM each encode a different inductive bias. Instead of forcing all abilities into a monolithic tracker, we formulate visual tracking as agentic tool coordina-tion : each model is invoked for the subproblem it is good at, and its failure modes are monitored by other tools. 
+
+SAM3 as motion and perception tools. 
+
+SAM-style video segmentation models provide promptable mask propagation and object-level memory, and recent SAM2/SAM3 variants fur-ther extend this ability to video and concept-conditioned segmentation [16, 17]. As show in the first row of Fig. 1, the strength of SAM3 is foreground awareness. A propagated mask usu-ally describes the target foreground more precisely than a bounding box, so the converted mask box 4#0440  #0456  #0464  #0516  #0528  #0562                   
+
+> #0255 #0260 #0265 #0270 #0275 #0280
+> #3242 #3243 #3244 #3245 #3246 #3247
+> Case 1: Tracker drifts in multi -distractor scenarios, while SAM3 remains stable
+> Case 2: SAM3 tracks distractor after target disappears, whereas the Tracker is able to recover
+> Case 3: SAM3 progressively expands the bounding box until it encloses the entire object
+> #0402 #0427 #0477 #0549 #0554 #0559
+> Case 4: Use VLM to resolve significant decision conflicts between SAM3 and Tracker
+> SAM3 MCITrack Ground Truth Trigger VLM Decision
+
+Fig. 1 : Case analysis of tracking failures for Tracker and SAM3 in different scenarios. provides a clean search prior for later matching. This is especially useful when background pixels inside a tracker crop become misleading. SAM3 is also useful in multi-distractor scenes because it can return object-level masks for similar instances, making it possible to reason about whether two boxes correspond to the same physical object. Motion-aware and distractor-aware SAM variants also show that obtaining the foreground mask of the target is conducive to estimating the motion state, and explicit motion and memory design is important for visual tracking with segmentation models [18, 19]. However, a segmentation model does not fully solve single-object tracking. Firstly, as shown in the last three rows of Fig. 1, promptable segmen-tation follows the semantically meaningful object extent, while tracking annotations define a spe-cific target instance that may correspond to a part, the whole, or only a subset of a seman-tic object. This mismatch leads to scale drift in both directions. The mask may expand from a part to the whole semantic object: if the initial box covers one carriage of a train, segmenta-tion memory tends to grow to the entire train because the whole train is a coherent visual object, while the tracker should preserve the annotated carriage identity. The mask may also collapse from the whole object to a discriminative local region: under occlusion, motion blur, or competi-tion from similar instances, a small high-contrast patch becomes a more stable anchor for memory attention than the full object outline. Secondly, when the target disappears, a segmentation prop-agation tool may output no reliable mask; after the target reappears, it may be unable to re-lock without a new prompt. Thirdly, once a wrong object, an over-expanded mask, or a collapsed par-tial mask is written into the video memory, the memory pool can be polluted and future masks may reinforce the error. 
+
+Trackers as instance matching tools. 
+
+Matching-based trackers formulate tracking as matching a target template to a search region [1, 2, 30, 31, 33, 46]. Compared with a pure mask propagator, they usually preserve the annotated instance more faithfully: the tracker learns to fol-low the target specified by the first-frame crop or the additional context, as shown in the third row of Fig. 1. Trackers also tend to continue exploring when the target becomes unreliable, as demon-strated in the second row of Fig. 1. This does not make it easy to deal with disappearance scenarios, 5Timeline 
+
+Motion Tool 
+
+Perception Tool 
+
+> Image
+> Encoder
+> Memory
+> Attention
+> Kalman -filter Motion State
+> Candidate
+> Reweight
+> Track Pred
+> Head
+> Target Candidate
+> Segmentation
+> Head
+
+Transfomer 
+
+Encoder 
+
+> Head
+
+Instance Matching Tool 
+
+> Search
+> Region
+> Re -Anchor
+> Distractor
+> Judgment
+> Conflict
+> Detection
+
+VLM Reprompt Tool    
+
+> ReFresh
+> 𝑸 :Compare the results of Instance
+> Matching Tool and Motion Tool.
+> Return {Matching, Motion, Uncertain}
+> Matching Motion
+
+𝑅 𝑡 
+
+𝑏 𝑡 
+
+> 𝑟
+
+𝑏 𝑡 
+
+> 𝑚
+
+𝒞 𝑡 Fig. 2 : Overview of ACTrack as agentic tool coordination. ACTrack maintains a shared target state Ω t and invokes heterogeneous visual models as tools in a closed loop. The SAM3 Motion Tool propagates target memory to obtain a mask-derived motion box bmt and its search prior Rt. The Instance Matching Tool predicts the tracker-side box brt under this prior. The SAM3 Perception Tool detects similar instances in the effective search region and assigns brt and bmt to instance identities, yielding the conflict signal Ct. If the same conflict persists for K frames, the VLM Reprompt Tool performs identity arbitration and refreshes the SAM3 prompt when brt is more reliable. but in difficult out-of-view or reappearance sce-narios, a tracker can still test candidate regions instead of simply returning a distractor or no object. The weakness of a tracker is that its crop and response map can be distracted by nearby similar objects, as shown in the first row of Fig. 1. Current methods often apply Hanning win-dows [30] to introduce motion prior and stabilize the response peak around the previous target cen-ter. This prior improves short-term smoothness but makes the tracker biased toward local can-didates and can amplify distractor errors when a similar object stays near the search center. Stronger spatio-temporal transformer interaction reduce this issue [4, 8, 33], but a box tracker still lacks the mask-level evidence required to tell whether two high-score boxes belong to different visible instances, as well as the precise motion state. 
+
+VLMs as reprompt tools. As mentioned in Section 2, the advantage of a VLM is not low-level localization speed but semantic com-parison. Given an initial reference, the current frame, and two competing hypotheses, a VLM can decide which candidate better matches the intended target identity. Another weakness of a VLM is cost and instability: dense per-frame VLM inference is unnecessary for routine localization and may introduce inconsistent semantic judg-ments. Therefore, our ACTrack uses the VLM only as a sparse reprompt tool under persistent dis-agreement. As shown in the last row of Fig. 1, when there is a serious conflict between the tracker output and the SAM3 output, the VLM inter-venes in decision-making and prompts other tools to correct the track trajectory. These complementary failure modes motivate the tool decomposition in Fig. 2. SAM3 pro-vides mask-level motion and perception evidence, the tracker provides instance-level matching, and the VLM provides rare semantic decision-making. ACTrack maintains a shared target state and decides which tool should influence the next frame. 
+
+3.2 Overview: Agentic Coordination Framework 
+
+This section details how ACTrack synchronizes and coordinates its tools into a closed-loop track-ing agent, as illustrated in Fig. 2. We process a video frame by frame: at step t the input is an RGB frame It ∈ RH×W ×3 (optionally with an auxiliary modality, Section 3.7), and the goal is to predict the target box ¯bt = ( x, y, w, h ) ∈ R4
+
+6specified by the first-frame annotation ( I0, b 0). We write Expand( b, ρ ) for a box scaled around its center by a factor ρ.Rather than fusing tool outputs by a fixed rule, ACTrack maintains a shared target state Ωt = {¯bt−1, H t−1, S t−1, Q t−1, (I0, b 0)}, (1) where ¯bt−1 ∈ R4 is the last accepted box, Ht−1
+
+denotes the implementation-dependent state of the Instance Matching Tool, including its tar-get state, template or memory features, and any hidden states or caches used by the underlying tracker (Section 3.4), St−1 denotes the SAM3 video state, including mask memories and object-pointer tokens used for propagation (Section 3.3), 
+
+Qt−1 ∈ { 0, 1}K denotes a sliding buffer of recent conflict flags, and ( I0, b 0) is the immutable ini-tial reference. At each frame, ACTrack invokes the tools in a fixed order: Motion, Instance Matching, and Perception, with Reprompt called only when its trigger is met. Each tool reads from and writes back to Ω t, turning three heterogeneous models into one feedback loop. 
+
+Motion Tool provides search region pri-ors for the Instance Matching Tool. The SAM3 Motion Tool propagates a mask to frame 
+
+It and converts it to a motion box bmt ∈ R4. This box is used as a motion prior to re-anchor the search center of the Instance Matching Tool, and is expanded by Rt = Expand( bmt , ρ ) to construct the effective search region. Therefore, the matched box brt ∈ R4 predicted by the Instance Matching Tool are steered by mask-level motion evidence while keeping the tracker’s own discriminative search. If no valid mask is returned, ACTrack falls back to using ¯bt−1 to crop the search region and skips the perception stage. 
+
+Perception Tool provides judgments of distractors within the search region. Given 
+
+Rt, the SAM3 Perception Tool detects instances inside the search region and assigns both brt and 
+
+bmt to the detected instances, yielding identities 
+
+art and amt . A reliable conflict Ct = ⊮[art̸ =
+
+amt ] ∈ { 0, 1} signals that the matcher and the motion prior have locked onto different physical objects ; this instance-level evidence, not a scalar IoU, drives all subsequent coordination. 
+
+Default Decision-Making Policy. When conflict-free ( Ct = 0), ACTrack accepts the box output by the Instance Matching Tool ¯bt = brt ,since the tracker preserves the annotated instance most faithfully; under a reliable conflict it tem-porarily favors the box bmt output by the Motion Tool to avoid contaminating the tracker with a distractor. The accepted ¯bt is committed back to both Ht and St, so each decision conditions the next frame. 
+
+Reprompt Tool is triggered by per-sistent disagreement. A one-frame conflict is treated as transient evidence. ACTrack queries the VLM Reprompt Tool only when the con-flict buffer Qt records the same conflict for K
+
+consecutive frames, obtaining a verdict yt ∈{Matching , Motion , Uncertain }. If yt =
+
+Matching , the VLM judges that the Instance Matching Tool still follows the annotated tar-get while SAM3 has drifted. ACTrack therefore accepts brt , injects it into SAM3 as a new box prompt at the current frame, and restarts SAM3 mask propagation from the next frame. If yt =
+
+Motion , ACTrack keeps the motion path bmt
+
+and does not overwrite the SAM3 state with the matcher output. If yt = Uncertain , ACTrack leaves the default decision unchanged and avoids forcing either tool to overwrite the other. The VLM is therefore used only for sparse identity arbitration and prompt renewal, not for dense localization. 
+
+3.3 Motion Tool and Perception Tool 
+
+ACTrack uses SAM3 in two roles. As the Motion Tool , SAM3 propagates the target memory in 
+
+St−1 to frame It, and its mask decoder yields N
+
+candidate masks {M (i) 
+
+> t
+
+} with mask-quality scores 
+
+ut ∈ RN (the IoU-prediction head) and an object-ness logit ot. The selected mask is binarized into the motion box bmt ∈ R4 and expanded into Rt =Expand( bmt , ρ ), where ρ is the expansion rate. If no valid mask is returned, ACTrack falls back to ¯bt−1 and skips conflict detection. The concrete hyperparameter values are given in Section 4. 
+
+Kalman-filtered mask selection. A purely appearance-driven decoder ranks candidates only by ut and tends to switch identity in clutter. Fol-lowing motion-aware SAM trackers [18], we inject a motion prior, but re-rank the mask candidates 
+
+before they enter the SAM3 memory rather than re-ranking final boxes, which keeps a distractor 7: Freeze  : Trainable  : Positional Embedding  : Elemet -wise Add  : Template/Aux Template/Search Region Tokens C : Concatenation  
+
+> Unified Patch Embedding
+> Prompt: a
+> penguin is
+> standing on the
+> ice surface
+> Linear
+> Pre -Extract
+> RGB PE Depth PE
+> Thermal PE
+> Event PE
+> C
+> Fuse
+> Linear
+> SAM3 Image Encoder
+
+…
+
+> Chunked -Causal Transformer Block 1
+> Chunke d-Causal  Transformer Block  2
+> Chunked -Causal  Transformer Block  3
+> Chunked -Causal  Transformer Block  n
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+> LoRA
+
+…
+
+> Avg
+> Pooling
+> Modality
+> Prediction
+> Traget
+> Prediction
+
+Fig. 3 : Architecture of the parameter-efficient unified multimodal Instance Matching Tool in ACTrack-EM. RGB and auxiliary inputs are first encoded by modality-aware patch embeddings with residual fusion. The resulting template, auxiliary-template, and search-region tokens are processed by the frozen SAM3 image encoder equipped with stream-specific LoRA paths. The tracker predicts the target box from the search tokens, while an auxiliary modality head regularizes the unified representation across RGB, RGB-D, RGB-T, and RGB-Event inputs. mask from polluting the video state. We main-tain a constant-velocity Kalman filter (KF) whose state xt ∈ R8 stacks the box center, aspect ratio, height, and their velocities, with measurement (cx, c y , w/h, h ) read from the selected mask box and noise scaled by the target height [47]. Convert-ing each candidate mask to a box and computing its IoU g(i) 
+
+> t
+
+with the KF-predicted box ˆbt, we select the mask by a motion-aware score 
+
+i⋆ = arg max 
+
+> i
+
+(1 − Wm) u(i) 
+
+> t
+
++ Wm g(i)
+
+> t
+
+, (2) where Wm controls the contribution of the motion prior. The motion term is enabled only after a warm-up period with consistently reliable mask predictions; otherwise the selection falls back to 
+
+ut alone. The objectness logit gates the whole pro-cess: when the target is deemed absent, the masks are suppressed, and the KF state is cleared so a stale trajectory is not carried through an occlu-sion. Eq. (2) only changes which mask is kept; it adds no learnable parameter and leaves SAM3 frozen. 
+
+Perception Tool. As the Perception Tool ,SAM3 uses its image detection and segmenta-tion branch to detect similar objects inside the effective search region, providing instance-level evidence rather than a better IoU. Let Ot =
+
+{(Bi, M i, q i)}Nt 
+
+> i=1
+
+be the detected instances, where 
+
+Bi ∈ R4 is the bounding box of instance i in the original image coordinates, Mi ∈ { 0, 1}HR×WR
+
+is its binary mask in the effective-search-region crop, and qi is the detection confidence. ACTrack then applies the assignment rule in Algorithm 1 to both the Instance Matching box brt and the Motion Tool box bmt . The assignment uses the centers of both boxes to query the SAM3 detec-tions. When a valid instance mask is available, ACTrack checks whether the box center lies inside that mask; otherwise it falls back to containment by the detected box Bi. We denote by Π R(·) the coordinate mapping from an original-image point to the mask grid of the crop specified by search region R: it subtracts the crop’s top-left corner and scales the point to the HR × WR mask reso-lution. For a candidate set I and a query center 
+
+c, SelectBest( I, c ) first selects the instance with the highest confidence qi; if multiple instances have the same confidence, it selects the one with the smallest center distance ∥c − Center( Bi)∥2. A conflict means the two tools have locked onto dif-ferent physical objects. This exposes the mismatch between semantic object perception and tracking identity, and ACTrack must decide how to update the shared state. 
+
+3.4 Instance Matching Tool 
+
+The Instance Matching Tool is the default local-ization engine. Given the current frame It, the tracker state Ht−1, and the search prior Rt from the Motion Tool, it predicts the tracker-side target 8Algorithm 1 Perception-based instance assign-ment                                                                                           
+
+> Require: Search region Rt, boxes brt, b mt
+> Require: SAM3 detections Ot={(Bi, M i, q i)}Nt
+> i=1
+> Require: Bi: image-coordinate box; Mi: mask on the Rtcrop grid
+> Ensure: Assignments art, a mtand conflict flag Ct
+> 1: function Assign (b, Ot, R t)
+> 2: c←Center( b)
+> 3: ˜c←ΠRt(c)
+> 4: Im← { i|˜c∈Mi}
+> 5: if Im̸=∅then
+> 6: return SelectBest( Im, c )
+> 7: end if
+> 8: Ib← { i|c∈Bi}
+> 9: if Ib̸=∅then
+> 10: return SelectBest( Ib, c )
+> 11: end if
+> 12: return ∅
+> 13: end function
+> 14: art←Assign( brt,Ot, R t)
+> 15: amt←Assign( bmt,Ot, R t)
+> 16: v←(art̸=∅)∧(amt̸=∅)
+> 17: Ct←⊮[v∧art̸=amt]
+> 18: return art, a mt,Ct
+
+hypothesis and updates its internal state: (brt , H rt ) = D(It, R t, H t−1), (3) where brt ∈ R4 is the box predicted by the Instance Matching Tool, and Hrt is the tracker state after matching. The interface requires three operations: initialization with the first-frame target, frame-wise matching under the motion-guided search prior, and state synchronization after ACTrack selects the accepted box. The coordination pol-icy does not rely on a scalar tracker confidence; instead, the tracker output is checked against SAM3’s instance-level evidence by the Perception Tool. The role of Rt is to constrain the search process with mask-level motion evidence, while the tracker still performs its own discriminative matching using its templates and temporal state. Because the tool is defined only by this box-and-state interface, any compatible tracker can be plugged into ACTrack; for RGB modality, we use an off-the-shelf matching-based tracker, and Section 3.7 provides a parameter-efficient tuned unified multimodal tracker Dmm . Our con-tribution is therefore not a new tracker followed matching paradigm but a coordination policy that lets a matching-based tracker interact with seg-mentation, perception, and semantic reasoning tools. 
+
+3.5 VLM Reprompt Tool 
+
+A single conflict flag Ct is unreliable, so ACTrack escalates to semantic reasoning only when the dis-agreement is persistent : the VLM is queried only when the conflict buffer Qt holds the same conflict for K consecutive frames. This keeps the average number of VLM calls per sequence small, so the semantic cost stays negligible relative to per-frame localization (Section 4). When triggered, the VLM receives a four-panel image. The panel contains the initial reference from ( I0, b 0), the current frame with both brt and 
+
+bmt overlaid, and one crop around each box. The VLM then returns a three-way verdict 
+
+yt = V (I0, b 0), I t, b rt , b mt
+
+,yt ∈ { Matching , Motion , Uncertain }. (4) 
+
+Matching means the Instance Matching Tool still follows the annotated target while SAM3 has drifted. ACTrack accepts brt , injects it into SAM3 as a new box prompt at the current frame, and restarts mask propagation from the next frame. 
+
+Motion keeps the motion path bmt , and Uncer-tain leaves the default decision unchanged. The VLM is used only for sparse identity arbitration and prompt renewal, not for dense localization. 
+
+3.6 The Coordination Algorithm of ACTrack 
+
+Fig. 2 illustrates the closed-loop interaction among the tools, and Algorithm 2 gives the correspond-ing per-frame control flow. The Motion Tool first provides a mask-derived motion prior, and the Instance Matching Tool uses this prior to produce the default target hypothesis. The Perception Tool then checks whether the Instance Matching box and the motion box belong to the same detected instance. On ordinary frames, ACTrack follows the default policy directly: it accepts brt when there is no conflict and temporarily favors bmt under a reli-able conflict. Only when the same conflict persists in Qt for K frames does ACTrack query the VLM Reprompt Tool. In the algorithm, ηt indicates whether it returns a valid mask, PerceptionAssign 9Algorithm 2 ACTrack Inference 
+
+Require: Frame It, accepted box ¯bt−1
+
+Require: Tool states Ht−1, S t−1, buffer Qt−1, refer-ence ( I0, b 0)
+
+Ensure: Accepted box ¯bt, updated state Ω t+1 1: (Mt, b mt , η t) ← MotionTool( It, S t−1) 
+
+> 2:
+
+if ηt = 0 then  
+
+> 3:
+
+bmt ← ¯bt−14: Ct ← 0 
+
+> 5:
+
+end if  
+
+> 6:
+
+Rt ← Expand( bmt , ρ ) 
+
+> 7:
+
+(brt , H rt ) ← D (It, R t, H t−1) 
+
+> 8:
+
+if ηt = 1 then  
+
+> 9:
+
+Ot ← PerceptionTool( It, R t) 
+
+> 10:
+
+(art , a mt , Ct) ←
+
+PerceptionAssign( Rt, b rt , b mt , Ot) 
+
+> 11:
+
+end if  
+
+> 12:
+
+Qt ← Push( Qt−1, Ct) 
+
+> 13:
+
+if Ct = 0 then  
+
+> 14:
+
+¯bt ← brt 
+
+> 15:
+
+else  
+
+> 16:
+
+¯bt ← bmt 
+
+> 17:
+
+end if  
+
+> 18:
+
+St ← St−119: if Persistent( Qt) then  
+
+> 20:
+
+yt ← V (( I0, b 0), I t, b rt , b mt ) 
+
+> 21:
+
+if yt = Matching then  
+
+> 22:
+
+¯bt ← brt 
+
+> 23:
+
+St ← Reprompt( St−1, b rt ) 
+
+> 24:
+
+else if yt = Motion then  
+
+> 25:
+
+¯bt ← bmt 
+
+> 26:
+
+end if  
+
+> 27:
+
+end if  
+
+> 28:
+
+(Ht, S t) ← Commit( Hrt , S t, ¯bt) 
+
+> 29:
+
+return ¯bt, Ωt+1 
+
+refers to Algorithm 1, and Persistent( Qt) denotes the repeated-conflict trigger. The final accepted box is committed back to both tool states, so the next frame is conditioned on the current decision. 
+
+3.7 Unified Multimodal Instance Matching Tool with Parameter-Efficient Adaptation 
+
+The ACTrack coordination policy is defined over tool outputs, not over a particular image modality. This makes multimodal tracking a natural exten-sion of the framework: the Motion, Perception, and Reprompt Tools keep their original inter-faces, while modality-specific fusion is isolated inside the Instance Matching Tool. ACTrack-EM implements this idea by parameter-efficiently adapting the SAM3 image encoder into a unified multimodal Instance Matching Tool that absorbs heterogeneous RGB-X inputs and still returns the same box-and-state output to ACTrack. The SAM3 backbone Φ0 is kept frozen, and only lightweight modality-specific patch embedding, stream-specific parameters, and prediction head are learnable. This design reuses the visual foun-dation backbone across tools, avoids training sep-arate trackers for different modalities, and keeps the additional parameter cost small. Each template, auxiliary-template, or search region is cropped and resized before patch embed-ding. We write the resulting input as X =[Xrgb ; Xaux ] ∈ R6×H×W ; with patch size p, it yields nH,W = ( H/p )( W/p ) visual tokens. Here 
+
+Xaux denotes the auxiliary modality, such as depth, thermal, or event data, and is replaced by a copy of RGB when no auxiliary modality is avail-able. A task index κ indicates the input modal-ity and also supervises an auxiliary modality-prediction head during training. As illustrated in Fig. 3, the adaptation consists of modality-aware unified patch embedding, dynamic auxiliary templates, stream-specific low-rank updates, and causal temporal token interaction. 
+
+Modality-aware unified patch embed-ding. Instead of feeding all modalities through a single projection, ACTrack-EM embeds the RGB channels with the frozen patch embed-ding PE rgb and the auxiliary channels with a modality-specific expert PE κ initialized from PE rgb . This gives Ergb , E aux ∈ Rd×(H/p )×(W/p ).The two streams are merged as E = Ergb +Fuse([ Ergb ; Eaux ]), so training starts from the pre-trained RGB representation and the auxiliary cue enters as a learned residual. For RGB-only inputs, the auxiliary branch receives the RGB copy, allow-ing the same module to serve both RGB and RGB-X settings. Flattening E gives the token sequence in RnH,W ×d.
+
+Dynamic auxiliary templates. Besides the fixed initial template Z0 cropped from (I0, b 0), ACTrack-EM maintains a FIFO queue of dynamic auxiliary templates to describe appear-ance changes over time. These templates are encoded as additional causal chunks between the initial template and the search region. At infer-ence, the underlying tracker uses its predicted 10 target confidence to decide when the auxiliary-template queue should be refreshed. This confi-dence is used only for template management inside the Instance Matching Tool and is not part of ACTrack’s cross-tool coordination policy. 
+
+Multi-path stream-specific LoRA. The backbone processes token streams with different roles: the initial-template stream, the dynamic-template stream, and the search-region stream. We therefore avoid sharing one adaptation path across all streams. Each linear projection W in attention and MLP is equipped with stream-specific LoRA experts, written as W ′ 
+
+> j
+
+= W + 
+
+> αr
+
+Bj Aj . Here j indexes one of the streams above; all dynamic auxiliary templates share the dynamic-template expert, while the search-region tokens are routed to the search expert. This static routing lets the search stream specialize for localization without changing the template repre-sentation learned from the reference frames, while the SAM3 backbone weights remain frozen [14]. 
+
+Chunked causal temporal attention. The original image encoder processes a single image crop, whereas tracking requires interaction among the initial template, auxiliary templates, and search frame. ACTrack-EM orders these token groups as temporal chunks and uses chunked causal attention to fuse them. When a language description is available, we use its pre-extracted T5 embedding and project it with a lightweight MLP into an NLP prefix token placed before the initial-template tokens; otherwise a default place-holder token is used. This prefix token is context input rather than a separate LoRA stream. Tokens in a later chunk can attend to previous chunks and to their own chunk, while earlier chunks are not updated by future search tokens. During infer-ence, the NLP prefix and template chunks are encoded into a KV cache, and the search chunk reads from the cached template context. This preserves the temporal direction of tracking and avoids contaminating the reference representation with information from later frames. Together, Dmm exposes exactly the same box-and-state interface ( brt , H rt ) = Dmm (It, R t, H t−1). As a result, ACTrack can use one coordi-nation policy for RGB and RGB-X tracking: modality-specific evidence is handled inside the Instance Matching Tool, while motion propaga-tion, instance-level perception, and sparse VLM reprompting remain unchanged. 
+
+## 4 Experiments 
+
+4.1 Implementation Details 
+
+Model settings. In our experiments, we eval-uated ACTrack under three configurations. All configurations maintain the same agentic coordi-nation framework, with the only difference being the Instance Matching tool used. For the Motion Tool, we adopt a SAM3 implementation enhanced with Kalman filter; for the Perception Tool, we use the original SAM3 implementation; and for the Reprompt Tool, we default to Seed 2.0 Pro [48]. For classic RGB tracking, we adopt two configura-tions: ACTrack-B 224 built upon MCITrack-B 224 ,and ACTrack-L 384 built upon MCITrack-L 384 . For the two configurations, the Instance Matching Tool uses templates of size 112 ×112 and 192 ×192 respectively, with corresponding search regions of 224 × 224 and 384 × 384. The cropping factors of the template is 2.0, and the search region is cropped based on the output of the Motion Tool. The inputs to the Motion Tool is the native video frames, whereas the Perception Tool applies the SAM3 image branch to the effective search-region crop for instance-conflict detection. For unified multimodal tracking, our variant is ACTrack-EM, which shares identical components with the RGB-based ACTrack except for the Instance Matching Tool. We apply parameter-efficient fine-tuning to the image encoder of SAM3 to train the Instance Matching Tool, which consists of 31 transformer layers with a hidden size of 1024 and an MLP inner dimension of 4736. Specifically, we employ LoRA with a rank of r = 64 and a scaling factor of α = 64 to fine-tune the backbone. ACTrack-EM uses a 224 × 224 initial template and two 224 × 224 dynamic templates, along with a 378 ×
+
+378 search region. Table 1 details the number of parameters, computational cost, and average inference speed of ACTrack-B 224 , ACTrack-L 384 ,and ACTrack-EM, with all evaluations conducted on a single NVIDIA RTX 4090 GPU. The speed test is conducted on the entire LaSOT test split and yielded an average value. The results demon-strate that integrating multiple specialized models as tools within a unified agentic coordination framework yields a significant advantage in terms of parameter count compared to previous large or giant scale trackers. Furthermore, benefiting from the parameter-efficient fine-tuning strategy, 11 ACTrack-EM exhibits an even more pronounced advantage in parameter efficiency. In terms of inference speed, ACTrack shows no clear disad-vantage against previous large-scale trackers and is substantially faster than SPMTrack-G. 
+
+Table 1 : Comparison of our method with other trackers using parameter-efficient training method in terms of total parameters, trainable parameters, computational complexity, and inference speed. Speed is measured on an NVIDIA RTX 4090 for ACTrack and SPMTrack-G; the speed of LoRAT-G378 is copied from the original paper.                      
+
+> Method Trainable Params(M) Params(M) FLOPs(G) Speed (FPS) ACTrack-B 224 0613.5 2348.09 15.1
+> ACTrack-L 384 0865.0 2679.93 12.7
+> ACTrack-EM 173.3 559.0 2876.54 14.2
+> SPMTrack-G 204.0 1339.5 3942.2 8.6
+> LoRAT-G 378 80.2 1215.7 1161.0 20.0
+
+Tool coordination configuration. When the Motion Tool supplies the search-region crop for the Instance Matching Tool, we adopt a crop expansion ratio of ρ = 2 .5 for RGB and RGB-Language datasets. For RGB-D/T/E datasets, the auxiliary modality conveys more salient fore-ground cues than the RGB modality; therefore, we adopt a smaller cropping factor ρ = 1 .5. Inside the Motion Tool, the multimask candidates produced by the SAM3 mask head are re-ranked through a linear fusion of the predicted-IoU score of the mask decoder and the geometric IoU between each candidate box and a Kalman filter prediction, with a motion-prior weight of Wm = 0 .15. When the sigmoid of the objectness score Pobj predicted by SAM3 falls below 0.5, the target is regarded as lost and all Kalman-filter states associated with it are cleared. Only after 15 consecutive frames in which the SAM3 IoU prediction head outputs a score above 0 .3 does the Kalman filter com-plete its warm-up and resume contributing to the re-ranking. The Perception Tool runs with the default SAM3 image-branch configuration, where both the per-query confidence threshold and the per-pixel mask threshold are set to 0 .5, and the number of object queries is 200. If the Motion Tool and the Instance Matching Tool are assigned to different object instances for 5 consecutive frames, the VLM Reprompt Tool is invoked to arbitrate among Matching , Motion , and Uncertain ;only when the decision is explicitly Matching 
+
+does ACTrack inject the current Instance Match-ing Tool prediction into SAM3 as a new box prompt and restart mask propagation from the next frame. 
+
+Datasets. ACTrack-B 224 and ACTrack-L 384 are assembled entirely from off-the-shelf checkpoints and require no additional training. ACTrack-EM is trained on the training splits of LaSOT [44], GOT-10k [52], COCO [53], TrackingNet [54], VastTrack [55], TNL2K [45], DepthTrack [35], VisEvent [36], and LasHeR [34]. The nine datasets are sampled with equal probability. Each sam-ple consists of four frames, consists of an ini-tial template, two dynamic templates, and one search frame. The frames are drawn from the same sequence with pairwise gaps uniformly sam-pled from [1 , 200]. For the image-only COCO dataset, each image is replicated to form a pseudo-sequence. 
+
+Training and Optimization. Our method is implemented in PyTorch 2.5.1 and trained on 8 NVIDIA H800 GPUs. ACTrack-EM is trained in two stages. In each stage we adopt a per-GPU batch size of 16 and train for 50 epochs, with 131 ,072 samples drawn per epoch. In the first stage, only one 224 × 224 initial template and one 224 × 224 dynamic template are used, and super-vision is provided by predicting the target on the dynamic template. In the second stage, the full configuration is enabled, in which one initial tem-plate, two dynamic templates, and one 378 × 378 search region are jointly fed into the network, and supervision is computed on the search region. The initial template, the dynamic templates, and the search region are each routed through a dedicated LoRA branch. Both stages use the AdamW [56] optimizer with an initial learning rate of 10 −7,a one-epoch warmup to 10 −4, a cosine schedule decaying to 5 × 10 −6, and a weight decay of 0 .1. 
+
+Loss and Inference of ACTrack-EM. For target prediction, we employ Generalized IoU [57] Loss to supervise bounding box prediction, and Binary Cross-Entropy Loss to supervise tar-get center point prediction. Additionally, we use Cross-Entropy Loss to compute the modality prediction loss. The loss weights for the above components are all set to 1.0. For the two aux-iliary templates in ACTrack-EM, an update is 12 Table 2 : State-of-the-art comparison on RGB tracking benchmarks. Public baseline numbers are taken from published comparison tables. SAM-based and matching-based trackers are separated by type, while ACTrack is left ungrouped as an agentic coordination method. The best three results for each metric are highlighted in red , blue , and bold , respectively.                                                                                                                                                                                                            
+
+> Method Source LaSOT TrackingNet LaSOT ext
+> AUC PNorm PAUC PNorm PAUC PNorm PACTrack-B 224 Ours 80.1 90.3 87.8 86.8 91.5 87.0 65.4 77.5 73.1 ACTrack-L 384 Ours 81.4 90.8 89.4 88.0 92.4 89.5 66.5 77.9 73.6 ACTrack-EM Ours 79.3 88.9 87.2 87.5 92.1 88.4 65.8 75.5 76.8
+> SAM-based trackers
+> SAMITE-B [49] arXiv25 74.9 83.4 81.4 84.5 ––60.7 73.1 71.2 SAMURAI-L [18] TIP26 74.2 82.7 80.2 85.3 ––61.0 73.9 72.2 SAM2.1-L [16] ICLR25 68.5 76.2 73.6 –––58.6 71.1 68.8
+> Matching-based trackers
+> RELO-L 256 [50] ICML26 75.1 85.1 83.4 87.3 91.6 88.0 57.5 69.1 66.7 SPMTrack-L [15] CVPR25 76.8 85.9 84.0 86.9 91.0 87.2 –––MCITrack-L 384 [9] AAAI25 76.6 86.1 85.0 87.9 92.1 89.2 55.7 66.5 62.9 LoRAT-g 378 [13] ECCV24 76.2 85.3 83.5 86.0 90.2 86.1 56.5 69.0 64.9 LoRAT-L 378 [13] ECCV24 75.1 84.1 82.0 85.6 89.7 85.4 56.6 69.0 65.1 LoRATv2-L 378 [14] NeurIPS25 76.1 85.1 83.1 ––––––ARPTrack-L 384 [51] CVPR25 74.2 83.4 81.7 86.6 91.1 87.4 54.2 64.4 61.2 ODTrack-L 384 [5] AAAI24 74.0 84.2 82.3 86.1 91.0 86.7 53.9 65.4 61.7 MambaLCT 384 [10] AAAI25 73.6 84.1 81.6 85.2 89.8 85.2 53.3 64.8 61.4 ARTrackV2-L 384 [6] CVPR24 73.6 82.8 81.1 86.1 90.4 86.2 53.4 63.7 60.2 ARTrack-L 384 [4] CVPR23 73.1 82.2 80.3 85.6 89.6 86.0 52.8 62.9 59.7 SeqTrack-L 384 [3] CVPR23 72.5 81.5 79.3 85.5 89.8 85.8 50.7 61.6 57.5
+
+performed only when the center-point confidence produced by the tracker exceeds 0 .9 and the gap to the previous update is at least ⌊n/ 5⌋ frames, where 
+
+n denotes the number of frames already tracked. When both conditions are satisfied, the auxiliary templates are refreshed in a FIFO manner. 
+
+4.2 Comparison with the State-of-the-Art Methods 
+
+We evaluate the proposed ACTrack-B 224 ,ACTrack-L 384 , and ACTrack-EM on twelve datasets spanning five modalities: RGB, RGB-D, RGB-E, RGB-T, and RGB-Language. For the RGB modality, we primarily report ACTrack-B 224 
+
+and ACTrack-L 384 , whereas for the remaining multimodal benchmarks we primarily report ACTrack-EM. We compare against recent state-of-the-art trackers and highlight the best three results for each metric in red , blue , and bold .
+
+LaSOT. LaSOT [44] is an RGB-based track-ing dataset built for long-term tracking, whose test split contains 280 sequences averaging more than 2,500 frames. As shown in Table 2, our proposed ACTrack-B 224 attains an AUC of 80 .1, substantially outperforming all existing methods and being the first to push the AUC beyond 80. ACTrack-L 384 further achieves the best AUC of 81 .4. In addition, Fig. 4 compares ACTrack with other methods on each attribute-based sub-set of LaSOT, where our method significantly outperforms all competitors across every subset. 
+
+LaSOT ext . LaSOT ext [44] is an RGB-based 
+
+extension that adds 150 sequences of 15 categories disjoint from LaSOT, probing generalization to unseen classes. As shown in Table 2, similar to the results on LaSOT, our method also achieves a sub-stantial performance gain, both ACTrack variants rank first and second across all three metrics. 
+
+TrackingNet. TrackingNet [54] is an RGB-based large-scale short-term dataset with 511 test sequences. As shown in Table 2, ACTrack-L 384 
+
+reaches the best AUC of 88 .0, showing that our method also preserves strong short-term localiza-tion. As performance on TrackingNet has nearly saturated, the gain over prior methods is less pronounced than on the other datasets. 
+
+GOT-10k. GOT-10k [52] is an RGB-based 
+
+dataset with 9,335 training and 180 test sequences under a strict one-shot protocol, where test classes do not overlap with the training split. As shown in Table 3, ACTrack-L 384 obtains the best AO of 86 .8. Since current state-of-the-art methods 13 Table 3 : The performance of our method and other state-of-the-art trackers on GOT-10k. The best three results for each metric are highlighted in red , blue , and bold , respectively.                                                                            
+
+> Method Source AO SR 0.5SR 0.75
+> ACTrack-B 224 Ours 83.8 95.4 82.0 ACTrack-L 384 Ours 86.8 95.9 87.2
+> ARPTrack-L 384 [51] CVPR25 81.5 90.6 80.5 SPMTrack-L [15] CVPR25 80.0 89.4 79.9 MCITrack-L 384 [9] AAAI25 80.0 88.5 80.2 ARTrackV2-L 384 [6] CVPR24 79.5 87.8 79.6 LoRAT-g 378 [13] ECCV24 78.9 87.8 80.7
+> LoRATv2-L 378 [14] NeurIPS25 78.2 86.8 79.1 HIPTrack [8] CVPR24 77.4 88.0 74.5 AQATrack 384 [7] CVPR24 76.0 85.2 74.9 MambaLCT 384 [10] AAAI25 76.2 86.7 74.3 ARTrack-L 384 [4] CVPR23 78.5 87.4 77.8 ODTrack-L 384 [5] AAAI24 78.2 87.2 77.3 LoRAT-L 378 [13] ECCV24 77.5 86.2 78.1 SeqTrack-L 384 [3] CVPR23 74.8 81.9 72.2
+
+commonly rely on large-scale pre-trained foun-dation models, the GOT-10k evaluation may no longer strictly conform to its one-shot protocol; we therefore report GOT-10k separately for reference. 
+
+TNL2K. TNL2K [45] is an RGB-language 
+
+dataset whose videos are annotated with natural-language descriptions under complex scenes and severe distractors. As shown in Table 4, our pro-posed ACTrack-EM achieves the best AUC of 77 .2, outperforming existing methods by a clear margin. 
+
+OTB2015, UAV123, and NfS. OTB2015 [61], UAV123 [62], and NfS [63] are classical RGB-based short-term datasets. OTB2015 contains 100 sequences with 11 challenge attributes, UAV123 contains 123 low-altitude aerial sequences with small fast-moving targets, and NfS contains sequences for evaluating tracking under fast motion. For NfS, we use the 30 FPS version. As shown in Table 5, ACTrack-B 224 achieves the best AUC on all three benchmarks, surpassing all previous large and giant scale methods. 
+
+VastTrack. VastTrack [55] is a recent large-scale RGB-based dataset whose test split spans hundreds of object categories, making it substan-tially more challenging than LaSOT. As shown in Table 6, all three ACTrack variants surpass all competing trackers by a large margin, demonstrat-ing strong category-level generalization. 
+
+LasHeR. LasHeR [34] is a large-scale RGB-Thermal dataset with aligned visible and thermal 
+
+Table 4 : The performance of our method and other state-of-the-art trackers on RGB-Language dataset TNL2K. We report AUC, normalized precision, and precision when available. Entries marked “–” are not reported in the correspond-ing paper or public benchmark table. The best three results for each metric are highlighted in 
+
+red , blue , and bold , respectively.                                                               
+
+> Method Source AUC PNorm PACTrack-EM Ours 77.2 87.1 84.7
+> SUTrack-L 384 [28] AAAI25 67.9 –72.1
+> MCITrack-L 384 [9] AAAI25 65.3 ––UVLTrack-L [58] AAAI24 64.8 82.8 68.8 SPMTrack-G [15] CVPR25 64.7 82.6 70.6
+> RELO-L 256 [50] ICML26 63.6 ––LoRATv2-L 378 [14] NeurIPS25 62.4 –67.7 LoRAT-g 378 [13] ECCV24 62.7 –67.8 ODTrack-L [5] AAAI24 61.7 ––ARTrackV2-L 384 [6] CVPR24 61.6 ––RTracker-L [59] CVPR24 60.6 –63.7 OneTracker [41] CVPR24 58.0 –59.1 JointNLT [60] CVPR23 56.9 73.5 58.1
+
+Table 5: The performance of our method and other state-of-the-art trackers on OTB2015, UAV123, and NfS (30 fps). We report AUC metric. Entries marked “–” are not reported in the cor-responding paper. The best three results for each metric are highlighted in red , blue , and bold ,respectively.                                                           
+
+> Method Source OTB2015 UAV123 NfS ACTrack-B 224 Ours 73.9 74.3 73.7
+> RELO-L 256 [50] ICML26 –71.4 71.3
+> MCITrack-L 384 [9] AAAI25 –71.5 70.6
+> LoRAT-g 378 [13] ECCV24 72.6 73.9 68.1 ARTrackV2-L 384 [6] CVPR24 –71.7 68.4 HIPTrack [8] CVPR24 71.0 70.5 68.1 ARTrack-L 384 [4] CVPR23 –71.2 67.9 SeqTrack-L 384 [3] CVPR23 –68.5 66.2 AiATrack [64] ECCV22 69.6 70.6 67.9 MixFormer-L [2] CVPR22 –69.5 –KeepTrack [65] ICCV21 70.9 69.7 66.4 TransT [32] CVPR21 69.4 69.1 65.7
+
+sequences. As shown in Table 7, ACTrack-EM achieves the best SR and PR. 
+
+VisEvent. VisEvent [36] is an RGB-Event 
+
+dataset pairing frames with event-camera streams. As shown in Table 7, ACTrack-EM reaches state-of-the-art performance, improving upon the pre-vious best result by more than 10% AUC and thus outperforming all other methods by a large margin. 14 Illumination Variation (0.737,0.816) Partial Occlusion (0.717,0.799) Deformation (0.756,0.812) Motion Blur (0.731,0.814) Camera Motion (0.777,0.846) Rotation (0.730,0.803) Background Clutter (0.693,0.790) Viewpoint Change (0.720,0.815) Scale Variation (0.742,0.811) Full Occlusion (0.667,0.754) Fast Motion (0.636,0.743) Out of View (0.695,0.773) Low Resolution (0.682,0.771) Aspect Ration Change (0.730,0.806) 
+
+> ACTrack-B ACTrack-L SAMURAI-L SAMITE-L SPMTrack-G ODTrack-L MCITrack-L 384
+> LoRAT-G 378
+
+Fig. 4 : The performance of our method compared with other state-of-the-art trackers in terms of AUC across various scenarios in the LaSOT test 
+
+split. 
+
+Table 6 : Comparison on VastTrack. We report AUC and precision (P). Numbers are taken from the public comparison tables of VastTrack [55] and LoRATv2 [14]. The best three results for each metric are highlighted in red , blue , and bold ,respectively. 
+
+Method Source AUC PACTrack-L 384 Ours 69.0 77.8 ACTrack-B 224 Ours 65.9 73.2 ACTrack-EM Ours 69.9 79.0 
+
+LoRATv2-L 378 [14] NeurIPS25 44.2 46.7 LoRAT-L 378 [13] ECCV24 43.9 45.8 SeqTrack-L 384 [3] CVPR23 39.6 40.2 MixFormer-L [2] CVPR22 39.5 39.8 ROMTrack 384 [66] ICCV23 37.0 36.1 DropTrack [67] CVPR23 37.0 36.5 GRM [68] CVPR23 36.3 34.8 ARTrack-L 384 [4] CVPR23 35.6 32.4 OSTrack 384 [1] ECCV22 33.6 31.5 STARK [33] ICCV21 33.4 30.8 TransT [32] CVPR21 29.9 25.4 
+
+DepthTrack. DepthTrack [35] is a long-term 
+
+RGB-Depth dataset reported with F-score, recall (Re), and precision (Pr). As shown in Table 7, ACTrack-EM obtains the best results across all three metrics. 
+
+4.3 More Detailed Results in Different Attribute Scenes 
+
+LaSOT [44] is well-known for featuring adiverse range of challenging tracking scenar-ios, therefore, in Fig. 5, we provide a more detailed comparison of our proposed ACTrack-B224 and ACTrack-L 384 with other current excel-lent trackers SPMTrack-G [15], LoRAT-G 378 [13], MCITrack-L 384 , SAMITE-L [49], SAMURAI-L [18] and ODTrack-L [5] across various challeng-ing scenario subsets in LaSOT [44]. Fig. 5 presents detailed success curves and AUC scores across individual subsets, along with the success curve on the entire LaSOT test split. The results demon-strate that our ACTrack significantly outperforms these RGB-based trackers both overall and across the vast majority of subsets. 
+
+4.4 Ablation Studies 
+
+Tracking Capability of Individual Tools. 
+
+Within the overall ACTrack framework, both the Instance Matching Tool and the SAM3-based Motion Tool possess tracking capability. In Table 8, we compare the tracking capability of each component within ACTrack-B, as well as the overall tracking capability. The results show that the overall tracking capability of ACTrack significantly outperforms that of each individual tool, demonstrating the effectiveness of the overall framework. 
+
+Effect of Tool Coordination. We isolate the contribution of each tool by starting from MCITrack-B 224 used alone as the Instance Match-ing Tool and incrementally activating the remain-ing tools. The corresponding LaSOT scores are reported in Table 9. Re-anchoring the search region with the Motion Tool already yields a clear gain over the standalone tracker; the instance-conflict detection of the Perception Tool brings a further improvement; and enabling the VLM Reprompt Tool produces the best result, corre-sponding to the full ACTrack configuration. 
+
+The Impact of Search Region Cropping Factor based on the Motion Tool. In ACTrack, the search region of the Instance Match-ing Tool is cropped based on the Motion Tool. In Table 10, we compare the effect of different search region cropping factors for ACTrack-B 224 on the RGB dataset and ACTrack-EM across datasets in 15 Table 7 : State-of-the-art comparison on multimodal tracking benchmarks. LasHeR evaluates RGB-T tracking, VisEvent evaluates RGB-Event tracking, and DepthTrack evaluates RGB-D tracking. The best three results for each metric are highlighted in red , blue , and bold , respectively. 
+
+Method Source LasHeR VisEvent DepthTrack SR PR AUC P F-score Re Pr ACTrack-EM Ours 63.7 79.4 77.8 94.6 74.9 76.5 73.3 
+
+Uni-MDTrack-L [29] arXiv26 62.1 77.9 65.7 81.8 67.4 67.2 67.6 
+
+FlexTrack [69] ICCV25 62.0 77.3 64.1 81.4 67.0 66.9 67.1 
+
+Uni-MDTrack-B [29] arXiv26 61.2 76.7 64.2 81.0 65.9 66.3 66.2 SUTrack-L 224 [28] AAAI25 61.9 77.0 64.0 80.9 64.3 64.6 64.0 SUTrack-L 384 [28] AAAI25 61.9 76.9 63.8 80.5 66.4 66.4 66.5 STTrack [70] AAAI25 60.3 76.0 61.9 78.6 63.3 63.4 63.2 SeqTrackV2-L 384 [27] arXiv23 61.0 76.7 63.4 – 62.3 62.6 62.5 OneTracker [41] CVPR24 53.8 67.2 60.8 76.7 60.9 60.4 60.7 UnTrack [42] CVPR24 53.6 66.7 58.9 75.5 61.2 61.0 61.3 SDSTrack [40] CVPR24 53.1 66.5 59.7 76.7 61.4 60.9 61.9 ViPT [38] CVPR23 52.5 65.1 59.2 75.8 59.4 59.6 59.2 ProTrack [37] MM22 42.0 53.8 47.1 63.2 57.8 57.3 58.3 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Illumination Variation 
+
+ACTrack L[81.6] 
+
+ACTrack B[79.4] 
+
+MCITrack-L 384 [77.1] 
+
+SPMTrack-G [76.8] 
+
+SAMITE-L [74.8] 
+
+LoRAT-G 378 [74.0] 
+
+ODTrack-L [73.7] 
+
+SAMURAI-L [73.7] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Partial Occlusion 
+
+ACTrack L[79.9] 
+
+ACTrack B[78.8] 
+
+SPMTrack-G [75.2] 
+
+MCITrack-L 384 [74.7] 
+
+LoRAT-G 378 [74.2] 
+
+SAMITE-L [73.8] 
+
+SAMURAI-L [73.2] 
+
+ODTrack-L [71.7] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Deformation 
+
+ACTrack L[81.2] 
+
+ACTrack B[79.8] 
+
+MCITrack-L 384 [79.3] 
+
+SPMTrack-G [79.0] 
+
+LoRAT-G 378 [77.0] 
+
+SAMITE-L [76.5] 
+
+SAMURAI-L [75.8] 
+
+ODTrack-L [75.6] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Motion Blur 
+
+ACTrack L[81.4] 
+
+ACTrack B[80.1] 
+
+SPMTrack-G [76.1] 
+
+LoRAT-G 378 [75.3] 
+
+SAMITE-L [74.9] 
+
+MCITrack-L 384 [74.8] 
+
+SAMURAI-L [74.7] 
+
+ODTrack-L [73.1] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Camera Motion 
+
+ACTrack L[84.6] 
+
+ACTrack B[82.9] 
+
+SPMTrack-G [81.2] 
+
+MCITrack-L 384 [80.3] 
+
+ODTrack-L [78.5] 
+
+SAMITE-L [78.3] 
+
+LoRAT-G 378 [78.1] 
+
+SAMURAI-L [77.7] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Rotation 
+
+ACTrack L[80.3] 
+
+ACTrack B[79.4] 
+
+MCITrack-L 384 [76.4] 
+
+SPMTrack-G [76.1] 
+
+LoRAT-G 378 [75.9] 
+
+SAMITE-L [73.6] 
+
+ODTrack-L [73.4] 
+
+SAMURAI-L [73.0] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Background Clutter 
+
+ACTrack L[79.0] 
+
+ACTrack B[77.8] 
+
+SPMTrack-G [73.2] 
+
+MCITrack-L 384 [71.8] 
+
+SAMITE-L [70.8] 
+
+LoRAT-G 378 [70.6] 
+
+SAMURAI-L [70.2] 
+
+ODTrack-L [69.3] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Viewpoint Change 
+
+ACTrack L[81.5] 
+
+SPMTrack-G [80.3] 
+
+ACTrack B[79.8] 
+
+ODTrack-L [78.5] 
+
+MCITrack-L 384 [77.2] 
+
+LoRAT-G 378 [77.2] 
+
+SAMITE-L [72.7] 
+
+SAMURAI-L [72.0] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Scale Variation 
+
+ACTrack L[81.1] 
+
+ACTrack B[79.9] 
+
+SPMTrack-G [77.7] 
+
+MCITrack-L 384 [76.8] 
+
+LoRAT-G 378 [76.3] 
+
+SAMITE-L [74.8] 
+
+ODTrack-L [74.4] 
+
+SAMURAI-L [74.2] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Full Occlusion 
+
+ACTrack L[75.4] 
+
+ACTrack B[75.0] 
+
+SPMTrack-G [70.6] 
+
+LoRAT-G 378 [70.5] 
+
+MCITrack-L 384 [69.8] 
+
+SAMITE-L [68.1] 
+
+SAMURAI-L [67.4] 
+
+ODTrack-L [66.7] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Fast Motion 
+
+ACTrack B[74.3] 
+
+ACTrack L[74.0] 
+
+SPMTrack-G [68.8] 
+
+LoRAT-G 378 [67.4] 
+
+MCITrack-L 384 [65.6] 
+
+SAMITE-L [65.6] 
+
+SAMURAI-L [64.9] 
+
+ODTrack-L [63.6] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Out of View 
+
+ACTrack L[77.3] 
+
+ACTrack B[77.2] 
+
+SPMTrack-G [72.6] 
+
+LoRAT-G 378 [71.9] 
+
+MCITrack-L 384 [71.4] 
+
+SAMITE-L [71.0] 
+
+SAMURAI-L [70.5] 
+
+ODTrack-L [69.5] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Low Resolution 
+
+ACTrack L[77.1] 
+
+ACTrack B[76.8] 
+
+SPMTrack-G [73.5] 
+
+LoRAT-G 378 [72.5] 
+
+MCITrack-L 384 [70.5] 
+
+SAMITE-L [69.3] 
+
+ODTrack-L [68.5] 
+
+SAMURAI-L [68.1] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE Aspect Ration Change 
+
+ACTrack L[80.6] 
+
+ACTrack B[79.3] 
+
+SPMTrack-G [76.7] 
+
+MCITrack-L 384 [75.8] 
+
+LoRAT-G 378 [75.5] 
+
+SAMITE-L [74.1] 
+
+SAMURAI-L [73.5] 
+
+ODTrack-L [73.0] 0.0 0.2 0.4 0.6 0.8 1.0 
+
+Overlap threshold 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Overlap Precision [%]
+
+Success plots of OPE LaSOTOverall 
+
+ACTrack L[81.4] 
+
+ACTrack B[80.1] 
+
+SPMTrack-G [77.9] 
+
+MCITrack-L 384 [77.0] 
+
+LoRAT-G 378 [76.6] 
+
+SAMITE-L [75.1] 
+
+SAMURAI-L [74.5] 
+
+ODTrack-L [74.4] 
+
+Fig. 5 : Comparisons of our proposed ACTrack-B and ACTrack-L with other excellent trackers in the success curve on LaSOT test split, which includes fourteen challenging scenarios such as Low Resolution, Motion Blur, Scale Variation, etc. We also provide the comparison of the success curve across the entire LaSOT test split. other modalities. As shown in Table 10, different search region cropping factors do not substan-tially affect the overall performance. On the RGB dataset, a cropping factor of 2 .5 yields better per-formance, whereas on datasets of other modalities, a cropping factor of 1 .5 yields better performance. 
+
+Triggering Interval of the VLM Reprompt Tool. In ACTrack, the VLM Reprompt Tool is 16 #0021  #0051  #0322  #0452  #0551  #0601               
+
+> #0205 #0274 #0287 #0318 #0355 #0571
+> #0063 #0532 #0572 #0785 #0874 #1028
+> Ground Truth ACTrack (Ours) SPMTrack RELO
+
+(a) Qualitative results of three methods when the targets is moving rapidly. #1451 #1392  #1481  #1521  #1555  #1626               
+
+> #0295 #0808 #0844 #0968 #1051 #1378
+> #0153 #0162 #0176 #0188 #0201 #0383
+> Ground Truth ACTrack (Ours) SPMTrack RELO
+
+(b) Qualitative results of three methods when the targets becomes blurred in motion. #0588  #1060  #1119  #1296  #1405  #1532               
+
+> #0530 #0546 #0740 #0801 #1243 #1250
+> #0077 #0338 #0508 #0828 #1739 #1786
+> Ground Truth ACTrack (Ours) SPMTrack RELO
+
+(c) Qualitative results of three methods when the targets have large occlusions. 
+
+Fig. 6 : This figure presents a visual comparison among our proposed ACTrack-B, SPMTrack [15] and RELO [50] in the challenges of target undergoes sudden movements, motion blur, and severe occlusion. It demonstrates that our method achieves more effective and accurate tracking in the aforementioned challenging scenarios. Zoom in for better view. invoked once the predictions of the Motion Tool and the Instance Matching Tool remain inconsis-tent for a sustained span of frames; the VLM then 17 #0421  #0582  #0622  #0688  #0719  #0949 
+
+#0175 #0146  #0226  #0292  #0375  #1030     
+
+> Ground Truth ACTrack -EM (Ours) FlexTrack SUTrack
+
+(a) Qualitative results of three methods on RGB-Depth tasks. #0011  #0024  #0037  #0054  #0067  #0087 
+
+#0030  #0074  #0085  #0097  #0122  #0192     
+
+> Ground Truth ACTrack -EM (Ours) FlexTrack SUTrack
+
+(b) Qualitative results of three methods on RGB-Event tasks. #0038  #0081  #0114  #0279  #0349  #0643 
+
+#0020  #0038  #0054  #0070  #0087  #0110     
+
+> Ground Truth ACTrack -EM (Ours) FlexTrack SUTrack
+
+(c) Qualitative results of three methods on RGB-Thermal tasks. 
+
+Fig. 7 : This figure presents a visual comparison among our proposed ACTrack-EM, FlexTrack [69] and SUTrack [28] in the challenges of different modalities including RGB-Depth, RGB-Event and RGB-Thermal tasks. It demonstrates that our method achieves more effective and accurate tracking in the aforementioned challenging scenarios. Zoom in for better view. arbitrates between the two candidates and cor-rects the Motion Tool whenever it has drifted. In Table 11, we study how the number of consecu-tive conflicting frames K required to trigger the VLM Reprompt Tool affects the overall perfor-mance. The results indicate that triggering on five consecutive conflicting frames achieves the best accuracy, while the number of invocations stays sufficiently small to keep the impact on overall inference speed negligible. In practice, the VLM is called only a few times per sequence, and each VLM call takes about 2.1 seconds on average, so this sparse reprompting mechanism has little impact on the overall efficiency. 
+
+Generality of the ACTrack Framework. The variants reported throughout this paper instanti-ate the Instance Matching Tool with MCITrack-B224 , MCITrack-L 384 , and the parameter-efficient fine-tuned tracker in ACTrack-EM. To further 18 Table 8 : Tracking capability of individual tools and the overall ACTrack-B 224 framework on the LaSOT test split.             
+
+> Method AUC Pnorm P
+> Instance Matching Tool 75.3 85.6 83.3 SAM3 Motion Tool 76.3 82.8 80.9 ACTrack-B 224 80.1 90.3 87.8
+
+Table 9 : Effect of progressively activating addi-tional tools on top of the Instance Matching Tool. All variants share MCITrack-B 224 as the Instance Matching Tool and are evaluated on the LaSOT 
+
+test split.                
+
+> Configuration AUC Pnorm P
+> Matching only 75.3 85.6 83.3 + Motion Region 78.9 88.7 86.2 + Perception Conflict 79.6 89.6 87.0 + Reprompt (ACTrack-B 224 )80.1 90.3 87.8
+
+Table 10 : Effect of the search-region cropping factor ρ on different datasets in terms of AUC (F-score for DepthTrack). RGB results use ACTrack-B224 , and the remaining modalities use ACTrack-EM.                          
+
+> Dataset (Modality) Cropping factor ρ
+> 1.52.02.54.0LaSOT (RGB) 79.8 79.6 80.1 79.6 TNL2K (RGB-L) 77.2 77.1 77.2 77.2 VisEvent (RGB-E) 77.8 77.7 77.6 77.7 LasHeR (RGB-T) 63.7 63.5 63.1 63.4 DepthTrack (RGB-D) 74.9 73.5 73.3 73.7
+
+Table 11 : Effect of the number of consecu-tive conflicting frames K that triggers the VLM Reprompt Tool, reported in terms of AUC (F-score for DepthTrack). “Calls” is the average num-ber of VLM invocations per sequence. RGB results use ACTrack-B 224 , and the remaining modalities use ACTrack-EM.                            
+
+> Dataset (Modality) AUC at trigger interval KCalls
+> 510 20 (K= 5) LaSOT (RGB) 80.1 79.5 79.5 1.3 TNL2K (RGB-L) 77.2 77.2 77.1 0.7 VisEvent (RGB-E) 77.8 77.8 77.8 0.3 LasHeR (RGB-T) 63.7 63.3 63.0 2.4 DepthTrack (RGB-D) 74.9 74.0 72.8 2.9
+
+Table 12 : A performance comparison of existing trackers and their integration with our proposed ACTrack framework on the LaSOT test set.                    
+
+> Method AUC Pnorm P
+> ODTrack-L 384 [5] 74 .084 .282 .3ODTrack-L 384 w/ ACTrack 78 .187 .984 .9
+> MCITrack-L 384 [9] 76 .686 .185 .0MCITrack-L 384 w/ ACTrack 81 .490 .889 .4
+
+verify that ACTrack remains effective with differ-ent underlying trackers, Table 12 compares addi-tional choices of Instance Matching Tools within the same coordination framework. The results show that ACTrack consistently delivers substan-tial gains regardless of the tracker used as the Instance Matching Tool, while a stronger under-lying tracker naturally translates into stronger overall performance. 
+
+Improvements on the SAM3-based Motion Tool. ACTrack augments the original SAM3 video tracker with a Kalman filter for motion mod-eling. In Table 13, we compare the tracking capa-bility of vanilla SAM3 with that of the Kalman-augmented variant. We further study the influence of the motion-prior weight and of incorporating a SAMITE-style memory selection mechanism [49]. The results in Table 13 show that the strongest standalone SAM3 configuration is not necessar-ily the best Motion Tool configuration inside ACTrack. For example, the motion-prior weight adopted in this paper is not the optimum for stan-dalone SAM3 tracking, and the SAMITE-style memory selection leads to noticeable improve-ments when SAM3 is used in isolation but it does not bring the best result after the Instance Matching Tool is introduced. This is because both modifications aim to mitigate the instance confu-sion and memory contamination issues of SAM3 discussed earlier, whereas in ACTrack the cooper-ation with the remaining tools already alleviates these issues. Table 13 also reports the perfor-mance obtained when search regions produced by different SAM3 motion-tool configurations are provided to the Instance Matching Tool, the resulting tracker not only substantially outper-forms the strengthened SAM3 baselines, but also confirms that the configuration adopted in this paper achieves the best performance overall. 19 Table 13 : Ablation on SAM3 motion configurations on the LaSOT test split. Each row is evaluated in two roles: as a standalone tracker (left block), and as the Motion Tool that provides the search region of the Instance Matching Tool in ACTrack-B 224 (right block).                                                             
+
+> SAM3 Configuration SAM3 alone SAM3 + Instance Matching Tool AUC Pnorm PAUC Pnorm P
+> Vanilla SAM3 75.1 82.0 79.9 78.4 88.1 85.7
+> w/ KF ( Wm= 0 .05, Pobj = 0 .5) 75.7 82.5 80.6 78.8 88.6 86.0
+> w/ KF ( Wm= 0 .15, Pobj = 0 .5) 76.3 82.8 80.9 78.9 88.7 86.2
+> w/ KF ( Wm= 0 .30, Pobj = 0 .5) 76.0 82.7 80.7 78.9 88.6 86.2
+> w/ KF ( Wm= 0 .15, Pobj = 0 .269) 76.5 83.2 81.1 78.7 88.4 85.9
+> w/ KF and Memory Selection [49] 76.9 83.5 81.4 78.8 88.5 86.1
+
+Table 14 : Ablation of the fine-tuning design of the standalone Instance Matching Tool used in ACTrack-EM, in terms of AUC on LaSOT, VisEvent, LasHeR, DepthTrack, and TNL2K. “PE” denotes patch embedding. The “Param” column reports the total parameters of the standalone Instance Matching Tool ,with the parameters of the patch-embedding module shown in parentheses.                         
+
+> Configuration LaSOT VisEvent LasHeR DepthTrack TNL2K Param (M)
+> Shared PE 76.2 68.7 59.8 65.9 64.2 495.6 (1.2) + Modality-specific Unified PE 75.6 69.5 60.9 66.4 64.5 496.8 (2.4) + Residual fusion (ours) 76.0 69.8 61.3 66.9 64.8 498.9 (4.5)
+
+Ablation of the Fine-tuned Instance Match-ing Tool in ACTrack-EM. In ACTrack-EM, the Instance Matching Tool is obtained by parameter-efficient fine-tuning of the SAM3 image encoder. To separate its own design choices from the full ACTrack coordination policy, we eval-uate this tool alone in Table 14. The shared patch embedding remains competitive and gives the highest LaSOT score. However, the modality-specific unified patch embedding improves all remaining benchmarks while adding only 1.2M patch-embedding parameters. When each modal-ity is assigned its corresponding patch embedding, the training gradients dedicated to RGB discrimi-nation are diluted accordingly, which may slightly degrade the performance of the pure RGB modal-ity. Adding the residual fusion connection further improves every benchmark over the modality-specific unified patch embedding and therefore gives a better overall multimodal trade-off with a small parameter increase. Table 15 further exam-ines the dynamic auxiliary templates. Using two auxiliary templates gives the best result among the tested choices, and updating them from high-confidence search frames every ⌊n/ 5⌋ frames is the most effective setting in this grid. 
+
+Table 15 : Ablation of the auxiliary-template set-tings of the standalone Instance Matching Tool used in ACTrack-EM on the LaSOT test split. n
+
+denotes the number of frames already tracked.                                
+
+> Factor Setting AUC Pnorm P
+> # Aux templates 075.0 82.9 81.3 175.4 83.6 81.9 276.0 84.3 82.7
+> Update threshold 0.574.5 82.5 80.7 0.75 75.2 83.4 81.5 0.976.0 84.3 82.7
+> Update interval
+> ⌊n/ 10 ⌋75.4 83.7 81.8
+> ⌊n/ 5⌋76.0 84.3 82.7
+> ⌊n/ 2⌋75.6 83.8 82.0
+
+4.5 Qualitative Study 
+
+4.5.1 Results On RGB Visual Tracking 
+
+We further analyze representative sequences to understand when tool coordination helps. We pro-vide the detail visualization results in Fig. 6. All videos are from the test split of LaSOT. We com-pare our proposed ACTrack with SPMTrack [15] and RELO [50] in terms of performance when the target undergoes sudden movement, motion blur, and severe occlusion. All the selected videos are challenging, as described below: 20 • Fig. 6(a) demonstrates the tracking results of three methods when the target suffers from sudden movement. 
+
+• Fig. 6(b) demonstrates the tracking results of three methods when the targets suffers from motion blur. 
+
+• Fig. 6(c) demonstrates the tracking results of three methods when the target suffers from severe occlusion. We observe that in fast motion scenarios (as shown in Fig. 6(a)), previous trackers commonly drift, whereas our method can even successfully track a fast-moving volleyball. Moreover, in sce-narios involving partial occlusion combined with motion blur, as well as scenarios with nearly com-plete occlusion, our method demonstrates tracking capability that far surpasses that of previous methods. 
+
+4.5.2 Results on Multi-Modal Visual Tracking 
+
+We further provide visualized comparisons of our proposed ACTrack-EM against other excel-lent trackers SUTrack [28], and FlexTrack [69] across other modalities including RGB-Depth in Fig. 7(a), RGB-Event in Fig. 7(b) and RGB-Thermal in Fig. 7(c). Our ACTrack-EM con-sistently exhibit superior performance on these modalities. 
+
+## 5 Conclusion 
+
+We presented ACTrack, an agentic tracking frame-work that coordinates heterogeneous visual mod-els as tools. The Instance Matching Tool pro-vides efficient box-level localization, the SAM3 Motion and Perception Tools provide mask-derived motion priors and instance-level conflict evidence, and the VLM Reprompt Tool is invoked only under persistent disagreement for sparse identity arbitration and prompt renewal. This sep-arates routine localization from motion propaga-tion, instance perception, and semantic reasoning, turning visual tracking into a closed-loop deci-sion process rather than a single-model matching problem. This work also argues for a broader view of visual tracking. Matching-based trackers remain important, but simply making them larger or more specialized should not be the only path forward. Visual foundation models and multimodal large models already provide capabilities that conven-tional trackers lack, including promptable segmen-tation, object-level memory, and semantic identity reasoning. ACTrack is an initial demonstration that these capabilities can be organized into a practical tracking pipeline. We hope it encour-ages further exploration of foundation-model and multimodal-model tools for future tracking sys-tems. 
+
+## Data Availability Statements 
+
+The datasets used in this manuscript are all deposited in publicly available repositories. LaSOT and LaSOT ext [44] can be obtained from https://github.com/HengLan/LaSOT Evaluatio n Toolkit. TrackingNet [54] can be obtained from https://github.com/SilvioGiancola/Tracking Net-devkit. GOT-10k [52] can be obtained from https://github.com/got-10k/toolkit. TNL2K [45] can be obtained from https://github.com/w angxiao5791509/TNL2K evaluation toolkit. OTB2015 [61] can be obtained from http://cvlab. hanyang.ac.kr/tracker benchmark/. UAV123 [62] can be obtained from https://ivul.kaust.edu.sa/ benchmark-and-simulator-uav-tracking-dataset. NfS [63] can be obtained from http://ci2cv.net/ nf s/index.html. VastTrack [55] can be obtained from https://github.com/HengLan/VastTrack. LasHeR [34] can be obtained from https://github .com/BUGPLEASEOUT/LasHeR. VisEvent [36] can be obtained from https://github.com/wangx iao5791509/VisEvent SOT Benchmark. Depth-Track [35] can be obtained from https://github .com/xiaozai/DeT. COCO [53] can be obtained from https://cocodataset.org/. 
+
+## References 
+
+[1] Ye, B., Chang, H., Ma, B., Shan, S., Chen, X.: Joint feature learning and relation model-ing for tracking: A one-stream framework. In: European Conference on Computer Vision, pp. 341–357 (2022). Springer [2] Cui, Y., Jiang, C., Wang, L., Wu, G.: Mixformer: End-to-end tracking with itera-tive mixed attention. In: Proceedings of the IEEE/CVF Conference on Computer Vision 21 and Pattern Recognition (CVPR), pp. 13608– 13618 (2022) [3] Chen, X., Peng, H., Wang, D., Lu, H., Hu, H.: Seqtrack: Sequence to sequence learning for visual object tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 14572– 14581 (2023) [4] Wei, X., Bai, Y., Zheng, Y., Shi, D., Gong, Y.: Autoregressive visual tracking. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 9697–9706 (2023) [5] Zheng, Y., Zhong, B., Liang, Q., Mo, Z., Zhang, S., Li, X.: Odtrack: Online dense temporal token learning for visual tracking. Proceedings of the AAAI Conference on Arti-ficial Intelligence 38 (7), 7588–7596 (2024) ht tps://doi.org/10.1609/aaai.v38i7.28591 [6] Bai, Y., Zhao, Z., Gong, Y., Wei, X.: Artrackv2: Prompting autoregressive tracker where to look and how to describe. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19048–19057 (2024) [7] Xie, J., Zhong, B., Mo, Z., Zhang, S., Shi, L., Song, S., Ji, R.: Autoregressive queries for adaptive tracking with spatio-temporal trans-formers. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR), pp. 19300–19309 (2024) [8] Cai, W., Liu, Q., Wang, Y.: Hiptrack: Visual tracking with historical prompts. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19258–19267 (2024) [9] Kang, B., Chen, X., Lai, S., Liu, Y., Liu, Y., Wang, D.: Exploring enhanced contextual information for video-level object tracking. In: Proceedings of the AAAI Conference on Artificial Intelligence, vol. 39, pp. 4194–4202 (2025) [10] Li, X., Zhong, B., Liang, Q., Li, G., Mo, Z., Song, S.: Mambalct: Boosting tracking via long-term context state space model. In: Pro-ceedings of the AAAI Conference on Artificial Intelligence, vol. 39, pp. 4986–4994 (2025) [11] Wu, W., Liang, Q., Zhong, B., Xia, H., Mo, Z., Song, S.: An efficient token compression framework for visual object tracking. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 6857–6867 (2026) [12] Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al.: Dinov2: Learning robust visual features with-out supervision. Transactions on Machine Learning Research Journal, 1–31 (2024) [13] Lin, L., Fan, H., Zhang, Z., Wang, Y., Xu, Y., Ling, H.: Tracking meets lora: Faster training, larger model, stronger performance. In: Leonardis, A., Ricci, E., Roth, S., Rus-sakovsky, O., Sattler, T., Varol, G. (eds.) Computer Vision – ECCV 2024, pp. 300–318. Springer, Cham (2025) [14] Lin, L., Fan, H., Zhang, Z., Huang, Y., Wang, Y., Xu, Y., Ling, H.: Loratv2: Enabling low-cost temporal modeling in one-stream trackers. In: Advances in Neural Information Processing Systems (NeurIPS) (2025) [15] Cai, W., Liu, Q., Wang, Y.: Spmtrack: Spatio-temporal parameter-efficient fine-tuning with mixture of experts for scalable visual tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 16871–16881 (2025) [16] Ravi, N., Gabeur, V., Hu, Y.-T., Hu, R., Ryali, C., Ma, T., Khedr, H., R¨ adle, R., Rolland, C., Gustafson, L., Mintun, E., Pan, J., Alwala, K.V., Carion, N., Wu, C.-Y., Gir-shick, R., Dollar, P., Feichtenhofer, C.: Sam 2: Segment anything in images and videos. In: The Thirteenth International Confer-ence on Learning Representations (2025). 
+
+https://openreview.net/forum?id=Ha6RTeWMd0 
+
+22 [17] Carion, N., Gustafson, L., Hu, Y.-T., Deb-nath, S., Hu, R., Suris, D., Ryali, C., Alwala, K.V., Khedr, H., Huang, A., Lei, J., Ma, T., Guo, B., Kalla, A., Marks, M., Greer, J., Wang, M., Sun, P., R¨ adle, R., Afouras, T., Mavroudi, E., Xu, K., Wu, T.-H., Zhou, Y., Momeni, L., Hazra, R., Ding, S., Vaze, S., Porcher, F., Li, F., Li, S., Kamath, A., Cheng, H.K., Doll´ ar, P., Ravi, N., Saenko, K., Zhang, P., Feichtenhofer, C.: SAM 3: Seg-ment Anything with Concepts (2026). https: //arxiv.org/abs/2511.16719 [18] Yang, C.-Y., Huang, H.-W., Jiang, Z., Chai, W., Hwang, J.-N.: Samurai: Motion-aware memory for training-free visual object track-ing with sam 2. IEEE Transactions on Image Processing (2026) [19] Videnovic, J., Lukezic, A., Kristan, M.: A distractor-aware memory for visual object tracking with sam2. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 24255– 24264 (2025) [20] Bai, S., Cai, Y., Chen, R., Chen, K., Chen, X., Cheng, Z., Deng, L., Ding, W., Gao, C., Ge, C., Ge, W., Guo, Z., Huang, Q., Huang, J., Huang, F., Hui, B., Jiang, S., Li, Z., Li, M., Li, M., Li, K., Lin, Z., Lin, J., Liu, X., Liu, J., Liu, C., Liu, Y., Liu, D., Liu, S., Lu, D., Luo, R., Lv, C., Men, R., Meng, L., Ren, X., Ren, X., Song, S., Sun, Y., Tang, J., Tu, J., Wan, J., Wang, P., Wang, P., Wang, Q., Wang, Y., Xie, T., Xu, Y., Xu, H., Xu, J., Yang, Z., Yang, M., Yang, J., Yang, A., Yu, B., Zhang, F., Zhang, H., Zhang, X., Zheng, B., Zhong, H., Zhou, J., Zhou, F., Zhou, J., Zhu, Y., Zhu, K.: Qwen3-VL Technical Report (2025). http s://arxiv.org/abs/2511.21631 [21] Sun, Y., Yu, F., Chen, S., Zhang, Y., Huang, J., Li, Y., Li, C., Wang, C.: Chattracker: Enhancing visual tracking performance via chatting with multimodal large language model. In: Advances in Neural Information Processing Systems (2024) [22] Yu, E., Zhao, L., Wei, Y., Yang, J., Wu, D., Kong, L., Wei, H., Wang, T., Ge, Z., Zhang, X., et al. : Merlin: Empowering multimodal llms with foresight minds. In: European Con-ference on Computer Vision, pp. 425–443 (2024). Springer [23] Wang, J., Zhou, K., Wu, Z., Ji, K., Huang, D., Zheng, Y.: VPTracker: Global Vision-Language Tracking via Visual Prompt (2026). https://arxiv.org/abs/2512.22799 [24] Huang, Z., Ban, Y., Fu, L., Li, X., Dai, Z., Li, J., Wang, D.: Adaptive Batch-Wise Sample Scheduling for Direct Preference Optimiza-tion (2026). https://arxiv.org/abs/2506.172 52 [25] Huang, Z., Xia, X., Ren, Y., Zheng, J., Wang, X., Zhang, Z., Xie, H., Liang, S., Chen, Z., Xiao, X., Zhuang, F., Li, J., Ban, Y., Wang, D.: Does Your Reasoning Model Implicitly Know When to Stop Thinking? (2026). https: //arxiv.org/abs/2602.08354 [26] Huang, Z., Xia, X., Ren, Y., Zheng, J., Xiao, X., Xie, H., Huaqiu, L., Liang, S., Dai, Z., Zhuang, F., Li, J., Ban, Y., Wang, D.: Real-Time Aligned Reward Model beyond Seman-tics (2026). https://arxiv.org/abs/2601.226 64 [27] Chen, X., Kang, B., Zhu, J., Wang, D., Peng, H., Lu, H.: Unified sequence-to-sequence learning for single-and multi-modal visual object tracking. arXiv preprint arXiv:2304.14394 (2023) [28] Chen, X., Kang, B., Geng, W., Zhu, J., Liu, Y., Wang, D., Lu, H.: Sutrack: Towards sim-ple and unified single object tracking. In: AAAI (2025) [29] Cai, W., Lu, Z., Li, Y., Feng, Y., Zhang, J., Liu, Q., Wang, Y.: Uni-MDTrack: Learn-ing Decoupled Memory and Dynamic States for Parameter-Efficient Visual Tracking in All Modality (2026). https://arxiv.org/abs/2603 .14452 [30] Bertinetto, L., Valmadre, J., Henriques, J.F., Vedaldi, A., Torr, P.H.: Fully-convolutional siamese networks for object tracking. In: ECCV, pp. 850–865 (2016) 23 [31] Li, B., Yan, J., Wu, W., Zhu, Z., Hu, X.: High performance visual tracking with siamese region proposal network. In: CVPR, pp. 8971–8980 (2018) [32] Chen, X., Yan, B., Zhu, J., Wang, D., Yang, X., Lu, H.: Transformer tracking. In: CVPR, pp. 8126–8135 (2021) [33] Yan, B., Peng, H., Fu, J., Wang, D., Lu, H.: Learning spatio-temporal trans-former for visual tracking. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 10448–10457 (2021) [34] Li, C., Xue, W., Jia, Y., Qu, Z., Luo, B., Tang, J., Sun, D.: Lasher: A large-scale high-diversity benchmark for rgbt tracking. IEEE Transactions on Image Processing 31 , 392– 404 (2022) https://doi.org/10.1109/TIP.20 21.3130533 [35] Yan, S., Yang, J., K¨ apyl¨ a, J., Zheng, F., Leonardis, A., K¨ am¨ ar¨ ainen, J.-K.: Depth-track: Unveiling the power of rgbd tracking. In: Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision (ICCV), pp. 10725–10733 (2021) [36] Wang, X., Li, J., Zhu, L., Zhang, Z., Chen, Z., Li, X., Wang, Y., Tian, Y., Wu, F.: Visevent: Reliable object tracking via collaboration of frame and event flows. IEEE Transactions on Cybernetics 54 (3), 1997–2010 (2024) https: //doi.org/10.1109/TCYB.2023.3318601 [37] Yang, J., Li, Z., Zheng, F., Leonardis, A., Song, J.: Prompting for multi-modal track-ing. In: Proceedings of the 30th ACM International Conference on Multimedia, pp. 3492–3500 (2022) [38] Zhu, J., Lai, S., Chen, X., Wang, D., Lu, H.: Visual prompt multi-modal tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 9516–9526 (2023) [39] Chen, Y., Wang, L.: emoe-tracker: Envi-ronmental moe-based transformer for robust event-guided object tracking. arXiv preprint arXiv:2406.20024 (2024) [40] Hou, X., Xing, J., Qian, Y., Guo, Y., Xin, S., Chen, J., Tang, K., Wang, M., Jiang, Z., Liu, L., Liu, Y.: Sdstrack: Self-distillation symmetric adapter learning for multi-modal visual object tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 26551– 26561 (2024) [41] Hong, L., Yan, S., Zhang, R., Li, W., Zhou, X., Guo, P., Jiang, K., Chen, Y., Li, J., Chen, Z., Zhang, W.: Onetracker: Unifying visual object tracking with foundation mod-els and efficient tuning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19079– 19091 (2024) [42] Wu, Z., Zheng, J., Ren, X., Vasluianu, F.-A., Ma, C., Paudel, D.P., Van Gool, L., Timofte, R.: Single-model and any-modality for video object tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19156–19166 (2024) [43] Wang, H., Ye, Y., Wang, Y., Nie, Y., Huang, C.: Elysium: Exploring Object-level Percep-tion in Videos via MLLM (2024). https://ar xiv.org/abs/2403.16558 [44] Fan, H., Lin, L., Yang, F., Chu, P., Deng, G., Yu, S., Bai, H., Xu, Y., Liao, C., Ling, H.: Lasot: A high-quality benchmark for large-scale single object tracking. In: CVPR, pp. 5374–5383 (2019) [45] Wang, X., Shu, X., Zhang, Z., Jiang, B., Wang, Y., Tian, Y., Wu, F.: Towards more flexible and accurate object tracking with natural language: Algorithms and bench-mark. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR), pp. 13763–13773 (2021) [46] Li, B., Wu, W., Wang, Q., Zhang, F., Xing, J., Yan, J.: Siamrpn++: Evolution of siamese visual tracking with very deep networks. In: CVPR, pp. 4282–4291 (2019) [47] Wojke, N., Bewley, A., Paulus, D.: Simple 24 online and realtime tracking with a deep association metric. In: IEEE International Conference on Image Processing (ICIP), pp. 3645–3649 (2017). IEEE [48] Seed, B.: Seed2. 0 model card: Towards intelligence frontier for real-world complexity. Available at ByteDance Seed Model Cards (2026) [49] Xu, Q., Zhu, L., Liu, C., Lin, G., Long, C., Li, Z., Zhao, R.: SAMITE: Position Prompted SAM2 with Calibrated Memory for Visual Object Tracking (2025). https://doi.org/10.4 8550/arXiv.2507.21732 . https://arxiv.org/ abs/2507.21732 [50] Chen, X., Sun, C., Xu, J., Peng, H., Wang, D., Lu, H., Ma, K.: RELO: Reinforcement Learning to Localize for Visual Object Track-ing (2026). https://arxiv.org/abs/2605.073 79 [51] Liang, S., Bai, Y., Gong, Y., Wei, X.: Autore-gressive sequential pretraining for visual tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 7254–7264 (2025) [52] Huang, L., Zhao, X., Huang, K.: Got-10k: A large high-diversity benchmark for generic object tracking in the wild. TPAMI (2019) [53] Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Doll´ ar, P., Zit-nick, C.L.: Microsoft coco: Common objects in context. In: ECCV, pp. 740–755 (2014) [54] Muller, M., Bibi, A., Giancola, S., Alsubaihi, S., Ghanem, B.: Trackingnet: A large-scale dataset and benchmark for object tracking in the wild. In: ECCV, pp. 300–317 (2018) [55] Peng, L., Gao, J., Liu, X., Li, W., Dong, S., Zhang, Z., Fan, H., Zhang, L.: Vasttrack: Vast category visual object tracking. In: Glober-son, A., Mackey, L., Belgrave, D., Fan, A., Paquet, U., Tomczak, J., Zhang, C. (eds.) Advances in Neural Information Processing Systems, vol. 37, pp. 130797–130818 (2024). https://proceedings.neurips.cc/paper files/p aper/2024/file/ec17a52ea4d42361ce8dde2e17 dcea05-Paper-Datasets and Benchmarks T rack.pdf [56] Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. In: 7th International Conference on Learning Representations, ICLR (2019) [57] Rezatofighi, H., Tsoi, N., Gwak, J., Sadeghian, A., Reid, I., Savarese, S.: Gen-eralized intersection over union: A metric and a loss for bounding box regression. In: CVPR, pp. 658–666 (2019) [58] Ma, Y., Tang, Y., Yang, W., Zhang, T., Zhang, J., Kang, M.: Unifying Visual and Vision-Language Tracking via Contrastive Learning (2024) [59] Huang, Y., Li, X., Zhou, Z., Wang, Y., He, Z., Yang, M.-H.: Rtracker: Recoverable track-ing via pn tree structured memory. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 19038–19047 (2024) [60] Zhou, L., Zhou, Z., Mao, K., He, Z.: Joint visual grounding and tracking with natural language specification. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 23151– 23160 (2023) [61] Wu, Y., Lim, J., Yang, M.: Object tracking benchmark. TPAMI 37 (9), 1834–1848 (2015) https://doi.org/10.1109/TPAMI.2014.23882 26 [62] Mueller, M., Smith, N., Ghanem, B.: Abenchmark and simulator for uav tracking. In: ECCV, pp. 445–461 (2016) [63] Kiani Galoogahi, H., Fagg, A., Huang, C., Ramanan, D., Lucey, S.: Need for speed: A benchmark for higher frame rate object tracking. In: Proceedings of the IEEE Inter-national Conference on Computer Vision (ICCV) (2017) [64] Gao, S., Zhou, C., Ma, C., Wang, X., Yuan, J.: Aiatrack: Attention in attention for transformer visual tracking. In: Computer 25 Vision–ECCV 2022: 17th European Confer-ence, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part XXII, pp. 146–164 (2022). Springer [65] Mayer, C., Danelljan, M., Paudel, D.P., Van Gool, L.: Learning target candidate asso-ciation to keep track of what not to track. In: Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision, pp. 13444–13454 (2021) [66] Cai, Y., Liu, J., Tang, J., Wu, G.: Robust object modeling for visual tracking. In: Pro-ceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), pp. 9589–9600 (2023) [67] Wu, Q., Yang, T., Liu, Z., Wu, B., Shan, Y., Chan, A.B.: Dropmae: Masked autoencoders with spatial-attention dropout for tracking tasks. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR), pp. 14561–14571 (2023) [68] Gao, S., Zhou, C., Zhang, J.: Generalized relation modeling for transformer tracking. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 18686–18695 (2023) [69] Tan, Y., Shao, J., Zamfir, E., Li, R., An, Z., Ma, C., Paudel, D., Van Gool, L., Timofte, R., Wu, Z.: What you have is what you track: Adaptive and robust multimodal tracking. arXiv preprint arXiv:2507.05899 (2025) [70] Hu, X., Tai, Y., Zhao, X., Zhao, C., Zhang, Z., Li, J., Zhong, B., Yang, J.: Exploiting mul-timodal spatial-temporal patterns for video object tracking. In: Proceedings of the AAAI Conference on Artificial Intelligence, vol. 39, pp. 3581–3589 (2025) 26

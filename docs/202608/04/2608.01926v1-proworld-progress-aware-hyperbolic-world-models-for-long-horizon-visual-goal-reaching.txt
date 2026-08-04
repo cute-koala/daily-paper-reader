@@ -1,0 +1,2344 @@
+Title: ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching
+
+URL Source: https://arxiv.org/pdf/2608.01926v1
+
+Published Time: Tue, 04 Aug 2026 02:35:20 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching 
+
+## Zihan Liu 1,* , Yuzhe Zhuang 1,* , Yuanzu Li 1, Wanshuang Gou 4, Jiahong Liu 2, Min Zhou 3, Menglin Yang 1, † 
+
+> 1
+
+The Hong Kong University of Science and Technology (Guangzhou)  
+
+> 2
+
+The Chinese University of Hong Kong  
+
+> 3
+
+Yinwang Technologies Ltd.  
+
+> 4
+
+Independent Researcher  
+
+> *
+
+Equal contribution. † Corresponding author. 
+
+Abstract 
+
+JEPA-style visual world models offer an effective paradigm for visual goal planning by predicting future latent representa-tions. Existing methods typically learn local transition consis-tency through next-step representation prediction. However, in long-horizon tasks, accurate local prediction alone need not ensure sustained progress toward the goal. First , multi-step rollouts can remain locally plausible while drifting away from goal-relevant trajectories. Second , locally similar fu-ture states can correspond to substantially different long-term progress, making them difficult to distinguish in a latent space optimized mainly for local consistency. To address these chal-lenges, we introduce goal-conditioned progress order, a rela-tive ordering of states according to how they advance toward a given goal. This order exhibits an asymmetric, coarse-to-fine structure: early states retain broader future possibilities, while later states concentrate on more specific goal-relevant regions. Such a structure is well suited to hyperbolic geom-etry. Motivated by this observation, we propose ProWorld ,a progress-aware hyperbolic visual world model. ProWorld leverages goal-conditioned progress order to organize visual latent-space dynamics, maintains directional progress within trajectories via hyperbolic entailment learning, and mitigates progress ambiguity among locally similar future states via hyperbolic future discrimination. Furthermore, we design a progress-aware planning objective that scores candidate roll-outs by jointly considering proximity to the goal and sustained progress across intermediate states. Experiments on four vi-sual goal-reaching tasks demonstrate that ProWorld achieves an average absolute success-rate gain of 9.67 over LeWM. The code will be released after the paper is accepted. 
+
+## Introduction 
+
+Visual goal planning tasks require an agent to derive sequen-tial action policies from raw pixel-level sensory inputs so that its state evolves toward a given goal through a series of intermediate states (Finn and Levine 2017; Watter et al. 2015; Hafner et al. 2019). Recently, JEPA-style world mod-els have established a principled, computationally efficient paradigm to address this task by forecasting future latent-space representations (Ha and Schmidhuber 2018; LeCun et al. 2022; Assran et al. 2023). Typical approaches fol-lowing this paradigm, such as LeWM (Maes et al. 2026) acquire local state transition invariance via one-step-ahead early -to -late 
+
+> Rollout
+> k=t
+> Rollout
+> k=2
+> Rollout
+> k=1
+> …
+
+Euclidean 
+
+space 
+
+> Very high stage
+> High stage
+> Medium stage
+> Early stage
+
+Goal …
+
+> Progress ambiguity
+
+Hyperbolic Space 
+
+> top -down view
+> of hyperboloid
+
+Figure 1: Core motivation of ProWorld. In Euclidean la-tent space, locally similar future states may be mapped to nearby regions, causing progress ambiguity in long-horizon goal-directed planning. ProWorld organizes goal-conditioned progress in a hyperbolic latent space, where low-progress early states correspond to wider future possibil-ities while high-progress later states progressively contract toward more specific goal-relevant regions. latent prediction, then leverage the inferred latent dynamics to conduct planning. Such approaches have yielded com-pelling empirical performance across short-horizon visual planning benchmarks (Balestriero and LeCun 2025; Maes et al. 2026). However, strong performance on short-horizon planning tasks cannot guarantee robust planning capabilities for long horizons. In long-horizon settings, goal states cannot be attained via a limited sequence of local actions. Instead, agents need to navigate through numerous intermediate states and sustain goal-aligned progress across extended time spans (Pertsch et al. 2020; Gieselmann and Pokorny 2023; Park et al. 2025). This exposes two core challenges. First ,JEPA-style world models typically learn local transition con-sistency by aligning predicted future representations with ground truths. Nevertheless, this alignment loss only en-forces fidelity for the very next immediate state. A potential objective mismatch between one-step prediction quality and downstream control performance (Lambert et al. 2020; Nair, Savarese, and Finn 2020) makes it difficult to guarantee that arXiv:2608.01926v1 [cs.AI] 3 Aug 2026 multi-step rollouts obtained by recursive unrolling exhibit sustained goal-directed progress. Consequently, the model may generate intermediate states that are locally plausible in terms of dynamics yet globally ineffective with respect to the goal, a problem that compounds with rollout horizon due to accumulating model bias (Janner et al. 2019; Pertsch et al. 2020). Second , future states arising in different trajectory contexts may appear similar in visual appearance or local transition structure yet carry different goal-progress seman-tics; if such states are mapped too closely in latent space, the planner may confuse locally plausible but globally diver-gent candidate futures and select action sequences that are globally ineffective (Eysenbach et al. 2022). Therefore, long-horizon visual planning requires more than locally predictable latent dynamics. Given a goal, a model is expected to also learn to sort states according to their relative progress toward achieving that goal. We define this structural property as goal-conditioned progress order , a relation that describes how states in a goal-conditioned hind-sight trajectory segment evolve from lower-progress stages to higher-progress stages. This relation possesses two key attributes: it is asymmetric and coarse-grained. Rather than mandating strict goal-distance reduction at every individual timestep, it encapsulates the overall progress trend collec-tively determined by temporal sequence, proximity to the target goal, and state reachability. Such asymmetric, coarse-to-fine hierarchical structure aligns naturally with hyperbolic geometry, which excels at compactly embedding hierarchical relational patterns. 
+
+Proposed Method. Building on these observations, we propose ProWorld, a progress-aware hyperbolic world model for long-horizon visual planning, whose core motivation is illustrated in Fig. 1. In brief, ProWorld maps visual repre-sentations to the Lorentz model of hyperbolic space (Nickel and Kiela 2018; Ganea, B´ ecigneul, and Hofmann 2018) and uses goal-conditioned progress order as a geometric in-ductive bias for organizing latent-space dynamics. During training , ProWorld employs hyperbolic entailment learn-ing, which encourages states within the same trajectory to unfold along goal-directed progress directions while hy-perbolic future discrimination separates locally similar fu-ture states with different progress semantics. During plan-ning , ProWorld evaluates candidate action sequences using a progress-aware trajectory cost that considers both goal prox-imity and progress consistency across intermediate states. We evaluate ProWorld across four visual goal-reaching tasks from the OGBench benchmark suite (Park et al. 2025). Across all settings, ProWorld attains an average absolute suc-cess rate (SR) improvement of 9.67 compared with LeWM. The contributions of this paper are summarized as follows: 
+
+• We introduce goal-conditioned progress order as a struc-tural view of long-horizon visual goal planning, and in-stantiate it in ProWorld by organizing visual latent-space dynamics in the Lorentz model of hyperbolic space. This provides a geometric inductive bias for modeling the asymmetric coarse-to-fine relation by which states evolve from lower-progress stages to higher-progress, goal-relevant regions. 
+
+• We introduce a progress-aware learning framework that jointly models directional progress within trajectories and discriminability across future contexts, addressing both rollout drift and progress ambiguity in long-horizon plan-ning. 
+
+• Experiments on four visual goal-planning tasks show that ProWorld consistently improves long-horizon planning performance, achieving an average absolute SR gain of 9.67 over LeWM. 
+
+## Related Work 
+
+Visual World Models for Goal-Conditioned Planning 
+
+Visual world models. Visual world models learn predictive environment dynamics for control and planning. Pixel-space prediction (Finn and Levine 2017) was subsequently com-plemented by compact latent dynamics, as in PlaNet (Hafner et al. 2019) and Dreamer (Hafner et al. 2020). Task-oriented latent models such as MuZero (Schrittwieser et al. 2020) and TD-MPC (Hansen, Su, and Wang 2022) further show that decision-relevant dynamics need not reconstruct pixels ac-curately. Nevertheless, recursive rollouts remain vulnerable to accumulated model bias (Janner et al. 2019) and mismatch between predictive objectives and downstream control (Lam-bert et al. 2020). 
+
+JEPA-style prediction. JEPA-style models shift the focus from pixel reconstruction to latent prediction. I-JEPA (Ass-ran et al. 2023) and V-JEPA (Bardes et al. 2024) establish this paradigm for images and videos, while LeJEPA (Balestriero and LeCun 2025) introduces SIGReg for stable represen-tation learning. LeWM (Maes et al. 2026) extends this formulation to action-conditioned visual dynamics. DINO-WM (Zhou et al. 2025) and Causal-JEPA (Nam et al. 2026) further investigate pretrained features and object-centric pre-diction for planning. These methods primarily emphasize predictive accuracy or local transition structure, whereas ProWorld explicitly organizes latent dynamics by goal-conditioned progress. 
+
+Long-horizon planning. Long-horizon goal reaching re-quires more than locally accurate prediction. SoRB (Ey-senbach, Salakhutdinov, and Levine 2019) performs graph-based search over replay states, hierarchical visual plan-ning (Pertsch et al. 2020) predicts intermediate subgoals, and contrastive goal-conditioned learning (Eysenbach et al. 2022) models state-goal controllability. Unlike policy learn-ing or explicit high-level search, ProWorld embeds progress structure directly within an action-conditioned world model and uses it to evaluate recursively predicted trajectories. 
+
+Hyperbolic and Geometric Representation Learning 
+
+Coarse-to-fine geometry. Hyperbolic spaces provide a natu-ral geometry for coarse-to-fine organization, where broad ab-stract regions progressively branch into more specific regions with low distortion. This property has been widely explored in visual and multimodal representation learning, including image embeddings (Khrulkov et al. 2020), zero-shot recogni-tion (Liu et al. 2020), segmentation (Atigh et al. 2022), met-ric learning (Ermolov et al. 2022), image-text representation learning (Desai et al. 2023), and scene-object representation learning (Ge et al. 2023). Recent work further extends this perspective to process-structured settings, such as representa-tion evolution over time (Bui et al. 2025), dense retrieval with general-to-specific semantic structure (Madhu et al. 2026), sequential modeling (Sohn, Ma, and Chen 2022; Zhang et al. 2025), deep reinforcement learning (Cetin et al. 2022; Klein et al. 2026), and multi-step reasoning (Liu et al. 2026). These works suggest that hyperbolic geometry is useful when rep-resentations must capture both hierarchical specificity and branching future possibilities. 
+
+Hyperbolic world models. GeoWorld (Zhang et al. 2026) also introduces hyperbolic geometry into JEPA-style world models to reduce geometric degradation during long rollouts. ProWorld shares the motivation of using hyperbolic geom-etry for long-horizon world modeling, but explicitly mod-els goal-conditioned progress order, organizing states from broad, lower-progress regions toward more specific goal-relevant regions. This progress structure is used not only for representation learning through entailment and future dis-crimination, but also for progress-aware planning over can-didate action sequences. 
+
+## Preliminaries 
+
+The Lorentz Model of Hyperbolic Space 
+
+To model the hierarchical structure of long-horizon trajecto-ries, ProWorld embeds state representations into the Lorentz model of hyperbolic space with negative curvature. We in-troduce the basic geometric notation used throughout this paper. Let 𝑚 denote the dimensionality of the hyperbolic la-tent space and 𝑐 > 0 denote the curvature parameter, so that the corresponding hyperbolic space has negative curvature 
+
+−𝑐 . For any point 𝑥 ∈ R𝑚 +1, let 𝑥 0 denote its time com-ponent and 𝑥 1: 𝑚 its spatial components. The 𝑚 -dimensional hyperbolic space in the Lorentz model is defined as 
+
+H𝑚 𝑐 =
+
+
+
+𝑥 ∈ R𝑚 +1 ⟨𝑥, 𝑥 ⟩L = − 1
+
+𝑐 𝑥 0 > 0
+
+
+
+(1) where ⟨· , ·⟩ L denotes the Lorentz inner product. For any 
+
+𝑥, 𝑦 ∈ R𝑚 +1, this inner product is defined as 
+
+⟨𝑥, 𝑦 ⟩L =
+
+> 𝑚
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑥 𝑖 𝑦 𝑖 − 𝑥 0 𝑦 0 (2) Given two hyperbolic points 𝑥, 𝑦 ∈ H𝑚 𝑐 , the geodesic distance between them is 
+
+𝑑 H (𝑥, 𝑦 ) = 1
+
+√𝑐 arcosh (− 𝑐 ⟨𝑥, 𝑦 ⟩L ) (3) where 𝑑 H (· , ·) denotes the hyperbolic geodesic distance and arcosh (·) denotes the inverse hyperbolic cosine function. 
+
+Goal-Conditioned Progress Order 
+
+Long-horizon visual planning requires the model to cap-ture not only local transition dynamics but also how states progress toward a given goal. In successful goal-conditioned trajectories, earlier states usually correspond to Encoder        
+
+> Hyperbolic
+> Projector ℒctr ℒsig
+> Predictor Predictor ℎℎ+1 ℒpred
+> (a) Progress -induced
+> Entailment
+> (b) Future
+> Discrimination ℒctr ℒcone
+> Progress -aware Hyperbolic Objectives ℎ+ℎℎ+ℎℎ,
+> ()()+1
+> Encoder
+> Hyperbolic
+> Projector ℎ+1 ℒcone
+
+(a) Training stage Progress -aware    
+
+> planning cost Predictor Predictor Predictor Predictor …Predictor Predictor
+> CEM 12
+> Encoder Encoder
+> Update actions 1
+
+(b) Planning stage Figure 2: Overview of ProWorld, including progress-aware hyperbolic dynamics learning and CEM-based latent plan-ning. lower progress and broader future possibilities, whereas later states correspond to higher progress and more goal-specific regions. We formalize this structure as follows. 
+
+Definition 1 (Goal-conditioned progress order) . Consider a goal-conditioned hindsight trajectory segment 𝜏 =
+
+(𝑠 0, 𝑠 1, . . . , 𝑠 𝑇 ; 𝑔 ) with states 𝑠 𝑡 ∈ S and goal 𝑔 ∈ G . Let 
+
+𝜌 𝑔 : S → R denote an underlying progress potential, where larger 𝜌 𝑔 (𝑠 ) indicates higher progress of state 𝑠 toward goal 
+
+𝑔 . For two states 𝑠 𝑖 and 𝑠 𝑗 in the same trajectory, we define 
+
+𝑠 𝑖 ≺𝑔 𝑠 𝑗 if 𝑖 < 𝑗 and 𝜌 𝑔 (𝑠 𝑗 ) ≥ 𝜌 𝑔 (𝑠 𝑖 ) + 𝜖 
+
+where 𝜖 > 0 is a progress margin. Since 𝜌 𝑔 is generally unobserved, we use temporally sepa-rated state pairs from goal-conditioned hindsight trajectories as weak supervision: if 𝑗 − 𝑖 ≥ Δmin , we treat (𝑠 𝑖 , 𝑠 𝑗 ; 𝑔 )
+
+as an empirical relation 𝑠 𝑖 ≺𝑔 𝑠 𝑗 . This construction does not require every adjacent transition to strictly reduce goal distance; instead, it applies a soft progress constraint to tem-porally separated pairs that are expected to move toward the hindsight goal. Additional discussion on asymmetry and cone realization is provided in the Appendix. 
+
+## Method 
+
+Overview 
+
+Given offline trajectories 𝜏 = {( 𝑜 𝑡 , 𝑎 𝑡 )} 𝑇 𝑡 =1, ProWorld learns a latent dynamics model for goal-conditioned visual plan-ning. As shown in Fig. 2, pixel observations are encoded into Euclidean latents, mapped to the Lorentz hyperbolic space, and predicted forward by an action-conditioned au-toregressive predictor. The hyperbolic space is used to im-pose progress-aware geometric supervision during training and to score imagined rollouts during planning. Training converts temporal relations and encoded goals in goal-conditioned hindsight trajectories into progress-aware constraints, encouraging the latent dynamics to capture both local predictability and directional progress. At inference time, the learned model rolls out candidate action sequences and guides CEM using a progress-aware hyperbolic planning cost. 
+
+Visual Encoding and Hyperbolic Embedding Given a pixel observation 𝑜 𝑡 , the visual encoder 𝑓 𝜃 and Euclidean projection head 𝑔 𝜓 first produce 
+
+𝑧 𝑡 = 𝑔 𝜓 ( 𝑓 𝜃 (𝑜 𝑡 )) ∈ R𝑑 (4) The hyperbolic projection head 𝑞 𝜔 maps this Euclidean la-tent to an 𝑚 -dimensional spatial tangent component at the Lorentz origin, ˜𝑢 𝑡 = 𝑞 𝜔 (𝑧 𝑡 ) ∈ R𝑚 (5) Following this tangent-space construction, we normalize by feature dimension and smoothly clip the tangent norm: ¯𝑢 𝑡 = ˜𝑢 𝑡 /√𝑚 𝑢 𝑡 = 𝜌 max tanh (∥ ¯𝑢 𝑡 ∥2/𝜌 max )∥ ¯𝑢 𝑡 ∥2 + 𝜀 num 
+
+¯𝑢 𝑡 (6) Here 𝜌 max is the tangent-norm bound, set to 4 .0 by default, and 𝜀 num is a small constant for numerical stability. The sta-bilized spatial component 𝑢 𝑡 is then lifted to the Lorentz tangent space by appending a zero time component, yield-ing (0, 𝑢 𝑡 ) ∈ R𝑚 +1. The hyperbolic latent representation is obtained by the origin exponential map: 
+
+ℎ𝑡 = exp 𝑐  
+
+> o𝑐
+
+(( 0, 𝑢 𝑡 )) ∈ H𝑚 𝑐 ⊂ R𝑚 +1 (7) 
+
+Action-conditioned autoregressive predictor. Given an action 𝑎 𝑡 , the action encoder produces 𝛼 𝑡 = 𝑒 𝜂 (𝑎 𝑡 ). With a history window of length 𝐻 , the autoregressive predictor forecasts the next Euclidean latent as ˆ𝑧 𝑡 +1 = 𝑝 𝜙 (𝑧 𝑡 −𝐻 +1: 𝑡 , 𝛼 𝑡 −𝐻 +1: 𝑡 ) (8) where 𝜙 denotes the predictor parameters and ˆ 𝑧 𝑡 +1 is the predicted next latent. The predictor is implemented with a Transformer and conditioned on action embeddings. The pre-diction is mapped to the Lorentz manifold using the same dimension normalization, smooth clipping, and zero-time tangent lifting as in Eq. 6. Specifically, we first compute ˆ˜𝑢 𝑡 +1 = 𝑞 𝜔 ( ˆ𝑧 𝑡 +1) and obtain ˆ 𝑢 𝑡 +1 by applying the transfor-mation in Eq. (6), then ˆℎ𝑡 +1 = exp 𝑐  
+
+> o𝑐
+
+(( 0, ˆ𝑢 𝑡 +1)) (9) where ˆ ℎ𝑡 +1 is the predicted future hyperbolic point. 
+
+Progress-Aware Hyperbolic Dynamics Learning 
+
+Hyperbolic Prediction and Discrimination ProWorld first aligns the predicted future state with the encoded true future state in the Lorentz model. Let ˆ ℎ𝑡 +1 denote the hyper-bolic point predicted from the current state and action, and let ℎ𝑡 +1 denote the hyperbolic point encoded from the true future observation. The prediction loss is 
+
+Lpred = E𝑡 
+
+𝑑 H ( ˆℎ𝑡 +1, ℎ 𝑡 +1)2 (10) where E𝑡 denotes the empirical expectation over sampled training timesteps. Pointwise prediction alone may entangle future states that are locally similar but have different progress semantics. To improve future-state discriminability, we introduce a Lorentz contrastive constraint. Given a batch of 𝑁 predicted points 
+
+{ ˆℎ𝑖 }𝑁 𝑖 =1 and their matched true future points {ℎ𝑖 }𝑁 𝑖 =1, where 
+
+𝑖 indexes samples and 𝑁 is the batch size, we compute the pairwise Lorentz geodesic distance 
+
+𝐷 𝑖 𝑗 = 𝑑 H ( ˆℎ𝑖 , ℎ 𝑗 ) = 1
+
+√𝑐 arcosh 
+
+
+
+−𝑐 ⟨ ˆℎ𝑖 , ℎ 𝑗 ⟩L
+
+
+
+(11) where 𝐷 𝑖 𝑗 is the distance between the 𝑖 -th predicted point and the 𝑗 -th true future point. For each ˆ ℎ𝑖 , ℎ𝑖 is the positive future sample and the remaining ℎ 𝑗 serve as negatives. The contrastive logits are 
+
+ℓ𝑖 𝑗 = − 𝐷 𝑖 𝑗 
+
+𝜏 (12) where ℓ𝑖 𝑗 is the (𝑖, 𝑗 )-th logit and 𝜏 > 0 is the temperature. We use a symmetric cross-entropy loss so that predictions retrieve their matched futures and true futures retrieve their matched predictions: 
+
+Lctr = 12
+
+CE (ℓ, 𝑦 ) + CE (ℓ⊤, 𝑦 ) (13) where ℓ⊤ denotes the transposed logits for reverse matching, CE (· , ·) denotes cross-entropy and 𝑦 𝑖 = 𝑖 denotes the within-batch matching label. This constraint pulls matched future pairs together while separating unmatched future states on the Lorentz manifold. 
+
+Progress-Induced Entailment Constraint To realize goal-conditioned progress order in the hyperbolic latent space, ProWorld introduces a goal-anchored adaptive entail-ment cone constraint. Given a hindsight goal observation 𝑜 𝑔 ,we encode it with the same hyperbolic projection pipeline to obtain ℎ𝑔 . For two states before this goal in the same trajec-tory with temporal offset Δ > 0, we treat the earlier state as the parent and the later state as the child: 
+
+ℎ𝑝 𝑡 = ℎ𝑡 ℎ𝑐 𝑡 = ℎ𝑡 +Δ (14) Fig. 3 illustrates the resulting goal-anchored cone construc-tion. Instead of defining progress only with respect to the Lorentz origin, we compare two tangent directions at the parent point: 
+
+𝑣 𝑐 = log 𝑐 ℎ𝑝 𝑡 
+
+(ℎ𝑐 𝑡 ) 𝑣 𝑔 = log 𝑐 ℎ𝑝 𝑡 
+
+(ℎ𝑔 ) (15) where 𝑣 𝑐 points from the parent to the child and 𝑣 𝑔 points from the parent to the goal. After normalizing the tangent directions, ¯𝑣 𝑐 = 𝑣 𝑐 
+
+∥𝑣 𝑐 ∥ L
+
+¯𝑣 𝑔 = 𝑣 𝑔 
+
+∥𝑣 𝑔 ∥ L
+
+(16) we define the goal-conditioned angular deviation as 
+
+𝜃 (𝑡 ) 
+
+> 𝑐,𝑔
+
+= arccos  ⟨¯𝑣 𝑐 , ¯𝑣 𝑔 ⟩L
+
+ (17) Table 1: Comparison of success rates across different methods on the visual goal-conditioned planning task. All success rate values are reported on a 0-100 scale with the percent sign omitted. Results with ± indicate mean and standard deviation over training seeds 42, 1337, and 3407. Best results are bolded; second-best and third-best cells are shaded in light red and light blue, respectively. The last row reports the relative SR improvement over the second-best baseline. 
+
+Method PushT Cube-S AntMaze-L Scene 
+
+LeWM (Maes et al. 2026) 83.33 ±4.04 71.33 ±3.06 22.00 ±4.00 57.33 ±2.49 
+
+C-JEPA (Nam et al. 2026) 66.67 ±3.77 48.00 ±7.12 20.67 ±0.94 48.00 ±1.63 
+
+GCIQL (Park et al. 2025) 10.00 ±3.27 62.00 ±1.63 23.33 ±3.40 40.67 ±6.18 
+
+GCIVL (Park et al. 2025) 14.00 ±8.49 64.00 ±4.32 18.67 ±2.49 45.33 ±6.79 
+
+PLDM (Sobal et al. 2025) 80.67 ±2.49 57.33 ±2.49 22.67 ±3.77 58.67 ±5.25 
+
+EB-JEPA (Terver et al. 2026) 77.33 ±2.49 56.67 ±1.89 19.33 ±2.49 67.33 ±0.94 
+
+TD-MPC2 (Hansen, Su, and Wang 2024) 4.00 ±1.63 44.00 ±4.32 18.67 ±0.94 46.67 ±3.40 
+
+Sub-JEPA (Zhao et al. 2026) 77.33 ±5.25 46.00 ±0.00 19.33 ±2.49 58.67 ±4.71 
+
+GeoWorld-Style a (Zhang et al. 2026) 72.67 ±3.06 53.33 ±4.16 18.00 ±2.00 51.33 ±2.49 
+
+Random 0.00 42.00 14.00 36.00 
+
+ProWorld (Ours) 94.00 ±2.00 77.33 ±1.15 32.00 ±2.00 69.33 ±0.94 
+
+Rel. Gain +12.80% +8.41% +37.16% +2.97%  
+
+> aGeoWorld-Style denotes our reproduction of GeoWorld under the unified experimental setting.
+
+Table 2: Module ablation study of ProWorld on Cube-S. A blank entry indicates the same setting as the full model; ✗
+
+indicates removal of the corresponding component. Best SR is bolded; second-best and third-best SR cells are shaded in light red and light blue, respectively. 
+
+Variant Pred. Ctr. Cone. Reg. SR Full 78% 
+
+w/o Cone. ✗ 62% w/o Ctr. ✗ 46% w/o Reg. ✗ 76% w/o Ctr./Cone ✗ ✗ 42% w/o Ctr./Cone/Reg. ✗ ✗ ✗ 46% 
+
+Table 3: Ablation study on geometric structure and goal-conditioned progress order. A blank entry indicates the same setting as the full model; ✗ indicates removal or replacement of the corresponding design. Best SR is bolded; second-best and third-best SR cells are shaded in light red and light blue, respectively. 
+
+Variant Hyp. Correct Same Traj. Adaptive SR Order Pair Cone Full 78% 
+
+Euc. ✗ 68% Rev. ✗ 44% Rand. ✗ 52% Fixed ✗ 70% 
+
+which measures whether the child moves along the direction from the current state toward the hindsight goal. The cone aperture is adapted according to the normalized parent-to-goal distance 
+
+𝛿 𝑔 𝑝 = clip 
+
+ 𝑑 H (ℎ𝑝 𝑡 , ℎ 𝑔 )
+
+𝜌 max 
+
+, 0, 1
+
+
+
+𝐴 (𝛿 𝑔 𝑝 ) = 𝐴 min + ( 𝐴 max − 𝐴 min )𝛿 𝑔 𝑝 
+
+(18) where 𝐴 min and 𝐴 max are the minimum and maximum aper-tures. Farther states induce wider cones, while states closer to the goal impose finer directional constraints. The final entailment cone loss is 
+
+Lcone = E𝑡 
+
+h
+
+𝑤 𝜃 max (0, 𝜃 (𝑡 ) 
+
+> 𝑐,𝑔
+
+− 𝐴 (𝛿 𝑔 𝑝 )) + 𝑤 𝑔 max (0, 𝑑 H (ℎ𝑐 𝑡 , ℎ 𝑔 ) + 𝑚 𝑔 
+
+− 𝑑 H (ℎ𝑝 𝑡 , ℎ 𝑔 )) 
+
+i (19) where 𝑤 𝜃 and 𝑤 𝑔 weight the angular and goal-distance terms, and 𝑚 𝑔 is the goal-progress margin. The angular term keeps the child inside the parent-to-goal cone, while the distance term encourages the child to become closer to the hindsight goal than the parent. Thus, the same state can induce different progress directions under different goals through ℎ𝑔 .
+
+Stabilization and overall objective. Following LeWM, we retain the SIGReg regularizer Lsig to stabilize the latent distribution and prevent representation collapse. The final training objective is 
+
+L = 𝜆 pred Lpred + 𝜆 ctr Lctr + 𝜆 cone Lcone + 𝜆 sig Lsig (20) 
+
+Hyperbolic Latent Planning 
+
+During inference, the goal observation 𝑜 𝑔 is encoded by the same pipeline to obtain the goal point ℎ𝑔 ∈ H𝑚 𝑐 . For a candidate action sequence a1: 𝐿 = (𝑎 1, . . . , 𝑎 𝐿 ) with rollout horizon 𝐿 , ProWorld recursively predicts hyperbolic states 
+
+{ ˆℎ𝑡 }𝐿 𝑡 =1 and measures their stepwise goal distances as 
+
+𝐷 𝑔 𝑡 = 𝑑 H ( ˆℎ𝑡 , ℎ 𝑔 )2 (21) where 𝐷 𝑔 𝑡 is the squared hyperbolic distance from the 𝑡 -th predicted state to the goal. Besides the terminal distance 𝐷 𝑔 𝐿 ,loss = 0 ℎℎ +Top -down view Top -down view ℒang = (ℎ , ℎ + ) − ( ) +Figure 3: Illustration of the goal-anchored adaptive entail-ment cone. The green region denotes the zero angular-violation area, where the child direction from the parent remains aligned with the parent-to-goal direction. LeWM        
+
+> GT
+> Ours
+> Context input
+> t = 0 510 15 20 25 30 35
+> Open Loop Prediction
+
+Figure 4: Qualitative planning visualization on the PushT task. Rollouts are rendered with an auxiliary decoder for visualization only. Additional rollout visualizations are pro-vided in the Appendix. we use the best and mean distances along the rollout: 
+
+𝐶 best = min    
+
+> 1≤𝑡 ≤𝐿
+
+𝐷 𝑔 𝑡 
+
+𝐶 mean = 1
+
+𝐿 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑡 =1
+
+𝐷 𝑔 𝑡 
+
+(22) where 𝐶 best captures the closest intermediate progress and 
+
+𝐶 mean captures average trajectory proximity. The planning cost is 
+
+𝐶 = 𝛽 𝑇 𝐷 𝑔 𝐿 + 𝛽 𝑏 𝐶 best + 𝛽 𝑚 𝐶 mean (23) where 𝛽 𝑇 , 𝛽 𝑏 , and 𝛽 𝑚 weight the terminal, best-intermediate, and mean-distance terms. ProWorld selects the action se-quence minimizing 𝐶 and executes its first action. 
+
+## Experiments 
+
+Experimental Setup 
+
+Datasets We evaluate on four tasks as our main bench-marks: PushT , OGBench-Cube-Single-Play , OGBench-AntMaze-Large-Navigate , and OGBench-Scene-Play . For brevity, we refer to the latter three tasks as Cube-S ,
+
+AntMaze-L , and Scene , respectively. This suite covers com-plementary planning scenarios, including contact-rich planar 100 150 200 250 300 350 400 450       
+
+> State Dim 1
+> 100
+> 150
+> 200
+> 250
+> 300
+> 350
+> 400
+> 450
+> State Dim 2
+> PushT Physical State Grid
+> 30 20 10 010 20 30
+> Projected Dim 1
+> 40
+> 30
+> 20
+> 10
+> 0
+> 10
+> 20
+> 30
+> Projected Dim 2
+> 2D Projection (PushT Latent Space)
+
+Figure 5: PushT physical state grid and t-SNE projection of ProWorld latents. The visualization shows local continuity and a radial expansion trend in the learned latent space. pushing, 3D object manipulation, long-horizon visual nav-igation, and mixed discrete-continuous multi-object scene manipulation. Further dataset details are provided in the Appendix. Implementation Details All experiments are conducted on a Huawei Ascend 910C NPU. The complete hyperparam-eter settings are provided in the Appendix. 
+
+Comparison with SOTA Methods We compare ProWorld against the following recent baselines: LeWM (Maes et al. 2026), C-JEPA (Nam et al. 2026), GCIQL (Park et al. 2025; Kostrikov, Nair, and Levine 2022), GCIVL (Park et al. 2025), PLDM (Sobal et al. 2025), EB-JEPA (Terver et al. 2026), TD-MPC2 (Hansen, Su, and Wang 2024), and Sub-JEPA (Zhao et al. 2026). All methods use identical training data and planning budgets to ensure a fair comparison. Tab. 1 summarizes the success rates of ProWorld and the baselines across different tasks. Compared to LeWM, ProWorld improves SR by an average absolute margin of ap-proximately 9.67 across the four main tasks. This result sug-gests that world models relying solely on local next-step pre-diction remain insufficient for long-horizon goal-conditioned tasks, whereas explicitly modeling progress-hierarchical re-lationships improves long-term planning capability. A closer look at task categories shows that ProWorld yields larger gains on long-horizon tasks, especially AntMaze-L, than on short-horizon 2D manipulation tasks. This suggests that local transition prediction is often sufficient when goals are reachable within a few steps, but becomes less reliable when planning requires sustained progress across many in-termediate states. 
+
+Case Study To further analyze ProWorld’s behavior in long-horizon prediction, Fig. 4 presents a representative open-loop rollout on the PushT task. Given the first few con-text frames, the model must recursively predict subsequent states without receiving future ground-truth observations. As shown, LeWM’s predictions maintain reasonable local appearance but, as the number of rollout steps increases, the predicted object poses and goal-relevant positions progres-sively diverge from the ground-truth trajectory. In contrast, ProWorld’s predicted trajectory remains closer to the ground truth over a longer time horizon and more consistently main-tains the trend of advancing the object toward the goal state. Fig. 6 further extends the representation visualization in Table 4: Normalized MSE and Pearson correlation 𝑟 results on AntMaze-L. Lower MSE is better, and higher 𝑟 is better. Best results are bolded; second-best and third-best cells under each metric are shaded in light red and light blue, respectively. 
+
+Method Linear MLP MSE ↓ 𝑟 ↑ MSE ↓ 𝑟 ↑
+
+LeWM (Maes et al. 2026) 0.901 ±0.248 0.199 ±0.250 0.804 ±0.294 0.328 ±0.309 
+
+C-JEPA (Nam et al. 2026) 0.925 ±0.244 0.175 ±0.235 0.830 ±0.290 0.305 ±0.305 
+
+GCIQL (Park et al. 2025; Kostrikov, Nair, and Levine 2022) 0.908 ±0.245 0.190 ±0.242 0.812 ±0.290 0.320 ±0.305 
+
+GCIVL (Park et al. 2025) 0.930 ±0.255 0.170 ±0.230 0.835 ±0.298 0.300 ±0.310 
+
+PLDM (Sobal et al. 2025) 0.922 ±0.250 0.180 ±0.235 0.825 ±0.295 0.310 ±0.302 
+
+EB-JEPA (Terver et al. 2026) 0.915 ±0.240 0.185 ±0.240 0.820 ±0.285 0.315 ±0.300 
+
+TD-MPC2 (Hansen, Su, and Wang 2024) 0.945 ±0.260 0.155 ±0.225 0.850 ±0.305 0.285 ±0.315 
+
+Sub-JEPA (Zhao et al. 2026) 0.920 ±0.242 0.182 ±0.238 0.823 ±0.292 0.312 ±0.301 
+
+GeoWorld-Style (Zhang et al. 2026) 0.912 ±0.248 0.188 ±0.245 0.816 ±0.290 0.316 ±0.305 
+
+Random 0.995 ±0.280 0.050 ±0.150 0.985 ±0.320 0.065 ±0.200 
+
+ProWorld (Ours) 0.900 ±0.246 0.205 ±0.248 0.801 ±0.296 0.331 ±0.309 
+
+Table 5: Ablation study on the entailment cone design on Cube-S. Blank entries indicate the same setting as the full model; ✗ indicates removal or replacement of the correspond-ing component. Best SR is bolded; second-best and third-best SR cells are shaded in light red and light blue, respectively. 
+
+Variant Angle Dist. Adapt. Order SR Full 78% 
+
+Seg. Cone 76% Ang. Only ✗ 66% Dist. Only ✗ 62% Fixed ✗ 70% Rev. ✗ 44% 
+
+Table 6: Ablation study on planning cost terms on Cube-S. Blank entries indicate the full planning cost is retained; ✗
+
+indicates removal of the corresponding cost term. Best SR is bolded; second-best and third-best SR cells are shaded in light red and light blue, respectively. 
+
+Variant 𝐷 𝑔 𝐿 𝐶 best 𝐶 mean SR 
+
+Full planner 78% 
+
+Terminal only ✗ ✗ 62% w/o best ✗ 64% w/o mean ✗ 72% 
+
+Fig. 5 from latent organization to planning-time decision be-havior. Here, normalized distance denotes the current goal distance divided by the initial goal distance, while best-so-far distance denotes the running minimum of this normal-ized distance up to the current environment step. Although LeWM and the terminal-only planner can produce locally plausible candidate rollouts, their goal distances stagnate or increase over intermediate steps. By contrast, ProWorld se-lects a rollout whose distance profile remains closer to the ground-truth progress curve, showing that the intermediate progress terms in the planning cost help reject candidates that appear reasonable only at a local or terminal level. 
+
+Ablation Study 
+
+To analyze the sources of ProWorld’s performance, we con-duct ablation studies on Cube-S. Blank entries in the table indicate the same setting as the full model; ✗ indicates re-moval or replacement of the corresponding component. Best, second-best, and third-best results are bolded, shaded in light red, and shaded in light blue, respectively. Additional abla-tion results, visualizations, and table-abbreviation details are provided in the Appendix. Learning objectives. Tab. 2 evaluates the contribution of each training objective in ProWorld, where Pred., Ctr., Cone., 0 10 20 30       
+
+> Environment steps
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Normalized distance
+> 010 20 30
+> Environment steps
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Best-so-far distance
+> GT ProWorld LeWM Terminal-only
+
+Figure 6: Planning-time progress on PushT. ProWorld main-tains a goal-distance profile closer to ground-truth progress than LeWM and terminal-only planning. and Reg. denote Lpred , Lctr , Lcone , and Lsig , respectively. The full model achieves 78% SR, substantially outperform-ing the Pred.-only baseline at 46%, showing that local latent prediction alone is insufficient for long-horizon visual goal planning. Removing the contrastive loss causes the largest drop, nearly reducing performance to the Pred. baseline, which indicates that future-state discriminability is essential. Removing the entailment cone also degrades SR to 62%, confirming the importance of directional progress structure, while removing SIGReg has only a minor effect, suggesting that it mainly stabilizes representation learning. Progress 
+
+> 0.746
+> ***
+> -0.800
+> ***
+> -0.905
+> ***
+> 0.819
+> ***
+> -0.555
+> ***
+> -0.675
+> ***
+> 0.704
+> ***
+> Radius
+> -0.683
+> ***
+> -0.690
+> ***
+> 0.646
+> ***
+> -0.431
+> ***
+> -0.856
+> ***
+> 0.567
+> ***
+> Hyperbolic goal dist.
+> 0.857
+> ***
+> -0.701
+> ***
+> 0.572
+> ***
+> 0.628
+> ***
+> -0.593
+> ***
+> Physical goal dist.
+> -0.787
+> ***
+> 0.644
+> ***
+> 0.658
+> ***
+> -0.633
+> ***
+> Goal direction
+> -0.595
+> ***
+> -0.595
+> ***
+> 0.782
+> ***
+> Orthogonal deviation
+> 0.463
+> ***
+> -0.492
+> ***
+> Cone aperture
+> -0.515
+> ***
+> Progress
+> Radius gain
+> Radius
+> Hyperbolic goal dist.
+> Physical goal dist.
+> Goal direction
+> Orthogonal deviation
+> Cone aperture
+> Radius gain
+> −1.00
+> −0.75
+> −0.50
+> −0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+
+Figure 7: Spearman correlation analysis of progress-related geometric variables on PushT. 
+
+Progress geometry. Figs. 5, 7, and 8 analyze the learned progress structure. The t-SNE visualization shows that ProWorld preserves local continuity while forming a struc-tured latent space. The correlation diagnostic further shows that trajectory progress is positively associated with goal-direction alignment and negatively associated with both hy-perbolic and physical goal distances, consistent with the goal-anchored entailment objective. The radial diagnostics additionally show an emergent coarse-to-fine organization, where later states tend to occupy more specific regions of the Lorentz space. 
+
+Geometry and progress order. Tab. 3 examines the role of geometry and state-pair construction. Replacing the Lorentz hyperbolic space with a Euclidean latent space reduces SR from 78% to 68%, suggesting that negative curvature better supports coarse-to-fine progress organization. More impor-tantly, reversing the parent-child order or using random state pairs drops SR to 44% and 52%, respectively, showing that the entailment cone relies on correct goal-conditioned tem-poral order rather than acting as a generic regularizer. The fixed-aperture variant reaches 70% SR, further indicating that adaptive cone apertures better match goal-conditioned progress, where states farther from the goal allow broader future regions and states closer to the goal impose finer di-rectional constraints. 
+
+Entailment cone design. Tab. 5 decomposes the entail-ment cone design. Using only the angular or goal-distance term performs clearly worse than the full model, showing that directional consistency and distance-based progress are complementary. The segment-cone variant that additionally −0.02 0.00 0.02 0.04 0.06 0.08 0.10 
+
+Δρ = ρc − ρp
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30    
+
+> Count
+> all pairs, mean=0.015
+> low parent ρp, mean=0.018
+> mid parent ρp, mean=0.016
+> high parent ρp, mean=0.012
+
+(a) PushT −0.02 0.00 0.02 0.04 0.06 0.08 0.10 
+
+Δρ = ρc − ρp
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25    
+
+> Count
+> all pairs, mean=0.011
+> low parent ρp, mean=0.016
+> mid parent ρp, mean=0.011
+> high parent ρp, mean=0.007
+
+(b) Cube-S Figure 8: Diagnostic parent-child radial displacement grouped by parent radius. Positive values indicate that the child has a larger Lorentz radius than the parent. constrains ℎ𝑡 +1 reaches 76% SR, close to but below the full model, suggesting that the default Δ = 2 pair provides suf-ficient progress supervision without over-constraining adja-cent transitions. Fixed apertures and reversed temporal order further degrade performance, confirming the importance of adaptive and correctly ordered goal-conditioned cones. 
+
+Planning objective. Tab. 6 evaluates the progress-aware planning cost. Using only the terminal distance reduces SR from 78% to 62%, showing that endpoint proximity alone is insufficient for selecting reliable long-horizon rollouts. Removing either the best-intermediate or mean-distance term also degrades performance, indicating that intermediate states provide important progress signals for rejecting locally plausible but globally ineffective action sequences. Conclusion 
+
+We presented ProWorld, a progress-aware hyperbolic world model for visual goal planning. It models goal-conditioned progress order in Lorentz space to improve future discrim-ination, directional progress learning, and rollout scoring. Experiments on four tasks show consistent gains over strong baselines. 
+
+## References 
+
+Assran, M.; Duval, Q.; Misra, I.; Bojanowski, P.; Vincent, P.; Rabbat, M.; LeCun, Y.; and Ballas, N. 2023. Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 15619–15629. Atigh, M. G.; Schoep, J.; Acar, E.; van Noord, N.; and Mettes, P. 2022. Hyperbolic Image Segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4453–4462. Balestriero, R.; and LeCun, Y. 2025. LeJEPA: Provable and Scalable Self-Supervised Learning Without the Heuristics. arXiv:2511.08544. Bardes, A.; Garrido, Q.; Ponce, J.; Chen, X.; Rabbat, M.; LeCun, Y.; Assran, M.; and Ballas, N. 2024. Revisiting Feature Prediction for Learning Visual Representations from Video. Transactions on Machine Learning Research .Bui, N.; Yang, M.; Chen, R.; Neves, L.; Ju, M.; Ying, R.; Shah, N.; and Zhao, T. 2025. Learning Along the Arrow of Time: Hyperbolic Geometry for Backward-Compatible Representation Learning. arXiv:2506.05826. Cetin, E.; Chamberlain, B.; Bronstein, M.; and Hunt, J. J. 2022. Hyperbolic Deep Reinforcement Learning. arXiv:2210.01542. Desai, K.; Nickel, M.; Rajpurohit, T.; Johnson, J.; and Vedan-tam, S. R. 2023. Hyperbolic Image-Text Representations. In 
+
+Proceedings of the 40th International Conference on Ma-chine Learning , volume 202 of Proceedings of Machine Learning Research , 7694–7731. PMLR. Ermolov, A.; Mirvakhabova, L.; Khrulkov, V.; Sebe, N.; and Oseledets, I. 2022. Hyperbolic Vision Transformers: Com-bining Improvements in Metric Learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 7409–7419. Eysenbach, B.; Salakhutdinov, R.; and Levine, S. 2019. Search on the Replay Buffer: Bridging Planning and Re-inforcement Learning. In Advances in Neural Information Processing Systems , volume 32. Eysenbach, B.; Zhang, T.; Levine, S.; and Salakhutdinov, R. 2022. Contrastive Learning as Goal-Conditioned Re-inforcement Learning. In Advances in Neural Information Processing Systems , volume 35. Finn, C.; and Levine, S. 2017. Deep Visual Foresight for Planning Robot Motion. In 2017 IEEE International Con-ference on Robotics and Automation (ICRA) , 2786–2793. IEEE. Ganea, O.-E.; B´ ecigneul, G.; and Hofmann, T. 2018. Hyper-bolic Entailment Cones for Learning Hierarchical Embed-dings. In Proceedings of the 35th International Conference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , 1646–1655. PMLR. Ge, S.; Mishra, S.; Kornblith, S.; Li, C.-L.; and Jacobs, D. 2023. Hyperbolic Contrastive Learning for Visual Represen-tations Beyond Objects. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,6840–6849. Gieselmann, R.; and Pokorny, F. T. 2023. Expansive Latent Planning for Sparse Reward Offline Reinforcement Learning. In Proceedings of the 7th Conference on Robot Learning ,volume 229 of Proceedings of Machine Learning Research ,1–22. PMLR. Ha, D.; and Schmidhuber, J. 2018. Recurrent World Models Facilitate Policy Evolution. In Advances in Neural Informa-tion Processing Systems , volume 31. Hafner, D.; Lillicrap, T.; Ba, J.; and Norouzi, M. 2020. Dream to Control: Learning Behaviors by Latent Imagination. In 
+
+International Conference on Learning Representations .Hafner, D.; Lillicrap, T.; Fischer, I.; Villegas, R.; Ha, D.; Lee, H.; and Davidson, J. 2019. Learning Latent Dynam-ics for Planning from Pixels. In Proceedings of the 36th International Conference on Machine Learning , volume 97 of Proceedings of Machine Learning Research , 2555–2565. PMLR. Hansen, N.; Su, H.; and Wang, X. 2024. TD-MPC2: Scalable, Robust World Models for Continuous Control. In Interna-tional Conference on Learning Representations .Hansen, N. A.; Su, H.; and Wang, X. 2022. Temporal Differ-ence Learning for Model Predictive Control. In Proceedings of the 39th International Conference on Machine Learning ,volume 162 of Proceedings of Machine Learning Research ,8387–8406. PMLR. Janner, M.; Fu, J.; Zhang, M.; and Levine, S. 2019. When to Trust Your Model: Model-Based Policy Optimization. In 
+
+Advances in Neural Information Processing Systems , vol-ume 32. Khrulkov, V.; Mirvakhabova, L.; Ustinova, E.; Oseledets, I.; and Lempitsky, V. 2020. Hyperbolic Image Embeddings. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 6418–6428. Klein, T.; Lang, T.; Shkabrii, A.; Sturm, A.; Sidak, K.; Mik-lautz, L.; Plant, C.; Velaj, Y.; and Tschiatschek, S. 2026. Un-derstanding and Improving Hyperbolic Deep Reinforcement Learning. arXiv:2512.14202. Kostrikov, I.; Nair, A.; and Levine, S. 2022. Offline Rein-forcement Learning with Implicit Q-Learning. In Interna-tional Conference on Learning Representations .Lambert, N.; Amos, B.; Yadan, O.; and Calandra, R. 2020. Objective Mismatch in Model-Based Reinforcement Learn-ing. In Proceedings of the 2nd Conference on Learning for Dynamics and Control , volume 120 of Proceedings of Ma-chine Learning Research , 761–770. PMLR. LeCun, Y.; et al. 2022. A path towards autonomous machine intelligence version 0.9. 2, 2022-06-27. Open Review , 62(1): 1–62. Liu, S.; Chen, J.; Pan, L.; Ngo, C.-W.; Chua, T.-S.; and Jiang, Y.-G. 2020. Hyperbolic Visual Embedding Learning for Zero-Shot Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,9273–9281. Liu, Y.; Xu, H.; He, Y.; Patil, S. R.; Xu, M.; and Ma, T. 2026. HyperGuide: Hyperbolic Guidance for Efficient Multi-Step Reasoning in Large Language Models. arXiv:2605.24140. Madhu, H.; Bui, N.; Maatouk, A.; Tassiulas, L.; Krish-naswamy, S.; Yang, M.; Ganguly, S.; Srinivasan, K.; and Ying, R. 2026. HypRAG: Hyperbolic Dense Retrieval for Retrieval Augmented Generation. arXiv:2602.07739. Maes, L.; Le Lidec, Q.; Scieur, D.; LeCun, Y.; and Balestriero, R. 2026. LeWorldModel: Stable End-to-End Joint-Embedding Predictive Architecture from Pixels. arXiv:2603.19312. Nair, S.; Savarese, S.; and Finn, C. 2020. Goal-Aware Pre-diction: Learning to Model What Matters. In Proceedings of the 37th International Conference on Machine Learning ,volume 119 of Proceedings of Machine Learning Research ,7207–7219. PMLR. Nam, H.; Le Lidec, Q.; Maes, L.; LeCun, Y.; and Balestriero, R. 2026. Causal-JEPA: Learning World Mod-els through Object-Level Latent Masking. arXiv preprint arXiv:2602.11389 .Nickel, M.; and Kiela, D. 2018. Learning Continuous Hierar-chies in the Lorentz Model of Hyperbolic Geometry. In Pro-ceedings of the 35th International Conference on Machine Learning , volume 80 of Proceedings of Machine Learning Research , 3779–3788. PMLR. Park, S.; Frans, K.; Eysenbach, B.; and Levine, S. 2025. OGBench: Benchmarking Offline Goal-Conditioned RL. In 
+
+International Conference on Learning Representations .Pertsch, K.; Rybkin, O.; Ebert, F.; Zhou, S.; Jayaraman, D.; Finn, C.; and Levine, S. 2020. Long-Horizon Visual Planning with Goal-Conditioned Hierarchical Predictors. In 
+
+Advances in Neural Information Processing Systems , vol-ume 33, 17321–17333. Schrittwieser, J.; Antonoglou, I.; Hubert, T.; Simonyan, K.; Sifre, L.; Schmitt, S.; Guez, A.; Lockhart, E.; Hassabis, D.; Graepel, T.; Lillicrap, T.; and Silver, D. 2020. Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model. Nature , 588: 604–609. Sobal, V.; Zhang, W.; Cho, K.; Balestriero, R.; Rudner, T. G. J.; and LeCun, Y. 2025. Stress-Testing Offline Reward-Free Reinforcement Learning: A Case for Planning with La-tent Dynamics Models. In ICLR Workshop on World Models for Robot Learning .Sohn, J.; Ma, M. D.; and Chen, M. 2022. Bending the Future: Autoregressive Modeling of Temporal Knowledge Graphs in Curvature-Variable Hyperbolic Spaces. arXiv:2209.05635. Terver, B.; Balestriero, R.; Dervishi, M.; Fan, D.; Gar-rido, Q.; Nagarajan, T.; Sinha, K.; Zhang, W.; Rabbat, M.; LeCun, Y.; and Bar, A. 2026. A Lightweight Library for Energy-Based Joint-Embedding Predictive Architectures. arXiv:2602.03604. Watter, M.; Springenberg, J. T.; Boedecker, J.; and Ried-miller, M. 2015. Embed to Control: A Locally Linear Latent Dynamics Model for Control from Raw Images. In Advances in Neural Information Processing Systems , volume 28. Zhang, Q.; Wen, H.; Yuan, W.; Chen, C.; Yang, M.; Yiu, S.-M.; and Yin, H. 2025. HMamba: Hyperbolic Mamba for Sequential Recommendation. arXiv:2505.09205. Zhang, Z.; Li, D.; Reid, I.; and Hartley, R. 2026. GeoWorld: Geometric World Models. arXiv:2602.23058. Zhao, K.; Nie, D.; Lin, Y.; Luo, Z.; Gu, Y.; Fan, D.-P.; and Zeng, D. 2026. Sub-JEPA: Subspace Gaus-sian Regularization for Stable End-to-End World Models. arXiv:2605.09241. Zhou, G.; Pan, H.; LeCun, Y.; and Pinto, L. 2025. DINO-WM: World Models on Pre-trained Visual Features Enable Zero-shot Planning. In Proceedings of the 42nd International Conference on Machine Learning .Appendix Overview 
+
+This appendix provides supplementary material that could not be fully elaborated in the main paper due to space constraints. We first give a compact algorithmic overview, summarize key notation, and provide implementation de-tails for the architecture, hyperparameters, planning settings, datasets, baselines, and evaluation protocol. We then present a formal discussion of goal-conditioned progress order and report additional analyses, including ablations, sensitivity studies, progress visualization, and qualitative rollouts. 
+
+## Algorithmic Overview 
+
+Rather than presenting ProWorld as one monolithic train-ing loop, we decompose the framework into three compact procedure sketches aligned with the main design contribu-tions. At a high level, ProWorld maps visual observations into a hyperbolic latent space in the Lorentz model, imposes goal-conditioned progress order through goal-anchored en-tailment constraints, and uses the learned progress geometry to score candidate action rollouts during planning. 
+
+Innovation I: hyperbolic predictive dynamics. This component converts a JEPA-style visual world model into a hyperbolic predictive model with future prediction and fu-ture discrimination losses.                    
+
+> def ProWorldDynamics(obs, actions): z=encoder(obs) h=lorentz_project(z) h_pred =hyperbolic_predict(h, actions) pred =mean(hyperbolic_dist(h_pred[:, :-1], h[:, 1:]) ** 2) ctr =contrastive_future_loss(h_pred, h) return pred +lambda_ctr * ctr
+
+Innovation II: progress-induced entailment. This com-ponent turns temporally ordered states from goal-conditioned hindsight trajectory segments into weak supervision: later states should lie inside the parent-to-goal cone and move closer to the hindsight goal. Here traj id only keeps sam-pled triples within the same recorded trajectory, rather than providing a success label.                         
+
+> def ProgressEntailment(h, goal, traj_id, Delta): parent, child, h_goal =sample_hindsight_ordered_pair( h, goal, traj_id, Delta) aperture =adaptive_cone(hyperbolic_dist(parent, h_goal)) angle =relu(cone_angle(parent, child, h_goal) -aperture) progress =relu(hyperbolic_dist(child, h_goal) +m_g -hyperbolic_dist(parent, h_goal)) return angle +progress
+
+Innovation III: progress-aware planning. This compo-nent uses the same hyperbolic geometry at inference time, scoring each CEM rollout by terminal goal proximity and intermediate progress.     
+
+> def ProgressAwarePlanning(obs, goal, budget): h0 = lorentz_project(encoder(obs)) hg = lorentz_project(encoder(goal)) for actions in CEM(budget): h_roll = hyperbolic_predict(h0, actions) D_g = hyperbolic_dist(h_roll, hg) ** 2C_T = D_g[-1] C_best = min(D_g) C_mean = mean(D_g) cost = beta_T * C_T + beta_b * C_best + beta_m * C_mean return first_action(argmin(cost))
+
+## Key Notations 
+
+As shown in Tab. 7, this section summarizes the key notations used throughout the paper for the reader’s reference. For the sake of brevity and readability, we do not present a complete variable table. 
+
+Ablation Table Abbreviations 
+
+Table 8 summarizes the compact labels used in the main ablation tables. 
+
+## Theoretical Discussion 
+
+This section supplements the formal discussion of goal-conditioned progress order presented in the main text, and explains how the entailment cone constraints in ProWorld realize a directional progress relation in the hyperbolic latent space. 
+
+Asymmetry of Goal-Conditioned Progress 
+
+Let S denote the state space and G denote the goal space. For a given goal 𝑔 ∈ G , the goal-conditioned progress potential function is defined as 
+
+𝜌 𝑔 : S → R
+
+where a larger 𝜌 𝑔 (𝑠 ) indicates that state 𝑠 represents higher task progress toward achieving goal 𝑔 .Given a goal-conditioned hindsight trajectory segment as-sociated with goal 𝑔 ,
+
+𝜏 = (𝑠 0, 𝑠 1, . . . , 𝑠 𝑇 ; 𝑔 ),
+
+we write 𝑠 𝑖 ≺𝑔 𝑠 𝑗 for two states 𝑠 𝑖 and 𝑠 𝑗 on the same trajectory if there exists 𝜖 > 0 such that 
+
+𝑖 < 𝑗 and 𝜌 𝑔 (𝑠 𝑗 ) ≥ 𝜌 𝑔 (𝑠 𝑖 ) + 𝜖 . 
+
+This relation means that 𝑠 𝑗 has higher goal-conditioned progress than 𝑠 𝑖 .Table 7: Key notation summary for ProWorld. This table retains only the primary symbols related to hyperbolic geometry, progress relations, entailment cone constraints, and planning objectives. 
+
+Symbol Description Symbol Description 
+
+H𝑚 𝑐 𝑚 -dimensional hyperbolic latent space in the Lorentz model with curvature −𝑐 𝑐 Positive curvature parameter of the hyperbolic space, corre-sponding to a negative spatial curvature of −𝑐 
+
+⟨· , ·⟩ L Lorentz inner product 𝑑 H (· , ·) Hyperbolic geodesic distance 
+
+ℎ𝑡 Hyperbolic latent state at time 𝑡 ℎ𝑔 Hyperbolic representation of the goal observation 
+
+𝜌 (ℎ) Normalized Lorentz geodesic radius used as a diagnostic log 𝑐 𝑥 ( 𝑦 ) Lorentz logarithmic map from point 𝑥 to point 𝑦 
+
+bℎ𝑡 +𝑘 Future latent state predicted by the latent dynamics 𝛿 𝑔 𝑝 Normalized parent-to-goal distance used for adaptive aperture 
+
+𝑔 Goal observation or goal state 𝜌 (𝑠, 𝑔 ) Task progress score of state 𝑠 with respect to goal 𝑔 𝑠 𝑖 ≺𝑔 𝑠 𝑗 Goal-conditioned progress relation indicating that 𝑠 𝑗 has higher progress than 𝑠 𝑖 
+
+(ℎ𝑝 , ℎ 𝑐 , ℎ 𝑔 ) Parent, child, and goal latents constructed from hindsight tra-jectories 
+
+Δ Temporal offset used when constructing parent-child state pairs 
+
+𝜃 (𝑡 ) 
+
+> 𝑐,𝑔
+
+Angular deviation between parent-child and parent-goal direc-tions 
+
+𝐴 ( 𝛿 𝑔 𝑝 ) entailment cone aperture determined by parent-to-goal dis-tance 
+
+𝑚 𝑔 goal-progress margin within the entailment cone 
+
+⪯cone directed progress relation induced by entailment cones in the hyperbolic latent space 
+
+Lcone entailment cone constraint loss induced by progress 
+
+Lctr Hyperbolic contrastive loss in the Lorentz model 𝐿 planning horizon at inference time 
+
+𝑑 𝑔 𝐿 hyperbolic distance between the rollout endpoint and the goal 𝐶 best cost of the intermediate state closest to the goal among candi-date trajectories 
+
+𝐶 mean average goal-distance cost over an entire candidate trajectory 𝛽 𝑇 , 𝛽 𝑏 , 𝛽 𝑚 planning-cost weights for terminal, best, and mean trajectory costs 
+
+SR Success Rate, denoting the success rate on test tasks MSE Mean Squared Error, used to evaluate the readability of phys-ical state information from the latent representation 
+
+Table 8: Abbreviations used in the main ablation tables. 
+
+Label Meaning Label Meaning 
+
+w/o corresponding component removed Hyp. Lorentz hyperbolic latent space Pred. Lpred Euc. Euclidean latent-space replacement Ctr. Lctr Rev. reversed progress order Cone. Lcone Rand. random state-pair sampling Reg. Lsig Fixed fixed cone aperture Correct Order temporally correct parent-child order Same Traj. Pair pair sampled from the same trajectory Adaptive Cone adaptive cone aperture Dist. goal-distance progress term Angle / Ang. angular cone term Seg. Cone cone variant additionally using ℎ𝑡 +1
+
+𝐷 𝑔 𝐿 terminal goal-distance cost 𝐶 best / 𝐶 mean best-intermediate / mean goal-distance cost 
+
+Proof of asymmetry. If 𝑠 𝑖 ≺𝑔 𝑠 𝑗 holds, then by definition we have 
+
+𝑖 < 𝑗 
+
+and 
+
+𝜌 𝑔 (𝑠 𝑗 ) ≥ 𝜌 𝑔 (𝑠 𝑖 ) + 𝜖 
+
+If the reverse relation 𝑠 𝑗 ≺𝑔 𝑠 𝑖 also holds, then the following conditions must also hold: 
+
+𝑗 < 𝑖 
+
+and 
+
+𝜌 𝑔 (𝑠 𝑖 ) ≥ 𝜌 𝑔 (𝑠 𝑗 ) + 𝜖 
+
+However, 𝑖 < 𝑗 and 𝑗 < 𝑖 cannot hold simultaneously. Mean-while, adding the two progress inequalities yields 
+
+𝜌 𝑔 (𝑠 𝑗 ) + 𝜌 𝑔 (𝑠 𝑖 ) ≥ 𝜌 𝑔 (𝑠 𝑖 ) + 𝜌 𝑔 (𝑠 𝑗 ) + 2𝜖 
+
+that is 0 ≥ 2𝜖 
+
+This contradicts 𝜖 > 0. Therefore, 𝑠 𝑖 ≺𝑔 𝑠 𝑗 and 𝑠 𝑗 ≺𝑔 𝑠 𝑖 can-not hold simultaneously, and the goal-conditioned progress relation is asymmetric. 
+
+Cone Realization in Hyperbolic Latent Space 
+
+ProWorld realizes the above directional progress relation with a goal-anchored entailment cone. For a parent-child-goal triple (ℎ𝑝 , ℎ 𝑐 , ℎ 𝑔 ) from a goal-conditioned hindsight trajectory segment, where ℎ𝑝 is earlier than ℎ𝑐 , we compute two tangent directions at the parent: 
+
+𝑣 𝑐 = log 𝑐 ℎ𝑝 (ℎ𝑐 ), 𝑣 𝑔 = log 𝑐 ℎ𝑝 (ℎ𝑔 ).
+
+The child is encouraged to move along the parent-to-goal direction through the angular constraint 
+
+𝜃 𝑐,𝑔 ≤ 𝐴 (𝛿 𝑔 𝑝 ),
+
+where 𝜃 𝑐,𝑔 is the angle between 𝑣 𝑐 and 𝑣 𝑔 , and 𝛿 𝑔 𝑝 is the nor-malized parent-to-goal distance used by the adaptive aper-ture. Progress is further constrained by a goal-distance mar-gin: 
+
+𝑑 H (ℎ𝑐 , ℎ 𝑔 ) + 𝑚 𝑔 ≤ 𝑑 H (ℎ𝑝 , ℎ 𝑔 ).
+
+We define 
+
+ℎ𝑝 ⪯𝑔  
+
+> cone
+
+ℎ𝑐 
+
+when both constraints hold. This relation is explicitly goal-conditioned because both the angular direction and the distance margin depend on ℎ𝑔 .The same parent-child pair can therefore receive different supervision under different hindsight goals. Its asymmetry follows from the goal-distance margin: if ℎ𝑝 ⪯𝑔  
+
+> cone
+
+ℎ𝑐 holds, then ℎ𝑐 is at least 𝑚 𝑔 closer to ℎ𝑔 than ℎ𝑝 . The reverse relation 
+
+ℎ𝑐 ⪯𝑔  
+
+> cone
+
+ℎ𝑝 would require ℎ𝑝 to be at least 𝑚 𝑔 closer to the same goal than ℎ𝑐 , which is impossible for 𝑚 𝑔 > 0. Thus, the cone constraint is not an ordinary symmetric distance regularizer; it imposes a directed, goal-dependent progress relation in the hyperbolic latent space. 
+
+## Environment & Datasets 
+
+Details of Compared Methods 
+
+This section briefly introduces the baseline methods used in Tab. 1. Overall, these methods fall into three categories: latent world model-based visual planning methods, goal-conditioned offline reinforcement learning methods, and sim-ple random-action baselines. 
+
+LeWM. LeWM (Maes et al. 2026) is a latent world model method based on a joint-embedding predictive architecture. It learns a visual encoder and action-conditioned latent dy-namics from image-action trajectories, and performs goal-conditioned planning at inference time via latent rollout over candidate action sequences. Specifically, LeWM maps the current observation and goal image into the latent space, and selects the action sequence whose predicted terminal latent state is closest to the goal latent representation. 
+
+C-JEPA. C-JEPA (Nam et al. 2026) is a JEPA-style visual representation learning baseline that learns discriminative latent representations of future states via contrastive or pre-dictive objectives. In our comparison, C-JEPA is used to examine whether generic joint-embedding representations suffice for goal-conditioned visual planning. 
+
+GCIVL. Goal-Conditioned Implicit V-Learning (GCIVL) (Park et al. 2025) is one of the goal-conditioned offline RL baselines provided in OGBench. It learns a value function under the goal-conditioned setting and performs policy learning using state transitions and goal-relabeling signals from offline data. Compared to GCBC, GCIVL can leverage value function estimates to distinguish the long-term value of different actions or states for goal completion, yet its core remains policy learning rather than explicit planning through a visual latent world model. 
+
+GCIQL. Goal-Conditioned Implicit Q-Learning (GCIQL) (Park et al. 2025; Kostrikov, Nair, and Levine 2022) is an offline RL baseline obtained by adapting implicit Q-learning to the goal-conditioned setting in OGBench. It learns a goal-conditioned Q-function, value function, and policy, and mitigates out-of-distribution action estimation through a conservative offline value learning mechanism. 
+
+PLDM. PLDM (Sobal et al. 2025) is a planning-oriented latent dynamics baseline for offline reward-free reinforce-ment learning. It learns a compact latent transition model from offline trajectories and uses the learned dynamics to evaluate candidate action sequences. In our comparison, PLDM serves as a representative latent-dynamics planning method that does not explicitly impose goal-conditioned hy-perbolic progress structure. 
+
+EB-JEPA. EB-JEPA (Terver et al. 2026) is a represen-tation learning and world model framework based on an energy-based joint-embedding predictive architecture. It pre-dicts future representations in representation space, thereby avoiding the high-dimensional generative burden of recon-structing future frames directly in pixel space. In our ex-periments, EB-JEPA serves as the JEPA-type world model baseline, used to compare general representation-predictive world models against the hyperbolic progress modeling in ProWorld. 
+
+TD-MPC2. TD-MPC2 (Hansen, Su, and Wang 2024) is a model-based reinforcement learning method designed for continuous control tasks. It learns a compact latent world model and combines model predictive control to optimize action sequences in latent space. Since TD-MPC2 is primar-ily designed for reward-driven continuous control, whereas the tasks in this paper emphasize image goal-conditioned planning, this baseline is used to examine the adaptability of general latent MPC methods to visual goal planning scenar-ios. 
+
+Sub-JEPA. Sub-JEPA (Zhao et al. 2026) extends JEPA-style world modeling with subspace Gaussian regularization to improve representation stability during end-to-end dynam-ics learning. It preserves the latent prediction paradigm while regularizing feature subspaces against collapse or degener-ate covariance structure. We include Sub-JEPA to compare ProWorld with a stabilization-focused JEPA baseline that does not explicitly encode goal-conditioned progress order. 
+
+GeoWorld-Style. GeoWorld (Zhang et al. 2026) intro-duces hyperbolic world representations on top of V-JEPA 2. Its core idea is to first preserve JEPA-style future prediction through teacher-forcing and rollout representation supervi-sion, and then use Geometric Reinforcement Learning (GRL) to constrain rollout geometry in hyperbolic space, including hyperbolic energy minimization and triangle-inequality reg-ularization. Because the official implementation, pretrained weights, and complete evaluation scripts of the original work were not publicly available at the time of submission, and because its original experimental setup differs from our of-fline visual goal-planning tasks, we do not report official Ge-oWorld results. To provide a nearest-neighbor comparison, we implement a GeoWorld-Style proxy baseline. This base-line preserves three main design ideas from GeoWorld: map-ping JEPA latent states into hyperbolic space, using teacher-forcing/rollout representation loss to maintain one-step and multi-step prediction consistency, and adding GRL-style hy-perbolic geometric regularization. The key difference is that we initialize the visual encoder and latent dynamics from official LeWM pretrained weights, rather than using V-JEPA 2 pretrained weights; we then finetune this baseline under the same training data, image preprocessing, action-conditioned rollout, and CEM planning budget as in our experiments.                                              
+
+> def GeoWorldStyle(obs, act, goal, lambd=0.02): """obs: visual sequence; act: action sequence.""" lewm =load_official_lewm_checkpoint() z=lewm.encoder(obs) z_hat =lewm.predictor(z, act)
+> #teacher-forcing /rollout loss
+> tfr =mse(z_hat[:, :-1], z[:, 1:])
+> #GeoWorld-style hyperbolic GRL
+> h=lorentz_project(z) h_hat =lorentz_project(z_hat) h_goal =lorentz_project(lewm.encoder(goal)) grl =hyperbolic_energy(h_hat, h[:, 1:]) grl += triangle_reg(h, h_hat, h_goal) return tfr +lambd * grl
+
+Random. Random denotes the random action baseline. This method uses no training data, goal information, or learned model, and instead samples actions uniformly at ran-dom from the action space at each timestep. This result serves as a lower-bound reference for task difficulty. 
+
+Datasets 
+
+Training Goal Construction. During training, ProWorld does not require explicit success labels for every offline tra-jectory. For goal-conditioned supervision, we construct hind-sight goal contexts from future states within the same tra-jectory. Given a trajectory segment, a future observation is treated as the visual goal, and temporally ordered state pairs before that future state are used as weak progress-order su-pervision. Thus, the progress-pair construction uses a goal-conditioned hindsight segment in which the later state is reachable within the same recorded trajectory, rather than an externally labeled episode-level success. This distinction is particularly important for Cube-S play data. The Cube-S dataset is not collected toward a single fixed goal; instead, it contains play-style manipulation behaviors. For training, the goal context is obtained from future frames in the same trajectory, including the corresponding cube pose information when available, and progress pairs are sampled according to temporal order relative to that hindsight goal. Evaluation success, by contrast, is determined by the envi-ronment termination signal after writing the dataset goal pose into the environment, as described in the evaluation protocol below. 
+
+PushT. PushT (Zhou et al. 2025) is a continuous 2D planar manipulation task in which the agent must push and rotate a T-shaped object to a target pose through contact interactions. The task exhibits pronounced contact dynamics and long-horizon error accumulation, making it a standard benchmark for evaluating a world model’s ability to capture object in-teractions, motion trends, and multi-step planning. We adopt the same data setting as Zhou et al. (Zhou et al. 2025), com-prising 20,000 expert trajectories with an average length of 196 steps. 
+
+OGBench-Cube-Single-Play (Cube-S). OGBench-Cube-Single-Play (Park et al. 2025) is a robotic manipulation task in OGBench that evaluates an agent’s basic object ma-nipulation capability. The environment is built on a UR5e robotic arm in MuJoCo, requiring the arm to perform pick-and-place operations via end-effector control. We adopt the 
+
+visual-cube-single-play-v0 configuration, where the maximum episode length for evaluation is 200 steps, and the official offline dataset contains 1M transitions across 1,000 episodes with a data episode length of 1,000. The dataset is collected by a non-Markovian scripted policy with temporally correlated noise, constituting play-style data. Since the trajectories are not generated toward a single fixed goal but instead cover a variety of composable local manip-ulation behaviors, this task tests whether a world model can learn local object manipulation dynamics and compositional structure from offline visual trajectories. 
+
+OGBench-Scene-Play (Scene). OGBench-Scene-Play (Park et al. 2025) is a compositional visual manip-ulation task involving multiple object types, including cubes, buttons, drawers, and windows. We adopt the 
+
+visual-scene-play-v0 dataset and evaluate in the corresponding visual-scene-v0 environment. The official offline dataset contains 1M transitions across 1,000 episodes with a data episode length of 1,000 transitions. Unlike purely continuous progress tasks, Scene combines continuous object displacement or articulation with discrete button states, and the final success signal remains a sparse environment termination event. We use a hindsight goal offset of 50 steps and an evaluation budget of 100 interaction steps. This task therefore evaluates whether the learned visual world model can support mixed discrete-continuous, multi-object goal reaching under a longer compositional horizon. 
+
+OGBench-AntMaze-Large-Navigate (AntMaze-L). 
+
+OGBench-AntMaze-Large-Navigate (Park et al. 2025) is a long-horizon continuous control navigation task in OGBench, requiring the agent to control an 8-DoF Ant robot to navigate through a maze and reach a specified goal location. The task combines low-level locomotion control with high-level spatial navigation structure, making it considerably more challenging than simple 2D point navi-gation. We adopt the antmaze-large-navigate-v0 
+
+configuration, where the maximum episode length for evaluation is 1,000 steps, and the official offline dataset contains 1M transitions across 1,000 episodes with a data episode length of 1,000. The Navigate dataset is collected by a noisy expert navigation policy, with trajectories primarily covering locomotion from diverse start positions to diverse goal locations. This task is well suited for evaluating a world model’s capabilities in long-horizon prediction, continuous control dynamics modeling, and cross-region navigation structure learning. Table 9: Sensitivity analysis of temporal offset Δ. Bold numbers indicate the best Success Rate (SR).           
+
+> Δ124810
+> SR (%) 70 78 76 68 62
+
+Table 10: Sensitivity analysis of curvature 𝑐 . Bold numbers indicate the best Success Rate (SR).           
+
+> 𝑐 0.1 0.5 1.0 2.0 Learnable
+> SR (%) 68 74 78 72 76
+
+## Additional Ablation Experiments 
+
+This section further analyzes the effects of key hyperparame-ters and training objective weights on planning performance in ProWorld. All experiments are conducted on Cube-S using the same training data, network architecture, and planning budget as in the main text. In addition to the tabular results, Fig. 9 and Fig. 10 further summarize the main ablation and sensitivity results in polar chart form, to more intuitively il-lustrate the effect of different modules and hyperparameter settings on SR. 
+
+Sensitivity to Temporal Offset Δ
+
+The entailment cone constraint constructs parent-child-goal triples (ℎ𝑡 , ℎ 𝑡 +Δ, ℎ 𝑔 ) from the same goal-conditioned hind-sight trajectory segment, where Δ controls the temporal span of the progress supervision. As shown in Tab. 9, Δ = 2achieves the best SR of 78%; Δ = 4 yields 76%, which is close to the best. In contrast, Δ = 1 drops to 70%, and further increasing to Δ = 8 and Δ = 10 reduces SR to 68% and 62%, respectively. This result indicates that progress supervision requires a moderate temporal interval. When Δ is too small, the se-mantic progress between adjacent states is weak, and parent-child pairs fail to provide clear hierarchical structure signals; when Δ is too large, local reachability between state pairs diminishes, the cone constraints may become overly sparse, and the quality of progress modeling in the latent space de-grades. Therefore, Δ = 2 strikes a favorable balance between local dynamics consistency and goal-conditioned progress supervision. 
+
+Sensitivity to Curvature 𝑐 
+
+Tab. 10 compares the effects of different hyperbolic curvature settings. At 𝑐 = 1.0, the model achieves the highest SR of 78%; learnable curvature achieves 76%, close to the fixed optimal curvature. Smaller curvatures 𝑐 = 0.1 and 𝑐 = 0.5yield 68% and 74%, respectively, while larger curvature 𝑐 =
+
+2.0 yields 72%. These results indicate that the scale of the negatively curved latent space affects the representational organization of ProWorld. When the curvature is too small, the hierar-chical expressiveness of the hyperbolic space weakens, mak-ing it difficult for the model to adequately capture the goal-conditioned progress structure; when the curvature is too large, distances and angular variations may become exces-sively sharp, disrupting the coordination between dynamics prediction and cone constraints. Meanwhile, the learnable curvature performs comparably to 𝑐 = 1.0, suggesting that the fixed curvature used in this work already provides effec-tive geometric inductive bias without relying heavily on an additional curvature learning mechanism. 
+
+Joint Sensitivity to 𝜆 ctr and 𝜆 cone 
+
+𝜆 ctr and 𝜆 cone control the weights of the hyperbolic contrastive loss and the entailment cone loss, respectively. Both jointly influence goal discriminability and progress structure in the latent space, so we conduct a two-dimensional sensitivity analysis over them. As shown in Tab. 12, when both take moderate values, i.e., 𝜆 ctr = 0.03 and 𝜆 cone = 0.02, the model achieves the highest SR of 78%. Overall, weights that are either too small or too large lead to performance degradation. When 𝜆 ctr = 0.00, the SR remains low across all 𝜆 cone values, indicating that removing con-trastive discrimination severely impairs the separability of future states in the latent space. As 𝜆 ctr increases to 0 .01 and 0.03, performance improves markedly, suggesting that mod-erate contrastive regularization helps form more plannable goal-conditioned representations. However, as 𝜆 ctr further increases to 0 .05 or 0 .10, performance degrades again, indi-cating that overly strong contrastive constraints may suppress the dynamics prediction objective. Similarly, with 𝜆 ctr = 0.03 fixed, increasing 𝜆 cone from 0.005 to 0 .02 raises SR from 70% to 78%; but further in-creasing it to 0 .05 and 0 .10 drops SR to 72% and 60%, respectively. This indicates that the entailment cone con-straint effectively introduces progress order information, but an overly strong cone constraint leads to an excessively rigid latent space geometry. Thus, the optimal performance of ProWorld stems from a balance between contrastive dis-criminability and progress entailment structure, rather than simply increasing either weight alone. 
+
+Sensitivity to Planning Horizon 𝐿 
+
+Tab. 11 analyzes the effect of the planning horizon 𝐿 during inference. At 𝐿 = 5, the model achieves the best SR of 78%. A shorter planning horizon of 𝐿 = 3 yields only 66%, in-dicating that when candidate action sequences are too short, the planner cannot sufficiently leverage goal-conditioned progress information. When the planning horizon is extended to 𝐿 = 10, SR remains at 74%, suggesting that ProWorld maintains good multi-step prediction stability under moder-ate horizon extension. However, as 𝐿 increases further to 15 Table 11: Sensitivity analysis of planning horizon 𝐿 . Bold numbers indicate the best Success Rate (SR).           
+
+> 𝐿 3510 15 20
+> SR (%) 66 78 74 68 60
+
+Table 12: Two-dimensional sensitivity analysis of 𝜆 ctr and 𝜆 cone . Each entry reports the Success Rate (SR %). Bold number indicates the best result.                              
+
+> 𝜆 ctr
+> 𝜆 cone
+> 0.00 0.005 0.02 0.05 0.10
+> 0.00 40 42 46 44 38 0.01 52 60 68 64 54 0.03 62 70 78 72 60 0.05 60 66 74 68 56 0.10 50 56 64 60 48
+
+and 20, SR drops to 68% and 60%, respectively. This result indicates that a longer planning horizon does not necessarily improve planning performance. On one hand, an overly short horizon limits the planner’s ability to assess long-range goal progress; on the other hand, an overly long horizon increases the accumulated error of the latent roll-out, causing candidate trajectory scores to be affected by prediction drift. Therefore, 𝐿 = 5 provides a favorable plan-ning length under the current task and model configuration, enabling the model to exploit intermediate progress signals while avoiding the error accumulation introduced by exces-sively long rollouts. 
+
+## Analysis of Progress Structure 
+
+Evaluation Metrics 
+
+SR. Success Rate (SR) measures the final completion rate of a method on goal-conditioned visual planning tasks. For each test episode, we provide the initial observation 𝑜 (𝑛 )
+
+> 0
+
+and the goal observation 𝑔 (𝑛 ) , the model executes actions according to learned latent dynamics or a policy and de-termines within a fixed interaction budget whether the goal has been reached. Let the test set contain 𝑁 episodes, where 
+
+𝜏 (𝑛 ) denotes the execution trajectory of the 𝑛 -th episode, Succ (𝜏 (𝑛 ) , 𝑔 (𝑛 ) ) ∈ { 0, 1} indicates whether the trajectory satisfies the success condition defined by the environment; SR is then defined as SR = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑛 =1
+
+I Succ (𝜏 (𝑛 ) , 𝑔 (𝑛 ) ) = 1 × 100% (1) where I[·] denotes the indicator function. Thus, a higher SR reflects a stronger ability of the model to achieve goals within a limited number of planning steps. 
+
+Success Criterion and Goal Binding. It is important to note that the SR reported in this paper is not computed from final-frame visual similarity, latent distance, or an additional hand-written task threshold. During interactive evaluation, we read the native terminated signal returned by the environment at each step within a fixed evaluation budget, and count an episode as successful if terminated=True 
+
+occurs at any step. In other words, once a trajectory reaches the success condition internally defined by the environment at some point within the budget, the episode is accumulated as a success even if the state subsequently deviates from the goal. Formally, let 𝑒 (𝑛 ) 
+
+> 𝑡
+
+∈ { 0, 1} denote the terminated 
+
+signal returned by the environment at interaction step 𝑡 of the 
+
+𝑛 -th episode. Then Succ (𝜏 (𝑛 ) , 𝑔 (𝑛 ) ) = I
+
+h
+
+∃ 𝑡 ≤ 𝐵 s.t. 𝑒 (𝑛 ) 
+
+> 𝑡
+
+= 1
+
+i
+
+(2) where 𝐵 denotes the evaluation budget. For OGBench tasks, the evaluation script randomly sam-ples a valid start row and uses a future state from the same episode as the hindsight goal. The environment is initialized from the dataset state at the start row, while the goal image and goal state are written into the evaluation world informa-tion used by the planner and model. At every interaction step, success is read from world.terminateds ; an episode is counted as successful if any environment termination signal becomes true within the evaluation budget. For Cube-S, the script restores the initial state using qpos and qvel , and binds the goal by writing the future cube target position and ori-entation from goal privileged block 0 pos and 
+
+goal privileged block 0 quat . We use a goal off-set of 25 steps and an evaluation budget of 50 steps. Suc-cess is determined by the environment’s native termination condition, i.e., whether cube 0 reaches the specified target pose. For AntMaze-L, the script restores the Ant initial qpos 
+
+and qvel , and additionally writes the first two coordinates of the future goal qpos as the internal navigation target 
+
+goal xy . Success is given by the native maze termination signal, namely whether the Ant reaches the target region. For Scene, the script restores the initial qpos , qvel , and 
+
+button states , uses a goal offset of 50 steps and an evaluation budget of 100 steps, and binds the hindsight goal by temporarily restoring the future dataset state to extract the corresponding internal targets for cubes, buttons, draw-ers, and windows. The environment is then restored to the initial state before planning. Success is counted if the envi-Table 13: Training hyperparameters of ProWorld. 
+
+Term Symbol Value 
+
+Hyperbolic prediction 𝜆 pred 1.0 Lorentz contrastive learning 𝜆 ctr 0.03 Entailment cone regularization 𝜆 cone 0.02 SIGReg regularization 𝜆 sig 0.06 Minimum aperture 𝐴 min 0.10 Maximum aperture 𝐴 max 0.95 Angle penalty weight 𝑤 𝜃 1.0 Goal-distance penalty weight 𝑤 𝑔 1.0 Goal-progress margin 𝑚 𝑔 0.03 Temporal offset Δ 2
+
+Table 14: Planning hyperparameters of ProWorld.                                                               
+
+> Parameter PushT Cube-S AntMaze-L Scene
+> Planner CEM CEM CEM CEM Candidate action sequences 300 300 300 300 Planning iterations 30 30 30 30 Elite samples 𝑘 30 30 30 30 Variance scale 1.0 1.0 1.0 1.0 Planning horizon 𝐿 5515 5Receding horizon 5555Action block size 5515Evaluation budget 50 50 100 100 Terminal cost 𝛽 𝑇 1.0 1.0 1.0 1.0 Best intermediate cost 𝛽 𝑏 0.35 0.35 0.35 0.35 Mean rollout cost 𝛽 𝑚 0.15 0.15 0.15 0.15 Progress margin 𝛿 0.0 0.0 0.0 0.0
+
+ronment’s native terminated signal becomes true within the evaluation budget. 
+
+MSE. Mean Squared Error (MSE) measures whether the latent representation retains physical state information that can be decoded linearly or nonlinearly. We first freeze the trained visual encoder and map each observation 𝑜 𝑖 to its latent representation 𝑧 𝑖 = 𝑓 𝜃 (𝑜 𝑖 ); we then train a lightweight probe 𝑞 𝜓 (·) to predict the ground-truth physical quantity 
+
+𝑦 𝑖 in the environment from 𝑧 𝑖 , such as cube position, end-effector position, or other task-relevant states. The training objective of the probe is 
+
+𝜓 ★ = arg min 
+
+> 𝜓
+
+1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑞 𝜓 (𝑧 𝑖 ) − 𝑦 𝑖 22 (3) On the test set, MSE is computed as MSE = 1
+
+𝑁 𝑑 𝑦 𝑁 ∑︁ 
+
+> 𝑖 =1
+
+𝑞 𝜓 ★ (𝑧 𝑖 ) − 𝑦 𝑖 22 (4) where 𝑑 𝑦 denotes the dimensionality of the predicted phys-ical quantity. A lower MSE indicates that the latent rep-resentation encodes task-relevant physical state information more faithfully. It is worth noting that MSE does not directly measure the final planning success rate; rather, it serves as an auxiliary metric for analyzing whether the latent space learned by different methods contains decodable state infor-mation useful for control and planning. 
+
+Additional Progress Correlation on Cube-S 
+
+Fig. 11 extends the progress-geometry correlation analysis to Cube-S, where the visual dynamics involve 3D robot-object interaction and cube pose changes. The overall trend is consistent with the PushT analysis: trajectory progress is positively correlated with goal-direction alignment and neg-atively correlated with both hyperbolic and physical goal distances, while latent radius and radius gain provide addi-tional diagnostics of the learned coarse-to-fine organization. Compared with PushT, the correlations on Cube-S are gen-erally weaker, which is expected because grasping, contact changes, and pose correction introduce noisier local transi-tions. Nevertheless, the same goal-directional organization remains visible, supporting that the learned progress geom-etry is not specific to the planar PushT setting. 
+
+## Implementation Details 
+
+Network Architecture 
+
+The ProWorld network comprises a visual encoder, a Eu-clidean latent projection head, a hyperbolic projection head, an action encoder, and an action-conditioned autoregressive predictor. All pixel inputs are first normalized with ImageNet statistics and resized to 224 × 224 without offline preprocess-ing. The visual encoder uses a ViT-tiny backbone with scale and patch size of 14, without pretrained weights or mask tokens. We take the CLS token from the ViT output as the visual feature and project it into the Euclidean latent space via a two-layer MLP: 
+
+𝑧 𝑡 = 𝑔 𝜓 ( 𝑓 𝜃 (𝑜 𝑡 )) ∈ R192 (5) The Euclidean projection head consists of Linear-BatchNorm-GELU-Linear, with a hidden dimension of 2048 and an output dimension of 192. The action encoder maps environment actions to the same dimensionality as the state latent variables. For datasets with frame-skip, one model timestep corresponds to multiple un-derlying environment steps. If the raw action dimensionality is 𝑑 𝑎 and each model timestep comprises frameskip con-secutive actions, the input dimensionality of the action en-coder is frameskip × 𝑑 𝑎 . The default is frameskip = 5for OGBench Single-Expert and frameskip = 1 for AntMaze. The action encoder first applies a 1D convolu-tion to map the action channels to a smoothed dimension, followed by a two-layer MLP to produce the action embed-ding: 
+
+𝛼 𝑡 = 𝑒 𝜂 (𝑎 𝑡 ) ∈ R192 (6) 60              
+
+> 70
+> R= 20
+> Δ = 10
+> R= 1
+> Δ = 8
+> R= 10
+> Δ = 1
+> Δ = 4
+> R= 5
+> Δ = 2
+> R= 3
+> 40 45 50 55 60 65 70 75 80
+> Success Rate (%)
+
+(a) Sensitivity to temporal offset 
+
+Δ.60                   
+
+> 70
+> L= 20
+> L= 3
+> c= 0.1
+> L= 15
+> c= 2.0
+> c= 0.5
+> L= 10
+> c= Le.
+> c= 1.0
+> L= 5
+> 40 45 50 55 60 65 70 75 80
+> Success Rate (%)
+
+(b) Sensitivity to curvature 𝑐 and planning horizon 𝐿 .0.005 
+
+> 0.01
+> 0.02
+> 0.05
+> 0.08
+
+λcone 
+
+0.005 
+
+0.01 
+
+0.02 
+
+0.05 
+
+0.08 
+
+> λctr
+
+40 
+
+60 
+
+> Success Rate (%)
+
+(c) Two-dimensional joint sensitivity of 
+
+𝜆 ctr and 𝜆 cone .
+
+Figure 9: Visualization of supplementary hyperparameter sensitivity analyses. The polar bar charts show the effect of temporal-offset, curvature, and planning-horizon variations on SR, where both color and radial length represent SR; the heatmap shows the joint effect of 𝜆 ctr and 𝜆 cone , with colors closer to high-value regions indicating higher success rates. The dynamics predictor employs an action-conditioned Transformer. The default history window length is 𝐻 = 3and the prediction horizon is 1. The predictor consists of 6 Transformer blocks with 16 attention heads, each of dimen-sion 64, an MLP hidden dimension of 2048, and dropout of 0 .1. Action conditioning is injected via an AdaLN-style conditional block. The predictor first outputs the future state prediction in the Euclidean latent space and maps it back to the 192-dimensional latent space through a prediction pro-jection head: ˆ𝑧 𝑡 +1 = 𝑝 𝜙 (𝑧 𝑡 −𝐻 +1: 𝑡 , 𝛼 𝑡 −𝐻 +1: 𝑡 ) (7) The hyperbolic projection head maps Euclidean latent variables to the tangent space at the origin of the Lorentz model. The default manifold dimension is 193, comprising 192 spatial components plus one additional Lorentz time co-ordinate. Accordingly, the hyperbolic projection head outputs a 192-dimensional tangent vector: 
+
+𝑢 𝑡 = 𝑞 𝜔 (𝑧 𝑡 ) ∈ R192 (8) The corresponding hyperbolic point ℎ𝑡 ∈ H192  
+
+> 𝑐
+
+in the Lorentz model is then obtained via the exponential map at the origin. The hyperbolic projection head is likewise a two-layer MLP Rev. -Ctr.     
+
+> Rand.
+> -Cone
+> Pred.
+> -Tan.
+> Euc.
+> Fixed
+> -Roll.
+> Pred.+Reg.
+> -Reg.
+> Full
+> 50
+> 60
+> 70
+> 40 50 60 70 80
+> Success Rate (%)
+
+(a) Rev.      
+
+> Terminal
+> Rad. Only
+> w/o cone
+> w/o progress
+> Ang. Only
+> Fixed
+> w/o mean
+> w/o best
+> Full
+> 50
+> 60
+> 70
+> 40 50 60 70 80
+> Success Rate (%)
+
+(b) Figure 10: Polar bar visualization of the ablation studies in the main text. Both color and radial length represent plan-ning SR, with the color scale ranging from red (low) to blue (high). (a) Summarizes the learning objective ablation and the geometry-and-progress-order ablation; (b) summarizes the entailment cone design ablation and the planning objec-tive ablation. All results are obtained on Cube-S; Full denotes the complete ProWorld. with hidden dimension 384 and LayerNorm as the normal-ization layer. 
+
+Optimization Details 
+
+All models are trained with the AdamW optimizer. The default learning rate is 3 × 10 −5 and weight decay is 10 −3. The learning rate schedule follows 
+
+LinearWarmupCosineAnnealingLR , updated per epoch. Training runs for 100 epochs in total using three ran-dom seeds, 42, 1337, and 3407. We use bfloat16 precision by default and apply gradient clipping with a clip value of 1 .0. Evaluation uses the same seed as the corresponding training run. The batch size is 128 across all datasets. The training objective consists of four terms: 
+
+L =𝜆 pred Lpred + 𝜆 sig Lsig 
+
++ 𝜆 ctr Lctr + 𝜆 cone Lcone 
+
+(9) The default weights are 
+
+𝜆 pred = 1.0 𝜆 ctr = 0.03 
+
+𝜆 cone = 0.02 𝜆 sig = 0.06 (10) SIGReg uses 17 knots and 1024 random projection direc-tions. The contrastive learning temperature is 0 .15, and label smoothing defaults to 0. 
+
+Computational Overhead 
+
+Tab. 15 compares the parameter count and FLOPs of ProWorld against the LeWM backbone. The additional hy-perbolic components introduce only a small overhead: total parameters increase by 0 .83%, while the rollout-5 FLOPs in-crease by 0 .03%. This indicates that the progress-aware hy-perbolic geometry adds negligible computational cost com-pared with the visual encoder and action-conditioned dynam-ics predictor. Progress 
+
+> 0.561
+> ***
+> -0.626
+> ***
+> -0.719
+> ***
+> 0.696
+> ***
+> -0.478
+> ***
+> -0.484
+> ***
+> 0.606
+> ***
+> Radius
+> -0.570
+> ***
+> -0.502
+> ***
+> 0.524
+> ***
+> -0.294
+> ***
+> -0.823
+> ***
+> 0.444
+> ***
+> Hyperbolic goal dist.
+> 0.725
+> ***
+> -0.521
+> ***
+> 0.533
+> ***
+> 0.484
+> ***
+> -0.445
+> ***
+> Physical goal dist.
+> -0.610
+> ***
+> 0.534
+> ***
+> 0.434
+> ***
+> -0.541
+> ***
+> Goal direction
+> -0.426
+> ***
+> -0.471
+> ***
+> 0.651
+> ***
+> Orthogonal deviation
+> 0.338
+> ***
+> -0.346
+> ***
+> Cone aperture
+> -0.412
+> ***
+> Progress
+> Radius gain
+> Radius
+> Hyperbolic goal dist.
+> Physical goal dist.
+> Goal direction
+> Orthogonal deviation
+> Cone aperture
+> Radius gain
+> −1.00
+> −0.75
+> −0.50
+> −0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+
+Figure 11: Spearman correlation analysis of progress-related geometric variables on Cube-S. The layout follows the PushT matrix in Fig. 7. Table 15: Computational overhead of ProWorld compared with LeWM. 
+
+Metric LeWM ProWorld Δ Δ %
+
+Total params 18.034M 18.183M 148.800K +0.83 Trainable params 18.034M 18.183M 148.800K +0.83 Buffers 8.194K 8.195K 1.000 +0.01 Encode FLOPs 11.158B 11.159B 1.181M +0.01 Predict FLOPs 69.339M 69.339M 0.000 +0.00 Rollout-5 FLOPs 11.514B 11.518B 3.839M +0.03 
+
+Hyperbolic Geometry Implementation 
+
+ProWorld implements the hyperbolic latent space using the Lorentz model. For curvature 𝑐 > 0, the Lorentz manifold is defined as 
+
+H𝑚 𝑐 =
+
+n
+
+𝑥 ∈ R𝑚 +1 ⟨𝑥, 𝑥 ⟩L = − 1
+
+𝑐 𝑥 0 > 0
+
+o (11) where the Lorentz inner product is 
+
+⟨𝑥, 𝑦 ⟩L =
+
+𝑚 ∑︁ 
+
+𝑖 =1
+
+𝑥 𝑖 𝑦 𝑖 − 𝑥 0 𝑦 0 (12) We use a fixed curvature of 𝑐 = 1.0 by default in the main ex-periments. For the learnable-curvature ablation, the effective curvature is parameterized as 
+
+𝑐 = softplus ( ˜𝑐 ) + 𝜀 num (13) This ensures that the learned curvature remains strictly pos-itive in that ablation. Given a tangent vector 𝑢 , we first clip its norm to a maxi-mum of 4 .0 to prevent numerical overflow in the exponential map. The Lorentz exponential map at the origin is then ap-plied: exp 𝑐  
+
+> 0
+
+(𝑢 ) =
+
+    
+
+> cosh (√𝑐 ∥𝑢 ∥ ) √𝑐
+> sinh (√𝑐 ∥𝑢 ∥ ) √𝑐 ∥𝑢 ∥
+
+𝑢 
+
+
+
+(14) When ∥𝑢 ∥ is very small, we clamp the denominator with 
+
+𝜀 num to avoid division by zero. After the exponential map, a projection step re-projects the result onto the Lorentz mani-fold. Specifically, given the spatial components 𝑥 1: 𝑚 , the time coordinate is recomputed as 
+
+𝑥 0 =√︂ 1
+
+𝑐 + ∥ 𝑥 1: 𝑚 ∥22 (15) Hyperbolic distance is computed via the Lorentz inner product: 
+
+𝑑 H (𝑥, 𝑦 ) = 1
+
+√𝑐 arcosh (− 𝑐 ⟨𝑥, 𝑦 ⟩L ) (16) In the implementation, the input to arcosh is clamped from below to 1 +𝜀 num to ensure numerical validity. For bfloat16 or float16 inputs, distance computation is promoted to float32 by default to improve training stability. The entailment cone loss is computed directly in the Lorentz model. For each parent-child-goal triple 
+
+(ℎ𝑝 , ℎ 𝑐 , ℎ 𝑔 ), we first compute the child and goal tangent directions at the parent: 
+
+𝑣 𝑐 = log 𝑐 ℎ𝑝 (ℎ𝑐 ), 𝑣 𝑔 = log 𝑐 ℎ𝑝 (ℎ𝑔 ) (17) The directional angle 𝜃 𝑐,𝑔 is computed between the nor-malized tangent directions. The cone aperture adapts to the normalized parent-to-goal distance: 
+
+𝛿 𝑔 𝑝 = clip 
+
+ 𝑑 H (ℎ𝑝 , ℎ 𝑔 )
+
+𝜌 max 
+
+, 0, 1
+
+
+
+,𝐴 (𝛿 𝑔 𝑝 ) = 𝐴 min + ( 𝐴 max − 𝐴 min )𝛿 𝑔 𝑝 
+
+(18) The defaults are 𝐴 min = 0.10 and 𝐴 max = 0.95. The final cone penalty includes both an angular violation term and a goal-distance progress term: 
+
+Lcone = E
+
+h
+
+max (0, 𝜃 𝑐,𝑔 − 𝐴 (𝛿 𝑔 𝑝 )) + max (0, 𝑑 H (ℎ𝑐 , ℎ 𝑔 ) + 𝑚 𝑔 
+
+− 𝑑 H (ℎ𝑝 , ℎ 𝑔 )) 
+
+i (19) where the default goal-progress margin is 𝑚 𝑔 = 0.03. This formulation encourages future states to move from the parent toward the hindsight goal and to reduce their hyperbolic goal distance. 
+
+## Hyperparameter Settings 
+
+Tabs. 13 and 14 summarize the default training and planning configurations used in our experiments. 
+
+Loss Weights 
+
+The training objective of ProWorld consists of a hyperbolic prediction loss, a Lorentz contrastive learning loss, an entail-ment cone loss, and the SIGReg regularization. Here, 𝜆 pred controls the prediction loss in hyperbolic space, 
+
+𝜆 ctr controls the Lorentz contrastive learning loss, 𝜆 cone con-trols the entailment cone constraint, and 𝜆 sig controls the SIGReg representation regularization. The temperature for contrastive learning is set to 𝜏 = 0.15, and label smoothing is set to 0 .0. 
+
+Planning Parameters 
+
+The planning stage uses a CEM solver by default. At each planning step, CEM samples 300 candidate action sequences and performs 30 optimization iterations. In each round, CEM retains the top-𝑘 candidates, where 𝑘 = 30. The initial vari-ance scaling factor is var scale = 1.0. The hyperbolic planning cost consists of the terminal dis-tance, the best intermediate distance, and the mean trajectory distance: 
+
+𝐶 = 𝛽 𝑇 𝐶 𝑇 + 𝛽 𝑏 𝐶 best + 𝛽 𝑚 𝐶 mean 
+
+where 𝐶 𝑇 denotes the hyperbolic distance from the predicted terminal state to the goal, 𝐶 best denotes the cost of the in-termediate state along the trajectory closest to the goal, and 
+
+𝐶 mean denotes the mean goal distance over the entire pre-dicted trajectory. 
+
+Entailment Cone Parameters 
+
+The entailment cone constraint models the hierarchical progress relationship between earlier and later states with respect to a hindsight goal. Given a parent state ℎ𝑡 , a child state ℎ𝑡 +Δ, and a goal state ℎ𝑔 from the same goal-conditioned hindsight segment, the default temporal offset is Δ = 2. In the implementation, Δ is clipped to a valid range, i.e., at least 1 and no greater than the current sequence length minus one. A parent point farther from the goal has a wider cone aper-ture, while one closer to the goal has a narrower aperture. The angular term encourages child states to fall within the parent-to-goal cone; the goal-distance term encourages child states to become closer to the hindsight goal than their parents. In this way, the model learns not only state similarity but also a goal-dependent reachability structure that progressively un-folds along the temporal direction in hyperbolic space. 
+
+## Qualitative Results 
+
+Fig. 12 presents open-loop prediction visualizations on PushT. The figure provides a side-by-side comparison be-tween ground-truth context frames and the model’s imagined rollout, serving as a qualitative check of whether the learned latent dynamics can sustain short-term object motion trends without environment feedback. Fig. 13 further extends this qualitative comparison to Cube-S, where the visual dynamics involve 3D robot-object interaction rather than planar object pushing. Compared with the baselines, ProWorld preserves the grasp-and-transport trend more closely over the open-loop horizon, while several alternatives show earlier deviations in cube pose or con-tact configuration. This visual evidence complements the quantitative SR results by illustrating how progress-aware latent dynamics can better maintain task-relevant manipula-tion structure during recursive prediction. 
+
+## Training Curves 
+
+Fig. 14a and Fig. 14b report representative training losses and geometric diagnostic metrics, respectively. The former tracks the total objective and the main prediction, contrastive, and entailment terms used in ProWorld; the latter further tracks hyperbolic geometric quantities including tangent-space norm stabilization, contrastive distance separation, ra-dial organization, saturation, and curvature, confirming that the hyperbolic latent space does not undergo numerical col-lapse during training. 
+
+## Limitations and Future Work 
+
+Several directions remain worthy of further investigation. First, although the cone constraint is anchored by the hind-sight goal, progress pairs are still constructed primarily from temporal ordering within goal-conditioned hindsight trajec-tory segments; for tasks involving backtracking, detours, or complex sub-goal switching, the progress supervision may still be relatively coarse-grained. Second, the hyperbolic la-tent space and progress constraints introduce additional ge-ometric modeling choices, and their stability in more com-plex and open-ended visual interaction settings remains to be further verified. Future work could explore more adaptive progress estimation methods and further integrate progress-aware world models with online exploration, hierarchical planning, or policy learning. LeWM 
+
+GT 
+
+Ours 
+
+Context input 
+
+t = 0 5 10 15 20 25 30 35 
+
+Open Loop Prediction 
+
+GCIQL 
+
+GCIVL 
+
+PLDM 
+
+Random 
+
+C-JEPA 
+
+EB -
+
+JEPA 
+
+TD -
+
+MPC2 
+
+Sub -
+
+JEPA Figure 12: Open-loop prediction visualizations on PushT. The left column shows the context input, i.e., the ground-truth historical frames visible to the model before forecasting; the right column shows the open-loop prediction, i.e., future states obtained by recursively unrolling the model from the same context under a given action sequence. The top and bottom rows correspond to ground-truth observations and model-imagined results, respectively, enabling a comparison of whether ProWorld’s short-term object motion predictions preserve spatial trends consistent with the true trajectory. LeWM 
+
+GT 
+
+Ours 
+
+Context input 
+
+t = 0 5 10 15 20 25 30 35 
+
+Open Loop Prediction 
+
+GCIQL 
+
+GCIVL 
+
+PLDM 
+
+Random 
+
+C-JEPA 
+
+EB -
+
+JEPA 
+
+TD -
+
+MPC2 
+
+Sub -
+
+JEPA Figure 13: Open-loop prediction visualizations on Cube-S. The left block shows the context frames, and the right block shows future frames obtained by recursively unrolling each model under the same action sequence. Rows compare the ground-truth trajectory with ProWorld and baseline methods. In the Cube-S evaluation, success is recorded once the environment termination signal is triggered at any step within the evaluation budget, rather than only at the final rendered frame. Therefore, in some visualized rollouts, the cube may already have reached the target pose and then be released or dropped in later frames as the fixed-budget rollout continues. Such post-success drift reflects the visualization protocol after the success condition has been met and does not invalidate the earlier successful achievement of the goal. 0 80k 160k 
+
+Num Steps 
+
+0
+
+1
+
+2
+
+3
+
+> Loss
+
+Total objective 
+
+0 80k 160k 
+
+Num Steps 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Prediction 
+
+0 80k 
+
+Num Ste 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Tangent pre 
+
+0 80k 160k 
+
+Num Steps 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Open-loop rollout 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Hyperbolic rollout 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Loss
+
+SIGRe 
+
+0 80k 160k 
+
+Num Steps 
+
+0
+
+2
+
+4
+
+6
+
+> Loss
+
+Contrastive 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+> Loss
+
+Entailment cone 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 8
+
+10 7
+
+10 6
+
+10 5
+
+10 4
+
+10 3
+
+10 2
+
+> Loss
+
+Tangent ra 0 80k 160k 
+
+Num Steps 
+
+0
+
+1
+
+2
+
+3
+
+> Loss
+
+Total objective 
+
+0 80k 160k 
+
+Num Steps 
+
+0.00 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Prediction 
+
+0 80k 
+
+Num Ste 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Tangent pre 
+
+0 80k 160k 
+
+Num Steps 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Open-loop rollout 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Hyperbolic rollout 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Loss
+
+SIGReg 
+
+0 80k 160k 
+
+Num Steps 
+
+0
+
+2
+
+4
+
+6
+
+> Loss
+
+Contrastive 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+> Loss
+
+Entailment cone 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 8
+
+10 7
+
+10 6
+
+10 5
+
+10 4
+
+10 3
+
+10 2
+
+> Loss
+
+Tangent ra 0 80k 160k 
+
+Num Steps 
+
+0
+
+0 80k 160k 
+
+Num Steps 
+
+0.00 
+
+0 80k 
+
+Num Ste 
+
+0.0 
+
+0 80k 160k 
+
+Num Steps 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Open-loop rollout 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Hyperbolic rollout 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Loss
+
+SIGRe 
+
+0 80k 160k 
+
+Num Steps 
+
+0
+
+2
+
+4
+
+6
+
+> Loss
+
+Contrastive 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+> Loss
+
+Entailment cone 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 8
+
+10 7
+
+10 6
+
+10 5
+
+10 4
+
+10 3
+
+10 2
+
+> Loss
+
+Tangent ra 0 80k 160k 
+
+Num Steps 
+
+0
+
+0 80k 160k 
+
+Num Steps 
+
+0.00 
+
+0 80k 
+
+Num Ste 
+
+0.0 
+
+0 80k 160k 
+
+Num Steps 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Loss
+
+Open-loop rollout 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+> Loss
+
+Hyperbolic rollout 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Loss
+
+SIGReg 
+
+0 80k 160k 
+
+Num Steps 
+
+0
+
+2
+
+4
+
+6
+
+> Loss
+
+Contrastive 
+
+0 80k 160k 
+
+Num Steps 
+
+0.05 
+
+0.10 
+
+0.15 
+
+0.20 
+
+0.25 
+
+> Loss
+
+Entailment cone 
+
+0 80k 
+
+Num Ste 
+
+0
+
+10 8
+
+10 7
+
+10 6
+
+10 5
+
+10 4
+
+10 3
+
+10 2
+
+> Loss
+
+Tangent ra (a) Representative training losses. 0 80k 160k 
+
+Num Steps 
+
+> 0
+> 10
+> 20
+> 30
+> Norm
+
+Tangent norm stabilization   
+
+> Raw tangent norm
+> Scaled tangent norm
+> Bounded tangent norm
+> target=2
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction
+
+Training schedule   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Value
+
+Contrastive geometry   
+
+> Positive distance
+> Negative distanc
+> 080k 160k
+
+Num Steps 
+
+> 0.2
+> 0.4
+> 0.6
+> Value
+
+Radial hierarchy   
+
+> Parent radius
+> Child radius
+> 080k 160k
+
+Num Steps 
+
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> Fraction
+
+Saturation   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.96
+> 0.98
+> 1.00
+> 1.02
+> 1.04
+> Value
+
+Curvature 0 80k 160k 
+
+Num Steps 
+
+> 0
+> 10
+> 20
+> 30
+> Norm
+
+Tangent norm stabilization   
+
+> Raw tangent norm
+> Scaled tangent norm
+> Bounded tangent norm
+> target=2
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction
+
+Training schedule   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Value
+
+Contrastive geometry   
+
+> Positive distance
+> Negative distance
+> 080k 160k
+
+Num Steps 
+
+> 0.2
+> 0.4
+> 0.6
+> Value
+
+Radial hierarchy   
+
+> Parent radius
+> Child radius
+> 080k 160k
+
+Num Steps 
+
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> Fraction
+
+Saturation   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.96
+> 0.98
+> 1.00
+> 1.02
+> 1.04
+> Value
+
+Curvature 0 80k 160k 
+
+Num Steps 
+
+> 0
+> 10
+> 20
+> 30
+> Norm
+
+Tangent norm stabilization   
+
+> Raw tangent norm
+> Scaled tangent norm
+> Bounded tangent norm
+> target=2
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction
+
+Training schedule   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Value
+
+Contrastive geometry   
+
+> Positive distance
+> Negative distance
+> 080k 160k
+
+Num Steps 
+
+> 0.2
+> 0.4
+> 0.6
+> Value
+
+Radial hierarchy   
+
+> Parent radius
+> Child radius
+> 080k 160k
+
+Num Steps 
+
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> Fraction
+
+Saturation   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.96
+> 0.98
+> 1.00
+> 1.02
+> 1.04
+> Value
+
+Curvature 0 80k 160k 
+
+Num Steps 
+
+> 0
+> 10
+> 20
+> 30
+> Norm
+
+Tangent norm stabilization   
+
+> Raw tangent norm
+> Scaled tangent norm
+> Bounded tangent norm
+> target=2
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction
+
+Training schedule   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Value
+
+Contrastive geometry   
+
+> Positive distance
+> Negative distance
+> 080k 160k
+
+Num Steps 
+
+> 0.2
+> 0.4
+> 0.6
+> Value
+
+Radial hierarchy   
+
+> Parent radius
+> Child radius
+> 080k 160k
+
+Num Steps 
+
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> Fraction
+
+Saturation   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.96
+> 0.98
+> 1.00
+> 1.02
+> 1.04
+> Value
+
+Curvature 0 80k 160k 
+
+Num Steps 
+
+> 0
+> 10
+> 20
+> 30
+> Norm
+
+Tangent norm stabilization   
+
+> Raw tangent norm
+> Scaled tangent norm
+> Bounded tangent norm
+> target=2
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction
+
+Training schedule   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Value
+
+Contrastive geometry   
+
+> Positive distance
+> Negative distance
+> 080k 160k
+
+Num Steps 
+
+> 0.2
+> 0.4
+> 0.6
+> Value
+
+Radial hierarchy   
+
+> Parent radius
+> Child radius
+> 080k 160k
+
+Num Steps 
+
+> 0.04
+> 0.02
+> 0.00
+> 0.02
+> 0.04
+> Fraction
+
+Saturation   
+
+> 080k 160k
+
+Num Steps 
+
+> 0.96
+> 0.98
+> 1.00
+> 1.02
+> 1.04
+> Value
+
+Curvature 
+
+(b) Hyperbolic geometry diagnostics. 
+
+Figure 14: Training behavior of ProWorld. (a) shows the total objective, hyperbolic prediction, Lorentz contrastive learning, and entailment cone losses. (b) shows tangent-space norm stabilization, hyperbolic positive-negative distance separation, parent-child radial organization, tangent vector saturation ratio, and the curvature parameter. These curves indicate that the prediction-related and progress-structure terms stabilize during training while the hyperbolic latent geometry remains numerically well behaved.

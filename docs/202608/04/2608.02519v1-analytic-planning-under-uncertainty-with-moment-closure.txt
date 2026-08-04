@@ -1,0 +1,885 @@
+Title: Analytic Planning under Uncertainty with Moment Closure
+
+URL Source: https://arxiv.org/pdf/2608.02519v1
+
+Published Time: Tue, 04 Aug 2026 02:43:16 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Analytic Planning under Uncertainty with Moment Closure 
+
+Shishir Sharma 1,2 Doina Precup 1,2 1McGill University, Montreal, Canada 
+
+> 2
+
+Mila – Quebec Artificial Intelligence Institute, Montreal, Canada 
+
+## Abstract 
+
+Effective model-based reinforcement learning in stochastic environments requires planning that accounts for predictive uncertainty. Propagating full state distributions analytically offers a prin-cipled way to do this, but has traditionally re-quired restrictive policy or reward structures to remain tractable. Consequently, modern deep re-inforcement learning has largely retreated to ei-ther stochastic sampling, which introduces signif-icant target variance, or deterministic point esti-mates that ignore predictive covariance entirely. We investigate whether distribution-aware plan-ning is possible without these constraints. Using a quadratic action-value parameterization, we first reduce the Bellman backup to an expectation over the state-value function alone; the key idea is then a compatibility principle between the predictive transition distribution and the value function class, under which this expectation is analytic in the dis-tribution’s moments. We instantiate this principle with a Gaussian transition model paired with a radial-basis value function, yielding a closed-form backup that propagates both predictive mean and covariance. Empirically, our approach reduces tar-get variance and yields well-calibrated predictive uncertainty under stochastic observations in con-tinuous control, providing a principled framework for planning with learned distribution models. 
+
+## 1 INTRODUCTION 
+
+Recent advances in model-based reinforcement learning (MBRL) increasingly revolve around world models that enable imagination-based value learning and planning in either state space or learned latent spaces [Gu et al., 2016, Chua et al., 2018, Janner et al., 2019, Hafner et al., 2019, 2020, Hansen et al., 2022, Hafner et al., 2025]. A common pattern in these systems is that Bellman targets (or policy updates) are computed from sampled imagined rollouts or trajectory optimization under the learned dynamics, which implicitly propagates predictive uncertainty through Monte Carlo variation. While this approach scales to expressive models, it makes value estimation inherently stochastic and often sensitive to sampling budgets and target variance. Non-sampling approaches avoid this variance but have their own limitations. Methods that collapse a stochastic model to its mean, or learn a deterministic model directly, discard predictive covariance and can be systematically biased when value functions are nonlinear. On the other hand, methods that propagate the full predictive distribution analytically can often require strong structural constraints, for instance on the policy or reward, to remain tractable. Our focus is distinct from both mean-substitution and rollout-style uncertainty propagation. Rather than propa-gating distributions over trajectories, we integrate stochastic one-step transitions directly inside the Bellman backup used for value-based control. The question we address is whether the Bellman expectation itself can be computed analytically under learned stochastic dynamics. We show that, under a quadratic action-value parameteriza-tion, closed-form Bellman expectations are possible when the transition model and value representation are moment-compatible. We instantiate this principle with a Gaussian dynamics model that predicts mean and covariance, paired with a value function whose expectation under a Gaussian distribution is analytic, resulting in a closed-form expression for the Bellman target. This removes Monte Carlo sampling from target construction while preserving propagation of predictive variance. Concretely, we learn a heteroscedastic Gaussian transition model via maximum likelihood to capture aleatoric uncer-tainty and use an ensemble, combined via moment matching, to represent epistemic uncertainty. Greedy action selection is made tractable separately, via a quadratic action-value pa-arXiv:2608.02519v1 [cs.LG] 3 Aug 2026 −5 0 5            
+
+> s0
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> Density / Value
+> (A) Predictive distribution + Value
+> Predictive p(s0)
+> Value V(s0)
+> p(s0)V(s0)
+> K=4 K=16 K=32
+> Samples K
+> 0.0
+> 0.1
+> 0.2
+> Estimate
+> (B) MC variability of E[V(s0)]
+> Analytic (0.057)
+> 2225
+> Samples K(log scale)
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> P(wrong action)
+> Analytic chooses A
+> E[A] = 0 :057 ,E[B] = 0 :025
+> (C) Wrong greedy action vs K
+
+Figure 1: Analytic versus Monte Carlo estimation of the Bellman expectation E[V (s′)] , on a one-dimensional toy example with a Gaussian predictive distribution p(s′) and a radial-basis value function V (s′). (A) The expectation is the integral of the density-weighted value p(s′) V (s′) (shaded); Here equal to E[V (s′)] = 0 .057 . (B) A Monte Carlo estimate from K samples is unbiased but is high-variance, especially when V is peaked. (C) For a choice between two actions whose predictive means differ ( E[A] = 0 .057 , E[B] = 0 .025 , so A is better), sampling noise leads to the wrong action being chosen with higher probability at smaller K, whereas the analytic expectation always selects correctly. rameterization that removes the inner maximization from the Bellman backup; uncertainty then enters exclusively through the analytic Bellman expectation. The value function is parameterized as a mixture of Gaussian radial basis func-tions, whose expectation under the predictive Gaussian is available in closed form. Empirically, analytic greedy plan-ning remains stable as observation noise increases, whereas sampling-based and mean-only baselines degrade. Ablations show that our moment-matched predictive distribution sta-bly captures the combined uncertainty, and that this robust-ness stems from planning efficiently under that uncertainty rather than from increased Monte Carlo budgets. 
+
+## 2 RELATED WORK 
+
+MBRL under uncertainty has been approached from mul-tiple directions, differing primarily in how stochastic dy-namics influence value estimation and planning. Most con-temporary deep MBRL systems estimate value targets by sampling imagined trajectories from learned dynamics mod-els, using particle rollouts or model predictive control-style shooting methods [Chua et al., 2018, Janner et al., 2019, Hafner et al., 2019, 2020]. These approaches scale well and accommodate expressive neural models, but Monte Carlo sampling introduces variance directly into Bellman targets. Stability often depends on rollout depth, particle count, or model bias. At the other end, expectation-style planning constructs tar-gets through a deterministic dynamics representation — ei-ther by collapsing a stochastic model to its predicted mean, or by learning a deterministic model directly [Nagabandi et al., 2017, Wan et al., 2019]. Such approaches simplify target computation and preserve determinism, but discard predictive covariance. Probabilistic dynamics models and deep ensembles are widely used to represent aleatoric and epistemic uncertainty [Lakshminarayanan et al., 2017]. In online MBRL, ensem-bles mitigate model bias and improve exploration [Chua et al., 2018]. However, even when models are probabilistic, value targets are typically constructed either by sampling ensemble members or by collapsing ensemble predictions to point estimates. Analytic uncertainty propagation offers a third perspective. In control and Gaussian process-based RL, moment match-ing has been used to propagate state distributions through nonlinear dynamics for policy search [Deisenroth and Ras-mussen, 2011]. More recently, deterministic approxima-tions have been proposed to reduce Monte Carlo noise in deep value updates by propagating Gaussian approxima-tions through critics [Akgül et al., 2024]. These approaches typically approximate intermediate activations or rely on multi-step rollout evaluation. Our work instead targets the Bellman backup itself in value-based deep MBRL, decoupling the tractability of greedy action selection from the tractability of the predictive ex-pectation. Quadratic Q-function parameterizations enable closed-form greedy action selection in continuous control [Gu et al., 2016]; we leverage this structure so that the max-imization disappears from the backup entirely, leaving an expectation over the state-value function alone. This decou-pling requires tractability only of the value representation, allowing analytic, uncertainty-aware planning without re-stricting the policy class or reward structure. 3 ANALYTIC GREEDY PLANNING VIA MOMENT CLOSURE 
+
+3.1 MOTIVATION 
+
+To illustrate the impact of sampling noise in Bellman back-ups, we construct a one-dimensional toy example. Let the predictive distribution p(s′) be Gaussian and the value func-tion V (s′) be a single Gaussian radial basis function. The expectation is then the integral of their pointwise product 
+
+p(s′) V (s′), shown shaded in Figure 1(A). When both p
+
+and V are Gaussian-shaped, this integral admits a simple closed form, so the exact expectation is available without any sampling. A sampling-based planner instead draws K next states 
+
+s′
+
+> 1
+
+, . . . , s ′ 
+
+> K
+
+∼ p(s′) and averages the value at those points, 
+
+> 1
+> K
+
+P 
+
+> i
+
+V (s′
+
+> i
+
+). This estimator is unbiased, but its variance can be severe, especially when V is sharply peaked relative to p, i.e. when only a narrow band of next states is highly valued (imagine the edge of a cliff, where a small region of states is safe and the rest are not). In this regime most sampled states fall where V ≈ 0 and contribute nothing, while the estimate is carried by the rare samples that land near the peak. Figure 1(B) shows the consequence: at small 
+
+K the Monte Carlo estimate scatters widely around the true expectation (dashed line), tightening only as K grows. This variance can easily corrupt control decisions. Greedy action selection does not require the expected value itself, only the ranking of actions by expected value, and sam-pling noise can flip that ranking. To show this, we consider two actions whose predictive distributions differ only in their means, so that one action is genuinely better (higher true expected value) than the other. A Monte Carlo planner selects whichever action has the higher sampled average; Figure 1(C) reports how often this disagrees with the correct choice. At small K the wrong action is selected a substantial fraction of the time, and the error rate falls toward zero only as K increases. The analytic expectation, computed exactly, never makes this error and removes this source of instability entirely. 
+
+3.2 PRELIMINARIES 
+
+We consider the standard reinforcement learning setting formalized as a Markov decision process (MDP) [Sutton and Barto, 2018], defined by the tuple 
+
+(S, A, p, r, γ ),
+
+where S ⊂ Rds is a continuous state space, A ⊂ Rda is a continuous action space, p(s′|s, a ) is the transition function, 
+
+r(s, a ) is a bounded reward function, and γ ∈ [0 , 1) is a discount factor. For a policy π, the action-value function is 
+
+Qπ (s, a ) = Eπ
+
+" ∞X
+
+> k=0
+
+γkr(St+k, A t+k) St = s, A t = a
+
+#
+
+The optimal action-value function satisfies the Bellman op-timality equation 
+
+Q∗(s, a ) = Es′∼p(·| s,a )
+
+
+
+r(s, a ) + γ max  
+
+> a′∈A
+
+Q∗(s′, a ′)
+
+
+
+(1) 
+
+Learned stochastic dynamics In MBRL, the true tran-sition density p(s′|s, a ) is replaced by a learned model 
+
+ˆpθ (s′|s, a ). When ˆpθ is stochastic, the Bellman target in (1) requires computing an expectation over next states under the learned predictive distribution. 
+
+3.3 DECOUPLING GREEDY ACTION SELECTION FROM EXPECTATION Representation challenge A sampling-free Bellman backup must compute 
+
+Es′∼ ˆpθ (·| s,a )
+
+
+
+max  
+
+> a′∈A
+
+Q(s′, a ′)
+
+
+
+The difficulty arises because the Bellman expectation in-volves the greedy value max a′ Q(s′, a ′) evaluated at each possible next state s′. Even if Q(s′, a ′) is smooth, the maxi-mization over actions produces a highly nonlinear function of s′. As a result, even under Gaussian predictive dynamics, the Bellman expectation is generally intractable for expres-sive deep Q-functions. One classical route to tractability is to impose strong struc-tural assumptions. In linear–quadratic settings (LQR/LQG), the Q-function is quadratic jointly in the state and action, yielding closed-form greedy actions and analytic expecta-tions under Gaussian disturbances [Anderson and Moore, 2007]. Similarly, trajectory-optimization methods such as it-erative LQG or differential dynamic programming maintain local quadratic approximations to the cost-to-go to obtain analytic feedback updates [Todorov and Li, 2005, Tassa et al., 2012]. However, enforcing this joint quadratic struc-ture in state and action directly on a deep Q-function would significantly restrict representational capacity. 
+
+Key observation: decoupling maximization from expec-tation The intractability of the Bellman expectation stems from integrating the greedy value max a′ Q(s′, a ′) under a stochastic transition. If the maximization can be removed from inside the expectation, the backup reduces to evaluat-ing 
+
+Es′∼ ˆpθ (·| s,a )[V (s′)] ,
+
+which is substantially simpler. We achieve this decoupling using a quadratic action-value parameterization (NAF-style) [Gu et al., 2016]. Specifically, we decompose 
+
+Q(s, a ) = V (s) − 12 (a − ˜μ(s)) ⊤P (s)( a − ˜μ(s)) , (2) where P (s) ≻ 0. Crucially, unlike the classical quadratic-in-state-and-action routes above, none of V (s), ˜μ(s), or P (s)
+
+are restrained to be quadratic: only the action-slice at each fixed s is quadratic, so Q retains its full flexibility in how it varies with s. In the unconstrained case A = Rda , greedy action selection is available in closed form, 
+
+arg max  
+
+> a
+
+Q(s, a ) = ˜ μ(s), max  
+
+> a
+
+Q(s, a ) = V (s).
+
+Substituting this structure into the Bellman equation re-moves the inner maximization entirely, so that the backup value depends only on the state-value term: 
+
+y(s, a ) = r(s, a ) + γEs′∼p(·| s,a )[V (s′)] 
+
+This decomposition has a consequence central to our ap-proach. The value part V (s) and the policy part ˜μ(s) play separate roles: uncertainty enters the backup only through the expectation of V (s′), so it is the value representation alone that must be made compatible with the predictive distribution, while the greedy policy ˜μ(s) carries no such compatibility requirement. In analytic planning with distri-bution models, the two are typically tied together, with the policy class restricted so that the propagated state distribu-tion stays tractable. Here the tractability requirement falls entirely on the value representation, freeing the policy from any such constraint: we obtain analytic uncertainty propa-gation and an unrestricted, network-parameterized policy at the same time. 
+
+Bounded actions In practical continuous-control settings, actions are typically bounded (e.g., A = [ −1, 1] da ), and the unconstrained maximizer ˜μ(s) need not lie in A. Fol-lowing the bounded NAF (BNAF) construction of Plaksin and Martyanov [2022], we define the greedy action as the projection μ(s) = Π A(˜ μ(s)) and shift the quadratic by a state-dependent constant, 
+
+Q(s, a ) = V (s) − 12 (a − ˜μ(s)) ⊤P (s)( a − ˜μ(s)) + 12 (μ(s) − ˜μ(s)) ⊤P (s)( μ(s) − ˜μ(s)) 
+
+(3) This preserves quadratic structure while ensuring 
+
+arg max  
+
+> a∈A
+
+Q(s, a ) = μ(s), max  
+
+> a∈A
+
+Q(s, a ) = V (s)
+
+Consequently, even under bounded actions, the Bellman backup reduces to computing Es′∼p(·| s,a )[V (s′)] such that uncertainty influences planning exclusively through the ex-pectation of the state-value function. For the class of RL problems arising from time-discretized optimal control with control-affine dynamics and control-quadratic costs, Plaksin and Martyanov [2022] show that this bounded family is expressive enough to solve the Bell-man optimality equation to arbitrary accuracy as the dis-cretization is refined, and that any such approximate solu-tion yields a greedy policy with correspondingly bounded suboptimality. They further show that the original vertex-constrained NAF family does not admit this guarantee, which motivates our use of the bounded construction. 
+
+3.4 STOCHASTIC DYNAMICS MODEL 
+
+We learn a stochastic dynamics model as a conditional Gaus-sian, 
+
+pθ (s′ | s, a ) = N s′; μθ (s, a ), Σθ (s, a ),
+
+where μθ : S × A → Rds predicts the conditional mean and 
+
+Σθ : S × A → Rds×ds predicts the conditional covariance. The covariance Σθ (s, a ) captures aleatoric uncertainty, cor-responding to irreducible stochasticity in the environment. 
+
+Ensemble-based epistemic uncertainty To capture epis-temic uncertainty arising from limited data, instead of a single model, we train an ensemble of K independently initialized copies {(μθk , Σθk )}Kk=1 . The ensemble induces a uniformly weighted mixture of Gaussian transition models, 
+
+p(s′ | s, a ) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+N s′; μθk (s, a ), Σθk (s, a )
+
+Rather than sampling ensemble members during planning, we approximate this mixture by a single Gaussian whose mean and covariance match the first two moments of the mixture, following Lakshminarayanan et al. [2017]. Using the law of total expectation and total variance, the moment-matched mean is 
+
+¯μ(s, a ) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+μθk (s, a ),
+
+and the predictive covariance decomposes as 
+
+¯Σ( s, a ) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+Σθk (s, a )+ 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+∆μk(s, a ) ∆ μk(s, a )⊤,
+
+where ∆μk(s, a ) = μθk (s, a ) − ¯μ(s, a ) (4) The first term in ¯Σ( s, a ) is the ensemble-averaged aleatoric covariance from each member. The second term captures epistemic uncertainty, reflecting divergence across ensemble members [Kendall and Gal, 2017]. Because members are trained on independent bootstrap resamples, this divergence is a genuine disagreement signal, inflating the predictive covariance in regions where ensemble members disagree. We therefore plan under the approximation 
+
+p(s′ | s, a ) ≈ N  s′; ¯ μ(s, a ), ¯Σ( s, a ),
+
+without sampling ensemble members. Under this model, the Bellman target becomes 
+
+y(s, a ) = r(s, a ) + γEs′∼N (¯ μ(s,a ), ¯Σ( s,a )) [V (s′)] (5) The remaining challenge is therefore to evaluate E[V (s′)] 
+
+in closed form. 
+
+3.5 MOMENT-COMPATIBLE VALUE REPRESENTATION 
+
+The tractability of the analytic backup rests on a compatibil-ity condition between the predictive transition distribution and the value representation. Let p(s′|s, a ) be the predictive distribution with parameters θp. We say the value class is 
+
+moment-compatible with p if the expectation Es′∼p[V (s′)] 
+
+admits a closed-form expression in θp. Whenever this holds, the state-value expectation in the Bellman backup can be evaluated analytically, with no sampling. Moment compatibility is a design principle rather than a prescription of any single functional form. Several pairings of predictive distribution and value class could satisfy it, such as polynomial value functions with elliptical distribu-tions (e.g. Gaussian, Laplace, Student-t) or Random Fourier Features with a Gaussian predictive distribution. For con-creteness and simplicity, we parameterize the state-value function as a mixture of Gaussian radial basis functions, 
+
+V (s) = 
+
+> M
+
+X
+
+> i=1
+
+wi exp 
+
+
+
+− 12 (s − ci)⊤Λi(s − ci)
+
+
+
+, (6) where Λi ≻ 0. The centers ci and precision matrices Λi
+
+are fixed throughout training (see Appendix B.4-B.5 for initialization details); only the weights {wi} are learned, updated via temporal-difference learning as part of the critic optimization (Algorithm 1, line 12). Under a Gaussian next-state distribution s′ ∼ N (μ, Σ) ,the expectation of each basis function can be computed exactly. Writing ∥x − a∥2 
+
+> B
+
+:= ( x − a)⊤B (x − a) and 
+
+Ai := Λ i(I + ΣΛ i)−1,
+
+E[V (s′)] = 
+
+> M
+
+X
+
+> i=1
+
+wi |I+ΣΛ i|−1/2 exp  − 12 ∥μ−ci∥2
+
+> Ai
+
+ (7) The full derivation is given in Appendix B.2. 
+
+Algorithm 1 Mo ment-Compatible Analytic Planning  
+
+> 1:
+
+Initialize twin critics ϕ1, ϕ 2 (each with Vϕ, μ ϕ) and target parameters ϕ− 
+
+> 1
+
+, ϕ − 
+
+> 2
+
+, ensemble dynamics models 
+
+{pθk }Kk=1 , replay buffer D, update counter n ← 0 
+
+> 2:
+
+for each environment step do  
+
+> 3:
+
+With probability p, a ∼ Uniform( A); otherwise 
+
+a = Π A(μϕ1 (s) + ϵ), ϵ ∼ N (0 , σ 2I) ▷ exploration  
+
+> 4:
+
+Execute a, observe (r, s ′, d ), and store 
+
+(s, a, r, s ′, d ) in D 
+
+> 5:
+
+for each gradient step do  
+
+> 6:
+
+Sample minibatch B ⊂ D  
+
+> 7:
+
+for k = 1 to K do  
+
+> 8:
+
+Update dynamics parameters θk via NLL on bootstrap resample of B 
+
+> 9:
+
+end for  
+
+> 10:
+
+Compute moment-matched predictive Gaussian 
+
+(¯ μ, ¯Σ) from {(μθk , Σθk )}Kk=1 using Eq. (4)  
+
+> 11:
+
+Compute target 
+
+y ← r + γ(1 − d) min i=1 ,2 Es′∼N (¯ μ, ¯Σ) [Vϕ−
+
+> i
+
+(s′)]  
+
+> 12:
+
+Update critics ϕ1, ϕ 2 by minimizing 
+
+(Qϕi (s, a ) − y)2 on B 
+
+> 13:
+
+n ← n + 1 ; every Ntarget updates, ϕ− 
+
+> i
+
+← ϕi 
+
+> 14:
+
+end for  
+
+> 15:
+
+end for 
+
+## 4 LEARNING PROCEDURE 
+
+We introduce Mo ment-Compatible Analytic Planning (MoCA) and detail the overall training procedure (Algo-rithm 1). We integrate the analytic Bellman backup into a standard off-policy learning loop with a learned stochastic dynamics ensemble. The agent alternates between collect-ing transitions, updating the dynamics model, and updating value critics using analytic targets. 
+
+Exploration Actions are selected from the greedy pol-icy implied by the quadratic critic, with injected exploration noise. Concretely, we perturb the greedy action with additive Gaussian noise and clip to the feasible action set. In addition, with a fixed probability we instead take a uniformly random action (also clipped). This mirrors the exploration mecha-nism used in Spinning Up’s TD3 implementation [Achiam, 2018], combining local exploration around the greedy action with occasional global exploration. 
+
+Dynamics model Given a replay buffer D =
+
+{(st, a t, s t+1 , r t, d t)}, we train each member of aGaussian dynamics ensemble 
+
+s′ ∼ N (μθk (s, a ), Σθk (s, a )) 
+
+by minimizing the negative log-likelihood. Models are trained independently on bootstrap resamples of the sampled minibatch B. At target-construction time, ensemble predic-tions are aggregated via moment matching according to (4) ,yielding a single predictive Gaussian N (¯ μ(s, a ), ¯Σ( s, a )) .
+
+Twin value critics and analytic targets To mitigate over-estimation bias, we adopt clipped double estimation (as in TD3), adapted to our setting where greedy control re-duces the backup to a state-value term. We maintain two critics, each inducing a state-value function Vϕ1 and Vϕ2
+
+(with corresponding target parameters ϕ− 
+
+> 1
+
+, ϕ − 
+
+> 2
+
+). For a transi-tion (st, a t, r t, d t), we compute two analytic expected next-values under the moment-matched predictive Gaussian: 
+
+vi = Es′∼N (¯ μ(st,a t), ¯Σ( st,a t)) 
+
+h
+
+Vϕ−
+
+> i
+
+(s′)
+
+i
+
+, i ∈ { 1, 2},
+
+where the expectation is evaluated in closed form via V ’s moment-compatible representation (Section 3.5). The Bell-man target then uses clipped double estimation: 
+
+yt = rt + γ(1 − dt) min( v1, v 2)
+
+Each critic is updated by minimizing a squared-error regres-sion to this shared target. Target parameters are refreshed periodically by copying the online critic parameters. 
+
+Action bounds and model evaluation A related and well-known failure mode in model-based RL is model exploita-tion (or planner overfitting ), where planning discovers ac-tions that exploit inaccuracies of the learned dynamics in poorly supported regions of the state–action space, leading to overly optimistic value estimates. In our setting, this risk is particularly transparent because analytic expectation re-moves Monte Carlo variability from target construction: any optimism induced by off-support model queries is no longer masked by sampling noise and can appear as systematic bias. For this reason, we restrict model evaluation to observed 
+
+(s, a ) pairs when constructing Bellman targets and avoid Dyna-style synthetic rollouts; greedy actions are projected onto the feasible action set via the BNAF construction, and uncertainty enters only through the closed-form expectation of V (s′).If one were to extend the method to Dyna-style synthetic experience generation, the BNAF correction term in (3) would need to be incorporated inside the expectation. Ana-lytic treatment under bounded actions would likely require truncated Gaussian moments, which we leave for future work. 
+
+## 5 EMPIRICAL STUDY 
+
+5.1 IMPLEMENTATION DETAILS 
+
+Our model-free baseline follows the continuous Normalized Advantage Function (NAF) formulation of Gu et al. [2016] and its bounded-action analysis in Plaksin and Martyanov [2022]. We adopt the faithful bounded variant (BNAF), in which the quadratic vertex ˜μ(s) ∈ RA is learned without squashing and only clipped to the environment action limits at evaluation time. The Q-function is parameterized so that 
+
+Q(s, π (s)) = V (s) for the clipped greedy action π(s) = clip(˜ μ(s)) , eliminating the saturation pathologies that arise from naïve tanh-constrained quadratic parameterizations. The critic uses a shared MLP trunk with two heads: (i) an unconstrained vertex head ˜μ(s) and (ii) a Cholesky head L(s) defining a positive-definite curvature matrix 
+
+P (s) = L(s)L(s)⊤. The value function V (s) is parame-terized linearly in fixed radial basis features. To ensure strict positive definiteness and prevent curvature collapse during training, we enforce a minimum-curvature constraint on 
+
+P (s) via the Cholesky parameterization. 1
+
+Training uses twin critics with clipped double tar-gets, i.e., Bellman targets are constructed using 
+
+min {V − 
+
+> 1
+
+(s′), V − 
+
+> 2
+
+(s′)} from periodically updated tar-get networks. Optimization is performed with Adam on minibatches sampled from a replay buffer. 
+
+5.2 NOISE MODELS 
+
+Our objective is to evaluate whether explicitly modeling predictive uncertainty improves planning performance under stochastic observations. To isolate the effect of uncertainty propagation in value estimation, we introduce controlled observation noise processes while keeping the underlying system dynamics unchanged. A key consideration is avoiding transition-model misspecifi-cation. Since our learned dynamics model assumes Gaussian structure, we restrict injected stochasticity to Gaussian ob-servation noise. This ensures that performance differences reflect how uncertainty is represented and propagated in planning, rather than mismatches in the transition distribu-tion. We consider two observation-noise regimes. 
+
+Homoscedastic Gaussian Observation Noise We first inject independent Gaussian noise directly into the observa-tions: 
+
+˜st = st + ϵt, ϵt ∼ N (0 , σ 2I) (8) The underlying dynamics remain deterministic; only the agent’s perception is corrupted. The variance is constant across the state space, providing a controlled and analyt-ically simple stochastic regime. By varying σ, we obtain degradation curves that quantify robustness as observation uncertainty increases. This homoscedastic setting serves as our primary evaluation                                          
+
+> 1We also apply a curvature keep-alive penalty that discour-ages near-flat quadratic advantages by adding λE[ReLU( pmin −∥L(s)∥2
+> F)2]to the TD loss, where ∥L∥2
+> F=tr( P). See Ap-pendix C. 0250 500 750 1000 1250 1500 1750 2000
+> Episode
+> 200
+> 400
+> 600
+> 800
+> 1000
+> Return
+> Cartpole — Homoscedastic (σ=0.025)
+> 0250 500 750 1000 1250 1500 1750 2000
+> Episode
+> 200
+> 400
+> 600
+> 800
+> Return
+> Cartpole — Homoscedastic (σ=0.05)
+> 0250 500 750 1000 1250 1500 1750 2000
+> Episode
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> Return
+> Cartpole —Heteroscedastic ( σmin = 0.0, σmax = 0.05)
+> SAC BNAF MoCA-CE MoCA (ours)
+
+Figure 2: Learning curves on Cartpole under Gaussian observation noise. Top row: homoscedastic noise with standard deviation σ ∈ 0.025 , 0.05 . Bottom: heteroscedastic noise with σmin = 0 .0, σmax = 0 .05 . Curves show mean return over 10 seeds; shaded regions denote ±1 standard deviation. regime, as it cleanly isolates the effect of uncertainty-aware planning under well-specified Gaussian noise. 
+
+State-Norm–Scaled (Heteroscedastic) Observation Noise 
+
+Many practical systems exhibit observation uncertainty that increases with state magnitude. To reflect this structure, we consider state-dependent Gaussian observation noise of the form 
+
+˜st = st + ϵt, ϵt ∼ N  0, σ (st)2I , (9) where the standard deviation scales with a normalized state norm: 
+
+σ(st) = σmin + ( σmax − σmin ) clip 
+
+ 
+
+> st
+> smax 2
+
+mmax 
+
+, 0, 1
+
+
+
+(10) Here smax ∈ Rd is a fixed per-dimension scaling vector, and the division is understood elementwise. The quantity 
+
+mmax bounds the normalized norm, ensuring that σ(st) ∈
+
+[σmin , σ max ].Under this model, observation variance increases smoothly as the state moves away from nominal regions, capturing a common phenomenon in control systems where sensor un-certainty grows in high-magnitude or dynamically extreme regimes. To maintain experimental clarity and controlled compar-isons, our primary ablations focus on the homoscedastic regime, while the state-norm noise serves as a practically motivated extension that stresses the planner under struc-tured, state-dependent uncertainty. 
+
+5.3 EVALUATION PROTOCOL 
+
+We evaluate all methods on continuous-control tasks from the MuJoCo Playground Zakka et al. [2025], which pro-vides JAX-based implementations of DeepMind Control Suite environments Tassa et al. [2018]. We report results on 
+
+Cartpole Balance and Pendulum Swingup .These environments do not contain terminal states; we there-fore use fixed-length episodes of 1000 timesteps for both training and evaluation. After each training episode, the cur-rent policy is evaluated over 10 episodes without exploration noise, and the average return is recorded. All methods use identical interaction budgets, episode lengths, and update-to-data ratios. Results are averaged over ten random seeds. On Cartpole Balance , we study robustness to observation noise. We consider homoscedastic Gaussian noise with 
+
+σ ∈ { 0.025 , 0.05 } and state-norm–scaled heteroscedastic noise with σmin = 0 .0 and σmax = 0 .05 (Section 5.2). We 0 1000 2000 3000 4000 5000                  
+
+> Episode
+> 0
+> 200
+> 400
+> 600
+> Return
+> Pendulum (σ=0.025)
+> 01000 2000 3000 4000 5000
+> Episode
+> 0
+> 200
+> 400
+> 600
+> Return
+> Pendulum (σ=0.05)
+> 0.0
+> 0.5
+> 1.0
+> 1σ coverage  Pendulum (σ=0.025)
+> 01000 2000 3000 4000 5000
+> Episode
+> 0.005
+> 0.010
+> 0.015
+> Epistemic std
+> 0.0
+> 0.5
+> 1.0
+> 1σ coverage  Pendulum (σ=0.05)
+> 01000 2000 3000 4000 5000
+> Episode
+> 0.01
+> 0.02
+> Epistemic std
+> SAC
+> MoCA-MC (K=1)
+> BNAF
+> MoCA-MC (K=4)
+> MoCA-CE
+> MoCA-MC (K=16)
+> MoCA (ours)
+> 1σcoverage Epistemic std
+
+Figure 3: Return and uncertainty diagnostics on Pendulum under Gaussian observation noise ( σ ∈ { 0.025 , 0.05 }, left and right columns). Top: evaluation return during training. Middle: for MoCA, empirical 1σ coverage remains near the nominal 68% level throughout training. Bottom: epistemic standard deviation for MoCA, which stabilizes as the ensemble converges. compare Soft-Actor Critic (SAC) [Haarnoja et al., 2018] and BNAF against our analytic uncertainty-propagation method (MoCA) as well as a certainty-equivalent version (MoCA-CE), which computes the Bellman target using only the predictive mean ¯μ (i.e., ¯Σ → 0 in Eq. (7)). On Pendulum Swingup , we isolate analytic versus Monte Carlo uncertainty propagation under homoscedastic Gaus-sian observation noise ( σ ∈ { 0.025 , 0.05 }). In addition to SAC, BNAF, and MoCA-CE, we include Monte Carlo vari-ants MoCA-MC with K = 4 and K = 16 samples, and compare them against MoCA, which computes the same expectation analytically. We also report empirical 1σ cover-age and epistemic standard deviation for MoCA to assess calibration during training. 
+
+## 6 RESULTS 
+
+We conduct two complementary experiments. First, we eval-uate robustness to stochastic observations under controlled Gaussian noise regimes. Second, we isolate the effect of analytic versus Monte Carlo uncertainty propagation in the Bellman expectation through a targeted ablation study. 
+
+6.1 ROBUSTNESS TO STOCHASTIC OBSERVATIONS 
+
+Figure 2 reports learning curves on Cartpole under increas-ing observation noise. 
+
+Homoscedastic noise Under moderate noise ( σ = 0 .025 ), all methods learn, but clear performance differences emerge. SAC and BNAF achieve reduced asymptotic return relative to low-noise settings, and MoCA-CE performs similarly to BNAF. In contrast, MoCA consistently attains higher final return and exhibits more stable learning dynamics. As noise increases ( σ = 0 .05 ), the gap widens substantially. SAC, BNAF, and MoCA-CE degrade further in both conver-gence speed and asymptotic performance. MoCA remains comparatively stable and maintains a clear performance advantage. 
+
+State-dependent noise Under state-norm–scaled observa-tion noise, the same qualitative ordering persists. All base-lines deteriorate noticeably, while MoCA retains superior stability and final return. Overall, the performance gains are attributable to analytic propagation of predictive uncertainty, rather than to model-based learning alone. 6.2 ANALYTIC VS. MONTE CARLO UNCERTAINTY PROPAGATION 
+
+Figure 3 compares analytic and sampling-based uncertainty propagation on Pendulum Swingup .Under moderate noise, MoCA consistently achieves the highest return and fastest convergence. MoCA-MC im-proves as the number of samples increases from K = 4 
+
+to K = 16 , but remains significantly below the analytic method in both learning speed and asymptotic performance. MoCA-CE and model-free baselines perform substantially worse, indicating that ignoring predictive variance is detri-mental under stochastic observations. As noise increases, these differences become more pro-nounced. Monte Carlo variants exhibit higher variance and slower improvement, even with K = 16 samples. In con-trast, MoCA maintains stable learning dynamics and a clear performance advantage. The lower panels report uncertainty diagnostics for MoCA. Empirical 1σ coverage remains close to the nominal 68% level throughout training, while the epistemic standard devi-ation stabilizes as learning progresses. This indicates that the analytic moment propagation remains well-calibrated while enabling superior control performance. Overall, analytic uncertainty propagation provides both im-proved sample efficiency and greater robustness compared to stochastic Monte Carlo estimation under identical model assumptions. 
+
+## 7 DISCUSSION 
+
+The role of each structural assumption Our method combines three structural choices that differ in both origin and function. Two are inherited from prior work: modeling the transition kernel as a Gaussian (mixture) is standard in MBRL [Chua et al., 2018, Janner et al., 2019], and con-densing the ensemble mixture to a single moment-matched Gaussian follows Lakshminarayanan et al. [2017]. The third, the radial-basis value class, is the element we introduce. It is worth separating what each assumption is for. The quadratic action-value (BNAF) parameterization is a structural neces-sity of the framework: without a closed-form max a Q, the Bellman backup cannot be posed as a state-value expecta-tion in the first place. The dynamics-value pairing plays a different role. It is what makes the resulting expectation 
+
+E[V (s′)] tractable, and the specific Gaussian–RBF pair is one of several pairings that could satisfy this requirement. 
+
+Limitations of the value representation The radial-basis instantiation carries two distinct limitations in higher di-mensions. The first is representational: RBF mixtures are universal approximators on compact state domains, but the number of bases M needed to maintain approximation qual-ity grows poorly with state dimension, a manifestation of the curse of dimensionality. The second is computational: for each basis, the closed-form expectation requires the de-terminant |I + ΣΛ i|−1/2 and the inverse (I + ΣΛ i)−1 of a 
+
+d × d matrix, each O(d3) in general, giving a per-backup cost of O(M d 3). When Λi and the predictive covariance are diagonal, as in our experiments, I + ΣΛ i is diagonal and both reduce to elementwise operations, lowering the cost to 
+
+O(M d ). One way to scale to higher dimensions could be to apply the analytic backup in a learned lower-dimensional latent space, where a compact value representation suffices. A full exploration of this direction is left for future work. 
+
+## 8 CONCLUSION 
+
+We introduced a moment-closure formulation for model-based reinforcement learning that enables analytic Bellman expectations under learned stochastic dynamics. Two in-gredients combine to make this possible. First, a quadratic action-value parameterization removes the inner maximiza-tion from the Bellman backup, reducing it to an expecta-tion of the state-value function alone. Second, a moment-compatibility principle: whenever the predictive transition distribution and the value representation are chosen so that this remaining state-value expectation is closed-form in the distribution’s moments, the backup can be evaluated an-alytically, without sampling. This principle is not tied to any single functional form. We realize it concretely with a Gaussian transition model paired with a radial-basis value function, for which the expectation has a closed form that propagates both predictive mean and covariance while re-maining deterministic and computationally efficient. Empirically, analytic uncertainty propagation improves ro-bustness to stochastic observations and consistently out-performs both mean-only (certainty-equivalent) and Monte Carlo baselines. In particular, it yields higher final perfor-mance, greater stability under increasing noise, and well-calibrated predictive uncertainty. These results demonstrate that analytic moment propagation can serve as a practi-cal and effective alternative to sampling-based planning in continuous-control settings. 
+
+References 
+
+Joshua Achiam. Spinning up in deep reinforcement learning. 
+
+https://spinningup.openai.com , 2018. Abdullah Akgül, Manuel Haußmann, and Melih Kan-demir. Deterministic uncertainty propagation for im-proved model-based offline reinforcement learning. Ad-vances in Neural Information Processing Systems , 37: 70313–70348, 2024. Brian DO Anderson and John B Moore. Optimal control: linear quadratic methods . Courier Corporation, 2007. Kurtland Chua, Roberto Calandra, Rowan McAllister, and Sergey Levine. Deep reinforcement learning in a handful of trials using probabilistic dynamics models, 2018. Marc Deisenroth and Carl E Rasmussen. Pilco: A model-based and data-efficient approach to policy search. In Pro-ceedings of the 28th International Conference on machine learning (ICML-11) , pages 465–472. Citeseer, 2011. Shixiang Gu, Timothy Lillicrap, Ilya Sutskever, and Sergey Levine. Continuous deep q-learning with model-based acceleration. In International conference on machine learning , pages 2829–2838. PMLR, 2016. Tuomas Haarnoja, Aurick Zhou, Kristian Hartikainen, George Tucker, Sehoon Ha, Jie Tan, Vikash Kumar, Henry Zhu, Abhishek Gupta, Pieter Abbeel, et al. Soft actor-critic algorithms and applications. arXiv preprint arXiv:1812.05905 , 2018. Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Ville-gas, David Ha, Honglak Lee, and James Davidson. Learn-ing latent dynamics for planning from pixels. In Interna-tional conference on machine learning , pages 2555–2565. PMLR, 2019. Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Mo-hammad Norouzi. Dream to control: Learning behav-iors by latent imagination. In International Confer-ence on Learning Representations , 2020. URL https: //openreview.net/forum?id=S1lOTC4tDS .Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse control tasks through world models. Nature , 640(8059):647–653, 2025. ISSN 1476-4687. doi: 10.1038/s41586-025-08744-2. URL https: //doi.org/10.1038/s41586-025-08744-2 .N Hansen, X Wang, and H Su. Temporal difference learning for model predictive control. In International Conference on Machine Learning, PMLR , 2022. Michael Janner, Justin Fu, Marvin Zhang, and Sergey Levine. When to trust your model: Model-based pol-icy optimization. In Advances in Neural Information Processing Systems , 2019. Alex Kendall and Yarin Gal. What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems , 30, 2017. Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive uncertainty esti-mation using deep ensembles. Advances in neural infor-mation processing systems , 30, 2017. Anusha Nagabandi, Gregory Kahn, Ronald S. Fearing, and Sergey Levine. Neural network dynamics for model-based deep reinforcement learning with model-free fine-tuning, 2017. Anton Plaksin and Stepan Martyanov. Continuous deep q-learning in optimal control problems: Normalized advan-tage functions analysis. Advances in Neural Information Processing Systems , 35:22806–22815, 2022. Richard S Sutton and Andrew G Barto. Reinforcement learning: An introduction . MIT press, 2018. Yuval Tassa, Tom Erez, and Emanuel Todorov. Synthe-sis and stabilization of complex behaviors through on-line trajectory optimization. In 2012 IEEE/RSJ Inter-national Conference on Intelligent Robots and Systems ,pages 4906–4913. IEEE, 2012. Yuval Tassa, Yotam Doron, Alistair Muldal, Tom Erez, Yazhe Li, Diego de Las Casas, David Budden, Ab-bas Abdolmaleki, Josh Merel, Andrew Lefrancq, Tim-othy Lillicrap, and Martin Riedmiller. Deepmind con-trol suite, 2018. URL https://arxiv.org/abs/ 1801.00690 .Emanuel Todorov and Weiwei Li. A generalized iterative lqg method for locally-optimal feedback control of con-strained nonlinear stochastic systems. In Proceedings of the 2005, American control conference, 2005. , pages 300–306. IEEE, 2005. Yi Wan, Muhammad Zaheer, Adam White, Martha White, and Richard S Sutton. Planning with expectation models. In Proceedings of the 28th International Joint Conference on Artificial Intelligence , pages 3649–3655, 2019. Kevin Zakka, Baruch Tabanpour, Qiayuan Liao, Mustafa Haiderbhai, Samuel Holt, Jing Yuan Luo, Arthur All-shire, Erik Frey, Koushil Sreenath, Lueder A. Kahrs, Carmelo Sferrazza, Yuval Tassa, and Pieter Abbeel. Mu-joco playground, 2025. URL https://arxiv.org/ abs/2502.08844 .A OBSERVATION NOISE CONSTRUCTION 
+
+This appendix provides full implementation details of the observation noise processes used in Section 5.2. 
+
+A.1 HOMOSCEDASTIC GAUSSIAN NOISE 
+
+In the homoscedastic setting, independent Gaussian noise is added directly to the observed state: 
+
+˜st = st + ϵt, ϵt ∼ N (0 , σ 2I).
+
+The underlying dynamics remain deterministic; stochasticity enters only through the agent’s observations. The variance 
+
+σ2 is fixed globally and identical across all state dimensions. We evaluate σ ∈ { 0.025 , 0.05 }.
+
+A.2 STATE-NORM–SCALED (HETEROSCEDASTIC) NOISE 
+
+To model state-dependent sensing uncertainty, we inject Gaussian noise with variance scaled by a normalized state magnitude. Noise is defined as: 
+
+˜st = st + ϵt, ϵt ∼ N  0, σ (st)2I ,
+
+where the standard deviation is 
+
+σ(st) = σmin +( σmax −σmin )·clip 
+
+ ∥st ⊘ smax ∥2
+
+mmax 
+
+, 0, 1
+
+
+
+(11) Here: • ⊘ denotes elementwise division. • smax ∈ Rk is a fixed per-dimension scaling vector over the k normalized state dimensions (defined below). • mmax bounds the normalized norm. • clip( ·, 0, 1) truncates the scaling factor to the interval 
+
+[0 , 1] .
+
+Per-Dimension Scaling We select k = 3 state dimen-sions to include in the norm — cart position, cart velocity, and pole angular velocity — and exclude cos θ, sin θ, since these are already bounded by construction. Each selected dimension is first normalized by a fixed constant reflecting its nominal magnitude: 
+
+ˆst = st ⊘ smax . (12) For Cartpole, we use: • cart position scale: 2.4
+
+• cart velocity scale: 2.0
+
+• pole angular velocity scale: 3.0
+
+These constants ensure all normalized state components are approximately O(1) within the typical operating region. 
+
+Normalized Magnitude The scaling term uses the (un-squared) ℓ2 norm: 
+
+m(st) = ∥ˆst∥2
+
+mmax 
+
+. (13) We set mmax = √k, where k is the number of normal-ized dimensions, such that m(st) ≈ 1 when each normal-ized component has magnitude 1. For Cartpole, k = 3 , so 
+
+mmax = √3 ≈ 1.732 . This produces smooth growth of ob-servation variance as the system moves toward dynamically extreme regimes. 
+
+Hyperparameters For the heteroscedastic regime we use 
+
+σmin = 0 .0, σ max = 0 .05 .
+
+## B MOMENT-COMPATIBLE RBF VALUE REPRESENTATION 
+
+To enable analytic Bellman expectations under Gaussian predictive dynamics, the state-value function must admit a closed-form expectation under a Gaussian distribution. We therefore parameterize the value function as a finite mixture of Gaussian radial basis functions (RBFs). 
+
+B.1 FUNCTIONAL FORM 
+
+The state-value function is defined as: 
+
+V (s) = 
+
+> M
+
+X
+
+> i=1
+
+wi exp 
+
+
+
+− 12 (s − ci)⊤Λi(s − ci)
+
+
+
+, (14) where: • M is the number of RBF components, • ci ∈ Rd are fixed centers, • Λi ≻ 0 are positive-definite precision matrices, • wi ∈ R are learned weights. The weights {wi} are optimized via temporal-difference learning. The centers and precision matrices are fixed throughout training. 
+
+B.2 GAUSSIAN EXPECTATION 
+
+If the predictive next-state distribution is Gaussian, s′ ∼N (μ, Σ) , the expectation of each basis function admits a closed-form expression. For brevity, write the quadratic form 
+
+∥x − a∥2 
+
+> B
+
+:= ( x − a)⊤B (x − a)
+
+Consider a single component with center ci and precision 
+
+Λi:
+
+E[Vi(s′)] = wi
+
+Z
+
+exp   − 12 ∥s′ − ci∥2Λi
+
+ N (s′; μ, Σ) ds ′
+
+Writing the Gaussian density explicitly, the integrand is the exponential of a quadratic form in s′,
+
+Zi
+
+Z
+
+exp   − 12
+
+ ∥s′ − ci∥2Λi + ∥s′ − μ∥2Σ−1
+
+ ds ′,
+
+where Zi := wi(2 π)−d/ 2|Σ|−1/2
+
+Completing the square in s′ combines the two quadratic forms into a single Gaussian with precision Λi + Σ −1, leav-ing a constant factor that depends on μ and ci. Carrying out the Gaussian integral and simplifying with the identity 
+
+Σ−1(Λ i + Σ −1)−1Λi = Λ i(I + ΣΛ i)−1 yields 
+
+E[Vi(s′)] = wi |I + ΣΛ i|−1/2 exp   − 12 ∥μ − ci∥2
+
+> Ai
+
+,Ai := Λ i(I + ΣΛ i)−1
+
+Summing over the M components gives the full expectation, 
+
+E[V (s′)] = 
+
+> M
+
+X
+
+> i=1
+
+wi |I + ΣΛ i|−1/2 exp   − 12 ∥μ − ci∥2
+
+> Ai
+
+
+
+which is Eq. (7). This closed form enables deterministic Bellman targets without Monte Carlo sampling. 
+
+B.3 NUMBER OF BASIS FUNCTIONS 
+
+We set the number of RBFs based on the effective complex-ity of the value landscape in each environment: • Cartpole: M = 256 bases. Cartpole uses a 5D obser-vation with two unbounded-velocity dimensions (prac-tically bounded for initialization), producing a broader range of relevant regimes; we therefore allocate more bases to avoid underfitting. • Pendulum: M = 128 bases. Pendulum observations are 3D with (cos θ, sin θ) bounded by construction, making the value function smoother over a lower-dimensional bounded domain, requiring fewer bases. These choices follow the principle that M should scale with (i) state dimension and (ii) the extent of the region in which accurate value curvature is needed for stable greedy control. 
+
+B.4 CENTER INITIALIZATION AND SUPPORT BOUNDS 
+
+RBF centers {ci}Mi=1 are sampled uniformly over a fixed hyper-rectangle defined by environment-specific practical bounds: 
+
+ci ∼ U (ℓ, h ),
+
+where (ℓ, h ) are per-dimension lower/upper bounds. 
+
+Cartpole bounds We use bounds 
+
+ℓ = [ −2.5, −1.0, −1.0, −10 .0, −15 .0] ,h = [2 .5, 1.0, 1.0, 10 .0, 15 .0] , (15) corresponding to practical operating ranges for stable initial-ization, while cos θ and sin θ remain bounded by construc-tion. 
+
+Pendulum bounds We use bounds 
+
+ℓ = [ −1.0, −1.0, −8.0] , h = [1 .0, 1.0, 8.0] .
+
+B.5 ANISOTROPIC LENGTHSCALES 
+
+Each basis uses a diagonal precision (anisotropic bandwidth) to reflect heterogeneous units and curvature across state dimensions: 
+
+Λ = diag  λ−21 , . . . , λ −2
+
+> d
+
+ .
+
+Cartpole lengthscales We set 
+
+λ = [0 .6, 0.5, 0.5, 3.0, 4.0] ,
+
+using tighter scales for (cos θ, sin θ) and looser scales for velocity-related dimensions. 
+
+Pendulum lengthscales We set 
+
+λ = [0 .5, 0.5, 2.0] ,
+
+again using tighter scales on bounded trigonometric coordi-nates and a looser scale for angular velocity. 
+
+## C CURVATURE REGULARIZATION (KEEP-ALIVE) 
+
+For NAF-based critics, the advantage term uses a positive-definite curvature matrix P (s) = L(s)L(s)⊤, where L(s)
+
+is produced by a Cholesky head. In addition to the Cholesky parameterization, we optionally apply a curvature keep-alive penalty that prevents the quadratic form from becom-ing degenerate (near-flat) early in training. 
+
+Keep-alive penalty We add the following term to the critic TD loss on each replay minibatch: 
+
+Lkeepalive = λ Es∼B 
+
+h
+
+ReLU  pmin − ∥ L(s)∥2
+
+> F
+
+2i
+
+, (16) where B denotes the replay batch and ∥L(s)∥2 
+
+> F
+
+=P 
+
+> i,j
+
+Lij (s)2.Interpretation Since tr( P (s)) = ∥L(s)∥2 
+
+> F
+
+, Eq. (16) en-forces a lower bound on the overall curvature magnitude 
+
+(trace of P ), rather than directly constraining individual eigenvalues. This reduces training pathologies where the learned quadratic advantage becomes nearly flat, which can destabilize greedy control and TD learning. 
+
+Scope This keep-alive penalty is applied uniformly to all BNAF-based variants that use the shared-trunk critic. 
+
+## D HYPERPARAMETERS 
+
+Hyperparameter Cartpole Pendulum 
+
+Critic LR (init) 1 × 10 −4 1 × 10 −4
+
+Critic LR (end) 1 × 10 −4 1 × 10 −4
+
+˜μ LR (init) 1 × 10 −5 5 × 10 −6
+
+˜μ LR (end) 1 × 10 −5 5 × 10 −6
+
+Batch size 128 128 
+
+σexplore (init) 1.0 0.3 
+
+σexplore (end) 0.1 0.3 Random-action probability prand 0.2 0.2 Target update period Ntarget 100 100 Curvature keep-alive λ 1 × 10 −4 1 × 10 −4
+
+Curvature keep-alive pmin 0.5 2.0 
+
+Table 1: MoCA hyperparameters used for Cartpole and Pen-dulum. Learning rates are specified separately for the critic and the quadratic vertex head ˜μ(s). For Cartpole, explo-ration noise σexplore is linearly annealed from its initial to final value over the first 50% of training steps; for Pendulum, 
+
+σexplore is held constant throughout. Curvature keep-alive uses the hinge-squared penalty described in Appendix C.

@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-03</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-04</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 14 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>4</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>4</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>7</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>7</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-03 21:55:49 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-04 21:47:48 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,9 +62,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读聚焦自动驾驶世界模型与鲁棒控制，另有机器人模拟与量子搜索等世界模型应用值得速览。</p>
-<p>最值得关注的是《Auto-JEPA》与《Tube MPC》（均9.0分），前者以连续意图潜变量驱动端到端驾驶，后者结合Koopman模型与收缩度量提升控制鲁棒性。</p>
-<p>建议普通读者优先追踪世界模型在决策与控制中的落地潜力，并留意低成本仿真数据集的后续扩展。</p>
+<p>今日推荐聚焦多模态视觉跟踪与世界模型两大方向，共14篇论文。</p>
+<p>最值得关注的是两篇高分精读：《Models as Tools》提出智能体协调框架统一多模态跟踪，以及通过知识蒸馏与结构剪枝实现紧凑多模态跟踪。</p>
+<p>若想快速入门，建议优先精读这两篇跟踪论文，并辅以世界模型相关的速读文章拓展视野。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -73,12 +73,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">4 篇</strong>
+    <strong class="dpr-home-dashboard-count">7 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Auto-JEPA: A Latent World Model of Continuous Intent for End-to-End Autonomous Driving">Auto-JEPA: A Latent World Model of Continuous Intent for End-to-End Autonomous Driving</span></li><li><span class="dpr-home-dashboard-paper-title" title="Tube MPC for Bilinear Koopman Models using Robust Control Contraction Metrics">Tube MPC for Bilinear Koopman Models using Robust Control Contraction Metrics</span></li><li><span class="dpr-home-dashboard-paper-title" title="ST-WAM: Semantic-Temporal World Action Model for Robust Manipulation under Visual Distribution Shifts">ST-WAM: Semantic-Temporal World Action Model for Robust Manipulation under Visual Distribution Shifts</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking">Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="Towards Compact Unified Multimodal Tracking: Synergizing Knowledge Distillation with Structural Pruning">Towards Compact Unified Multimodal Tracking: Synergizing Knowledge Distillation with Structural Pruning</span></li><li><span class="dpr-home-dashboard-paper-title" title="ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching">ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span><span class="dpr-home-dashboard-tag">vt <strong>3</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -86,12 +86,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">4 篇</strong>
+    <strong class="dpr-home-dashboard-count">7 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="CG-World: A Large-Scale World-State Dataset and Protocol for World Models">CG-World: A Large-Scale World-State Dataset and Protocol for World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="BWM: A Low-Cost High-Fidelity World Simulator for Robot Learning">BWM: A Low-Cost High-Fidelity World Simulator for Robot Learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="DreamQAS: Learning a Decision-Useful World Model for VQE-Efficient Quantum Architecture Search">DreamQAS: Learning a Decision-Useful World Model for VQE-Efficient Quantum Architecture Search</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="MiniWorld: Democratizing the Training of Video World Models from Scratch">MiniWorld: Democratizing the Training of Video World Models from Scratch</span></li><li><span class="dpr-home-dashboard-paper-title" title="SG-WAM: Self-Guided World Modeling in Geometry-Aware Policy Space">SG-WAM: Self-Guided World Modeling in Geometry-Aware Policy Space</span></li><li><span class="dpr-home-dashboard-paper-title" title="World Action Models in Real Time: An Empirical Study of Smooth Execution via Asynchronous Deployment">World Action Models in Real Time: An Empirical Study of Smooth Execution via Asynchronous Deployment</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>7</strong></span></div>
 </section>
 </div>
 
