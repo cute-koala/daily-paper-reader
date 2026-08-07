@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-04</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-07</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 14 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>7</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>7</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>1</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-04 21:47:48 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-07 02:20:09 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,9 +62,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日推荐聚焦多模态视觉跟踪与世界模型两大方向，共14篇论文。</p>
-<p>最值得关注的是两篇高分精读：《Models as Tools》提出智能体协调框架统一多模态跟踪，以及通过知识蒸馏与结构剪枝实现紧凑多模态跟踪。</p>
-<p>若想快速入门，建议优先精读这两篇跟踪论文，并辅以世界模型相关的速读文章拓展视野。</p>
+<p>今日聚焦世界模型与视觉导航，共精读7篇、速读1篇。</p>
+<p>最值得关注《Quo Vadis, World Modeling?》与《UniNav》双9.0分，分别厘清世界模型演进方向、提出统一动作扩散导航方案。</p>
+<p>建议顺着“世界模型+导航”主线，延伸阅读《DreamWAM》中超越RGB帧预测的扩展思路。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -76,9 +76,9 @@
     <strong class="dpr-home-dashboard-count">7 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking">Models as Tools: An Agentic Coordination Framework for Unified Multimodal Visual Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="Towards Compact Unified Multimodal Tracking: Synergizing Knowledge Distillation with Structural Pruning">Towards Compact Unified Multimodal Tracking: Synergizing Knowledge Distillation with Structural Pruning</span></li><li><span class="dpr-home-dashboard-paper-title" title="ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching">ProWorld: Progress-Aware Hyperbolic World Models for Long-Horizon Visual Goal Reaching</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Quo Vadis, World Modeling?">Quo Vadis, World Modeling?</span></li><li><span class="dpr-home-dashboard-paper-title" title="UniNav: A Unified World-Action Diffusion Model for Visual Navigation">UniNav: A Unified World-Action Diffusion Model for Visual Navigation</span></li><li><span class="dpr-home-dashboard-paper-title" title="LiLa-WAM: Lightweight Latent Reasoning World-Action Model for Robotic Manipulation">LiLa-WAM: Lightweight Latent Reasoning World-Action Model for Robotic Manipulation</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span><span class="dpr-home-dashboard-tag">vt <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>7</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -86,12 +86,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">7 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="MiniWorld: Democratizing the Training of Video World Models from Scratch">MiniWorld: Democratizing the Training of Video World Models from Scratch</span></li><li><span class="dpr-home-dashboard-paper-title" title="SG-WAM: Self-Guided World Modeling in Geometry-Aware Policy Space">SG-WAM: Self-Guided World Modeling in Geometry-Aware Policy Space</span></li><li><span class="dpr-home-dashboard-paper-title" title="World Action Models in Real Time: An Empirical Study of Smooth Execution via Asynchronous Deployment">World Action Models in Real Time: An Empirical Study of Smooth Execution via Asynchronous Deployment</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="DreamWAM: Beyond RGB Future Prediction for World Action Models">DreamWAM: Beyond RGB Future Prediction for World Action Models</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>7</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>1</strong></span></div>
 </section>
 </div>
 
