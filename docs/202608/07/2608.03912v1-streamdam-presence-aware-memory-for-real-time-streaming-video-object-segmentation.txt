@@ -1,0 +1,244 @@
+Title: StreamDAM: Presence-Aware Memory for Real-Time Streaming Video Object Segmentation
+
+URL Source: https://arxiv.org/pdf/2608.03912v1
+
+Published Time: Wed, 05 Aug 2026 01:20:45 GMT
+
+Number of Pages: 5
+
+Markdown Content:
+# StreamDAM: Presence-Aware Memory for Real-Time Streaming Video Object Segmentation 
+
+Xiang Chen 
+
+Global College Shanghai Jiaotong University Shanghai, China xiangch@umich.edu 
+
+Abstract —Quality-tier video object segmentation (VOS) track-ers such as DAM4SAM top accuracy leaderboards, but they are measured offline, one frame at a time with no clock. Under an honest streaming protocol at 30 frames per second, where a frame that misses its budget is served the last mask already computed, the winner collapses: the rich memory that makes it accurate is too slow to keep up, and what it emits is blind to whether the object is even present. We trace both failures to one place, the tracker’s memory pipeline, and rebuild it for streaming. StreamDAM makes the memory machinery itself run at frame rate through in-model optimization rather than a bolted-on fallback, and governs it with a single learned presence signal that decides what enters memory, how far back the tracker reads, when to withhold output, and when to re-detect. A mechanism analysis shows why a fixed policy cannot win: the control that helps when an object truly disappears is the one that hurts when it is merely hard to see, so the choice must be made per frame. Across four benchmarks and five modern baselines, StreamDAM is the strongest streaming tracker, recovers nearly all of the offline model’s accuracy under the clock, and on the hardest content exceeds the offline model it is built from. 
+
+Index Terms —video object segmentation, real-time tracking, streaming perception, SAM2, memory networks 
+
+I. I NTRODUCTION 
+
+Promptable video object segmentation (VOS) has been transformed by memory-based foundation trackers: SAM2 [1] and its distractor-aware refinement DAM4SAM [2] top accu-racy leaderboards by carrying a rich memory of past frames. These systems are, however, almost always measured offline :each frame is processed to completion before the next is read, as if the clock stopped. Real deployment in robotics, augmented reality, and video editing has a frame clock. At 30 frames per second a new frame arrives roughly every 33 milliseconds whether or not the tracker has finished the previous one. This gap is sharp, not academic. Once a tracker’s per-frame cost crosses the budget it can no longer serve every frame, and the transition is abrupt: a tracker only a hair over the budget can be forced to hold a stale mask on almost every frame of a fast-changing sequence, and its streamed score plummets [3]. DAM4SAM-L runs well over the budget and misses everywhere; streamed under the zero-order-hold rule of the VOT real-time protocol [4], [5], its offline lead over cheaper models evaporates and it falls below a distilled efficiency tracker. Two philosophies respond. Efficiency-first trackers such as EdgeTAM [6] and EfficientTAM [7] distill SAM2 to fit the budget, trading peak quality for speed; quality-first trackers keep the heavy memory and miss the clock. We argue for a third path. The two streaming failures of a quality-first model are not separate problems bolted together: the same memory pipeline is at once too slow for the frame clock and blind to whether the object is present. StreamDAM rebuilds that one pipeline so its machinery runs at frame rate and is governed, per frame, by a single presence signal, making the same checkpoint both real-time and more accurate on the hard, distractor- and disappearance-heavy content where its memory has structural advantage. 
+
+Contributions.  
+
+> •
+
+We locate the streaming failure of quality-tier VOS at a single place, the tracker’s memory pipeline, which is at once too slow for the frame clock and blind to whether the object is present.  
+
+> •
+
+We make that memory machinery run at frame rate inside the model, with emitted masks identical to the offline tracker: a graph-captured backbone, host-synchronization removal, and resolution-capped distractor introspection, so no accuracy is traded for speed (Sec. III-C).  
+
+> •
+
+We show by mechanism analysis that one coupled mem-ory control governs the tracker’s hardest behavior and that no fixed setting of it can win, then govern it with a single learned presence signal that drives memory admission, the recency window, output suppression, and re-detection (Sec. III-B, Sec. III-E).  
+
+> •
+
+We evaluate under a frozen streaming protocol against five modern baselines on four benchmarks, with explicit offline and stale-reuse bounds and an honest ledger of what did not work (Sec. IV, App. A). II. R ELATED WORK 
+
+Memory-based VOS. Space-time memory networks [8] and their efficient successors XMem [9] and Cutie [10] made read/write memory the dominant VOS paradigm. SAM2 [1] added a streaming memory bank to promptable segmentation, and DAM4SAM [2] augments it with a distractor-resolving memory (DRM) that inserts hard frames as conditioning to-kens and wins VOTS-class benchmarks. We take DAM4SAM arXiv:2608.03912v1 [cs.CV] 4 Aug 2026 as our base and dissect the memory machinery that streaming stresses. 
+
+Efficient VOS. EdgeTAM [6] and EfficientTAM [7] distill or restructure SAM2’s encoder for on-device speed. They meet the clock but shed the heavy memory that helps on hard content, and they are our strongest streaming baselines. 
+
+Training-free SAM2 modifications. SAM2Long [11] adds uncertainty-branched memory pathways and SAMURAI [3] Kalman-filtered mask selection, both training-free. We use SAMURAI-style selection as an ablation, where it is a mea-sured wash on DAM4SAM, and, unlike these, add one small 
+
+learned component only where the training-free signal is provably insufficient. 
+
+Streaming perception and real-time protocols. Li et al. [12] defined streaming accuracy , coupling latency and quality under a clock; the VOT and VOTS real-time protocol [4], [5] scores trackers under a deadline with stale-output reuse; classic video work amortizes compute across frames, as in Deep Feature Flow [13] and Clockwork Convnets [14]. We adopt the streaming and stale-reuse protocol and target the model itself, not inter-frame amortization. III. S TREAM DAM Both streaming failures live in one machine, the memory pipeline: it is too slow for the frame clock and blind to whether the object is present. StreamDAM rebuilds it for streaming. We formalize the protocol (Sec. III-A) and the memory read (Sec. III-B), stream the pipeline (Sec. III-C), learn a causal presence estimate (Sec. III-D), and use it to govern the memory (Sec. III-E). 
+
+A. Problem setting and streaming protocol 
+
+Frame t is released at time t∆ under a fixed clock of period 
+
+∆ = 1 /f , the per-frame budget, and a frame started at σ
+
+finishes its mask at σ + c for compute cost c. At each deadline the tracker emits the newest finished output, serving the last completed mask on a miss, a zero-order hold, exactly the VOT real-time rule [4], [5]: 
+
+ˆmt = mπ(t), π(t) = max { k : frame k ready by t∆ }. (1) With the compute-to-budget ratio ρ = c/ ∆ over steady-state compute c, the served mask stays fresh while ρ ≤ 1, but once 
+
+ρ exceeds one the tracker falls behind and π(t) < t on a growing share of frames. The dependence is a cliff: a tracker a hair above ρ = 1 holds a stale mask on nearly every frame of fast content. 
+
+B. The memory pipeline 
+
+DAM4SAM reads a memory bank Bt whose entries j store encoded features ej and the decoded mask mj . Each frame it encodes xt to ft = ϕ(xt) through the backbone ϕ, assembles a conditioning set Mt, attends ft against it to decode mt, and writes back a new entry: 
+
+Mt = C ∪ { ej ∈ Bt : |mj | > 0 ∧ j ∈ Wr (t) }, (2) 0.0 0.5 1.0      
+
+> vanilla SAM2.1-L J&F
+> 0.0
+> 0.5
+> 1.0
+> base DAM4SAM-L  J&F
+> +62 pt
+> −76 pt
+> (a) per-sequence stakes
+> helps (49)
+> hurts (38)
+> no DRM
+> dense-cond
+> vanilla
+> no presence
+> StreamDAM
+> −20
+> 0
+> 20
+> 40
+> oracle gap closed (%)
+> -21% -16%
+> 0%
+> +13%
+> +36%
+> (b) per-seq gap closed
+> Fig. 1. Per-sequence stakes and payoff of DAM4SAM’s fixed memory on held-out MOSE-train, by J&F. (a) Each dot is one sequence, base DAM4SAM-L against vanilla SAM2.1-L: the memory helps some and hurts others by huge margins, swinging by more than sixty points either way and tens on average.
+> (b) Against a per-sequence oracle of the better design, fixed policies close at most a fifth of the gap and several widen it, while StreamDAM closes over a third, several times the best fixed policy. Presence must be decided per frame.
+
+with prompt anchors C. The presence filter |mj | > 0 drops entries with an empty stored mask, and the temporal stride 
+
+r thins the recent window Wr (t) = {t − 1, t − 1 − r, . . . };together they form one coupled recency control. This pipeline is both bottlenecks: the backbone ϕ dominates compute and is flat in video length, so it sets ρ, while on held-out sequences the coupled control alone carries DAM4SAM’s split behavior, helping some sequences and hurting others though its distractor additions carry none of it. It is right on a genuine disappearance and wrong on present-but-low-confidence frames, no fixed setting winning both (Fig. 1): presence must be known per frame. 
+
+C. Streaming the pipeline 
+
+The latency is all memory machinery, reclaimed by three in-model changes that are bit-identical by construction (Table I): graph-capturing the Hiera backbone with torch.compile 
+
+and CUDA-graph capture; removing host synchronization through a GPU-resident mask, byte-packed transfers, and on-device pixel counts; and capping the distractor introspection, whose connected-components cost scales as min( R, s )2 in mask side-length R under a cap s while its scale-invariant add decision is unchanged. These bring streamed compute below budget, so ρ ≤ 1 save one oversize sequence, the honest residual flagged in Sec. V. Speed leaves the accuracy bottleneck untouched. 
+
+D. Estimating presence 
+
+The built-in presence test thresholds the object-score logit and fails in the low-confidence band that matters most. We add a small causal estimator: a gated recurrent unit (GRU) 
+
+gθ reads per-frame runtime scalars ut the tracker already computes—logits, mask-overlap statistics, area ratios, absence run-length—and carries a state ht to a calibrated presence probability 
+
+ht = gθ (ut, h t−1), pt = σ(w⊤ht + b), (3) TABLE I PER -COMPONENT LATENCY OF DAM4SAM-L AND THE EFFECT OF EACH IN -MODEL OPTIMIZATION , IN MS PER FRAME AT 1080 P UNLESS NOTED .ALL OPTIMIZATIONS ARE BIT -IDENTICAL BY CONSTRUCTION . F ULL PROFILES IN APP . C. 
+
+Component / stage pub. optimization after Hiera-L trunk 23.2 CUDA-graph ∼16 .5
+
+CPU host path 6.3 copy elimination ∼4.4
+
+DRM introsp., 1080p tail 6.1 downsampling ∼0
+
+mem-attn/dec/enc 8.6 unchanged 8.6 
+
+per-frame total ∼38 < 32 p95 
+
+trained on disjoint held-out sequences against ground-truth presence yt ∈ {0, 1} with a class-balanced binary cross-entropy 
+
+L = − X
+
+> t
+
+ β y t log pt + (1 − β)(1 − yt) log(1 − pt) . (4) Every operating threshold below is set on training data alone, and gθ costs a negligible slice of the budget on CPU. 
+
+E. Presence-governed memory control 
+
+The signal pt governs four decisions in (2). Admission 
+
+replaces the presence filter, a bank entry becoming eligible when its stored estimate clears τ :
+
+j ∈ Mt ⇐⇒ pj > τ. (5) 
+
+The recency window is a binary stride mode mw 
+
+> t
+
+set by a hysteresis machine on pt, dense when it equals 1 and held only for a burst after a reappearance: 
+
+mw 
+
+> t
+
+= 1 ⇐⇒ pt ≥ phi ∨  mw 
+
+> t−1
+
+∧ pt ≥ plo ∧ dt < R , (6) with dt the frames since dense onset and the window sparse otherwise. Output suppression emits ˆmt = ∅ when pt < θ ,and re-detection relaxes (5) after K suppressed frames to break the self-reinforcing absent latch. Admission recovers the hurt sequences and the burst protects the helped ones, together the first policy we found to close the per-sequence gap no fixed setting reaches (Fig. 1); the other two are conservative safety governors (App. D, App. E). One signal, four consumers, and no fixed policy serves all four at once. IV. E XPERIMENTS 
+
+Setup. All runs use a single NVIDIA RTX 6000D GPU of the Blackwell generation, with PyTorch 2.11 on CUDA 12.8 and bfloat16 inference, and every latency we report is wall-clock on this GPU. The timed harness replays each sequence under a 30 fps clock: frame t is released at t/ 30 s, the tracker always processes the newest released frame, and whenever a frame’s budget passes before a fresh mask is ready we emit the last computed mask, a zero-order hold (ZOH), exactly the VOT real-time rule [4], [5]. The model and any CPU fast path run for real, so masks are faithful and the timeline is driven by measured cost. We report each method both streamed , its honest score under the clock, and offline , with oracle compute                                                               
+
+> TABLE II STREAMED 30 FPS J&F,SINGLE OBJECT ,WITH OFFLINE AND STALE -REUSE BOUNDS . G REY ROWS ARE REFERENCES ;BOLD MARKS THE BEST STREAMED VALUE PER COLUMN . S TREAM DAM, OUR METHOD ,IS THE MEAN OVER THREE FRESH -COMPILE SEEDS ,SEED SPREAD BELOW ONE POINT EXCEPT ON LVOS.
+> Method, streamed 30 fps DAVIS LVOS VOST MOSE-h mean Oracle DAM4SAM-L, offline 0.914 0.838 0.570 0.610 0.733 StreamDAM offline, ref. 0.913 0.832 0.547 0.627 0.730
+> StreamDAM 0.914 0.825 0.544 0.626 0.727
+> EdgeTAM 0.891 0.769 0.545 0.612 0.704 EfficientTAM 0.921 0.733 0.528 0.593 0.694 vanilla SAM2.1-L 0.884 0.810 0.413 0.570 0.669 Cutie 0.908 0.658 0.483 0.588 0.659 SAMURAI 0.879 0.811 0.341 0.508 0.635 Naive DAM4SAM-L, ZOH 0.809 0.527 0.335 0.513 0.546
+
+and no clock. Where evaluation is parallelized we use several GPUs of the same model, but serving is always single-GPU. All methods share this harness, are initialized uniformly from the first-frame ground-truth mask as a fairness fix, and are scored with single-object region-and-contour accuracy, J &F.We report StreamDAM as the mean over three fresh-compile seeds, with seed variation below one point on three of the four benchmarks and LVOS the exception. 
+
+Datasets and baselines. We evaluate on four benchmarks of rising difficulty: DAVIS-2017 val [15], a saturated reference; LVOS val [16], long videos; VOST val [17], heavy transforma-tion and occlusion; and MOSE-hard , sixty sequences curated from held-out MOSE [18] train by ground-truth difficulty and frozen before comparison, described in App. B. Baselines are recent: EdgeTAM, EfficientTAM, Cutie [10], SAMURAI, and vanilla SAM2.1-L. For the fast baselines streamed equals offline, verified with a zero hold-fraction on every spot-check; SAMURAI and vanilla-L straddle or miss the clock and degrade honestly. 
+
+Main result. Table II is the primary streamed comparison, with explicit offline and stale-reuse bounds. StreamDAM is the strongest streaming tracker on the mean, ahead of EdgeTAM and EfficientTAM. It leads the two hardest panels, MOSE-hard and LVOS, ties VOST, and cedes only the saturated DAVIS reference to the efficiency specialists, as expected. The comparison against the offline bound is the headline: naive streaming sheds nearly nineteen points of the offline model’s mean accuracy, and StreamDAM recovers about ninety-seven percent of that gap while meeting the same clock. On MOSE-hard its streamed score even surpasses the offline model, because the presence governor improves the model itself, not merely how it is served (Fig. 2). 
+
+Attribution. An offline decomposition with full anchors sep-arates the two additions StreamDAM makes over the base tracker. The uniform mask-initialization fix carries the DAVIS gain and part of MOSE-hard; the presence governor carries the rest of MOSE-hard at a small cost on VOST, and does not buy that gain by regressing elsewhere—a pre-registered cross-domain check finds no family regressing beyond noise. DAVIS LVOS VOST MOSE-hard 
+
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> J&F
+> Oracle DAM4SAM-L (offline)
+> Naive streamed (ZOH)
+> StreamDAM (ours)
+> EdgeTAM (streamed)
+
+Fig. 2. The streaming cliff and its recovery. Naive stale-reuse streaming collapses the offline model on every benchmark; StreamDAM recovers nearly all of it, matches or leads the strongest streaming baseline EdgeTAM, and on MOSE-hard surpasses the offline model. 
+
+Serving. StreamDAM meets the clock, genuinely real-time rather than a stale-reuse model in disguise: its stale-hold fraction is near zero apart from one oversize sequence, and its compute stays within the frame budget at the 95th percentile (Table I). 
+
+Negatives. App. A records every rejected lever. Input-resolution scaling is catastrophic on small objects: at reduced resolution the bounding-box init grabs a distractor, a re-roll not a rescue. DRM bank hygiene is refuted, since every variant trades away more on the help group than it recovers on the hurt group. Compile-lottery variance is real and non-Gaussian; pinning the autotune cache removes it for deployment and is the source of the LVOS seed spread. V. L IMITATIONS AND CONCLUSION 
+
+StreamDAM has honest boundaries. LVOS carries compile-lottery variance, so the pinned-cache remedy is a deployment step, not a proof; one oversize VOST sequence still breaches the budget, an un-eliminated resolution tail; a large share of the hurt group is moved by neither presence consumer; our protocol scores single-object accuracy, leaving multi-object streaming open; and MOSE-hard is a curated held-out subset of MOSE train, frozen before comparison, a fair but non-standard panel we state plainly. We conclude that the streaming cliff, not raw offline ac-curacy, is the right lens for deploying quality-tier VOS, and that the productive response is to rebuild the memory pipeline itself: make its machinery real-time inside the model and govern it with a single presence signal. StreamDAM makes DAM4SAM-L real-time with bit-identical outputs, localizes its hurt and help behavior to one coupled memory control, and governs that control with a small learned presence head that, uniquely among the policies we tried, recovers the hurt group without hurting the help group—giving the strongest streaming tracker across four benchmarks and, on the hardest, beating the offline model. Closing the small gap that remains everywhere needs a learned regime selector over the memory composition, which online causal signals cannot separate—the natural next step. REFERENCES [1] N. Ravi, V. Gabeur, Y.-T. Hu et al. , “SAM 2: Segment anything in images and videos,” in International Conference on Learning Represen-tations (ICLR) , 2025. [2] J. Videnovi´ c, A. Lukeˇ ziˇ c, and M. Kristan, “A distractor-aware memory for visual object tracking with SAM2,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2025. [3] C.-Y. Yang, H.-W. Huang, W. Chai, Z. Jiang, and J.-N. Hwang, “SAMU-RAI: Adapting segment anything model for zero-shot visual tracking with motion-aware memory,” arXiv preprint arXiv:2411.11922 , 2024. [4] M. Kristan, A. Leonardis, J. Matas, M. Felsberg, R. Pflugfelder et al. ,“The visual object tracking VOT2017 challenge results,” in Proceedings of the IEEE International Conference on Computer Vision Workshops (ICCVW) , 2017. [5] M. Kristan, J. Matas, A. Leonardis et al. , “The first visual object tracking segmentation VOTS2023 challenge results,” in Proceedings of the IEEE/CVF International Conference on Computer Vision Workshops (ICCVW) , 2023. [6] C. Zhou, C. Zhu, Y. Xiong et al. , “EdgeTAM: On-device track anything model,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2025, pp. 13 832–13 842. [7] Y. Xiong, C. Zhou, X. Xiang et al. , “Efficient track anything,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2025. [8] S. W. Oh, J.-Y. Lee, N. Xu, and S. J. Kim, “Video object segmentation using space-time memory networks,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2019, pp. 9225– 9234. [9] H. K. Cheng and A. G. Schwing, “XMem: Long-term video object segmentation with an Atkinson-Shiffrin memory model,” in European Conference on Computer Vision (ECCV) , 2022, pp. 640–658. [10] H. K. Cheng, S. W. Oh, B. Price, J.-Y. Lee, and A. Schwing, “Putting the object back into video object segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 3151–3161. [11] S. Ding, R. Qian, X. Dong et al. , “SAM2Long: Enhancing SAM 2 for long video segmentation with a training-free memory tree,” in 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2025. [12] M. Li, Y.-X. Wang, and D. Ramanan, “Towards streaming perception,” in European Conference on Computer Vision (ECCV) , 2020. [13] X. Zhu, Y. Xiong, J. Dai, L. Yuan, and Y. Wei, “Deep feature flow for video recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2017, pp. 2349–2358. [14] E. Shelhamer, K. Rakelly, J. Hoffman, and T. Darrell, “Clockwork convnets for video semantic segmentation,” in European Conference on Computer Vision Workshops (ECCVW) , 2016. [15] J. Pont-Tuset, F. Perazzi, S. Caelles, P. Arbel´ aez, A. Sorkine-Hornung, and L. V. Gool, “The 2017 DAVIS challenge on video object segmen-tation,” arXiv preprint arXiv:1704.00675 , 2017. [16] L. Hong, W. Chen, Z. Liu et al. , “LVOS: A benchmark for long-term video object segmentation,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023, pp. 13 480– 13 492. [17] P. Tokmakov, J. Li, and A. Gaidon, “Breaking the “object” in video object segmentation,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2023, pp. 22 836– 22 845. [18] H. Ding, C. Liu, S. He et al. , “MOSE: A new dataset for video object segmentation in complex scenes,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 2023, pp. 20 224– 20 234. APPENDIX ANEGATIVE -RESULTS LEDGER 
+
+Every rejected lever, with evidence.  
+
+> •
+
+Input-resolution scaling (rejected). L@896 on the 8 smallest-area LVOS seqs (area frac 0.0003 –0.0009 ): mean J &F 0.470 vs. 0.855 @1024 ( −0.385 ; 4/8 catas-trophic collapse); L@960 −0.253 with different seqs collapsing. Root cause: the bbox-prompt init grabs a distractor at reduced resolution (frame-0 IoU 0.00 vs. 
+
+0.88 @1024). Knife-edge, not gradual.  
+
+> •
+
+DRM bank hygiene (refuted). TTL expiry / cap / freeze-after all trade help-group losses ≥ hurt-group gains; the DRM hurt/help split is a per-sequence regime (only 1/15 
+
+divergences within 10 frames of a DRM add; add-time separability AUC ≤ 0.67 ), so per-event add-veto is dead.  
+
+> •
+
+Memory-bank shrinking (rejected). LVOS 0.949 →
+
+0.434 . 
+
+> •
+
+Aggressive/matched-fp admission τ (rejected). The emission-gate’s matched-fp τ =0 .46 is net-exclusionary for admission (hurt −0.037 ); the looser τ =0 .34 is correct.  
+
+> •
+
+Head emission variant, embedding-similarity feature, channels-last-on-compile, antialias-skip (rejected: no gain / parity failure).  
+
+> •
+
+Kalman-filter mask selection (wash). Free, kept, claimed only as an ablation row. APPENDIX BMOSE-HARD CURATION 
+
+MOSE-hard is 60 sequences drawn from the held-out MOSE train split (disjoint from the presence-head train cor-pus), selected by objective GT-only difficulty attributes— disappearance/reappearance events, number of co-annotated distractors, object size, and video length—and frozen in a fixed sequence list before any method comparison. It concentrates exactly the content where distractor-aware memory has struc-tural advantage. It is a non-standard panel and we report it as such. APPENDIX CPER -COMPONENT LATENCY 
+
+Steady-state DAM4SAM-L (1080p): encoder 23 .2 ms ( 61% ,flat in history), CPU “everything-else” 6.3 (p95 10 .4; DRM alt-mask numpy + host syncs), memory attention 4.6, decoder 
+
+3.0, memory encoder 1.0. The trunk compile saves 6.0–7.6 ms; CPU reclaim 1.6–2.2 ms; hires_cap =512 removes the 6–
+
+8 ms 1080p DRM-introspection tail (scale-invariant decision, bit-identical on 5/6 seqs). Streamed compute p95 by panel: DAVIS 27 .8, LVOS 29 .1, VOST 31 .0 (max 36 .0 on the 
+
+2560 ×1920 residual), MOSE-hard 29 .9. A featurizer subtlety cost a campaign: the presence head’s full-res mask-centroid scan (not the embedding pool, which is 0.04 ms) was the hi-res tail; exact marginal row/col sums make it 0.95 ms and bit-identical. APPENDIX DGATE EVIDENCE AND FORENSICS 
+
+Absence gate θ=1 .0 improves MOSE-train accuracy by a little over one point, is roughly neutral on DAVIS/LVOS-train, and costs under a point on VOST, an accepted trade. Redetection nudge K=5 breaks the is_obj_appearing 
+
+self-reinforcing latch (memory encodes “absent” → 235-frame dead runs); conservative guard, helps rarely, never hurts. Presence head operating points (val): head@matched-fp false-absent 0.067 vs. logit’s 0.099 at equal hallucination; head@youden cuts false-present to 0.080 vs. logit’s 0.234 . The residual failure class ( eeaaa67e ) moves for neither presence consumer. APPENDIX EREPRODUCIBILITY 
+
+Hardware: single NVIDIA RTX 6000D (Blackwell, sm 120) GPU, bf16 autocast, torch 2.11+cu128. Evaluation: timed simulator at 30 fps, ZOH on miss, 3 fresh-compile seeds; the LVOS seed spread is 0.035 across fresh compiles. A compile guard ( --assert_warm_ms 33 ) aborts poisoned launches and CPU thread pools are capped (numerics un-changed).
