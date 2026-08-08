@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-07</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-08</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 17 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
-    <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>2 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>11</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>2</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>6</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-07 21:29:27 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-08 20:01:29 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日聚焦世界模型与具身智能，精读2篇高分解码内镜导航与移动操作，速读3篇涉及JEPA表示、语义前瞻与交互世界模型。最值得看的是EndoWAM（9.0）实现通用内镜导航，以及DreamTrajectory（9.0）用轨迹引导动作生成并对齐世界模型。建议优先关注世界模型在机器人操作与医疗导航中的落地，可复现或测试这两个9分工作。</p>
+<p>今日精读聚焦世界模型与无人机导航，速读覆盖零样本视觉语言导航、层次强化学习及具身规划，共8篇论文。最值得关注的是9.0分的《Overcoming Statistical Bias in Action-Controllable World Models》与8.0分的《FlowPilot》实时UAV导航，前者解决可控世界模型偏差，后者实现敏捷飞行。建议普通读者从世界模型与层次RL的交叉方向切入，追踪后续应用落地。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -71,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">11 篇</strong>
+    <strong class="dpr-home-dashboard-count">2 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="EndoWAM: A Grounded World-Action Model for Generalizable Endoscopic Navigation">EndoWAM: A Grounded World-Action Model for Generalizable Endoscopic Navigation</span></li><li><span class="dpr-home-dashboard-paper-title" title="DreamTrajectory: Trajectory-Guided Action Generation with World Model Alignment for Mobile Manipulation">DreamTrajectory: Trajectory-Guided Action Generation with World Model Alignment for Mobile Manipulation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Quo Vadis, World Modeling?">Quo Vadis, World Modeling?</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Overcoming Statistical Bias in Action-Controllable World Models">Overcoming Statistical Bias in Action-Controllable World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="FlowPilot: Real-Time World-Action Modeling for Agile UAV Navigation">FlowPilot: Real-Time World-Action Modeling for Agile UAV Navigation</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>10</strong></span><span class="dpr-home-dashboard-tag">vt <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>2</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -87,7 +87,7 @@
     <strong class="dpr-home-dashboard-count">6 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="PhyLatent: Learning Dynamics-Relevant Representations for JEPA World Models">PhyLatent: Learning Dynamics-Relevant Representations for JEPA World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Robust-WAM: Bridging Generative Pretraining and Semantic Foresight in World-Action Models">Robust-WAM: Bridging Generative Pretraining and Semantic Foresight in World-Action Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="GeniWorld: A Generalizable Interactive World Model for Robotic Manipulation via Visual Actions">GeniWorld: A Generalizable Interactive World Model for Robotic Manipulation via Visual Actions</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="HAM-VLN: Harnessing Hierarchical Agentic Memory for Zero-Shot Vision-and-Language Navigation">HAM-VLN: Harnessing Hierarchical Agentic Memory for Zero-Shot Vision-and-Language Navigation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification">Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification</span></li><li><span class="dpr-home-dashboard-paper-title" title="From Failures to Supervision: DynamicEnvPlan for Robust Long-Horizon Embodied Planning">From Failures to Supervision: DynamicEnvPlan for Robust Long-Horizon Embodied Planning</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>6</strong></span></div>
 </section>
