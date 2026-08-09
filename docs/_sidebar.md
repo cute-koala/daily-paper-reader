@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-08-09 <!--dpr-date:20260809-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/09/2608.06375v1--0-a-latent-predictive-world-action-model-for-concurrent-humanoid-loco-manipulation" data-sidebar-item="{&quot;title&quot;: &quot;$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.06375v1--0-a-latent-predictive-world-action-model-for-concurrent-humanoid-loco-manipulation&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;world-model&quot;}], &quot;evidence&quot;: &quot;隐式预测世界动作模型用于机器人控制，匹配学习世界模型控制&quot;}">$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation</a>
   * 2026-08-08 <!--dpr-date:20260808-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/08/2608.04653v1-overcoming-statistical-bias-in-action-controllable-world-models" data-sidebar-item="{&quot;title&quot;: &quot;Overcoming Statistical Bias in Action-Controllable World Models&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.04653v1-overcoming-statistical-bias-in-action-controllable-world-models&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;world-model&quot;}], &quot;evidence&quot;: &quot;动作条件世界模型在反事实动作和观测下的一致性约束&quot;}">Overcoming Statistical Bias in Action-Controllable World Models</a>

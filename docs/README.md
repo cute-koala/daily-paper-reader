@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-08</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-09</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 8 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 1 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>2</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>6</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>0</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-08 20:01:29 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-09 20:51:42 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,7 +62,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读聚焦世界模型与无人机导航，速读覆盖零样本视觉语言导航、层次强化学习及具身规划，共8篇论文。最值得关注的是9.0分的《Overcoming Statistical Bias in Action-Controllable World Models》与8.0分的《FlowPilot》实时UAV导航，前者解决可控世界模型偏差，后者实现敏捷飞行。建议普通读者从世界模型与层次RL的交叉方向切入，追踪后续应用落地。</p>
+<p>今日精读 1 篇论文，聚焦人形机器人同时完成移动与操作的潜在预测世界动作模型。</p>
+<p>最值得关注的是该模型通过潜在预测统一了全身控制与操作，为复杂动态任务提供新思路。</p>
+<p>建议普通读者留意这类“世界模型”在具身智能中的落地潜力，后续可追踪相关实验演示。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -71,12 +73,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">2 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Overcoming Statistical Bias in Action-Controllable World Models">Overcoming Statistical Bias in Action-Controllable World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="FlowPilot: Real-Time World-Action Modeling for Agile UAV Navigation">FlowPilot: Real-Time World-Action Modeling for Agile UAV Navigation</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation">$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -84,12 +86,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">6 篇</strong>
+    <strong class="dpr-home-dashboard-count">0 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="HAM-VLN: Harnessing Hierarchical Agentic Memory for Zero-Shot Vision-and-Language Navigation">HAM-VLN: Harnessing Hierarchical Agentic Memory for Zero-Shot Vision-and-Language Navigation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification">Sample Efficient Hierarchical Reinforcement Learning via Best Policy Identification</span></li><li><span class="dpr-home-dashboard-paper-title" title="From Failures to Supervision: DynamicEnvPlan for Robust Long-Horizon Embodied Planning">From Failures to Supervision: DynamicEnvPlan for Robust Long-Horizon Embodied Planning</span></li></ul>
+<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>6</strong></span></div>
+
 </section>
 </div>
 
