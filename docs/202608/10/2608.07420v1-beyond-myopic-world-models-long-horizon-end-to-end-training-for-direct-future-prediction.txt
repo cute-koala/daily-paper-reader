@@ -1,0 +1,397 @@
+Title: Beyond Myopic World Models: Long-Horizon End-to-End Training for Direct Future Prediction
+
+URL Source: https://arxiv.org/pdf/2608.07420v1
+
+Published Time: Mon, 10 Aug 2026 01:13:32 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Beyond Myopic World Models: Long-Horizon End-to-End Training for Direct Future Prediction 
+
+Xinyi Li Zaishuo Xia Chenjie Hao Yubei Chen 
+
+University of California, Davis 
+
+{kxyli, zsxia, cjhao, ybchen}@ucdavis.edu 
+
+## Abstract 
+
+World models are expected to support imagination over extended temporal hori-zons, yet most are still trained through local few-step prediction objectives and deployed by recursively rolling out their own predictions. This creates a fundamen-tal mismatch: few-step losses optimize local transition fidelity, while long-horizon prediction depends on how errors and gradients propagate through the entire trajec-tory. As a result, transitions with different downstream influence on the endpoint are treated uniformly during training, and small local errors are amplified through recursive inference. We argue that long-horizon accuracy is better achieved by optimizing directly, through an end-to-end endpoint prediction objective. To instan-tiate this paradigm, we introduce the Direct Prediction World Model (DPWM) , a non-recursive architecture that compresses an action sequence of arbitrary length into a single embedding and predicts the endpoint observation in a single forward pass. This design avoids recurrent rollout in both prediction and gradient propaga-tion, making long-horizon end-to-end training practical at horizons where unrolled autoregressive training becomes unstable. Empirically, DPWM substantially im-proves long-horizon endpoint prediction over recursive world-model baselines on continuous-control and pixel-based benchmarks, with larger gains as the prediction horizon increases. We further show that recurrent baselines benefit similarly when retrained with the same long-horizon endpoint objective, supporting our central claim that the training objective, rather than the particular backbone choice, is the main driver of long-horizon prediction accuracy. Our results suggest that world models can benefit from being trained and evaluated at the temporal scales where they are ultimately used, shifting the focus from local transition modeling toward long-horizon predictive accuracy. 
+
+## 1 Introduction 
+
+World models [14, 25, 35] provide a compact predictive interface between past experience and future decision making. In model-based reinforcement learning and embodied control, they are expected to support imagination over extended temporal horizons: an agent must evaluate the consequence of an action sequence, compare alternative plans, or reason about delayed outcomes many steps into the future [35, 16, 15, 17, 18, 22, 1, 21]. Long-horizon prediction is also a useful test of whether a model has captured the underlying dynamics [38, 29, 26, 40, 11], since errors in transition structure are often only revealed after the model is rolled forward over many steps. However, many widely used world models are trained through local transition objectives. They learn to predict the next observation, or a short segment of future observations, and long-horizon predictions are obtained at inference time by recursively feeding the model’s own predictions back into itself [16, 15, 31, 1]. This creates a mismatch between how world models are trained and how they are used. A one-step objective optimizes local transition fidelity under ground-truth inputs, but long-horizon prediction depends on the entire composed trajectory under model-generated inputs: small errors drift the rollout 
+
+> Preprint. arXiv:2608.07420v1 [cs.LG] 7 Aug 2026 Action
+> Embedding
+> Transformer Encoder
+> Dynamic Model
+> concatenate
+> output_head
+> Linear + SiLU
+> FiLM x num_blocks
+> pooling
+> enc
+> dec
+> Action Sequence Encoder
+> Long-Horizon Reconstruction Objective
+
+Figure 1: DPWM architecture. Action Sequence Encoder compresses the variable-length action sequence into a single embedding, which conditions a Dynamic Model that directly predicts the endpoint observation ˆot+K from the initial observation ot. Modules are trained end-to-end under a long-horizon reconstruction objective on the endpoint, without generating intermediate observations. away from the training distribution and amplify through recursive inference [6, 12, 3, 36]. More fundamentally, transitions are weighted uniformly by the local loss even though their downstream influence on the endpoint differs substantially with the dynamics and horizon, so improving one-step accuracy does not necessarily optimize the prediction an agent ultimately uses after tens or hundreds of imagined steps [3, 5]. A natural alternative is to attach the loss directly to the endpoint induced by an initial observation and an action sequence, so that the optimization signal is tied to the long-horizon prediction target rather than to a collection of local transition errors. However, extending this approach to long horizons introduces practical obstacles: training an autoregressive model with an endpoint loss requires unrolling the model across the full prediction horizon, increasing memory cost and optimization difficulty as the horizon grows [32, 12]. Compared to short-horizon and recursively rolled-out world modeling, long-horizon end-to-end endpoint supervision remains relatively underexplored. To study this training paradigm directly, we introduce the Direct Prediction World Model (DPWM) ,a non-recursive world model that predicts the endpoint observation from the initial observation and the entire variable-length action sequence in a single forward pass. DPWM first compresses the action sequence into a single embedding and then conditions a dynamics module on both the initial observation representation and the action embedding to predict the endpoint. By predicting the endpoint directly rather than rolling out intermediate observations, DPWM avoids feeding prediction errors back into later prediction steps, reducing one source of compounding rollout error. The same property also makes long-horizon end-to-end training more computationally practical because the endpoint loss is applied without recursively unrolling the model through the extended horizon. Empirically, DPWM substantially improves endpoint prediction accuracy on continuous-control tasks in DeepMind Control Suite [37], with the advantage becoming more pronounced as the evaluation horizon increases. Increasing the maximum training horizon further improves stability and generalization at long evaluation horizons, including evaluation beyond the training horizon. The central claim of this paper, however, is not that a particular sequence encoder or backbone is inherently superior. Instead, we argue that long-horizon prediction accuracy is strongly shaped by the training objective and prediction paradigm; the architecture of DPWM serves as a practical mechanism for making this paradigm feasible at large horizons. To separate objective from architecture, we retrain autoregressive any-step baselines [27, 28] under the same long-horizon endpoint objective and compare them against their original short-horizon counterparts. We find that these baselines benefit significantly from the same endpoint supervision, supporting the view that the training paradigm, rather than the specific backbone alone, is a major driver of long-horizon prediction accuracy. These results suggest that world models can benefit from being trained and evaluated at the temporal scales at which they are ultimately used, rather than assuming that accurate short-horizon prediction will translate to accurate long-horizon prediction. In summary, our main contributions are as follows: 2• We formulate long-horizon world modeling as direct endpoint prediction, and analyze how this paradigm and the choice of training horizon shape long-horizon prediction accuracy. • We propose DPWM, a non-recursive architecture that makes this paradigm practical at extended horizons, and achieves substantial gains in endpoint prediction accuracy on continuous-control and pixel-based benchmarks. 
+
+## 2 Method 
+
+2.1 Direct Prediction Formulation Markov decision process. We consider a deterministic Markov decision process 1 M = ( S, A, f ),where S and A denote the state and action spaces, and f : S × A → S is the deterministic transition function. Given a state st and an action sequence at:t+K−1 := ( at, . . . , a t+K−1), the K-step deterministic transition map S × A K → S induced by f is the composition: 
+
+f (K)(st, a t:t+K−1) := f (· · · f (f (st, a t), a t+1 ) · · · , a t+K−1). (1) Although f (K) is by construction a K-fold composition of f , its approximator need not be recursive. 
+
+Two paradigms. A standard one-step autoregressive world model learns an approximation ˆfθ to 
+
+f (1) = f and produces long-horizon predictions by recursively applying ˆfθ to its own predicted states. We instead train a model gθ : S × A K → S to approximate f (K) directly for variable horizons 
+
+K ∈ { 1, . . . , K max }: rather than predicting the intermediate states st+1 , . . . , s t+K−1, the model predicts the endpoint st+K in a single forward pass. The two paradigms differ in how prediction errors scale with K. Under standard L-Lipschitz assump-tions on f and a one-step approximation error ϵ for ˆfθ, recursive rollout produces an endpoint error bounded by ϵ PK−1 
+
+> i=0
+
+Li, which grows exponentially in K whenever L > 1 [2]. This amplification is not a property of the modeling error itself, but of the recursive structure in which each step re-applies 
+
+ˆfθ to a perturbed input. For tasks with locally expansive dynamics (e.g., chaotic systems, contact-rich manipulation), L > 1 is the norm rather than the exception. Direct prediction, by approximating 
+
+f (K) as a single mapping, incurs an endpoint error bounded only by δK := sup ∥gθ − f (K)∥, with no recursive amplification. A complete derivation is given in App. A. This does not eliminate the difficulty of long-horizon modeling; it relocates it. Recursive rollout pays a horizon-dependent inference-time cost, while direct prediction pays a modeling cost: as K grows, the target map f (K) becomes harder to approximate and δK may grow with K. The substantive question is therefore empirical: how low can δK be driven in practice, and is this enough to make direct prediction favorable at long horizons? We answer this experimentally in Sec. 3. The same Lipschitz factor L reappears in our analysis of training-time gradient misalignment in Sec. 2.2. 
+
+Instantiation. We instantiate the direct prediction model gθ defined above as a composition of four learned modules. An observation encoder E maps the raw observation ot to a latent representation 
+
+st = E(ot). An action encoder ϕ compresses the action sequence into a fixed-dimensional embedding 
+
+za = ϕ(at:t+K−1). A dynamics module g produces the predicted endpoint latent ˆst+K = g(st, z a).A decoder D maps the predicted latent back to observation space, ˆot+K = D(ˆ st+K ). Together, 
+
+ˆot+K = D  g E(ot), ϕ (at:t+K−1)  , (2) which we view as the operational form of gθ in this paper. The next subsection describes how this composition is trained; concrete instantiations of the four modules are deferred to Sec. 2.3. 
+
+2.2 Long-Horizon End-to-End Training 
+
+We train the full pipeline (E, ϕ, g, D ) end-to-end to predict the ground-truth endpoint observation 
+
+ot+K . For each training example, we draw a transition tuple (ot, a t:t+K−1, o t+K ) from the dataset 
+
+D, where the horizon K is sampled from a predefined horizon distribution, instantiated as either uniform or log-uniform in our experiments, and minimize 
+
+L(θ) = E
+
+h
+
+D g(E(ot), ϕ (at:t+K−1))  − ot+K 
+
+> 2
+
+i
+
+. (3)    
+
+> 1We present the formulation for deterministic dynamics for clarity; in stochastic environments, the same direct-prediction view applies to modeling the conditional distribution or conditional mean of st+Kgiven (st, a t:t+K−1).
+
+3A single set of weights is therefore trained to predict observations across the full range of horizons 
+
+K ∈ { 1, . . . , K max }, rather than separately for any fixed K.This objective stands in contrast to the standard training objective for autoregressive world models, which fits a one-step transition function ˆfθ against single-step targets: 
+
+L1-step (θ) = E(sk ,a k ,s k+1 )∼D 
+
+h ˆfθ (sk, a k) − sk+1  
+
+> 2
+
+i
+
+. (4) Long-horizon predictions are then obtained at inference time by recursively applying ˆfθ to its own outputs. The two paradigms differ not only in inference behavior, but in two structural ways at training time as well, which we analyze below. 
+
+Train–inference distribution mismatch. The 1-step objective conditions ˆfθ on ground-truth states 
+
+sk, but at inference time the model is conditioned on its own previous predictions ˆsk — a form of exposure bias in which small modeling errors push later inputs progressively off the training distribution. The K-step endpoint loss, by contrast, conditions only on the true initial observation ot
+
+and the true action sequence at:t+K−1 at both training and inference, with no such shift. 
+
+Misaligned gradient weighting under 1-step training. The two objectives also differ in how training gradient is allocated across transitions. Consider what determines endpoint accuracy under autoregressive inference: ˆsK is the K-fold composition of ˆfθ along the action sequence, and its sensitivity to the model parameters expands by the chain rule into: 
+
+∂ˆsK
+
+∂θ =
+
+> K−1
+
+X
+
+> k=0
+> K−1
+
+Y
+
+> j=k+1
+
+∂ ˆfθ (ˆ sj , a j )
+
+∂ˆsj
+
+!| {z }
+
+> Jk→K
+
+∂ ˆfθ (ˆ sk, a k)
+
+∂θ , (5) where Jk→K is the Jacobian product propagating perturbations [32, 7] from step k to step K. The contribution of each transition to endpoint error is therefore weighted by Jk→K , which depends on both the horizon offset K − k and the local Lipschitz behavior of the dynamics. In the expansive regime ( L > 1), early transitions dominate; in the contractive regime ( L < 1), late transitions dominate. The 1-step gradient ∇θ L1-step , however, is a uniform sample average over transitions and contains no Jacobian product. It allocates training signal to each transition without regard for that transition’s downstream influence, and is therefore systematically misaligned with the gradient that would actually improve endpoint accuracy. This misalignment grows with K: the longer the inference rollout, the more endpoint sensitivity diverges from the uniform 1-step weighting. The K-step endpoint loss in (3) avoids this misalignment by definition: its gradient is the derivative of endpoint error with respect to θ, taken in a single backward pass, and structurally matches the sensitivity in (5). We emphasize that this property is a feature of the training objective , not of any particular architecture. A learned autoregressive model trained end-to-end on K-step endpoint loss (i.e., backpropagating through a K-step unrolled rollout) would inherit the same Jacobian-weighted gradient automatically through the chain rule. Thus, the gains from long-horizon training should be viewed as a property of the direct-prediction paradigm, rather than of a particular architecture. Our architecture provides one practical instantiation that remains tractable to train at large K.
+
+Why this paradigm is rare in practice. Despite these advantages, end-to-end training at long horizons is uncommon. For an autoregressive model, computing gradients of an endpoint loss requires backpropagating through K sequential model applications, leading to increasing memory cost and optimization difficulty as K grows due to the vanishing and exploding gradient pathologies familiar from recurrent network training. Our direct prediction architecture, described next, sidesteps this by making g a non-recursive function of the action sequence, so the gradient path from L to any model parameter has fixed depth regardless of K. This is the role our architectural design plays in the broader story: not as a standalone architectural contribution, but as a practical enabler that makes long-horizon end-to-end training feasible. 
+
+2.3 Model Design 
+
+This subsection describes the architecture used to instantiate the four modules of Eq. (2). The design intentionally uses standard components: the observation encoder/decoder, a Transformer encoder [39] for the action sequence, and a FiLM-conditioned [33] MLP for endpoint dynamics. 4Figure 2: Long-horizon prediction visualizations rendered from states predicted by DPWM K=100 ,trained and evaluated on the policy dataset. 
+
+Observation encoder/decoder. The observation interface is the only modality-specific component of the pipeline. For state-based environments, the encoder E is an MLP, and the final output head maps the predicted latent directly back to raw state space. For pixel-based environments, E and D
+
+are matched convolutional encoder–decoders. Both are trained jointly with the action encoder ϕ and dynamics module g under the endpoint loss in Eq. (3). 
+
+Action sequence encoder. The action encoder ϕ maps the full action sequence at:t+K−1 to a fixed-dimensional embedding za ∈ RDa . Discrete actions are mapped through a learned embedding lookup, and continuous actions through a linear projection. The resulting tokens are processed by a Transformer encoder with rotary positional encodings (RoPE) [34]. Since the entire action sequence is available at prediction time, we do not use a causal mask. In our default implementation, the Transformer uses non-causal local self-attention with a window size of 20 , allowing each action token to attend to nearby past and future action tokens within the window. The final-layer action tokens are aggregated by mean pooling to produce the sequence embedding. 
+
+Dynamics module. The dynamics module g predicts the endpoint latent from the encoded initial observation and the action embedding. Let c = [ st, z a] denote the concatenated condition. We instantiate g as a stack of FiLM-conditioned residual MLP blocks. An input projection maps c to the hidden dimension; each residual block applies feature-wise affine modulation whose scale and shift parameters are computed from c at every block, re-injecting the conditioning throughout the depth. A final linear head maps the hidden state to the prediction space: raw state space for state-based environments, or latent space before decoding for pixel-based environments. Importantly, g is non-recursive with respect to the prediction horizon: it predicts the endpoint directly and does not generate any intermediate latent. This keeps the architecture aligned with the endpoint objective in Eq. (3) and avoids the recursive feedback path used by autoregressive models. 
+
+## 3 Experiments 
+
+3.1 Baselines 
+
+We compare DPWM with the following representative world-model baselines. 
+
+MoSim [21] is a Neural-ODE-based [9] motion simulator with physics priors of rigid body dynamics for control tasks. It targets accurate physical state prediction and serves as a strong reference on physics-driven control tasks in the short-horizon regime. Because MoSim requires the prediction interval to coincide with the simulator timestep, for the results in Tab. 1 we set action_repeat =1 
+
+5Table 1: Raw state-space MSE of endpoint observation prediction.                                                                                                         
+
+> rand train, rand eval policy train, policy eval Env Horizon DPWM K=100 ADM K=3 MoSim DPWM K=100 ADM K=3 MoSim Cheetah 10.0277 0.0345 0.0519 0.1888 0.2624 0.2801 16 0.0920 1.8550 0.2331 0.2918 17.3993 1.8238 100 0.1854 1.7240 0.3215 0.4452 25.6086 11.0004 200 0.5110 1.7875 0.3190 1.3840 34.0766 N/A Humanoid 10.2449 0.2724 0.3378 0.2812 0.3910 0.6887 16 0.9172 10.8206 3.0627 1.9022 28.5179 9.2534 100 2.6677 17.9088 4.5153 5.7811 49.4643 17.4877 200 3.2823 18.2562 5.2478 7.7810 51.0466 20.4348 Hopper 10.3727 0.4960 0.0105 0.0820 0.0253 0.0452 16 0.4050 0.6727 0.1887 0.1249 5.4239 0.5634 100 0.4081 1.0853 0.4158 0.2733 14.9331 30.2598 200 0.5975 1.1014 0.5982 2.7208 15.3578 N/A Walker 10.0622 0.0780 0.0686 0.1907 0.1180 0.3475 16 1.7475 2.4299 1.7650 2.0393 14.9711 11.9352 100 1.1604 3.8802 15.3791 3.7131 55.7769 33.7685 200 1.6793 3.8563 N/A 18.9293 44.1142 N/A
+
+for all methods, rather than the TD-MPC2 defaults. N/A indicates that the MoSim rollout became numerically unstable and did not produce a finite endpoint prediction. 
+
+ADM [27, 28] is the closest any-step dynamics baseline, since it also predicts the endpoint state at a variable horizon. However, it differs from our approach in two key respects. First, it recurrently processes the action sequence through latent intermediate states. Second, in its published setting, it is trained with very short prediction horizons, e.g., K = 2 or 3 on the Cheetah and Humanoid tasks. In contrast, our focus is end-to-end supervision at much longer horizons. To disentangle these two factors, we evaluate ADM in two settings. The main results below reproduce its published short-horizon training; Sec. 3.2 additionally reports ADM retrained under our long-horizon objective at Kmax = 100 , providing a controlled comparison between the training paradigm and architecture. For one-step prediction models we evaluate by autoregressive rollout: each predicted observation is fed back into the model with the next action in the sequence to produce the following prediction, repeated for K steps to reach the endpoint. For ADM, we obtain the predicted endpoint using the rollout generation procedure from the original paper. Together, these baselines allow us to test whether long-horizon endpoint accuracy is better addressed by direct endpoint supervision than by short-horizon supervision followed by autoregressive rollout. 
+
+3.2 State-based Continuous Control Setup. We evaluate on four tasks from the DeepMind Control Suite [37]: cheetah-run ,
+
+humanoid-walk , hopper-hop , and walker-run . For each task, the raw observation consists of the physics state (qpos , q vel ). The corresponding dimensions of (qpos , q vel ) are (9 , 9) , (28 , 27) ,
+
+(7 , 7) , and (9 , 9) , respectively, and the action spaces are R6, R21 , R4, and R6.For each environment we construct training and evaluation datasets distinguished by the action distribution used to roll out trajectories. The random dataset draws actions uniformly from the action space. The policy dataset uses a publicly released TD-MPC2 [20] expert checkpoint. A pure expert, however, produces highly consistent trajectories that converge to a narrow distribution of states and actions, particularly over long horizons. We mitigate this with an intermix protocol that injects short random segments into expert rollouts, enriching the diversity of trajectories seen during training. We evaluate prediction accuracy under two matched training and evaluation action distributions: random-policy training and evaluation, and intermix-policy training and evaluation . The main evaluation metric is the endpoint mean squared error between the predicted observation ˆot+K and the ground-truth observation ot+K . We report endpoint MSE rather than averaging across the rollout because compounding errors in autoregressive inference (Sec. 2.1) are most pronounced at the horizon endpoint; averaging across intermediate steps would dilute this signal with easier short-horizon predictions. We evaluate at horizons K ∈ { 1, 16 , 100 , 200 }.60 25 50 75 100 125 150 175 200 Horizon K 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 Total State MSE                 
+
+> K=50 K=100 K=400
+> 025 50 75 100 125 150 175 200 Horizon K 0.0 0.1 0.2 0.3 0.4 0.5 Total State MSE
+> K=50 K=100 K=400
+> 025 50 75 100 125 150 175 200 Horizon K 01234567Total State MSE
+> K=50 K=100 K=400
+
+Figure 3: Endpoint prediction MSE computed in normalized state space across evaluation horizons for models trained with Kmax ∈ { 50 , 100 , 400 } on intermix-policy data. Results are shown for 
+
+humanoid_walk evaluated on intermix-policy (left), cheetah_run on intermix-policy (middle), and 
+
+cheetah_run on random-policy (right). DPWM is trained with our long-horizon end-to-end endpoint objective using Kmax = 100 . ADM is trained using its published short-horizon setting with Kmax = 3 . Autoregressive baselines are trained with local one-step prediction losses, corresponding to Kmax = 1 , and are evaluated by rolling out their predictions to the target horizon. 
+
+Evaluation results. DPWM achieves substantially lower endpoint MSE as the prediction horizon increases across all four tasks (Tab. 1), while ADM and MoSim are competitive mainly at short horizons. This trend reflects a fundamental difference in how long-range prediction is learned. ADM composes short transitions recursively, so small prediction errors alter subsequent inputs and are progressively amplified over the rollout. MoSim introduces an explicit physics prior that can improve local prediction, but systematic model mismatch in the learned physical dynamics can still accumulate over long horizons and eventually cause divergence. In contrast, DPWM directly learns the effect of an entire action sequence under multi-horizon endpoint supervision, aligning its training objective with long-horizon evaluation while avoiding repeated self-conditioning on predicted states. These results suggest that accurate long-horizon prediction requires explicitly learning the long-range transition, rather than relying solely on short-step accuracy or physics-informed priors. 
+
+Selection of training parameter Kmax . We compare DPWM trained with Kmax ∈ { 50 , 100 , 400 }
+
+on intermix-policy data, evaluated across K ∈ [1 , 200] under three settings: in-distribution evaluation on humanoid_walk and cheetah_run , and out-of-distribution evaluation on cheetah_run with random-action trajectories (Fig. 3). Models trained with Kmax = 50 perform well only within their training horizon and exhibit sharp error growth beyond it, suggesting that long-horizon prediction requires long-horizon training. Models trained with Kmax = 100 remain stable across the full evaluation range, including the K = 200 extrapolation regime. Models trained with Kmax = 400 are comparable to Kmax = 100 at most in-distribution horizons but exhibit elevated error at very short horizons; under out-of-distribution evaluation on random-action trajectories, however, Kmax = 400 
+
+yields consistently lower error than Kmax = 100 , providing additional evidence that longer training horizons yield stronger generalization to unseen action distributions. We adopt Kmax = 100 as the default for all main experiments based on its balanced performance across horizons. 
+
+Training objective paradigm dominates architecture choice. To isolate the contribution of our long-horizon training paradigm from the architectural choice (Transformer vs. RNN), we compare three models on humanoid_walk in Tab. 2: DPWM K=100 , ADM K=100 that aligns with DPWM setting, and ADM K=3 that aligns with the published setting. Retraining ADM under our long-horizon paradigm substantially closes its long-range prediction gap to DPWM at evaluation horizons K ≥ 16 .ADM K=3 and ADM K=100 share the same encoder and inference procedure, differing only in the training horizon. Short-horizon supervision propagates gradient through only a handful of dynamics steps and offers no training pressure on structure that emerges over longer horizons. Long-horizon end-to-end supervision, by attaching the loss directly to a K-step prediction, forces the encoder to represent features whose evolution remains accurate at horizons that local losses never reach. 
+
+3.3 Pixel-Based Discrete Control Setup. We evaluate on Pong from the Atari Learning Environment [4]. Observations are single-frame 
+
+160 × 160 RGB images cropped from the native 210 × 160 to remove the static scoreboard region; 7Table 2: Endpoint prediction MSE on humanoid_walk , computed in normalized state space. The 
+
+action_repeat follows the TD-MPC2 default setting. The suffix indicates the training horizon 
+
+Kmax , with ADM K=3 following the published ADM setting.                                 
+
+> Policy train, policy eval Policy train, rand eval Env Horizon DPWM K=100 ADM K=100 ADM K=3 DPWM K=100 ADM K=100 ADM K=3
+> Humanoid 10.2700 0.3448 0.1385 0.4560 0.5639 0.2637
+> 16 0.2394 0.2577 0.4318 0.4340 0.4732 0.5763 100 0.2658 0.2999 0.7756 0.6058 0.6318 0.8011 200 0.3234 0.3483 0.8882 0.6305 0.6622 0.9701
+
+Figure 4: DPWM trajectory generation on Pong. Top: ground-truth observations. Bottom: per-step predictions ˆot, each independently generated from the same initial observation o0 and the action prefix a0: t−1. Frames T = 41 to T = 50 from a 70 -step rollout; full rollout in App. B. we apply an action repeat of 4 but no frame stacking and no auxiliary state information, so each prediction is conditioned on a single observed frame. The action space contains 4 discrete actions. For training data, we use a deterministic chase-ball heuristic policy: the green paddle tracks the ball’s vertical position, except when the ball lies within a narrow band, where the paddle stays still. This deliberate miss zone produces approximately tied scores against the built-in opponent, balancing the distribution of game states in the training data. DPWM is trained with Kmax = 100 on this policy data and evaluated on held-out trajectories from the same distribution. 
+
+Results. Fig. 4 shows a 10-frame slice of a 70-step trajectory generated by DPWM K=100 ; the rollout terminates around T = 70 where the held-out episode ends and the game state resets. Although DPWM is trained to predict only the endpoint at horizon K, the same model can generate a per-step trajectory by feeding successively longer slices of the action sequence (the first t actions, for 
+
+t = 1 , . . . , K ) into the model, each query conditioned on the same initial observation o0. Each frame is produced by an independent forward pass rather than by recursively feeding previous predictions back into the model, so the trajectory visualization does not rely on autoregressive rollout. Across the sequence, the predicted frames remain visually close to the ground truth. This suggests that endpoint-supervised direct prediction can be queried at multiple horizons to provide intermediate states, making it compatible with downstream pipelines that require trajectory-level predictions, such as model-based planning. 
+
+## 4 Related Work 
+
+World Models. A world model is an action-conditioned generative model of environment dynamics: given an initial state and a sequence of actions, it predicts the resulting future observations [14, 35, 25, 8]. Such models serve as learned surrogates for the environment, supporting downstream uses including planning [19, 20] and model-based reinforcement learning [15, 17, 18, 35, 22, 31, 1]. Recent work targets multiple dimensions of model quality including physical fidelity, prediction accuracy, temporal coherence over rollouts, and generalization to new states and action distributions [24, 29, 26, 40, 21]. Across these settings, however, many widely used systems still rely on one-step or short-horizon transition prediction, with long-horizon behavior obtained at inference time via recursive rollout. 8Multi-Step Prediction and Action Sequence Modeling. A line of work [10, 30] compresses consecutive low-level actions into higher-level units such as learned skills, and plans or predicts at this level rather than at the primitive-action level. Another direction processes raw action sequences to reduce the number of autoregressive prediction steps without explicit semantic abstraction: some [41, 43] predict states at a fixed horizon offset, while variable-length self-segmenting models [13, 23] learn to find the next endpoint in an unsupervised manner. Hierarchical latent world models [42] also encode variable-length action sequences with a Transformer encoder, but they operate at shorter horizons and focus on downstream task performance. These works either focus on finding good segmentation points or operate at short horizons; DPWM instead predicts over variable-length action sequences without requiring a temporal segmentation prior, training at extended horizons and processing the entire sequence non-recursively in a single forward pass. 
+
+## 5 Conclusion and Limitations 
+
+We examined long-horizon endpoint supervision as an alternative to local transition training for world models. To make this paradigm practical, we proposed DPWM, a non-recursive model that directly predicts the endpoint observation from an initial observation and an action sequence. Across continuous-control and pixel-based benchmarks, DPWM improves endpoint accuracy at extended horizons. Our ablations further show that the benefit is not tied to the DPWM backbone alone: other model designs, including recurrent ones, also improve under the same end-to-end endpoint objective. These results point to supervision horizon as an important design choice for world models used in long-range prediction. 
+
+Limitations and future directions. Our evaluation focuses on endpoint prediction rather than downstream control performance, and independently queried predictions are not explicitly constrained to form temporally consistent trajectories. Future work could evaluate DPWM in planning and policy learning, introduce trajectory-level consistency constraints, and extend the framework to stochastic environments. 9References 
+
+[1] Eloi Alonso, Adam Jelley, Vincent Micheli, Anssi Kanervisto, Amos Storkey, Tim Pearce, and François Fleuret. DIAMOND: Diffusion for world modeling: Visual details matter in atari. In 
+
+Advances in Neural Information Processing Systems , 2024. [2] Kavosh Asadi, Dipendra Misra, and Michael L. Littman. Lipschitz continuity in model-based reinforcement learning, 2018. URL https://arxiv.org/abs/1804.07193 .[3] Kavosh Asadi, Dipendra Misra, Seungchan Kim, and Michel L. Littman. Combating the compounding-error problem with a multi-step model, 2019. URL https://arxiv.org/abs/ 1905.13320 .[4] M. G. Bellemare, Y. Naddaf, J. Veness, and M. Bowling. The arcade learning environment: An evaluation platform for general agents. Journal of Artificial Intelligence Research , 47:253–279, 2013. ISSN 1076-9757. doi: 10.1613/jair.3912. URL http://dx.doi.org/10.1613/jair. 3912 .[5] Abdelhakim Benechehab, Giuseppe Paolo, Albert Thomas, Maurizio Filippone, and Balázs Kégl. Multi-timestep models for model-based reinforcement learning, 2024. URL https: //openreview.net/forum?id=Rh4DmXaf8R .[6] Samy Bengio, Oriol Vinyals, Navdeep Jaitly, and Noam Shazeer. Scheduled sampling for sequence prediction with recurrent neural networks, 2015. URL https://arxiv.org/abs/ 1506.03099 .[7] Y. Bengio, P. Simard, and P. Frasconi. Learning long-term dependencies with gradient descent is difficult. IEEE Transactions on Neural Networks , 5(2):157–166, 1994. doi: 10.1109/72.279181. [8] Jake Bruce, Michael Dennis, Ashley Edwards, Jack Parker-Holder, Yuge Shi, Edward Hughes, Matthew Lai, Aditi Mavalankar, Richie Steigerwald, Chris Apps, Yusuf Aytar, Sarah Bechtle, Feryal Behbahani, Stephanie Chan, Nicolas Heess, Lucy Gonzalez, Simon Osindero, Sherjil Ozair, Scott Reed, Jingwei Zhang, Konrad Zolna, Jeff Clune, Nando de Freitas, Satinder Singh, and Tim Rocktäschel. Genie: Generative interactive environments, 2024. URL https: //arxiv.org/abs/2402.15391 .[9] Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 31. Curran Associates, Inc., 2018. URL https://proceedings.neurips.cc/paper_files/paper/ 2018/file/69386f6bb1dfed68692a24c8686939b9-Paper.pdf .[10] Benjamin Eysenbach, Abhishek Gupta, Julian Ibarz, and Sergey Levine. Diversity is all you need: Learning skills without a reward function, 2018. URL https://arxiv.org/abs/1802. 06070 .[11] Chelsea Finn, Ian J. Goodfellow, and Sergey Levine. Unsupervised learning for physical interaction through video prediction. ArXiv , abs/1605.07157, 2016. URL https://api. semanticscholar.org/CorpusID:2659157 .[12] Anirudh Goyal, Alex Lamb, Ying Zhang, Saizheng Zhang, Aaron Courville, and Yoshua Bengio. Professor forcing: a new algorithm for training recurrent networks. In Proceedings of the 30th International Conference on Neural Information Processing Systems , NIPS’16, page 4608–4616, Red Hook, NY, USA, 2016. Curran Associates Inc. ISBN 9781510838819. [13] Christian Gumbsch, Noor Sajid, Georg Martius, and Martin V. Butz. Learning hierarchical world models with adaptive temporal abstractions from discrete latent dynamics. In The Twelfth International Conference on Learning Representations , 2024. URL https://openreview. net/forum?id=TjCDNssXKU .[14] David Ha and Jürgen Schmidhuber. World models. arXiv preprint arXiv:1803.10122 , 2018. [15] Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Mohammad Norouzi. Dream to control: Learning behaviors by latent imagination. arXiv preprint arXiv:1912.01603 , 2019. 10 [16] Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Villegas, David Ha, Honglak Lee, and James Davidson. Learning latent dynamics for planning from pixels. In Proceedings of the 36th International Conference on Machine Learning , volume 97 of Proceedings of Machine Learning Research , pages 2555–2565, 2019. [17] Danijar Hafner, Timothy Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. arXiv preprint arXiv:2010.02193 , 2020. [18] Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse control tasks through world models. Nature , pages 1–7, 2025. [19] Nicklas Hansen, Xiaolong Wang, and Hao Su. Temporal difference learning for model predictive control, 2022. URL https://arxiv.org/abs/2203.04955 .[20] Nicklas Hansen, Hao Su, and Xiaolong Wang. Td-mpc2: Scalable, robust world models for continuous control, 2024. URL https://arxiv.org/abs/2310.16828 .[21] Chenjie Hao, Weyl Lu, Yifan Xu, and Yubei Chen. Neural motion simulator pushing the limit of world models in reinforcement learning. In Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) , pages 27608–27617, June 2025. [22] Mikael Henaff, William F Whitney, and Yann LeCun. Model-based planning with discrete and continuous actions. arXiv preprint arXiv:1705.07177 , 2017. [23] Dinesh Jayaraman, Frederik Ebert, Alexei A. Efros, and Sergey Levine. Time-agnostic pre-diction: Predicting predictable video frames, 2018. URL https://arxiv.org/abs/1808. 07784 .[24] Bingyi Kang, Yang Yue, Rui Lu, Zhijie Lin, Yang Zhao, Kaixin Wang, Gao Huang, and Jiashi Feng. How far is video generation from world model: A physical law perspective, 2025. URL 
+
+https://arxiv.org/abs/2411.02385 .[25] Yann LeCun. A path towards autonomous machine intelligence version 0.9. 2, 2022-06-27. 
+
+Open Review , 62(1):1–62, 2022. [26] Xinyi Li, Zaishuo Xia, Weyl Lu, Chenjie Hao, and Yubei Chen. Smallworlds: Assessing dynamics understanding of world models in isolated environments, 2025. URL https:// arxiv.org/abs/2511.23465 .[27] Haoxin Lin, Yu-Yan Xu, Yihao Sun, Zhilong Zhang, Yi-Chen Li, Chengxing Jia, Junyin Ye, Jiaji Zhang, and Yang Yu. Any-step dynamics model improves future predictions for online and offline reinforcement learning. In The 13th International Conference on Learning Representations (ICLR’25) , Singapore, 2025. [28] Haoxin Lin, Siyuan Xiao, Yi-Chen Li, Zhilong Zhang, Yihao Sun, Chengxing Jia, and Yang Yu. Adm-v2: Pursuing full-horizon roll-out in dynamics models for offline policy learning and evaluation. In The 14th International Conference on Learning Representations (ICLR’26) , Rio de Janeiro, Brazil, 2026. [29] Ziming Liu, Sophia Sanborn, Surya Ganguli, and Andreas Tolias. From kepler to newton: Inductive biases guide learned world models in transformers. ArXiv , abs/2602.06923, 2026. URL https://api.semanticscholar.org/CorpusID:285401944 .[30] Marlos C. Machado, Andre Barreto, Doina Precup, and Michael Bowling. Temporal abstraction in reinforcement learning with the successor representation, 2023. URL https://arxiv.org/ abs/2110.05740 .[31] Vincent Micheli, Eloi Alonso, and François Fleuret. Transformers are sample-efficient world models. In International Conference on Learning Representations , 2023. [32] Razvan Pascanu, Tomas Mikolov, and Yoshua Bengio. On the difficulty of training recurrent neural networks. In International Conference on Machine Learning , 2012. URL https: //api.semanticscholar.org/CorpusID:14650762 .11 [33] Ethan Perez, Florian Strub, Harm de Vries, Vincent Dumoulin, and Aaron Courville. Film: Visual reasoning with a general conditioning layer, 2017. URL https://arxiv.org/abs/ 1709.07871 .[34] Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu. Roformer: Enhanced transformer with rotary position embedding, 2023. URL https://arxiv.org/ abs/2104.09864 .[35] Richard S Sutton. Dyna, an integrated architecture for learning, planning, and reacting. ACM Sigart Bulletin , 2(4):160–163, 1991. [36] Erik Talvitie. Self-correcting models for model-based reinforcement learning, 2017. URL 
+
+https://arxiv.org/abs/1612.06018 .[37] Saran Tunyasuvunakool, Alistair Muldal, Yotam Doron, Siqi Liu, Steven Bohez, Josh Merel, Tom Erez, Timothy Lillicrap, Nicolas Heess, and Yuval Tassa. dm_control: Software and tasks for continuous control. Software Impacts , 6:100022, 2020. ISSN 2665-9638. doi: https:// doi.org/10.1016/j.simpa.2020.100022. URL https://www.sciencedirect.com/science/ article/pii/S2665963820300099 .[38] Keyon Vafa, Peter G. Chang, Ashesh Rambachan, and Sendhil Mullainathan. What has a foundation model found? using inductive bias to probe for world models. ArXiv , abs/2507.06952, 2025. URL https://api.semanticscholar.org/CorpusID:280150828 .[39] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention is all you need, 2023. URL https://arxiv. org/abs/1706.03762 .[40] Zaishuo Xia, Yukuan Lu, Xinyi Li, Yifan Xu, and Yubei Chen. Cloning deterministic worlds: The critical role of latent geometry in long-horizon world models, 2026. URL https://arxiv. org/abs/2510.26782 .[41] Jingwei Zhang, Jost Tobias Springenberg, Arunkumar Byravan, Leonard Hasenclever, Abbas Abdolmaleki, Dushyant Rao, Nicolas Heess, and Martin Riedmiller. Leveraging jumpy models for planning and fast learning in robotic domains, 2023. URL https://arxiv.org/abs/ 2302.12617 .[42] Wancong Zhang, Basile Terver, Artem Zholus, Soham Chitnis, Harsh Sutaria, Mido Assran, Randall Balestriero, Amir Bar, Adrien Bardes, Yann LeCun, and Nicolas Ballas. Hierarchical planning with latent world models, 2026. URL https://arxiv.org/abs/2604.03208 .[43] Tony Z. Zhao, Vikash Kumar, Sergey Levine, and Chelsea Finn. Learning fine-grained bimanual manipulation with low-cost hardware, 2023. URL https://arxiv.org/abs/2304.13705 .12 A Lipschitz Proof of Error Bound 
+
+We now compare how prediction errors scale with the horizon K under the two modeling paradigms. Throughout this analysis, we assume the dynamics f are L-Lipschitz in the state argument: for all 
+
+s, s ′ ∈ S and a ∈ A ,
+
+∥f (s, a ) − f (s′, a )∥ ≤ L ∥s − s′∥. (6) 
+
+Recursive rollout. Let ˆf denote a learned one-step model with bounded approximation error 
+
+∥ ˆf (s, a ) − f (s, a )∥ ≤ ϵ for all (s, a ). Define the k-step rollout error as ek := ∥ˆst+k − st+k∥, where 
+
+ˆst+k is obtained by recursively applying ˆf to its own predictions. A standard triangle inequality yields 
+
+ek+1 = ∥ ˆf (ˆ st+k, a t+k) − f (st+k, a t+k)∥≤ ∥ ˆf (ˆ st+k, a t+k) − f (ˆ st+k, a t+k)∥
+
+| {z } 
+
+> ≤ϵ
+
++ ∥f (ˆ st+k, a t+k) − f (st+k, a t+k)∥
+
+| {z } 
+
+> ≤L e k
+
+≤ ϵ + L e k. (7) Unrolling the recursion from e0 = 0 gives 
+
+eK ≤ ϵ
+
+> K−1
+
+X
+
+> i=0
+
+Li =
+
+
+
+ϵ LK − 1
+
+L − 1 , L̸ = 1 ,K ϵ, L = 1 .
+
+(8) This compounding-error bound has been observed in various forms across the model-based RL literature, which is linear in K when L = 1 , and grows exponentially in K when L > 1. Crucially, this amplification arises not from the modeling error ϵ itself, but from the recursive structure of rollout: each step re-applies f to a perturbed input, and the Lipschitz constant L propagates the perturbation forward. For control tasks with locally expansive dynamics (e.g., chaotic systems, contact-rich manipulation), L > 1 is the norm rather than the exception, making this error amplification a 
+
+structural obstacle to long-horizon prediction. 
+
+Direct prediction. Let gθ : S × A K → S denote our direct prediction model, which approximates 
+
+f (K) as a single mapping. Denote its endpoint approximation error by 
+
+δK := sup 
+
+> st, a t:t+K−1
+
+gθ (st, a t:t+K−1) − f (K)(st, a t:t+K−1) . (9) The endpoint error of direct prediction is then bounded by δK alone, with no recursive amplification term. Comparing with (8), direct prediction yields a tighter long-horizon bound whenever 
+
+δK < ϵ 
+
+> K−1
+
+X
+
+> i=0
+
+Li. (10) We emphasize that direct prediction does not eliminate the difficulty of long-horizon modeling; it relocates it. Recursive rollout incurs a horizon-dependent inference-time amplification through the recursive factor PK−1 
+
+> i=0
+
+Li in (8). Direct prediction avoids this recursive amplification, but pays a 
+
+modeling cost: as K grows, the target map f (K) can become harder to approximate, and the endpoint error δK may grow with the prediction horizon. The substantive question is therefore empirical: how fast does δK grow? When L > 1, if δK grows more slowly than the rollout bound ϵ PK−1 
+
+> i=0
+
+Li, direct prediction can become favorable at long horizons. When L = 1 , the corresponding comparison is against the linear bound Kϵ . For contractive dynamics with L < 1, the rollout bound is less severe, and the advantage of direct prediction must be established empirically. 
+
+## B DPWM Prediction Visualization 
+
+Fig. 5 shows the full 70-step Pong trajectory corresponding to the 10-frame slice in Fig. 4. DPWM is trained on trajectories from a simple chase-ball policy and evaluated here on a held-out trajectory from the same policy. The sequence is obtained by querying the model at successive horizons, where the prediction at time t is conditioned on o0 and a0: t−1 rather than on previously predicted frames. 13 Figure 5: Full DPWM 70-step trajectory generation on Pong. Top: ground-truth observations. Bottom: per-step predictions ˆot, each independently generated from the same initial observation o0 and the action prefix a0: t−1.14 Table 3: Default DPWM hyperparameters and implementation settings. 
+
+Component Hyperparameter Value 
+
+State observation Cheetah state/action dim 18 / 6
+
+Humanoid state/action dim 55 / 21 
+
+Hopper state/action dim 14 / 4
+
+Walker state/action dim 18 / 6
+
+Encoder 4-layer MLP, width 256 
+
+Pixel observation Resolution (crop) 160 × 160 (from 210 × 160 )Action repeat / discrete acts 4 / 4
+
+Conv/deconv blocks 5 / 5
+
+Channel widths 32 , 64 , 128 , 256 , 256 
+
+Latent dim 256 
+
+Transformer Action encoder Token dim Da 256 
+
+Layers 5
+
+Heads 4
+
+Head dim 64 
+
+FFN expansion / dropout 4× / 0.1
+
+Attention window size 20 
+
+Dynamics module Condition [st, z a]
+
+Hidden width 512 
+
+Hidden blocks 10 
+
+Optimization Optimizer Adam Learning rate 3 × 10 −4
+
+LR schedule cosine to 10 −10 
+
+State batch size 256 
+
+Pixel batch size 128 
+
+Gradient clipping 1.0
+
+Epochs 3600 
+
+Max updates per epoch 2000 state / 500 pixel 
+
+## C Hyperparameter and Implementation Details 
+
+Table 3 summarizes the architecture and training configuration of DPWM. All modules are trained jointly with the endpoint reconstruction loss mentioned in Sec. 2.2. 
+
+Observation encoder and decoder. For state-based DeepMind Control experiments, the obser-vation encoder is a 4-layer MLP with width 256 and ReLU activations, mapping the raw physics state ot to a latent representation st ∈ R256 . For these experiments, the dynamics output head maps directly back to raw state space, where the endpoint MSE is computed. For pixel-based Pong experiments, we use a matched convolutional encoder–decoder. The observation is a single RGB frame cropped from the native 210 × 160 resolution to 160 × 160 to remove the static scoreboard region, with an action repeat of 4 and no frame stacking. Pixel values are normalized to [0 , 1] , and the reconstruction loss is computed in this normalized space (the decoder ends in a sigmoid). The encoder applies five stride-2 convolutional blocks with kernel size 4, padding 1, GroupNorm, and SiLU activations, using channel widths 32 , 64 , 128 , 256 , 256 . The resulting 5 × 5
+
+feature map is flattened and projected to a 256-dimensional latent. 
+
+Action sequence encoder. The default action encoder is a RoPE Transformer. Continuous actions are projected linearly to action tokens, while discrete actions are mapped through a learned embedding lookup. The token dimension is Da = 256 . The Transformer uses 5 layers, 4 attention heads, head dimension 64, a 4× feed-forward expansion with GELU activations, and dropout 0.1. We use rotary positional encodings (RoPE) and bidirectional (non-causal) local self-attention with window size 20. The final action embedding za ∈ R256 is obtained by mean-pooling the final-layer action tokens. 15 Dynamics module. The dynamics module is a FiLM-conditioned residual MLP. Given the encoded observation st and the action embedding za, we form the condition c = [ st, z a]. The condition is projected to the hidden width with a linear layer and SiLU activation, then processed by a stack of FiLM residual blocks. Each block applies LayerNorm, a linear layer, SiLU activation, feature-wise affine modulation, and a residual connection. We use hidden width 512 and 10 blocks. 
+
+Training. We train with Adam using learning rate 3 × 10 −4 and gradient clipping with maximum norm 1.0. The learning rate follows cosine annealing to 10 −10 over 3600 epochs. State-based tasks use batch size 256, and pixel-based tasks use 128. 
+
+## D Quantitative Pong Evaluation 
+
+The main paper provides only qualitative Pong rollouts (Fig. 4). Here we report quantitative pixel-space MSE at multiple horizons, comparing DPWM K=100 against ADM K=100 as the architecture-controlled long-horizon baseline. For every target horizon t, we query each model with the same initial frame o0 and the action prefix 
+
+a0: t−1. For DPWM, each entry is produced by an independent forward pass—no autoregressive rollout, no intermediate latents. Pixel MSE is computed on the cropped 160 × 160 RGB frame. Table 4: Pong endpoint pixel MSE ( ×10 −4). Horizon DPWM K=100 ADM K=100 
+
+1 1.1759 1.1252 
+
+16 5.5467 5.6842 
+
+100 5.9387 6.8619 
+
+200 5.5852 6.9098 
+
+400 5.9844 6.7410 
+
+16

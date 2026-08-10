@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-09</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-10</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 1 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 12 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>0</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>7</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>5</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-09 20:51:42 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-10 21:23:50 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,9 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日精读 1 篇论文，聚焦人形机器人同时完成移动与操作的潜在预测世界动作模型。</p>
-<p>最值得关注的是该模型通过潜在预测统一了全身控制与操作，为复杂动态任务提供新思路。</p>
-<p>建议普通读者留意这类“世界模型”在具身智能中的落地潜力，后续可追踪相关实验演示。</p>
+<p>今日共读12篇，精读7篇、速读5篇，核心聚焦世界模型与多模态跟踪。最值得看的是9.0分的《Dueling World Models》与《AnyTrack》，前者解决干扰物剔除，后者统一任意模态跟踪。建议优先精读这两篇高分论文，并顺带浏览速读中三篇8.0分相关研究。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -73,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">1 篇</strong>
+    <strong class="dpr-home-dashboard-count">7 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation">$ω$-0: A Latent Predictive World Action Model for Concurrent Humanoid Loco-Manipulation</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Dueling World Models: Advantage-Style Action Channels for Common-Mode Distractor Rejection">Dueling World Models: Advantage-Style Action Channels for Common-Mode Distractor Rejection</span></li><li><span class="dpr-home-dashboard-paper-title" title="AnyTrack: Unifying Visual Object Tracking with Any Modalities">AnyTrack: Unifying Visual Object Tracking with Any Modalities</span></li><li><span class="dpr-home-dashboard-paper-title" title="Is Forward Prediction Enough? Physical State Grounding for JEPA World Models">Is Forward Prediction Enough? Physical State Grounding for JEPA World Models</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>1</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>6</strong></span><span class="dpr-home-dashboard-tag">vt <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -86,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">0 篇</strong>
+    <strong class="dpr-home-dashboard-count">5 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p class="dpr-home-dashboard-empty">今日暂无推荐。</p>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="TaskSense: Focusing on What Matters in World Models">TaskSense: Focusing on What Matters in World Models</span></li><li><span class="dpr-home-dashboard-paper-title" title="Flowing Through States: Neural ODE Regularization for Reinforcement Learning">Flowing Through States: Neural ODE Regularization for Reinforcement Learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="Decoupling Intention from Trajectory: A Representational Deduction Framework for World Action Models">Decoupling Intention from Trajectory: A Representational Deduction Framework for World Action Models</span></li></ul>
   </div>
-
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>5</strong></span></div>
 </section>
 </div>
 
