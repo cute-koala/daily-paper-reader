@@ -1,0 +1,400 @@
+Title: FeedbackTrack: Visual-Cortex-Inspired Cross-Frame Feedback for Transformer Tracking
+
+URL Source: https://arxiv.org/pdf/2608.09369v1
+
+Published Time: Tue, 11 Aug 2026 02:07:29 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# FeedbackTrack: Visual-Cortex-Inspired Cross-Frame Feedback for Transformer Tracking 
+
+Yueyang Cang 1, Xiaoteng Zhang 1, Zhiyuan Ning 1, Yuchen He 1, Li Shi 1
+
+> 1
+
+Tsinghua University Beijing, China 
+
+Abstract 
+
+Visual object tracking requires the continuous integration of target information across frames, yet most Transformer track-ers still rely on predominantly feed-forward visual feature extraction. Existing temporal mechanisms commonly update templates, prompts, queries, or prediction states, while in-termediate representations from previous frames rarely mod-ulate corresponding stages of current-frame processing. We propose FeedbackTrack , a visual-cortex-inspired framework that introduces sparse, group-level layer-aligned cross-frame feedback into pretrained Transformer trackers. Previous-frame outputs from selected Transformer groups are detached, cached, and returned to the corresponding groups in the current frame. FeedbackTrack contains two complementary pathways. Query Feedback transforms historical search-token states into low-rank query biases and applies per-sample, per-head, and per-token RMS alignment to control their magni-tude. Gate Feedback uses pooled historical context to provide bounded channel-group modulation of the projected attention output. The proposed mechanism retains the original track-ing pipeline and requires only a fixed-size one-frame cache. Across SPMTrack and ARTrackV2, FeedbackTrack consis-tently improves five backbone configurations on LaSOT and GOT-10k. It improves GOT-10k AO by 2.3–4.1 points and La-SOT AUC by 1.1–1.8 points, reaching 83.4 AO and 79.1 AUC with SPMTrack-G, while adding less than 1% parameters in all configurations. Controlled comparisons further show that cross-frame feedback outperforms same-frame modulation by 1.8–3.2 AO points, confirming that the gains primarily arise from recurrent historical information rather than additional modulation capacity. Analysis of the learned feedback scales reveals a non-uniform depth-dependent organization, demon-strating that recurrent cross-frame feedback provides an effec-tive and scalable mechanism for Transformer tracking. 
+
+Introduction 
+
+Visual object tracking aims to continuously localize an arbi-trary target throughout a video given only its initial state. A reliable tracker must preserve target identity while adapting to appearance variation, occlusion, fast motion, background clutter, and similar distractors. Recent advances have shifted tracking architectures from convolutional Siamese match-ing toward Transformer-based target–search interaction (Li et al. 2019; Chen et al. 2021; Yan et al. 2021; Cui et al. 2022). In particular, one-stream and sequence-based trackers jointly 
+
+Figure 1: Performance versus model parameter count on GOT-10k for the SPMTrack and ARTrackV2 series. Solid and dashed lines denote the FeedbackTrack-enhanced and original models, respectively. FeedbackTrack consistently improves tracking performance across different backbone scales with only marginal parameter overhead. model template and search information within a shared back-bone, enabling strong feature interaction and accurate target localization (Ye et al. 2022; Chen et al. 2023; Wei et al. 2023; Cai, Liu, and Wang 2025). Despite their strong performance, existing Transformer trackers still rely predominantly on feed-forward visual fea-ture extraction within each frame. Temporal information has been incorporated through updated templates, histori-cal prompts, autoregressive queries, candidate associations, and additional temporal tokens (Wang et al. 2021; Mayer et al. 2021; Cai, Liu, and Wang 2024; Zheng et al. 2024; Xie et al. 2024; Bai et al. 2024). These mechanisms effectively preserve target history, but temporal states are commonly introduced at the input, prompt, query, or prediction level and then processed by another largely feed-forward visual encoder. Intermediate representations formed at a particular backbone stage in the previous frame are rarely returned to the corresponding processing stage in the current frame. Con-sequently, the visual feature hierarchy itself lacks an explicit recurrent pathway through which previously formed repre-sentations can directly modulate ongoing feature extraction. Biological vision suggests a different computational orga-arXiv:2608.09369v1 [cs.CV] 10 Aug 2026 Figure 2: Overall architecture of FeedbackTrack. Previous-frame outputs of selected Transformer groups are detached, cached, and returned to the corresponding groups in the current frame. The original prediction head remains unchanged. nization. The mammalian visual system combines ascending feed-forward pathways with extensive recurrent and feed-back connections, allowing previously formed representa-tions to influence subsequent sensory processing (Lamme and Roelfsema 2000; Markov et al. 2014). Recent studies further indicate that visual feedback is distributed across processing stages, pathway-specific, and modulatory rather than a simple reversal of feed-forward activity (Federer et al. 2021; Siu et al. 2021; Semedo et al. 2022; Fişek et al. 2023; Shen et al. 2022). These findings motivate us to investigate whether recurrent reuse of intermediate visual states can im-prove Transformer tracking. We do not seek to reproduce specific cortical structures or neural dynamics, but instead abstract the general principle that previously formed repre-sentations can provide stage-corresponding modulation of current visual processing. To this end, we propose FeedbackTrack , a visual-cortex-inspired framework that introduces sparse, group-level layer-aligned cross-frame feedback into pretrained Transformer trackers. The visual encoder is partitioned into groups of consecutive Transformer blocks. For each selected group, the previous-frame group output is detached, cached, and returned to the first block of the corresponding group in the current frame. This design converts the originally stateless feature hierarchy into a lightweight recurrent system while retaining the original feed-forward pathway, tracking inter-face, and prediction modules. Only one-frame states are re-tained, so the cache size remains constant with respect to video length. FeedbackTrack implements recurrent modulation through two complementary pathways. Query Feedback transforms previous search-token states through a low-rank projection to generate token-wise biases for current search queries. A per-sample, per-head, and per-token RMS alignment operation controls the bias magnitude relative to the pretrained queries. 
+
+Gate Feedback pools the complete previous group state and generates bounded, context-dependent channel-group mod-ulation of the projected attention output. Query Feedback therefore influences where current attention retrieves evi-dence, whereas Gate Feedback regulates the resulting atten-tion response. We instantiate FeedbackTrack on two representative track-ing frameworks, SPMTrack and ARTrackV2. On SPMTrack, FeedbackTrack improves GOT-10k AO from 76.5 to 80.6 for ViT-B, from 80.0 to 82.6 for ViT-L, and from 81.0 to 83.4 for ViT-G. The corresponding LaSOT AUC scores in-crease from 74.9 to 76.4, from 76.8 to 77.9, and from 77.4 to 79.1. FeedbackTrack also improves ARTrackV2-B and ARTrackV2-L to 81.2 and 81.8 AO on GOT-10k, with cor-responding LaSOT AUC scores of 74.8 and 75.4. Across all five configurations, the additional parameter cost remains below 1%. Moreover, under the same modulation architec-ture and parameter count, cross-frame feedback outperforms its same-frame counterpart by 3.2, 2.3, and 1.8 AO points for ViT-B, ViT-L, and ViT-G, respectively, demonstrating that the improvements primarily arise from recurrent histor-ical information rather than additional modulation capacity alone. Although all Query Feedback scales are initialized iden-tically, the trained models develop a non-uniform depth-Figure 3: Feedback module. Query Feedback generates a norm-controlled bias for current search-token queries, while Gate Feedback modulates the projected attention output us-ing pooled previous-frame context. dependent organization, with relatively weak feedback in shallow groups and stronger modulation in intermediate and deep groups. This emergent pattern is qualitatively consistent with the hierarchical and pathway-dependent organization of biological visual feedback, while representing a computa-tional correspondence rather than an anatomical equivalence. Our main contributions are summarized as follows: 
+
+• We introduce FeedbackTrack, a general framework that equips pretrained Transformer trackers with sparse, group-level layer-aligned cross-frame feedback, enabling intermediate previous-frame states to recurrently mod-ulate corresponding stages of current-frame visual pro-cessing. 
+
+• We develop two complementary lightweight pathways. Query Feedback performs low-rank, RMS-aligned mod-ulation of current search queries, while Gate Feedback ap-plies bounded, context-dependent channel-group rescal-ing to the projected attention output. 
+
+• We demonstrate consistent improvements across two tracking frameworks and five backbone configurations on LaSOT and GOT-10k, while introducing less than 1% additional parameters. Controlled same-frame compar-isons further verify the importance of recurrent historical information. 
+
+• We analyze the learned feedback strengths and identify an emergent depth-dependent organization, showing that cross-frame feedback is allocated non-uniformly across visual representation stages. 
+
+Related Work 
+
+Transformer-Based Visual Tracking 
+
+Visual object tracking has progressively shifted from con-volutional Siamese matching to Transformer-based architec-tures with explicit target–search interaction. Representative methods include TransT, STARK, OSTrack, SeqTrack, AR-Track, and ARTrackV2 (Chen et al. 2021; Yan et al. 2021; Ye et al. 2022; Chen et al. 2023; Wei et al. 2023; Bai et al. 2024), while more recent approaches further explore adap-tive temporal queries and parameter-efficient tracking (Xie et al. 2024; Cai, Liu, and Wang 2025). Although these track-ers may use historical templates, prompts, or autoregressive predictions, intermediate visual representations are generally not recurrently returned to corresponding backbone stages in the following frame. FeedbackTrack complements these ar-chitectures by introducing sparse, group-level layer-aligned cross-frame feedback inside the visual encoder. 
+
+Temporal Modeling in Visual Tracking 
+
+Existing trackers exploit temporal context through historical templates, candidate associations, memory representations, prompts, autoregressive queries, and temporal tokens (Wang et al. 2021; Mayer et al. 2021; Cai, Liu, and Wang 2024; Zheng et al. 2024; Xie et al. 2024; Bai et al. 2024). These approaches typically introduce temporal information at the input, prompt, memory, or prediction level, after which the visual encoder remains predominantly feed-forward. In con-trast, FeedbackTrack treats intermediate Transformer group outputs as recurrent visual states and returns each previous-frame group output to the corresponding current-frame group. This design is complementary to existing temporal modeling strategies, including the prompt-based autoregres-sive pipeline of ARTrackV2. 
+
+Recurrent Feedback in Biological Vision 
+
+Biological vision combines feed-forward and recurrent pro-cessing, with distributed and pathway-specific feedback modulating ongoing sensory representations across the vi-sual hierarchy (Lamme and Roelfsema 2000; Markov et al. 2014; Federer et al. 2021; Semedo et al. 2022; Fişek et al. 2023; Shen et al. 2022). FeedbackTrack does not reproduce specific cortical structures or neural pathways, but abstracts several general computational principles, including recurrent reuse of previous representations, correspondence between feedback states and processing stages, and residual modu-lation of current visual computation. These principles are implemented through group-level layer-aligned cross-frame connections together with Query Feedback and Gate Feed-back. 
+
+Method 
+
+Overview 
+
+Biological visual processing combines feed-forward compu-tation with recurrent feedback that modulates ongoing sen-sory representations (Federer et al. 2021; Siu et al. 2021; Semedo et al. 2022; Fişek et al. 2023; Shen et al. 2022). Inspired by this computational principle, FeedbackTrack in-troduces cross-frame recurrent modulation into the visual Transformer encoder, without attempting to reproduce spe-cific cortical structures. FeedbackTrack is formulated as a generic feedback mech-anism for Transformer-based trackers and is instantiated on two representative frameworks, SPMTrack (Cai, Liu, and Wang 2025) and ARTrackV2 (Bai et al. 2024). For SPM-Track, the feedback modules are inserted into its DINOv2-based Transformer backbone (Oquab et al. 2024; Doso-vitskiy et al. 2021), while the patch embedding, tracking embeddings, TMoE adapters, and prediction head remain unchanged. For ARTrackV2, only the visual encoder is modified, while the original trajectory prompts, appearance prompts, autoregressive prediction modules, and training ob-jective are retained. As illustrated in Fig. 2, FeedbackTrack augments the original visual feature extractor with sparse cross-frame connections while preserving the task-specific tracking interface and prediction pipeline. 
+
+Layer-Aligned Cross-Frame Feedback 
+
+We partition the Transformer backbone into groups of G
+
+consecutive blocks. Let X(i) 
+
+> t
+
+and U(i) 
+
+> t
+
+denote the input and output of group i at frame t, respectively. The output of the corresponding group in the previous frame is detached and stored as a one-frame cache: 
+
+C(i) 
+
+> t−1
+
+= StopGrad 
+
+
+
+U(i)
+
+> t−1
+
+
+
+. (1) At frame t, the cached representation is provided to the first Transformer block of the same group: 
+
+U(i) 
+
+> t
+
+= G(i)fb 
+
+
+
+X(i) 
+
+> t
+
+, C(i)
+
+> t−1
+
+
+
+, (2) where G(i)fb denotes group i equipped with the proposed feedback module. Because the output of group i at frame t − 1 is returned to the first block of the same group i at frame t, the tempo-ral connection preserves the hierarchical stage at which the representation was generated. We therefore refer to this de-sign as group-level layer-aligned cross-frame feedback . Only the first block of each group contains the feedback module, whereas the remaining blocks retain their original computa-tion. We use a group size of G = 4 . For example, the output produced after blocks 0–3 at frame t − 1 is returned to block 
+
+0 at frame t, while the output produced after blocks 4–7
+
+is returned to block 4. Accordingly, feedback modules are inserted at blocks {0, 4, 8} for ViT-B, {0, 4, 8, 12 , 16 , 20 }
+
+for ViT-L, and {0, 4, 8, 12 , 16 , 20 , 24 , 28 , 32 , 36 } for ViT-G. The same grouping strategy is applied to the visual encoders of ARTrackV2-B and ARTrackV2-L. 
+
+Feedback Module 
+
+The feedback module contains two complementary path-ways, as illustrated in Fig. 3. Query Feedback preserves token-level spatial information and recurrently modulates the current search-token queries. Gate Feedback summarizes the complete previous group state and applies context-dependent channel-group modulation to the projected attention output. The two pathways therefore inject historical information at different locations in the attention computation. 
+
+Norm-Controlled Query Feedback Let 
+
+Mq, (i) 
+
+> t−1
+
+∈ RB×Ns×D (3) denote the search-token subset selected from the cached rep-resentation C(i)
+
+> t−1
+
+, where B is the batch size, Ns is the num-ber of search tokens, and D is the feature dimension. We first transform the historical search-token states using LayerNorm and a low-rank projection: 
+
+Bq, (i) 
+
+> t
+
+= Up (i) 
+
+Down (i) 
+
+LN 
+
+
+
+Mq, (i)
+
+> t−1
+
+ 
+
+, (4) where the down- and up-projections map the feature di-mension as D → r → D, with a bottleneck dimension of 
+
+r = 16 . The projected historical bias is then reshaped into the multi-head form 
+
+Bq, (i) 
+
+> t
+
+∈ RB×H×Ns×dh , (5) where H is the number of attention heads and D = Hd h.Directly adding the projected historical bias to the pre-trained queries may result in a substantial magnitude mis-match. We therefore align their root-mean-square magni-tudes independently for each sample, attention head, and search token: 
+
+bBq, (i) 
+
+> t,bhs :
+
+= Bq, (i)
+
+> t,bhs :
+
+ρ RMS 
+
+
+
+Q(i)
+
+> t,bhs :
+
+
+
+RMS 
+
+
+
+Bq, (i)
+
+> t,bhs :
+
+ , (6) where b, h, and s index the sample, attention head, and search token, respectively. The RMS operator is defined as 
+
+RMS( x) = 
+
+vuut 1
+
+dhdhX
+
+> d=1
+
+x2 
+
+> d
+
++ ϵ. (7) We set ρ = 0 .05 and ϵ = 10 −4. The aligned historical bias is added to the current search-token queries using a learnable head-wise scale vector s(i) 
+
+> q
+
+∈ RH :
+
+eQ(i) 
+
+> t,bhs :
+
+= Q(i) 
+
+> t,bhs :
+
++ s(i) 
+
+> q,h
+
+bBq, (i)
+
+> t,bhs :
+
+. (8) All q-scales are initialized to 0.01 , allowing the modified tracker to start close to the pretrained model. Only the cur-rent search-token queries are modified, while all non-search queries, keys, and values remain unchanged. 
+
+Gate Feedback Query Feedback is complemented by an output-side modulation pathway. We first summarize the complete previous group state by averaging over all cached tokens: 
+
+p(i) 
+
+> t−1
+
+= 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+C(i)
+
+> t−1,n
+
+, (9) where p(i) 
+
+> t−1
+
+∈ RB×D and N denotes the total number of cached tokens. A lightweight MLP maps the pooled context from D to a hidden dimension of 384 and then to H channel groups. A tanh-bounded contextual signal is combined with a learnable channel-group scale vector s(i) 
+
+> g
+
+∈ RH :
+
+g(i) 
+
+> t
+
+= tanh 
+
+
+
+MLP (i)
+
+> g
+
+
+
+LN 
+
+
+
+p(i)
+
+> t−1
+
+ 
+
+⊙ s(i) 
+
+> g
+
+, (10) where g(i) 
+
+> t
+
+∈ RB×H contains one modulation coefficient for each channel group. The learnable gate scales are initial-ized to 0.01 .Let A(i) 
+
+> t
+
+denote the attention output after head concatena-tion, output projection, projection dropout, and the original LayerScale. We reshape its feature dimension into H channel groups, each containing dh channels, and apply 
+
+eA(i) 
+
+> t,bnh :
+
+=
+
+
+
+1 + g(i)
+
+> t,bh
+
+
+
+A(i)
+
+> t,bnh :
+
+. (11) The same gate is broadcast across all tokens and applied before the original residual connection. Because the output projection has already mixed information from the origi-nal attention heads, this operation should be interpreted as channel-group rescaling of the projected attention output rather than direct modulation of individual attention heads. 
+
+Training and Online Inference 
+
+During training, consecutive search frames are processed se-quentially, and detached previous-frame group outputs serve as feedback caches for the current frame, avoiding cross-frame backpropagation through time. The original feed-forward and residual pathways are retained, while the small initial query and gate scales keep the model close to the pretrained base tracker. During inference, each selected Transformer group main-tains a one-frame cache that is updated after every frame. When no valid cache is available, the original base-tracker computation is used. Because only the immediately preced-ing group states are stored, the cache memory remains con-stant with respect to video length. 
+
+Experiments 
+
+Datasets and Evaluation Metrics 
+
+We evaluate FeedbackTrack on two widely used visual tracking benchmarks, LaSOT (Fan et al. 2019) and GOT-10k (Huang, Zhao, and Huang 2019). For LaSOT, we report the area under the success curve (AUC), normalized preci-sion ( PNorm ), and precision ( P ). For GOT-10k, we report average overlap (AO) and success rates at overlap thresholds of 0.5 and 0.75, denoted as SR 0.5 and SR 0.75 , respectively. 
+
+Implementation Details 
+
+We evaluate FeedbackTrack on two representative Trans-former tracking frameworks, SPMTrack (Cai, Liu, and Wang 2025) and ARTrackV2 (Bai et al. 2024). For SPMTrack, FeedbackTrack is implemented in TrackIt and evaluated with ViT-B, ViT-L, and ViT-G backbones. For ARTrackV2-B and ARTrackV2-L, the feedback modules are inserted only into the visual encoder, while the original prompts, autoregres-sive prediction modules, and training objectives remain un-changed. The SPMTrack-based models are trained with AdamW on four NVIDIA A100-SXM4-80GB GPUs using a total batch size of 32. The base learning rate is 1 × 10 −5 with a weight decay of 0.1. We use a per-iteration cosine schedule with a 10-epoch warm-up from 1 × 10 −7 and a minimum learning rate of 1 × 10 −6. Most backbone parameters are frozen, while the last four Transformer blocks are fine-tuned at 1 × 10 −6. The TMoE adapters, tracking embeddings, and prediction head use the base learning rate, whereas Query Feedback and Gate Feedback are optimized at 5 × 10 −5. For ARTrackV2, we follow its original training configuration. Inference throughput is measured on a single NVIDIA A100 GPU with batch size 1. FPS is averaged over all eval-uated GOT-10k test frames, excluding image loading and preprocessing. 
+
+Main Results 
+
+Table 1 compares FeedbackTrack with representative state-of-the-art trackers on LaSOT and GOT-10k. When applied to SPMTrack, FeedbackTrack consistently improves all six metrics across the B, L, and G variants. On GOT-10k, the AO scores increase by 4.1, 2.6, and 2.4 points, respectively, while the corresponding LaSOT AUC gains are 1.5, 1.1, and 1.7 points. FeedbackTrack also generalizes well to ARTrackV2. It im-proves ARTrackV2-B and ARTrackV2-L to 81.2 and 81.8 AO on GOT-10k, with LaSOT AUC scores of 74.8 and 75.4. The corresponding SR 0.75 gains are 5.8 and 2.5 points, show-ing that intermediate visual-state feedback complements the autoregressive temporal modeling of ARTrackV2. 
+
+Ablation Study 
+
+Effect of feedback components. Table 2 shows that both Query Feedback and Gate Feedback are independently ef-fective. Query Feedback contributes the majority of the gain, improving AO by 3.2, 2.0, and 2.0 points for ViT-B, ViT-L, and ViT-G, while Gate Feedback yields gains of 1.8, 0.6, and 0.8 points, respectively. Combining both pathways achieves the best results on all metrics, indicating that token-level query modulation and global context-based output modula-tion are complementary. 
+
+Cross-frame feedback versus same-frame modulation. 
+
+To isolate the effect of recurrent historical information, we construct a same-frame control that replaces the detached previous-frame group output with the detached current group input, while keeping the same modules, insertion positions, and parameter count. As shown in Table 3, cross-frame feed-back outperforms this control by 3.2, 2.3, and 1.8 AO points for ViT-B, ViT-L, and ViT-G, respectively, confirming that the main gains arise from recurrent historical information rather than additional modulation capacity. 
+
+Effect of RMS alignment. Table 4 evaluates RMS align-ment in Query Feedback. Aligning the historical bias with the magnitude of current search queries improves all met-rics, increasing AO by 2.4, 0.5, and 1.3 points for ViT-B, ViT-L, and ViT-G, respectively. This confirms the impor-tance of controlling feedback magnitude when modulating pretrained query representations. Table 1: Comparison with state-of-the-art trackers on LaSOT and GOT-10k. Each indented FeedbackTrack row is built upon the immediately preceding baseline. The best and second-best results are highlighted in bold and underlined, respectively. 
+
+# Method Source LaSOT GOT-10k AUC PNorm P AO SR 0.5 SR 0.75 
+
+# AiATrack ECCV’22 69.0 79.4 73.8 69.6 80.0 63.2 OSTrack 384 ECCV’22 71.1 81.1 77.6 73.7 83.2 70.8 ARTrack 384 CVPR’23 72.6 81.7 79.1 75.5 84.3 74.3 GRM CVPR’23 69.9 79.3 75.8 73.4 82.9 70.4 SeqTrack-B 384 CVPR’23 71.5 81.1 77.8 74.5 84.3 71.4 F-BDMTrack 384 ICCV’23 72.0 81.5 77.7 75.4 84.3 72.9 ROMTrack 384 ICCV’23 71.4 81.4 78.2 74.2 84.3 72.4 ODTrack-B AAAI’24 73.2 83.2 80.6 77.0 87.9 75.1 AQATrack 384 CVPR’24 72.7 82.9 80.2 76.0 85.2 74.9 ARTrackV2-B 384 CVPR’24 73.0 82.0 79.6 77.5 86.0 75.5 + FeedbackTrack Ours 74.8 82.7 80.2 81.2 89.2 81.3 ARTrackV2-L 384 CVPR’24 73.6 82.8 81.1 79.5 87.8 79.6 + FeedbackTrack Ours 75.4 83.6 81.6 81.8 89.6 82.1 HIPTrack CVPR’24 72.7 82.9 79.5 77.4 88.0 74.5 LoRAT-B 378 ECCV’24 72.9 81.9 79.1 73.7 82.6 72.9 LoRAT-L 378 ECCV’24 75.1 84.1 82.0 77.5 86.2 78.1 LoRAT-G 378 ECCV’24 76.2 85.3 83.5 78.9 87.8 80.7 SPMTrack-B CVPR’25 74.9 84.0 81.7 76.5 85.9 76.3 + FeedbackTrack Ours 76.4 84.9 82.6 80.6 89.9 80.4 SPMTrack-L CVPR’25 76.8 85.9 84.0 80.0 89.4 79.9 + FeedbackTrack Ours 77.9 86.8 85.2 82.6 91.4 83.8 SPMTrack-G CVPR’25 77.4 86.6 85.0 81.0 89.2 82.3 + FeedbackTrack Ours 79.1 87.8 86.3 83.4 91.8 84.0     
+
+> (a) ViT-B (b) ViT-L (c) ViT-G Figure 4: Learned signed mean q-scale across feedback blocks, averaged over attention heads within each block. All q-scales are initialized to 0.01, as indicated by the dashed lines.
+
+Analysis      
+
+> Parameter efficiency. Table 5 reports the parameter over-head across both tracking frameworks. For the SPMTrack-based implementations, FeedbackTrack adds 0.983M, 2.620M, and 6.548M parameters to the B, L, and G variants,
+
+Table 2: Ablation of Query Feedback (QF) and Gate Feed-back (GF) on GOT-10k. 
+
+Backbone QF GF AO SR 0.5 SR 0.75 
+
+ViT-B 76.5 85.9 76.3 ViT-B ✓ 79.7 89.2 80.1 ViT-B ✓ 78.3 87.2 77.8 ViT-B ✓ ✓ 80.6 89.9 80.4 
+
+ViT-L 80.0 89.4 79.9 ViT-L ✓ 82.0 91.1 83.4 ViT-L ✓ 80.6 90.0 81.2 ViT-L ✓ ✓ 82.6 91.4 83.8 
+
+ViT-G 81.0 89.2 82.3 ViT-G ✓ 83.0 91.4 83.7 ViT-G ✓ 81.8 90.2 82.7 ViT-G ✓ ✓ 83.4 91.8 84.0 
+
+Table 3: Comparison between same-frame modulation and cross-frame feedback on GOT-10k. Same-frame modulation uses the detached current group input, while cross-frame feedback uses the detached previous-frame group output. Both variants use the same modules, insertion positions, and parameter count. 
+
+Backbone Modulation Source AO SR 0.5 SR 0.75 
+
+ViT-B None 76.5 85.9 76.3 ViT-B Current-frame input 77.4 86.3 77.7 ViT-B Previous-frame output 80.6 89.9 80.4 
+
+ViT-L None 80.0 89.4 79.9 ViT-L Current-frame input 80.3 90.2 81.1 ViT-L Previous-frame output 82.6 91.4 83.8 
+
+ViT-G None 81.0 89.2 82.3 ViT-G Current-frame input 81.6 89.7 83.0 ViT-G Previous-frame output 83.4 91.8 84.0 
+
+Table 4: Effect of RMS alignment on GOT-10k. All variants contain both Query Feedback and Gate Feedback. 
+
+Backbone RMS Align. AO SR 0.5 SR 0.75 
+
+ViT-B 78.2 88.6 79.3 ViT-B ✓ 80.6 89.9 80.4 
+
+ViT-L 82.1 90.3 82.6 ViT-L ✓ 82.6 91.4 83.8 
+
+ViT-G 82.1 90.3 83.8 ViT-G ✓ 83.4 91.8 84.0 
+
+corresponding to increases of only 0.852%, 0.690%, and 0.489%, respectively. For ARTrackV2-B and ARTrackV2-L, the corresponding increases are 0.983M and 2.620M, ac-counting for only 0.753% and 0.686% of the original model sizes. FeedbackTrack therefore introduces less than 1% pa-rameter overhead across all five model configurations. 
+
+Runtime efficiency. Table 6 reports model inference throughput. For SPMTrack-B, SPMTrack-L, and SPMTrack-Table 5: Parameter overhead of FeedbackTrack across SPM-Track and ARTrackV2.                               
+
+> Model Baseline QF Only QF + GF Extra Increase SPMTrack-B 115.331M 115.409M 116.313M 0.983M 0.852% SPMTrack-L 379.582M 379.791M 382.202M 2.620M 0.690% SPMTrack-G 1339.512M 1340.034M 1346.060M 6.548M 0.489% ARTrackV2-B 384 130.514M 130.593M 131.497M 0.983M 0.753% ARTrackV2-L 384 382.059M 382.268M 384.679M 2.620M 0.686%
+
+Table 6: Model inference throughput on the GOT-10k test set. Image loading and preprocessing are excluded. 
+
+Model Baseline FPS FeedbackTrack FPS Reduction SPMTrack-B 45.59 42.20 7.44% SPMTrack-L 19.98 18.82 5.81% SPMTrack-G 4.40 4.16 5.45% ARTrackV2-B 384 15.7785 15.7505 0.18% ARTrackV2-L 384 12.9309 12.8203 0.86% 
+
+G, the throughput reductions are 7.44%, 5.81%, and 5.45%, respectively. For ARTrackV2-B and ARTrackV2-L, the re-ductions are only 0.18% and 0.86%. These results show that FeedbackTrack preserves most of the original inference throughput across both tracking frameworks while introduc-ing explicit recurrent cross-frame modulation. 
+
+Biologically inspired analysis. Biological visual feedback is distributed non-uniformly across the cortical hierarchy (Federer et al. 2021; Semedo et al. 2022; Fişek et al. 2023; Shen et al. 2022). We therefore analyze the signed mean 
+
+q-scale across attention heads within each feedback block. Since all scales are initialized to 0.01, their depth-dependent variation is learned during optimization. As shown in Fig. 4, ViT-B reaches its strongest feedback in the intermediate group, ViT-L develops stronger modulation from middle to deep groups, and ViT-G progressively in-creases toward deep groups before slightly decreasing. Over-all, feedback is weaker in shallow groups and stronger in intermediate and deep groups. This pattern is qualitatively consistent with hierarchical biological feedback, but reflects computational correspondence rather than anatomical equiv-alence. 
+
+Conclusion 
+
+We presented FeedbackTrack, a visual-cortex-inspired framework that introduces sparse, group-level layer-aligned cross-frame feedback into Transformer trackers. Through complementary Query Feedback and Gate Feedback path-ways, previous-frame representations recurrently modulate current visual processing while retaining the original feed-forward pathway and tracking pipeline. Beyond visual track-ing, the proposed mechanism provides a general approach for introducing recurrent temporal states into pretrained video models. Future work will explore its application to broader video tasks, including video object segmentation, action recognition, video understanding, and video generation. References 
+
+Bai, Y.; Zhao, Z.; Gong, Y.; and Wei, X. 2024. ARTrackV2: Prompting Autoregressive Tracker Where to Concentrate. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 19048–19057. Cai, W.; Liu, Q.; and Wang, Y. 2024. HIPTrack: Visual Tracking with Historical Prompts. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 19258–19267. Cai, W.; Liu, Q.; and Wang, Y. 2025. SPMTrack: Spatio-Temporal Parameter-Efficient Fine-Tuning with Mixture of Experts for Scalable Visual Tracking. In Proceedings of the Computer Vision and Pattern Recognition Conference ,16871–16881. Chen, X.; Peng, H.; Wang, D.; Lu, H.; and Hu, H. 2023. SeqTrack: Sequence to Sequence Learning for Visual Object Tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 14572–14581. Chen, X.; Yan, B.; Zhu, J.; Wang, D.; Yang, X.; and Lu, H. 2021. Transformer Tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 8126–8135. Cui, Y.; Jiang, C.; Wang, L.; and Wu, G. 2022. MixFormer: End-to-End Tracking with Iterative Mixed Attention. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 13608–13618. Dosovitskiy, A.; Beyer, L.; Kolesnikov, A.; Weissenborn, D.; Zhai, X.; Unterthiner, T.; Dehghani, M.; Minderer, M.; Heigold, G.; Gelly, S.; Uszkoreit, J.; and Houlsby, N. 2021. An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale. In International Conference on Learn-ing Representations .Fan, H.; Lin, L.; Yang, F.; Chu, P.; Deng, G.; Yu, S.; Bai, H.; Xu, Y.; Liao, C.; and Ling, H. 2019. LaSOT: A High-Quality Benchmark for Large-Scale Single Object Tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 5374–5383. Federer, F.; Ta’afua, S.; Merlin, S.; Hassanpour, M. S.; and Angelucci, A. 2021. Stream-Specific Feedback Inputs to the Primate Primary Visual Cortex. Nature Communications ,12(1): 228. Fişek, M.; Herrmann, D.; Egea-Weiss, A.; Cloves, M.; Bauer, L.; Lee, T.-Y.; Russell, L. E.; and Häusser, M. 2023. Cortico-Cortical Feedback Engages Active Dendrites in Visual Cor-tex. Nature , 617(7962): 769–776. Huang, L.; Zhao, X.; and Huang, K. 2019. GOT-10k: A Large High-Diversity Benchmark for Generic Object Track-ing in the Wild. IEEE Transactions on Pattern Analysis and Machine Intelligence , 43(5): 1562–1577. Lamme, V. A. F.; and Roelfsema, P. R. 2000. The Distinct Modes of Vision Offered by Feedforward and Recurrent Pro-cessing. Trends in Neurosciences , 23(11): 571–579. Li, B.; Wu, W.; Wang, Q.; Zhang, F.; Xing, J.; and Yan, J. 2019. SiamRPN++: Evolution of Siamese Visual Tracking with Very Deep Networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,4282–4291. Markov, N. T.; Vezoli, J.; Chameau, P.; Falchier, A.; Quilo-dran, R.; Huissoud, C.; Lamy, C.; Misery, P.; Giroud, P.; Ull-man, S.; Barone, P.; Dehay, C.; Knoblauch, K.; and Kennedy, H. 2014. Anatomy of Hierarchy: Feedforward and Feedback Pathways in Macaque Visual Cortex. Journal of Compara-tive Neurology , 522(1): 225–259. Mayer, C.; Danelljan, M.; Paudel, D. P.; and Van Gool, L. 2021. Learning Target Candidate Association to Keep Track of What Not to Track. In Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision , 13444–13454. Oquab, M.; Darcet, T.; Moutakanni, T.; Vo, H.; Szafraniec, M.; Khalidov, V.; Fernandez, P.; Haziza, D.; Massa, F.; El-Nouby, A.; Assran, M.; Ballas, N.; Galuba, W.; Howes, R.; Huang, P.-Y.; Li, S.-W.; Misra, I.; Rabbat, M.; Sharma, V.; Synnaeve, G.; Xu, H.; Jégou, H.; Mairal, J.; Labatut, P.; Joulin, A.; and Bojanowski, P. 2024. DINOv2: Learning Robust Visual Features without Supervision. Transactions on Machine Learning Research .Semedo, J. D.; Jasper, A. I.; Zandvakili, A.; Krishna, A.; Aschner, A.; Machens, C. K.; Kohn, A.; and Yu, B. M. 2022. Feedforward and Feedback Interactions between Visual Cor-tical Areas Use Different Population Activity Patterns. Na-ture Communications , 13(1): 1099. Shen, S.; Jiang, X.; Scala, F.; Fu, J.; Fahey, P.; Kobak, D.; Tan, Z.; Zhou, N.; Reimer, J.; Sinz, F.; and Tolias, A. S. 2022. Distinct Organization of Two Cortico-Cortical Feed-back Pathways. Nature Communications , 13(1): 6389. Siu, C.; Balsor, J.; Merlin, S.; Federer, F.; and Angelucci, A. 2021. A Direct Interareal Feedback-to-Feedforward Circuit in Primate Visual Cortex. Nature Communications , 12(1): 4911. Wang, N.; Zhou, W.; Wang, J.; and Li, H. 2021. Transformer Meets Tracker: Exploiting Temporal Context for Robust Vi-sual Tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 1571–1580. Wei, X.; Bai, Y.; Zheng, Y.; Shi, D.; and Gong, Y. 2023. Autoregressive Visual Tracking. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 9697–9706. Xie, J.; Zhong, B.; Mo, Z.; Zhang, S.; Shi, L.; Song, S.; and Ji, R. 2024. Autoregressive Queries for Adaptive Track-ing with Spatio-Temporal Transformers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 19300–19309. Yan, B.; Peng, H.; Fu, J.; Wang, D.; and Lu, H. 2021. Learn-ing Spatio-Temporal Transformer for Visual Tracking. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision , 10448–10457. Ye, B.; Chang, H.; Ma, B.; Shan, S.; and Chen, X. 2022. Joint Feature Learning and Relation Modeling for Tracking: A One-Stream Framework. In Computer Vision – ECCV 2022 , volume 13682 of Lecture Notes in Computer Science ,341–357. Springer. Zheng, Y.; Zhong, B.; Liang, Q.; Mo, Z.; Zhang, S.; and Li, X. 2024. ODTrack: Online Dense Temporal Token Learning for Visual Tracking. Proceedings of the AAAI Conference on Artificial Intelligence , 38(7): 7588–7596.

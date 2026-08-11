@@ -1,0 +1,418 @@
+Title: GenTrack3: Hybrid Stochastic-Deterministic Online Multi-Object Tracking with Cluster-Aware Association
+
+URL Source: https://arxiv.org/pdf/2608.09581v1
+
+Published Time: Tue, 11 Aug 2026 02:20:14 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+> *correspondence: toanvn@mmmi.sdu.dk
+
+# Gen Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject 
+
+# Tracking with Cluster -A ware Association 
+
+Preprint , compiled August 11, 2026 
+
+Toan Van Nguyen ID 1, Rasmus G. K. Christiansen ID 2, Dirk Kraft ID 3, and Leon Bodenhagen ID 4*SDU Robotics, University of Southern Denmark 
+
+## Abstract 
+
+Multi-object tracking (MOT) involves maintaining consistent target identities as objects dynamically enter and leave a scene. Deterministic approaches, such as tracking-by-detection with data association, produce reproducible results and are computationally e ffi cient, but they rely heavily on motion models and are sensitive to noisy detections that can lead to association errors. In contrast, stochastic methods explicitly model uncertainty and can better handle complex non-linear dynamics, albeit at the cost of increased computational complexity and variability arising from random sampling. This paper presents an online MOT framework that integrates deterministic and stochastic principles to achieve robust tracking under uncertainty. Furthermore, a novel track-to-detection matching approach is introduced to enhance scalability with increasing target numbers while supporting group tracking. The tracking inference mechanism employs a tracklet that includes identifiers, states, velocities, track penalties and track ages of targets, supporting a systematic tracking pipeline. Each target is associated with a stochastic particle set to compute the matching cost to detections. Reference implementations of the proposed approach and baseline trackers can be found on GitHub: https://github.com/SDU-VelKoTek/GenTrack3 .
+
+## 1 Introduction 
+
+Multi-object tracking (MOT) remains a highly challenging task, primarily due to the presence of factors such as occlusions, non-linear motion patterns, and high inter-object similarity. When objects exhibit strong visual resemblance, tracking algorithms often face di ffi culties in maintaining consistent identities over time, leading to potential identity switches. Similarly, partial or complete occlusions, caused by environmental obstacles or in-teractions between objects, can result in temporary or prolonged loss of target trajectories, further complicating the tracking pro-cess. In addition, irregular or unpredictable motion dynamics, which frequently occur in real-world scenarios, impose signifi-cant challenges on the accurate temporal association of objects across consecutive frames. E ff ectively addressing these issues is critical for the development of robust and precise MOT systems capable of functioning reliably in practical scenarios. 
+
+1.1 Related works 
+
+Recent advancements in object detection have solidified tracking-by-detection as the dominant strategy in state-of-the-art MOT frameworks, especially in scenarios involving a variable number of targets since frame-level detections facilitate the auto-matic initialization and termination of tracks while reducing drift accumulation. Within detection-based paradigm, the Kalman fil-ter is extensively employed for motion state updates and position estimation, often in conjunction with tracklet-detection associ-ation mechanisms. In [1], a data-oriented tracking framework reconstructs trajectories of an unknown number of interacting objects via a three-level association. Local analysis generates trajectory segments, constrained merging forms fragments, and global association produces final estimates using the Hungarian algorithm, which also incorporates sub-threshold detections for ambiguous cases. In [2], multi-person tracking in semi-crowded scenes is formulated as a nonlinear global optimization integrat-ing social grouping behavior into a ffi nity models. The Lagrange dual is solved via a two-stage algorithm using the Hungarian method and K-means clustering. In [3], SORT tracker provides a practical solution for real-time multi-object tracking, although its e ff ectiveness is strongly dependent on the accuracy of ob-ject detections. Subsequently, DeepSORT, as proposed in [4], enhances the original SORT by incorporating appearance fea-tures to mitigate identity switches. In [5], ByteTrack further advances tracking accuracy by separately managing high and low confidence detections during data association. In [6], BoT-SORT achieves improved performance through the integration of a refined Kalman filter, camera motion compensation, and appearance cues. In [7], OC-SORT addresses occlusion-related noise by generating virtual trajectories based on observations. In [8], SMILEtrack extends ByteTrack and BoT-SORT by in-corporating an object detector with a Siamese similarity mod-ule to improve appearance-based matching. In [9], ConfTrack enhances a Kalman filter-based tracking framework by apply-ing low-confidence penalization and cascading techniques to manage noisy detections. Built upon SORT, BoostTrack, intro-duced in [10], proposes a confidence-weighted similarity metric to prioritize reliable detection-tracklet associations in single-stage tracking. Additionally, ambiguities from Intersection over Union (IoU) are reduced using Mahalanobis distance and shape similarity. Confidence refinement allows e ff ective utilization of low-score detections, while interpolation and camera motion compensation maintain benchmark-level accuracy with real-time performance. Real-world scenarios often involve non-linear motion and non-Gaussian noise, but Kalman filter-based trackers rely on the assumptions of linear dynamics and Gaussian noise. In contrast, particle filters can e ff ectively address these challenges, and many methods have been developed to improve tracking accuracy and robustness of particle-based single-object trackers. However, applying particle filters to multi-object tracking presents di ffi cul-ties due to the high-dimensional state space that increases with arXiv:2608.09581v1 [cs.CV] 10 Aug 2026 Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 2the number of objects. Additionally, exploring particle filters for scenarios with unknown and time-varying numbers of targets remains challenging [11, 12, 13, 14, 15]. In [11], a method is pre-sented to address this issue but exhibited poor scalability as the number of targets grew. Thereafter, an approach is introduced in [12] which employs a modified Metropolis-Hastings algorithm incorporating add-delete and stay-leave operations; however, it was prone to duplicate tracks and decreased reliability when targets changed frequently. These particle-based approaches primarily focus on managing time-varying target counts, giving less consideration to factors such as object scale or appearance. By contrast, detection-based methods in [13, 14, 15] manage the addition and removal of targets more deterministically and place greater emphasis on robust observation models, though they of-ten overlook the optimization of the tracking inference process. Existing online MOT methods remain limited in their ability to simultaneously handle nonlinear dynamics, non-Gaussian noise, and object identity preservation in scenarios with time-varying numbers of targets. To address this gap, GenTrack, introduced in [16], integrates stochastic and deterministic paradigms for multi-object tracking. Unlike conventional particle sampling methods, each target in GenTrack is represented by a particle set that estimates its optimal state without full posterior sampling, while track initiation and removal are determined through deter-ministic matching history. Particles are generated via Markov Chain Monte Carlo (MCMC) and refined using Particle Swarm Optimization (PSO) prior to track-detection association. Track-detection matching costs and PSO fitness are formulated based on motion consistency, appearance similarity, target interactions, detection confidence, and track penalties, forming a unified tracking framework. Thereafter, GenTrack2, an extension of GenTrack is presented in [17] to better manage occlusions and maintain weak track continuity through a novel weak-track up-dating scheme and velocity regression. However, scalability remains constrained by the global cost matrix of all current tracks and detections used for matching. Furthermore, while the neighbour-based refinement of weak tracks performs well in sparse scenes, it can lead to ambiguities in crowded environ-ments where weak tracks are surrounded by numerous others. 
+
+1.2 Contributions and organizations 
+
+This paper introduces an online MOT framework that integrates deterministic and stochastic principles to enable robust and scal-able tracking under uncertainty. The proposed framework, re-ferred to as GenTrack3, models each target through tracklets encoding identifiers, states, velocities, penalties, and ages, aug-mented by a stochastic particle set for matching cost estimation. Furthermore, a novel track-to-detection association strategy is proposed to reduce space complexity while preserving reliabil-ity and supporting group tracking. The pipeline leverages prior tracklets, particle states, current detections, and detection confi-dences, which executes track-detection matching through four stages: (1) clustering-based track–detection grouping, (2) valid masking and cost computation, (3) shared detection handling with local cost refinement, and (4) final association. A mod-ified neighbor-based refinement further mitigates ambiguities in crowded scenes. A reference implementation is provided to validate the framework’s e ff ectiveness. The remainder of this paper is structured as follows: Section 2 outlines the tracking pipeline, followed by the data association 
+
+Figure 1: Overview of the tracking pipeline for temporal and scalable numbers of targets. Section 3 evalu-ates the proposed tracker on MOT17 and MOT20. Finally, the conclusions are presented in Section 4. 
+
+## 2 Methodology 
+
+To e ff ectively address non-linear dynamics and non-Gaussian noise, multi-object tracking can be formulated as a particle filtering problem. Here, the system state is represented as 
+
+{Kt, Xt} = {Ki,t, Xi,t}ki=1, with Kt denotes a set of target identi-fiers of k time-varying number of targets, and Xt denotes their states. Then, the posterior density P(Kt, Xt|Z0: t) is approximated using S random samples. Unlike conventional methods, the proposed approach omits track creation and removal during sampling, employing instead a deterministic data association to ensure output consistency. This design resolves the challenges of internal model of jointly predicting target motion and preserving identity, thereby eliminating the need for full posterior sampling and focusing on optimizing particles for each target [16, 17]. In this paper, target particles are sampled via a MCMC approach, as {KSt , XSt } ≜ Ps P(Kt, Xt|Kst−1, Xst−1), and refined using a PSO algorithm [18, 19] with a specifically designed fitness function. The optimized particles are subsequently passed through the proposed track-detection matching to update target states. The target state at time t is presented by a bounding box 
+
+Xi,t = (ui,t, vi,t, wi,t, hi,t), characterized by center ( ui,t, vi,t) and size ( wi,t, hi,t). Its corresponding velocity will be Vi,t =
+
+(˙ ui,t, ˙vi,t, ˙wi,t, ˙hi,t). The target velocities Vt = {V1,t, ..., Vk,t}
+
+are constrained by Vmax t = {Vmax  
+
+> 1,t
+
+, ..., Vmax k,t }, satisfying Vi,t ∈
+
+(−Vmax i,t , Vmax i,t ), with Vmax i,t = (˙ umax i,t , ˙vmax i,t , ˙wmax i,t , ˙hmax i,t ). For the tracking inference in this paper, target tracklets are then for-mulated by their identifiers, states, velocities, penalties, and ages up to the current frame It, as {Kt, Xt, Vt, Xpen t , Xage t } =
+
+{Ki,t, Xi,t, Vi,t, Xpen i,t , Xage i,t }ki=1.The following sections outline the tracking pipeline and the pro-posed track-detection matching for scalable numbers of targets. 
+
+2.1 Tracking pipeline 
+
+The tracking pipeline illustrated in Figure 1 comprises three pri-mary stages: particle sampling and optimization, track-detection Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 3association, and tracklet updates. Without an explicit motion model, particle sampling employs the random motion model in Equation (1): 
+
+(Vi,t = Vi,t−1 + εV .UVi,t
+
+Xi,t = Xi,t−1 + λV .Vi,t + λX .ε X .UXi,t
+
+(1) Parameters εX , ε V , λ X , and λV regulate state and velocity explorations, with λX + λV = 1. Perturbations UXi,t =
+
+(Uui,t, Uvi,t, Uwi,t, Uhi,t) and UVi,t = (U ˙ui,t, U ˙vi,t, U ˙wi,t, U ˙hi,t) bounded by (−Umax Xi,t , Umax Xi,t ) and ( −Umax Vi,t , Umax Vi,t ) which are determined by its bounding box size in the previous state {Ki,t−1, Xi,t−1, Vi,t−1}. To guide particles sampled from Equation (1) toward optimal po-sitions, PSO algorithm is applied with a fitness function com-bining history fitness f hPS O , exploration fitness f pPS O , and social fitness f iPS O .
+
+fPS O = σh. f hPS O + σp. f pPS O + σi. f iPS O (2) Here, weights σh, σ p, and σi are positive and σh + σp + σi = 1. Both f hPS O (comparing the particle to the previous optimal state) and f pPS O (comparing it to its prior PSO update) are measured by f (•, •), as: 
+
+f (•, •) = λs. fs + λm. fm (3) Here, fs ∈ [0 , 1] denotes the cosine similarity between non-negative HoG features of two input bounding boxes, while mo-tion fitness fm measures their distance, normalized to [0 , 1] by a target-adaptive maximum do,m. Weights λs and λm are positive and λs + λm = 1. Target interactions impact performance of multi-object tracking, especially under occlusions. The neighbour set {Ki,t, Xi,t}nei =
+
+{Knj,t, Xnj,t}Nn=1 of target {Ki,t, Xi,t} is obtained via a nearest-neighbour search {Ki,t, Xi,t}nei = Ψ ⟨(Ki,t, Xi,t), ε nei ⟩, with adap-tive threshold εnei based on the size of the bounding box of Xi,t,which does not directly participate in data association. Instead, social fitness is employed within PSO to guides particles to di-verge from nearby states, reducing ID switches, as computed as in Equation (4), with |x| denotes the magnitude of the vec-tor x. Here, Vmax s = Vmax i,t + Umax Vi,t , with ξp + ξV = 1. And, if 
+
+N = 0, f i,sPS O = 1. 
+
+f i,sPS O = ξp
+
+N .
+
+> N
+
+X
+
+> j=1
+
+min (|Xsi,t − X j,t|, 2εnei )2εnei 
+
++ ξV
+
+N .
+
+> N
+
+X
+
+> j=1
+
+min (|V si,t − V j,t|, Vmax s )
+
+Vmax s
+
+(4) Optimized particles are then used for track-detection data associ-ation via the Hungarian algorithm [20] with the target-oriented cost matrix Cmat ∈ RT ×D, where T and D are the numbers of tar-gets and detections, ( T = k). The matching cost Ci, j between Xi,t
+
+and detection det j, is computed by using S particles of Xi,t, track penalty Xpen i,t−1 ∈ [0 , 1], and detection confidence det con f j ∈ [0 , 1]: 
+
+Ci, j = λp. 1
+
+S .
+
+> S
+
+X
+
+> s=1
+
+CXsi,t ,det j 
+
+> m
+
++ λd.(1 − det con f j )
+
++λh.Xpen i,t−1
+
+(5) Here, λh, λ d and λp are positive and λh + λd + λp = 1. The motion consistent cost CXsi,t ,det j 
+
+> m
+
+∈ [0 , 1] is re-defined as: 
+
+CXsi,t ,det j 
+
+> m
+
+= σu · CXsi,t ,det j 
+
+> IoU
+
++ σd · CXsi,t ,det j 
+
+> d
+
+(6) The IoU cost is defined as CXsi,t ,det j 
+
+> IoU
+
+= 1 − IoU Xsi,t  
+
+> det j
+
+. The dis-tance cost CXsi,t ,det j 
+
+> d
+
+quantifies the track-detection bounding box separation, normalized to [0 , 1] using a maximum distance derived from their current bounding box sizes, with det j =
+
+(udet , vdet , wdet , hdet ). It is noted that IoU Xsi,t  
+
+> det j
+
+is computed as a combination of the two-dimensional spatial intersection and height-based intersection, and σu + σd = 1. By using Cmat , a set of M pairs {Kmi,t, Xmi,t, det mj,t}Mm=1 is identified. Strong tracks are then defined as ( Kmi,t, Xmi,t). Weak tracks are residual set {Kwt , Xwt } = {Kt, Xt} − { Kmi,t, Xmi,t}. Unmatched detec-tions {det ut , det u,con f t } = {Dt, Dcon f t } − { det mt , det m,con f t } are used to initialize new tracks {Knt , Xnt }. The state of system now can be detailed as: {Kt, Xt} = {(Kmt , Kwt , Knt ), (Xmt , Xwt , Xnt )}.Track states are updated according to their types, with Xmt
+
+and Xnt adopting their associated detection states, and penal-ties Xm,pen t , Xn,pen t and ages Xm,age t , Xn,age t reset to zero. Weak tracks ( Kwt , Xwt ), lacking matched detections, are updated using their PSO global bests and neighbours {Ki,g, Xi,g, fi,g, Xnei i }ki=1,with neighbors’ states taken from matched detections if strong, or from previous optimal states otherwise. States of weak tracks are then updated as: 
+
+
+
+{Kwt , Xwt } ← − { Kwg , Xwg , f wg , Vwt , Xnei w }
+
+Xw,pen t = Xw,pen t−1 + ζ. ∆t
+
+Xw,age t = Xw,age t−1 + ζ. ∆t.∂ max 
+
+∆t = (1 − e −l22σ2 ).(1 − f wg + ∆ e)(7) Here, ∂max denotes the maximum age, and ζ represents recovery trust, defined as ζ = sign (ρre − f wg + ∆ e) if a weak track has strong neighbours, and ζ = 1 otherwise. ∆e is an optional entrance penalty defined inside custom entrance areas, l counts consecutive unmatched frames, σ = η.∂ max with η > 1, and ρre ∈
+
+[0 , 1] is the recovery threshold. Track penalties and ages satisfy 1 ≥ Xw,pen t ≥ 0, and ∂max ≥ Xw,age t ≥ 0. It is noted that updating bounding box size like its center location during occlusions causes scale drift; thus, position and size updates should be decoupled. For deeper insight into the tracking pipeline, it is encouraged to consult [16, 17]. Beyond PSO social fitness, neighbour ( K j,t, X j,t) influences weak track ( Kwt , Xwt ) based on its reliability: strong-track neighbour is reliable to contribute to state update, whereas weak-track neighbour is excluded. Let {Xbt , Vbt } denote the set of reliable neighbours and {Xbt , Vbt } denote their median. Unlike [16, 17], the state of weak track in this paper is updated as: Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 4
+
+
+
+Xwt = Xbt − Xbt−1 + Xwt−1, if δ ≥ δd
+
+Xwt = (1 − σg). ˆXwt + σg.Xwg , otherwise (8) Here, δ denotes the cosine similarity between weak-track and neighbour velocities, with δd is the similarity threshold. Xwg
+
+and σg represent the weak track’s post-PSO global best and its associated trust factor, while ˆ Xwt is updated by using its previous optimal state and velocity. The size of ˆ Xwt remains similar as of 
+
+Xwt−1, while the bounding box center’s position [u,v] ˆXwt is updated as:  
+
+> [u,v]
+
+ˆXwt = [u,v] Xwt−1 + [u,v]Vwt (9) It is noted that the weak track state is updated only if |[u,v]Vwt | ≥ 
+
+τV to suppress noise, with size adjustments made minimally or upon a detection match. After updates, penalties {Xpen t } =
+
+{Xm,pen t , Xw,pen t , Xn,pen t } and ages {Xage t } = {Xm,age t , Xw,age t , Xn,age t }
+
+of all targets are recorded, and expired tracks are removed from the tracklets as follows: 
+
+{Kt, Xt, Vt, Xpen t , Xage t } =
+
+{Ki,t, Xi,t, Vi,t, Xpen i,t , Xage i,t |Xage i,t < ∂ max }ki=1
+
+(10) Finally, for each current target Xi,t, velocity regression over its past H states with a frame window F (0 < F ≤ H) estimates trend-based velocity for subsequent particle generation and state updates. The presented tracking pipeline enables robust performance un-der nonlinear target dynamics. Nonetheless, scalability remains a critical issue due to the reliance on a full cost matrix CT xD 
+
+for global data association, with T and D are total numbers of current targets and detections. It incurs substantial computa-tional overhead and hinders real-time applicability when the number of targets significantly increases. While some prior works [21, 22], not MOT-specific, have introduced modified Hungarian algorithms and incremental cost updates, they do not adequately address the raised limitation. In this paper, a novel data association framework is introduced that preserves global track-detection matchings while improving scalability. Distinct from multi-stage matching strategies [1, 2, 4, 5], the proposed method systematically constructs a cost matrix that partitions the global matching problem into smaller, localized associations within a single-stage process. Global optimality is subsequently maintained through shared detection processing. The detailed formulation of the proposed track-detection matching approach is provided in the following section. 
+
+2.2 Proposed track-detection matching 
+
+To address the spatial complexity of the matching cost matrix while supporting group tracking, an association framework is introduced. The track-detection pipeline, illustrated in Figure 2, utilizes previous target tracklets and particle states, along with current detections and associated confidences. Following input acquisition, the pipeline comprises four stages: track-detection grouping, valid track-detection masking and cost computation, shared detection processing with local cost matrix refinement, and final track-detection matchings. 
+
+Figure 2: Pipeline for track-detection matching The first stage clusters tracks and detections to partition the global cost matrix into smaller, independent submatrices for effi cient matching, as illustrated in Figure 3. A two-dimensional (2-D) occupancy grid map G is defined over the image It with width Iw and height Ih, as G = {gy,x|0 ≤ y ≤ Ih 
+
+> gy
+
+, 0 ≤ x ≤ Iw 
+
+> gx
+
+},where gx = n.Ip and gy = m.Ip denote the grid cell dimensions along the width and height, and Ip is the image pixel unit. In this paper, the grid-map was configured with gx = 5 pixels and gy = 5 pixels. Accordingly, the grid-map dimensions are (Gw, Gh) = ( Iw 
+
+> gx
+
+, Ih 
+
+> gy
+
+). The occupancy of each cell is updated based on the previous optimal target states, as: 
+
+gy,x =
+
+(1, if y ∈ By & x ∈ Bx
+
+0, otherwise (11) For each target state Xi = (ui, vi, wi, hi) with ∀Xi ∈ Xt−1,
+
+Bx = [ ui−0.5wi 
+
+> gx
+
+− ε. wi 
+
+> gx
+
+, ui+0.5wi 
+
+> gx
+
++ ε. wi 
+
+> gx
+
+] and By = [ vi−0.5hi 
+
+> gy
+
+−
+
+ε. hi 
+
+> gy
+
+, vi+0.5hi 
+
+> gy
+
++ε. hi 
+
+> gy
+
+], where ε is the inflation ratio. Since all bound-ing boxes lie within the image boundaries, {By, Bx} ⊆ { Gy, Gx}.The set of occupied cells is Gocc = {gy,x|gy,x = 1}, and the set of free cells is the complement G f ree = G − Gocc . The grid-map update process is illustrated in the top-right of Figure 3. Subsequently, clustering is performed on the 2-D occupancy grid map G using connected-component labeling. Cells in G f ree 
+
+are assigned to the background cluster and excluded from sub-sequent processing. Valid clusters are extracted from Gocc by evaluating 8-connected neighborhoods, where adjacent occupied cells are grouped into the same cluster. The clustering process is illustrated in the bottom-right of Figure 3, with distinct clusters visualized in di ff erent colors. Each cluster comprises occupied cells belonging to the same connected region. After the cluster set L = {Locc } is obtained, tracks and detections are mapped to their respective clusters. Since the occupancy grid is updated using the bounding boxes of track states, a track Xi is assigned to cluster Locc if ( vi 
+
+> gy
+
+, ui 
+
+> gx
+
+) ∈ Locc , ensuring a unique cluster as-sociation per track. Detections, however, are subject to noise and temporal discrepancies between frames. Thus, a detection 
+
+det j = (u j, v j, w j, h j) is assigned to cluster Locc if ( v j 
+
+> gy
+
+, u j 
+
+> gx
+
+) ∈ Lexp occ ,where Lexp occ denotes an expanded region of Locc by half the detec-tion bounding box size. This expansion may result in detections belonging to multiple clusters, which is resolved in the subse-quent stage. In the second stage, after assigning tracks and detections to clusters, a valid track-detection pair mask is constructed for each cluster to eliminate redundant cost computes. Since matches are Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 5
+
+Figure 3: Track and detection grouping sampled from the MOT17-04 sequence [23], containing 45 targets in the current frame. Top-left: current tracking scene; top-right: updated 2-D occupancy grid map; bottom-right: clustering results, with di ff erent colors representing distinct clusters; bottom-left: mapping of tracks and detections to their respective clusters. The blue bounding boxes indicate detections. implausible when tracks and detections are spatially distant, and computing full matching costs is more expensive than simple distance calculation, the mask e ff ectively reduces computational complexity - particularly with large target sets. For cluster Locc ,the matching cost matrix is defined as CL ∈ RT L xD L
+
+, where T L
+
+and DL denote the numbers of tracks and detections within the cluster. The corresponding valid-pair mask ML ∈ RT L xR L
+
+is updated as follows: 
+
+MLi, j =
+
+
+
+1, if |XLi − det Lj | ≤ λD.
+
+q
+
+w2 
+
+> j
+
++ h2
+
+> j
+
+0, otherwise (12) Here, XLi and det Lj denote a track and a detection assigned to cluster Locc , with w j and h j representing the width and height of 
+
+det Lj . The factor λD > 1 controls the valid spatial range around a detection. Figure 4 illustrates the valid track–detection mask for a cluster: a track is valid for matching with the detection if its bounding box region is entirely green, and invalid if any portion is orange. For invalid pairs ( MLi, j = 0), the matching cost CLi, j is assigned a large value; otherwise, the cost is computed using Equation (5) and Equation (6). One track is always assigned to a unique cluster, whereas a detection may belong to multiple clusters, as shown in Fig-ure 5. For global matching, a detection cannot be assigned to multiple tracks. To enforce this, shared-detections undergo 
+
+Figure 4: Example of a valid-pair mask within an individual cluster for a specific detection. The blue bounding box indicates the detection. post-processing: each is reallocated to the optimal cluster to ensure a one-to-one track-detection correspondence. Specif-ically, all valid tracks associated with a shared-detection are compared, and the detection is allocated to the best-matching cluster. Given that valid masks constrain the comparisons, the number of candidate pairs remains small. For a shared detection det s, let {Lsl }El=1 denote its associated list of E clusters. For each cluster Lsl , the best track and cor-Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 6
+
+Figure 5: Example scenarios where a detection is assigned to multiple clusters. The blue bounding box highlights the detection, while di ff erent colors represent distinct clusters. 
+
+Figure 6: A shared detection - shown as a blue bounding box (last part of figure)- is initially assigned to two di ff erent clusters before being correctly finalized in the right-side cluster. responding cost for det s are determined. Let {DLt } represent the set of all detections in Lsl , so that det s ∈ { DLt }. A track 
+
+Xsl ∈ { XLl } is defined as the best match of det s in Lsl if it sat-isfies ∀det Lj ∈ { DLt }, Cdet Lj
+
+> Xsl
+
+> Cdet s
+
+> Xsl
+
+∧ ∀ XLl,i ∈ { XLl }, Cdet s
+
+> XLl,i
+
+> Cdet s
+
+> Xsl
+
+,where {XLl } is the set of all valid pairwise tracks associated with 
+
+Lsl , and Cdet X denotes the matching cost between track X and detection det . Then, the representative cost of the shared de-tection det s to cluster Lsl is defined as Cdet s
+
+> Lsl
+
+= Cdet s
+
+> Xsl
+
+, and it is used to compare det s across clusters. If ¬∃ Xsl ∈ { XLl } satisfies the previous condition, Cdet s
+
+> Lsl
+
+is assigned a very big value. After the representative costs of det s across its associated clusters are determined, it is assigned to the cluster Lsb that minimizes the cost, as Cdet s
+
+> Lsb
+
+< Cdet s 
+
+> Lsq
+
+, ∀Lsq ∈ { Lsl } ∧ b , q. Finally, the matching costs of det s for tracks in all other clusters are then set to a large value. An illustration of the shared-detection process is provided in Figure 6. After shared detections are assigned to their optimal clusters, final cost matrices for track-detection matching within each clus-ter are established. Local track-detection assignments are then performed per cluster. Although track-detection assignments are performed locally, the overal matching remains global through the pipeline illustrated in Figure 2. This approach also enhances conditions for group tracking. The primary di ff erences in complexity between the proposed track-detection matching method and the approaches in [16, 17] arise from cost matrix computation and assignment. For a global cost matrix of T tracks and D detections, as in [16, 17], the space complexity is O(T · D) for cost matrix and O(T ·
+
+D + T + D) for the assignments. In contrast, for the proposed method, which partitions tracks and detections into L clusters, the space complexity of the cost matrices and assignments is PLl=1 O(Tl · Dl) and PLl=1 O(Tl · Dl + Tl + Dl), respectively, where 
+
+Tl ≥ 0 and Dl ≥ 0 denote the number of tracks and detections in the lth cluster. Since Tl and Dl are non-negative and T =PLl=1 Tl and D = PLl=1 Dl, it is straightforward to verify that 
+
+T · D ≥ PLl=1 Tl · Dl. Therefore, O(T · D) ≥ PLl=1 O(Tl · Dl) and 
+
+O(T · D+T + D) ≥ PLl=1 O(Tl · Dl +Tl + Dl). The time complexity of constructing the global cost matrix is O(T · D · tc), where tc
+
+denotes the computation time per cost, as defined in Equation (5), while the worst case time complexity of the assignment step is 
+
+O(max (T, D)3). Analogously to the space complexity analysis, the time complexity of the global cost matrix exceeds that of the proposed method. Furthermore, applying valid track-detection masks reduces the complexity of the cost matrix. A single cost computation in Equation (5) involves S IoU evaluations and 
+
+S box distance computations, in addition to other operations, while the mask requires only a single box distance per entry. Consequently, masking reduces both computational time and resource usage. Increasing the number of clusters reduces the computational cost of cost matrix construction and assignment by operating on smaller subsets of tracks and detections. However, this may increase the complexity of shared detection processing. The computational complexity of both the grouping stage and shared detection processing is further influenced by the density of the tracking scenario. Further analysis follows in Section 3. Although the shared-detection processing generally ensures global assignments, a near-optimal solution can be obtained for stricter computation by selecting the top n tracks from each cluster rather than all valid tracks, with top n = 1 using direct mutual lowest-cost. In practice, this approach is more scalable while remaining near-optimal since each detection is assigned to the cluster with the lowest achievable cost and the global solution would not assign a detection to a higher-cost cluster. 
+
+## 3 Evaluations 
+
+The proposed method was evaluated on the MOT17 [23] and MOT20 [24] datasets. Specifically, the MOT17-04 sequence (including 1050 frames at a resolution 1920 ×1080 and was recorded at 30 frames per second (FPS)) was used to assess performance in sparse scenes, while the MOT20-05 (including 3315 frames at a resolution 1654x1080 and was recorded at 25 FPS) was employed for crowded scenarios. Illustrations of these sequences are shown in the top-left of Figure 3 and in the left of Figure 7, respectively. Furthermore, comparative evaluations were conducted against previous trackers, including SORT [3], DeepSORT [4], Byte-Track [5], BoT-SORT [6], OC-SORT [7], SMILEtrack [8], Con-fTrack [9], BoostTrack [10], GenTrack Super [16], and Gen-Track2 Super [17], using identical detections and ground truths. The GenTrack framework introduced in [16] features three vari-ants, among which the full version, GenTrack Super, is used for comparison. The method in [17], being an extension of Gen-Track Super, is referred to as GenTrack2 Super. The proposed approach represents a further extension, will be termed as Gen-Track3 Super. Additionally, a variant, GenTrack2 Super +, is evaluated; it employs the complete GenTrack2 Super pipeline but replaces its track-detection matching component with the proposed matching method in this paper. All experiments were performed on a PC equipped with an AMD Ryzen 7 PRO 8840U processor, 16GB RAM, without dedicated GPU (Graphics Processing Unit). A reference implementation of the proposed method, along with re-evaluable implementa-tions of the compared trackers, is provided for re-evaluation. Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 7Table 1: Tracking Performance Evaluated on the MOT17-04 [23] 
+
+Tracker ATA IDF1 HOTA MOTA 
+
+SORT [3] 56.17 82.60 61.96 69.86 DeepSORT [4] 51.00 89.44 55.51 75.00 ByteTrack [5] 49.73 83.28 62.94 73.84 BoT-SORT [6] 40.34 82.79 61.74 70.88 OC-SORT [7] 49.59 81.41 59.59 69.11 SMILEtrack [8] 44.10 83.97 62.17 71.48 ConfTrack [9] 51.75 90.18 68.10 82.16 BoostTrack [10] 49.88 81.50 61.34 69.40 GenTrack Super [16] 62.95 93.59 68.60 85.11 GenTrack2 Super [17] 66.90 93.88 70.04 85.72 
+
+GenTrack2 Super + 68.94 93.40 66.64 87.31 GenTrack3 Super 63.62 93.16 67.61 84.86 Table 2: Tracking Performance Evaluated on the MOT20-05 [24] 
+
+Tracker ATA IDF1 HOTA MOTA 
+
+SORT [3] 29.63 67.01 38.19 49.93 DeepSORT [4] 22.47 84.47 26.11 73.68 ByteTrack [5] 20.93 63.89 37.03 55.25 BoT-SORT [6] 14.14 63.61 37.98 55.51 OC-SORT [7] 22.53 65.56 40.94 55.24 SMILEtrack [8] 20.96 70.16 40.07 55.62 ConfTrack [9] 28.23 81.20 45.59 78.39 BoostTrack [10] 23.98 62.69 38.08 50.00 GenTrack Super [16] 28.02 88.00 34.27 75.14 GenTrack2 Super [17] 35.84 91.88 39.96 77.45 
+
+GenTrack2 Super + 35.16 91.10 39.82 76.89 
+
+GenTrack3 Super 34.00 88.23 44.23 78.72 
+
+Tracking performance was assessed using established metrics [25, 26], including ATA (Average Tracking Accuracy), IDF1, HOTA (Higher Order Tracking Accuracy), and MOTA (Multiple Object Tracking Accuracy). Here, their values range from 0 to 100, with higher values indicate better results. The results, summarized in Table 1 and Table 2, with best metrics in bold, demonstrate distinct performance pattern across track-ers. In Table 1, GenTrack2 Super achieves the highest IDF1 and HOTA scores, while GenTrack2 Super + attains superior ATA and MOTA values. However, Table 2 reveals trade-o ff s between identity consistency and localization: GenTrack2 Super excels in ATA and IDF1, whereas ConfTrack achieves the highest HOTA, and GenTrack3 Super achieves the highest MOTA score. These findings indicate that the weak track refinement mechanism in GenTrack2 Super e ff ectively manages occlusions and ensures trajectory smoothness in sparse scenes but can cause state shifts in dense environments, such as the MOT20-05, where weak tracks are surrounded by numerous others. The performance of GenTrack2 Super + further demonstrates that the proposed track-detection matching strategy e ff ectively reduces computational complexity while maintaining comparable global assignment accuracy. Overall, the complete framework in this paper, Gen-Track3 Super, achieves a competitive performance across both sparse and crowded scenes. 
+
+Figure 7: Crowded scene from MOT20-05 sequence [24] show-ing 188 targets in the current frame. Three clusters are identified: clusters 1 and 2 each contain a single target, while the last cluster contains the remaining 186 targets. 
+
+Figure 8: Image-region clustering: the image is partitioned into six smaller regions, each treated as an individual cluster. Observations from implementation identify an edge case when a large number of targets densely occupy the observation region, as shown in Figure 7. In this case, target grouping using oc-cupancy grid maps and clustering does not help to reduce the computation. Specifically, the right side of Figure 7 shows three clusters: clusters 1 and 2 each contain a single target, whereas the last cluster encompasses 186 targets. In this scenario, track grouping is achieved by partitioning the image into smaller regions, with each region treated as a distinct cluster. The subse-quent track-detection matching pipeline remains identical to the original approach, except that the occupancy grid map used for clustering is replaced by a simple spatial division. An example is shown in Figure 8, where the image is divided into six regions, each representing a separate cluster. However, regional clustering results in a higher number of shared detections, increasing the complexity of shared-detection pro-cessing and potentially reducing accuracy. These observations indicate that the proposed track-to-detection method is suited for sparse environments, such as robot navigation and human–robot interaction, where group tracking is essential for socially aware navigation. In contrast, the global masking cost matrix provides a better balance between performance in sparse and dense sce-narios, o ff ering greater overall robustness. A comprehensive analysis across GenTrack versions will be reported in future work. Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 8
+
+## 4 Conclusions 
+
+This paper introduces an online visual MOT framework that integrates deterministic and stochastic components for robust and scalable tracking under uncertainty. Each target is mod-eled using a stochastic particle set for optimal state estimation, while a novel track-to-detection association preserves temporal identity consistency. The tracking inference employs tracklets encompassing identifiers, states, velocities, penalties, and ages to support a unified tracking pipeline. Insights from implemen-tation indicate that the proposed track-to-detection method is suited for sparse environments, such as robot navigation and human–robot interaction, where group tracking is essential for socially aware navigation. 
+
+## Acknowledgment 
+
+This work was a part of VelKoTek project, funded by The Min-istry of Food, Agriculture and Fisheries of Denmark via the Green Development and Demonstration Program (GUDP). 
+
+## References 
+
+[1] Csaba Beleznai and David Schreiber, "Multiple object tracking by hierarchical association of spatio-temporal data," in 2010 IEEE International Conference on Image Processing, 2010, pp. 41-44. [2] Zhen Qin and Christian R. Shelton, "Improving Multi-target Tracking via Social Grouping," in 2012 IEEE Con-ference on Computer Vision and Pattern Recognition, 2012, pp. 1972-1978. [3] Bewley Alex and Ge Zongyuan and Ott Lionel and Ramos Fabio and Upcroft Ben, "Simple online and realtime track-ing," in 2016 IEEE International Conference on Image Processing (ICIP), 2016, pp. 3464-3468. [4] Nicolai Wojke and Alex Bewley and Dietrich Paulus, "Sim-ple online and realtime tracking with a deep association metric," in 2017 IEEE International Conference on Image Processing (ICIP), 2017, pp. 3645-3649. [5] Yifu Zhang and Peize Sun and Yi Jiang and Dongdong Yu and Fucheng Weng and Zehuan Yuan and Ping Luo and Wenyu Liu and Xinggang Wang, "ByteTrack: Multi-object tracking by associating every detection box," in Computer Vision – ECCV 2022. Lecture Notes in Computer Science, vol. 13682, 2022, Springer Cham. [6] Nir Aharon and Roy Orfaig and Ben-Zion Bobrovsky, "BoT-SORT: Robust associations multi-pedestrian track-ing," arXiv, 2022. Available at: https://doi.org/10. 48550/arXiv.2206.14651 
+
+[7] Jinkun Cao and Jiangmiao Pang and Xinshuo Weng and Rawal Khirodkar and Kris Kitani, "Observation-Centric SORT: Rethinking SORT for robust multi-object tracking," in 2023 IEEE /CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2023, pp. 9686-9696. [8] Yu-Hsiang Wang and Jun-Wei Hsieh and Ping-Yang Chen and Ming-Ching Chang and Hung-Hin So and Xin Li, "SMILEtrack: Similarity learning for occlusion-aware mul-tiple object tracking," in Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence, vol. 38, no. 6, pp. 5740-5748, 2024. [9] Hyeonchul Jang and Seokjun Kang and Takgen Kim and HyeongKi Kim, "ConfTrack: Kalman filter-based multi-person tracking by utilizing confidence score of detection box," in 2024 IEEE /CVF Winter Conference on Applica-tions of Computer Vision (WACV), 2024, pp. 6583-6592. [10] Vukasin D. Stanojevic and Branimir T. Todorovic, "Boost-Track: Boosting the similarity measure and detection con-fidence for improved multiple object tracking," Machine Vision and Applications, vol. 35, no. 53, 2024. [11] M. Isard and J. MacCormick, "BraMBLe: A Bayesian multiple-blob tracker," in Proceedings Eighth IEEE Inter-national Conference on Computer Vision (ICCV 2001), 2001, pp. 34-41. [12] Zia Khan and T. Balch and F. Dellaert, "MCMC-based particle filter for tracking a variable number of interacting targets," IEEE Transactions on Pattern Analysis and Ma-chine Intelligence, vol. 27, no .11, pp. 1805-1819, 2005. [13] Michael D. Breitenstein and Fabian Reichlin and Bastian Leibe and Esther Koller-Meier and Luc Van Gool, "Robust tracking-by-detection using a detector confidence particle filter," in 2009 IEEE 12th International Conference on Computer Vision (ICCV), 2009, pp. 1515-1522. [14] Ming Yang and Gengjun Lv and Wei Xu and Yihong Gong, "Detection driven adaptive multi-cue integration for mul-tiple human tracking," in 2009 IEEE 12th International Conference on Computer Vision (ICCV), 2009, pp. 1554-1561. [15] Kenji Okuma and Ali Taleghani and Nando de Freitas and James J. Little and David G. Lowe, "A boosted particle filter: multitarget detection and tracking," in Proceedings of European Conference on Computer Vision (ECCV), 2024, pp.28-39. [16] Toan Van Nguyen and Rasmus G. K. Christiansen and Dirk Kraft and Leon Bodenhagen, "GenTrack: A New Genera-tion of Multi-Object Tracking," arXiv, 2025. Available at: 
+
+https://doi.org/10.48550/arXiv.2510.24399 .[17] Toan Van Nguyen and Rasmus G. K. Christiansen and Dirk Kraft and Leon Bodenhagen, "GenTrack2: An Improved Hybrid Approach for Multi-Object Track-ing, arXiv, 2025. Available at: https://doi.org/10. 48550/arXiv.2510.24410 .[18] J. Kennedy and R. Eberhart, "Particle swarm optimiza-tion," in Proceedings of IEEE International Conference on Neural Networks, 1995, pp. 1942-1948. [19] M. Clerc and J. Kennedy, "The particle swarm - explosion, stability, and convergence in a multidimensional complex space," IEEE Transactions on Evolutionary Computation, vol. 6, no. 1, pp. 58-73, 2002. [20] H. W. Kuhn, "The Hungarian method for the assignment problem," Naval Research Logistics Quarterly, vol. 2, no. 1-2, pp. 83-97, 1995. [21] Tingpeng Li and Yue Li and Yanling Qian, "Improved Hungarian algorithm for assignment problems of serial-parallel systems," Journal of Systems Engineering and Electronics, vol. 27, no. 4, pp. 858-870, 2016. Preprint – G en Track 3: H ybrid Stochastic –D eterministic Online Multi -O bject Tracking with Cluster -A ware Association 9[22] Ayorkor Mills-Tettey and Anthony Stent and M. Bernar-dine Dias, "The Dynamic Hungarian Algorithm for the Assignment Problem with Changing Costs," Robotics In-stitute, Carnegie Mellon University, 2007. [23] Patrick Dendorfer and Aljosa Osep and Anton Milan and Konrad Schindler and Daniel Cremers and Ian Reid and Stefan Roth and Laura Leal-Taixe, "MOTChallenge: A benchmark for single-camera multiple target tracking," International Journal of Computer Vision, vol. 129, pp. 845-881, 2021. [24] Patrick Dendorfer and Hamid Rezatofighi and Anton Mi-lan and Javen Shi and Daniel Cremers and Ian Reid and Stefan Roth and Konrad Schindler and Laura Leal-Taixe, "MOT20: A benchmark for multi object tracking in crowded scenes," arXiv, 2020. Available at: https: //doi.org/10.48550/arXiv.2003.09003 
+
+[25] Vasant Manohar and Padmanabhan Soundararajan and Har-ish Raju and Dmitry Goldgof and Rangachar Kasturi and John Garofolo, "Performance evaluation of object detec-tion and tracking in video, "Springer, Berlin, Heidelberg, 2006, in Narayanan, P.J., Nayar, S.K., Shum, HY. (eds) Computer Vision – ACCV 2006. ACCV 2006. Lecture Notes in Computer Science, vol .3852, pp. 151-161. [26] Jonathon Luiten and Aljosa Osep and Patrick Dendorfer and Philip Torr and Andreas Geiger and Laura Leal-Taixe and Bastian Leibe, "HOTA: A higher order metric for evaluating multi-object tracking," International Journal of Computer Vision, vol. 129, pp. 548-578, 2021.
