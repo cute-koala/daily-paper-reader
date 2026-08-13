@@ -1,0 +1,268 @@
+Title: MVTrack: Ultrafast Appearance-Free Moving Object Tracking from Compressed Bitstreams
+
+URL Source: https://arxiv.org/pdf/2608.10790v1
+
+Published Time: Wed, 12 Aug 2026 00:57:48 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# MVTrack: Ultrafast Appearance-Free Moving Object Tracking from Compressed Bitstreams 
+
+Iñaki Erregue 1,2,4 , Kamal Nasrollahi 3,4 , and Sergio Escalera 1,2,3 
+
+> 1
+
+Universitat de Barcelona  
+
+> 2
+
+Computer Vision Center  
+
+> 3
+
+Aalborg Universitet  
+
+> 4
+
+Milestone Systems 
+
+Abstract. Deploying modern video trackers at scale is bottlenecked by the computational cost of RGB-based object detectors. To this end, we present MVTrack, an ultrafast tracker for moving objects that operates directly on H.264 bitstreams. MVTrack combines MVDet, a lightweight detector for motion vector fields, with MVLink, a minimalist kinematic association module. On VIRAT, MVTrack outperforms YOLO26n while using 60 × fewer parameters, requiring 40 × fewer FLOPs, and reducing CPU latency by 8.6 ×. These results demonstrate that compressed video data alone can enable accurate and scalable surveillance tracking, thereby bypassing the need for pixel reconstruction. 
+
+Keywords: Compressed-domain video analysis · Motion vectors · Multi-object tracking 
+
+# 1 Introduction 
+
+Video surveillance has reached a planetary scale, with hundreds of millions of cameras monitoring urban, transportation, and industrial environments. Yet real-time analytics remains constrained by the cost of processing visual data, especially when many high-resolution feeds must run simultaneously on resource-limited edge hardware. While modern tracking-by-detection frameworks (TbD) achieve impressive accuracy, they typically rely on GPU-accelerated object de-tectors that operate on decoded RGB frames. As a result, CPU-only deployments must aggressively subsample frames, reduce resolution, or offload computation. A key observation motivates this work: for many surveillance applications, appearance is not the primary signal of interest; motion is. Tasks such as traf-fic monitoring, intrusion detection, occupancy estimation, and trajectory-based anomaly detection ultimately depend on where objects move and how they move, rather than on detailed visual appearance. Yet most tracking systems implicitly assume that visual content must first be reconstructed before meaningful track-ing can occur. Consequently, the dominant paradigm remains RGB-centric, even when the objective is simply to localize and associate moving entities over time. Compressed video representations offer an alternative perspective. Modern video codecs such as H.264 encode predictive frames using motion vectors (MVs). arXiv:2608.10790v1 [cs.CV] 11 Aug 2026 2 I. Erregue et al .
+
+Prior work has successfully exploited these compact displacement fields for ob-ject detection [16, 28, 32, 39, 40, 42], tracking [2, 6, 9, 11, 17, 24, 29, 41], segmenta-tion [14, 26, 36–38, 44], action recognition [15, 43, 46], multi-modal video under-standing [35, 48], and numerous other vision tasks [7, 8, 13, 33, 45, 50]. However, nearly all compressed-domain approaches retain a periodic RGB pathway. MVs accelerate inference on intermediate frames, while heavyweight RGB networks are invoked regularly to recover semantic information and correct accumulated errors. In other words, existing systems adopt a slow-fast paradigm in which compressed-domain motion serves as a computational shortcut, but RGB re-mains the ultimate source of truth. We argue that, for moving-object tracking in surveillance settings, the slow stream is unnecessary. Moving objects generate large, coherent MV patterns over time, while static scene content has near-zero displacement. Thus, MVs contain the signal needed to track moving entities. Rather than treating MVs as an auxiliary cue, we use them as the primary rep-resentation and eliminate RGB entirely. We call this the always-fast paradigm. Beyond computational efficiency, an always-fast approach offers distinct ad-vantages for practical edge deployment. Because RGB frames are never recon-structed, the system provides a more privacy-aware representation by reducing direct exposure to biometric or appearance-based features. Furthermore, its min-imal footprint enables real-time trajectory generation to summarize scene activ-ity, serving as an efficient filter for event-based recording or anomaly detection. MVTrack can thus act as an always-on, low-power front end that triggers heavy, pixel-level perception models only when meaningful activity is detected. By by-passing both RGB decoding and appearance-based inference, this framework is well suited to resource-constrained, CPU-only edge devices and large-scale, multi-stream surveillance deployments. To this end, we present MVTrack , an ultrafast moving-object tracker that operates entirely on H.264 bitstreams. We focus on pedestrians and vehicles, as these categories constitute most objects of interest in practical CCTV surveil-lance applications. The proposed TbD framework couples MVDet , a lightweight CenterNet-inspired [51] detector adapted to MV representations, with MVLink ,a ByteTrack-based [47] association module that uses kinematics to reduce iden-tity fragmentation during stationary periods. Together, these components enable real-time tracking across multiple concurrent video streams on a single consumer-grade CPU while maintaining competitive accuracy. Tracking experiments on VIRAT [30] demonstrate that MVTrack outperforms YOLO26n [18] while using 60 × fewer parameters, requiring 40 × fewer FLOPs, and reducing CPU latency by a factor of 8.6 ×. More broadly, our results suggest that useful surveillance tracking can be achieved without ever reconstructing a pixel, opening a path toward scalable, privacy-preserving, and resource-efficient video analytics. MVTrack 3· · ·        
+
+> IP· · · PIP· · · GOP
+> · · ·
+> Fig. 1: GOP organization consisting of I-frames followed by predictive frames with MVs, and an HSV visualization of MVs, along with MB partitions.
+
+# 2 Related Work 
+
+2.1 Video Coding Preliminaries 
+
+Codecs such as H.264 exploit spatial and temporal redundancy to enable efficient video storage and transmission. Rather than storing raw pixels, they suppress predictable information across frames, retaining motion information and resid-ual signals sufficient for reconstruction. As shown in Fig. 1, video frames are categorized into three types: intra-coded (I), predictive (P), and bi-predictive (B). I-frames encode full spatial content as self-contained images. P-frames are predicted from a single past reference, while B-frames interpolate between past and future references. Frames are organized into Groups of Pictures (GoPs), each anchored by an I-frame followed by a sequence of P and B frames. Predic-tive frames are partitioned into macroblocks (MBs), each encoded via motion compensation: the encoder locates the most similar region in the reference frame and records the displacement as a MV. In H.264, block sizes range from 4×4 to 
+
+16 ×16 pixels, with smaller partitions used in regions exhibiting complex motion. The difference between the motion-compensated prediction and the true content is stored as a residual. Assembling MVs across a frame yields a displacement field that conceptually resembles optical flow. Unlike the latter, MVs are optimized for rate-distortion efficiency rather than photometric accuracy, resulting in lower spatial resolution and characteristic artifacts ( e.g ., noisy background motion and imprecise object boundaries). Despite these limitations, it provides a task-agnostic representa-tion of scene motion available at zero marginal cost during bitstream parsing. Thus, the benefits of operating in the compressed domain for video analytics are threefold: (i) computational efficiency, as it bypasses full RGB decoding, while MB-level representations reduce dimensionality and accelerate downstream pro-cessing; (ii) inherent motion priors, which provide readily available temporal cues without requiring explicit optical flow computation; and (iii) privacy-preserving representations, which naturally abstract away sensitive pixel-level content ( e.g ., faces and license plates), thereby mitigating privacy risks. 4 I. Erregue et al .
+
+2.2 Detection and Tracking with Compressed Video Data 
+
+The dominant line of research in early compressed-domain video analysis con-structs per-MB motion activity maps from encoder-derived signals, including MVs, MB partition modes, quantization parameters, and residuals, followed by rule-based weighting and heuristic smoothing and thresholding to separate fore-ground moving objects from background [9, 27, 28, 31, 32, 36]. Complementary approaches further reduce complexity by relying solely on MB-level coding de-cisions [21, 22], underscoring the discriminative power of codec metadata alone. Temporal consistency is typically addressed via aggregation across consecutive frames or filtering incoherent vectors, while more structured methods employ spatio-temporal Markov Random Fields [5]. Overall, these methods avoid RGB reconstruction but struggle with robustness in complex scenes and generaliza-tion. With the rise of deep learning, compressed-domain signals are increasingly used as an auxiliary modality to improve efficiency. Most approaches follow a slow-fast paradigm, in which full RGB decoding and inference is performed only on sparse I-frames, while MVs and residual are leveraged to propagate features and detections across predictive frames. A first line of work uses hand-crafted MV-based aggregation at the bounding-box level for propagation [2,6,16,40,41], remaining sensitive to noisy motion estimates and heuristic design choices. A second line instead learns propagation modules that better model temporal dy-namics across predictive frames [10,24,39,42]. However, both approaches still rely on computationally expensive RGB inference in key-frames, and performance is often limited to the codec configuration seen during training. CoVA [17] further reduces RGB usage by tracking coarse motion blobs. A lightweight temporal-aided UNet predicts motion objectness maps, which are converted to boxes via connected-component analysis and used to select a small set of frames for RGB decoding and trajectory refinement. This design, however, remains limited by MB-level precision, lacks semantic predictions at the blob stage, and struggles to separate overlapping objects because instances are defined by region connectivity. Moreover, its blob detector is trained per video to adapt to scene-specific compression statistics, limiting generalization. 
+
+# 3 Methodology 
+
+3.1 Data Representation 
+
+To emulate realistic edge-surveillance streams, we resize videos to 1080p and en-code them at a target bitrate of 4 Mbps, restricting the minimum partition size to 8×8 pixels. We enforce stream causality by disabling bi-directional dependen-cies (B-frames), which is essential for low-latency inference without look-ahead buffering. The GoP size is set to the native frame rate, yielding one keyframe per second; this provides frequent error recovery under packet loss and limits long-term drift in accumulated MVs. MVTrack 5
+
+The compressed video frame is represented using a patch size of p=16 for maximum efficiency, producing a per-frame tensor of shape X ∈ R⌈H/p ⌉×⌈ W/p ⌉× 3.The first two channels store the horizontal and vertical displacements (dx, d y ),normalized by the dataset-wide 95th percentile of non-zero MV magnitudes and clipped to [−2, 2] . The third channel encodes the MB partition size q ∈ M ,where M = {16 ×16 , 2×(8 ×16) , 2×(16 ×8) , 4×(8 ×8) }. For sub-partitioned MBs, constituent MVs are aggregated to the 16 ×16 patch by taking the maximum magnitude. To ensure spatial alignment with object locations at time t, MVs are remapped to their destination coordinates. I-frames are represented as zero tensors, which acts as a structured temporal dropout signal during training and forces the model to handle sparse but periodic motion gaps by extrapolating detections from preceding MV fields. 
+
+3.2 MVDet Architecture. We adopt a lightweight, anchor-free detector based on Center-Net [51]. The architecture follows a encoder-decoder design with three predic-tions heads. Aggressive downsampling is omitted to preserve the already coarse spatial information. Channel widths and network depth are kept deliberately small for yielding a low computational cost. Detailed specifications are provided in Tab. 1. Partition modes q are mapped into a continuous latent space via a learnable embedding table and concatenated channel-wise with the MVs before the first convolutional block. This allows the network to adaptively weight motion cues, such as emphasizing high-frequency motion in small partitions while suppressing background artifacts from bigger MBs. After the first convolutional block, a recursive Temporal Gate filters transient compression noise and jitter by propagating motion features across time. Unlike standard ConvGRU [3], which uses three gated branches, our EMA-inspired update uses a single learned gate to interpolate between the previous state and current features. This yields roughly 3× lower recurrent complexity, requiring only 0.5K parameters and 4.2 MFLOPs: 
+
+gt = σ Conv 1×1(Concat( ft, h t−1)) ,ht = GroupNorm( gt ⊙ ht−1 + (1 − gt) ⊙ ft) . (1) Once robust temporal features are obtained, the encoder downsamples the grid only once using max pooling, followed by a second convolutional block. The bottleneck then applies three consecutive dilated convolutions to enlarge the receptive field while preserving the resolution for local-global motion consistency. The decoder restores the original feature grid via bilinear upsampling and a skip connection from the temporally gated features. Finally, three task-specific prediction heads with 1 ×1 kernels produce a class-specific heatmap ˆYc for center detection, a size map ˆS, and a local offset map ˆO for sub-grid localization. 6 I. Erregue et al .                                                
+
+> Table 1: MVDet architecture with tensor shapes for a single input frame. Each con-volutional block (ConvBlock) consists of a convolution, batch normalization, and a LeakyReLU activation. Block Layers Output Shape Input MVs + MB Partition Embeddings (6 ,68 ,128)
+> ConvBlock (16 ,68 ,128)
+> Encoder Temporal Gate (S1) (16 ,68 ,128)
+> MaxPool (16 ,34 ,64)
+> ConvBlock (32 ,34 ,64)
+> Bottleneck Dilated ConvBlocks ( d={2,4,8})(32 ,34 ,64)
+> Bilinear Upsample (32 ,68 ,128)
+> Decoder Concat with S1 (48 ,68 ,128)
+> ConvBlock (16 ,68 ,128)
+> Heatmap (Nc,68 ,128)
+> Heads Size (2 ,68 ,128)
+> Offset (2 ,68 ,128)
+
+Label creation. Ground-truth labels follow a modified CenterNet paradigm. Each object is represented by an anisotropic Gaussian blob on a class-specific heatmap Yc, with per-axis standard deviations proportional to the object width and height. Gaussian responses from overlapping objects are combined by an elementwise maximum operation, and the quantized center location is explicitly forced to attain a peak value of one. A 3×3 neighborhood around each quantized center defines the regression mask R. Within this region, a size map S stores the object width and height, while an offset map O encodes the displacement from each neighborhood cell to the true continuous center. When regression regions of multiple objects overlap, size and offset targets are assigned to the object whose center is closest to the corresponding cell, be-cause that object is the one for which the cell provides the most local and least ambiguous center evidence. This tie-breaking rule is also consistent with the CenterNet formulation: at the detector output resolution, each cell, correspond-ing to a 16 × 16 pixel patch, can regress only a single object hypothesis. As a result, objects whose centers quantize to the same cell are inherently compet-ing targets, and such collisions cannot be represented simultaneously by design. These four tensors, {Yc, R, S, O }, constitute the dense supervision used by the detection head during training. 
+
+Multi-task objective. The model is trained with a weighted multi-task ob-jective comprising a modified focal loss for heatmap prediction, ℓ1 losses for size and offset regression, and a Complete IoU (CIoU) loss [49]. Following Center-Net, positive heatmap samples correspond to object-center peaks, while negative focal loss is evaluated only outside the 3 × 3 regression neighborhoods. Width, MVTrack 7
+
+height, and offset regressions are supervised over the entire regression region using masked ℓ1 losses. In addition, predicted boxes decoded from the size and offset maps are refined using a CIoU loss evaluated at object centers to improve localization accuracy. The overall loss is: 
+
+L = λhm Lhm + λwh Lwh + λoff Loff + λciou Lciou , (2) with weights λhm = 1 .0, λwh = 0 .1, λoff = 1 .0, and λciou = 2 .0.
+
+Bounding box decoding. At inference, boxes are decoded from ˆY , ˆS, ˆO using the same 3 × 3 neighborhood used for supervision. Rather than reading size and offset only at the peak, we compute a heatmap-weighted local expectation over the neighborhood, improving stability on the coarse MV grid. Candidate centers are obtained via non-maximum suppression on ˆYc followed by top-K selection, and each detection is assigned the class arg max c( ˆYc) at its center. 
+
+3.3 MVLink Stationary-object fragmentation. Compressed-domain moving-object track-ing introduces an association failure mode that is uncommon in conventional TbD pipelines. When an object temporarily stops, it no longer induces a coher-ent MV pattern and can disappear from the detector output despite remaining visible in the scene. When motion resumes, the tracker must determine whether the new MV evidence belongs to an existing target or to a newly entering ob-ject. In the absence of appearance features, such stationary intervals are a major source of track fragmentation and identity switches. Standard multi-object tracking (MOT) association strategies are not well suited to this setting because they typically handle all unmatched tracks uni-formly, regardless of whether the missed detection is caused by occlusion, depar-ture from the field of view, or a temporary stop. In Kalman-filter-based track-ers, an unmatched track is usually marked as lost while its state continues to be propagated according to the last estimated velocity. For a stopped object, this prediction is actively harmful: the bounding box drifts away from the true location, reducing the likelihood of matching the object when it starts moving again. 
+
+Perspective-invariant kinematic modeling. MVLink addresses this issue by minimally modifying the ByteTrack [47] association pipeline: unmatched tracks are classified according to their recent motion state before propagation or ter-mination. To reduce sensitivity to perspective-induced scale variation, MVLink computes kinematic features in a box-scale-normalized coordinate system. Given a Kalman filter state at frame t, the normalized speed and acceleration are de-fined as: 
+
+v(t) 
+
+> norm
+
+=
+
+r v2 
+
+> x
+
++ v2
+
+> y
+
+wh ,a(t) 
+
+> norm
+
+= v(t) 
+
+> norm
+
+− v(t−1)  
+
+> norm
+
+,
+
+(3) 8 I. Erregue et al .
+
+where vx and vy are the image-plane velocity components, and w and h are the current box width and height. MVLink maintains exponential moving averages of both quantities to suppress frame-level noise and obtain stable estimates. When a track is not matched to an MV detection, MVLink inspects the smoothed kinematic history. If the normalized speed falls below a stationary threshold and the object was decelerating, the track is assigned to a dedicated Stopped 
+
+state; otherwise, it is marked as Lost . For Stopped tracks, MVLink keeps the boxes anchored at their last reliable location for a fixed temporal window. As a result, when objects resume motion and again produce MV detections, the new observations can be matched to the preserved tracks rather than initializing new identities. 
+
+# 4 Experiments and Results 
+
+4.1 Dataset 
+
+We train and evaluate MVTrack on the VIRAT Ground Dataset [30], specif-ically the DIVA-V1 subset [20], a large-scale surveillance benchmark recorded from static overhead CCTV cameras across 5 different outdoor scenes including parking lots, walkways, and building entrances. It comprises 119 videos totaling 4.3 hours at a frame rate of 30 FPS, with 55 videos reserved for validation. DIVA-V1 provides dense annotations for activity recognition and MOT, span-ning pedestrians, vehicles, and other object categories. We leverage these com-plementary annotations to partition object trajectories into dynamic track seg-ments, retaining only the intervals during which an object participates in an annotated non-static activity. This excludes stationary periods, such as pedes-trians sitting or crouching and parked vehicles, while tolerating minor boundary noise of a few frames around static-dynamic transitions. 
+
+4.2 Metrics and Evaluation 
+
+We report mAP 50:95 [23] as the primary detection metric, together with per-class scores and mAP 50 [12], which characterizes the trade-off between recall and bounding-box precision under coarse input resolution. Tracking performance is primarily assessed with HOTA [25], which jointly captures detection accuracy (DetA) and association quality (AssA), while MOTA [4] and IDF1 [34] are in-cluded for completeness. To ensure a fair comparison between conventional MOT trackers ( i.e ., track-ing all objects regardless of motion state) and MVTrack, we adopt a dedicated evaluation protocol. Rather than removing static track segments from the ground truth, which would unfairly penalize conventional trackers via false positives, we mark them as distractors, thereby leveling the detection benchmark. At the same time, this protocol preserves the association challenge discussed in Sec. 3.3: con-ventional RGB trackers can observe stopped objects and maintain continuous identities, whereas MVTrack must re-identificate after stationary periods, mak-ing association intrinsically harder for MVTrack. MVTrack 9
+
+4.3 Implementation details 
+
+MVDet is trained to detect moving objects for 100 epochs with a batch size of 64, utilizing a temporal window of T = 10 for backpropagation through time (BPTT). This horizon is strictly confined to bounding gradient history during training; at inference, the recursive formulation processes frames sequentially and fully continuously, meaning the training window size has zero impact on inference latency or memory footprint. We employ the Adam [19] optimizer with an initial learning rate of 6 × 10 −3, which is halved upon mAP stagnation. Data augmentation includes random translations and horizontal flips. The recently introduced YOLO26n [18] is adopted as the sole RGB baseline because it combines state-of-the-art performance with a CPU-efficient design tai-lored for edge deployment, providing a strong test of whether compressed-domain motion can outperform an RGB-only detector under practical CPU constraints. Accordingly, we use its standard 640 × 640 input resolution, avoiding the sub-stantial computational overhead associated with higher resolutions. The model is trained to detect moving and static targets for 100 epochs with a batch size of 64 using the default hyperparameter configuration. Hyperparameters for the different association algorithms are tuned using the Optuna framework [1], targeting the most crowded sequences per-scene within the training split to ensure robustness in complex scenarios. 
+
+4.4 Ablations Architecture. We ablate the key design components of MVDet, beginning with temporal modeling as it is expected to have the largest impact in MV-based de-tection. For this analysis, MVs are used as the sole input modality. As shown in Tab. 2, the single-frame Baseline achieves the lowest accuracy. Conventional many-to-one aggregation schemes ( Mean Pooling and Channel Stacking ) improve robustness to transient artifacts, but discard temporal ordering and operate over a fixed temporal windows. In contrast, the proposed Temporal Gate selectively accumulates motion evidence over time, consistently outperforming both win-dowed alternatives. Increasing the BPTT horizon yields substantial gains up to T = 5 , after which improvements saturate; we therefore adopt T = 10 as the default configuration. Adding MB partition metadata further improves per-formance for both classes with negligible overhead, indicating that codec block structure provides complementary spatial cues beyond the MV field alone. 
+
+Scene generalization. The dataset comprises only five scenes that appear in both splits, limiting the assessment of cross-scene generalization. We therefore perform Leave-One-Scene-Out (LOSO) cross-validation, training on four scenes and evaluating on the held-out fifth. As shown in Tab. 3, MVDet achieves an average mAP of 31.91, remaining within 5 points of the standard setting. Per-formance remains stable across LOSO folds, suggesting that MVDet primarily exploits transferable motion patterns, with only a modest contribution from scene-specific statistics. 10 I. Erregue et al .                                                                  
+
+> Table 2: Comparison of temporal aggregation strategies and the injection of MB partitions on detection accuracy. Architecture mAP mAP 50 mAP pmAP v
+> Baseline ( T= 1 )28.05 59.79 13.56 42.54 Mean ( T= 5 )31.85 67.73 17.44 46.26 Channel Stack ( T= 5 )32.04 67.54 17.68 46.40 Temporal Gate ( T= 3 )32.40 68.66 18.02 46.78 Temporal Gate ( T= 5 )34.51 71.49 20.37 48.65 Temporal Gate ( T= 10 )34.79 72.33 20.67 48.92 + MB Partition 36.45 73.77 22.42 50.47
+> Table 3: Cross-scene validation to evaluate spatial domain invariance across distinct sequences. Held-out Seq. mAP mAP 50 mAP pmAP v
+> 0000 25.37 52.14 11.83 38.91 0002 31.08 65.12 20.94 41.22 0400 38.84 72.91 24.67 53.01 0401 27.55 60.41 16.73 38.37 0500 36.72 71.22 27.65 45.79 LOSO 31.91 64.36 20.36 43.46
+
+Encoding generalization. Compressed-domain models must be robust to codec settings that shift the MV distribution, including temporal sampling den-sity, predictive-frame chain length, MV quantization noise, and bi-predictive coding. Table 4 shows that MVDet, trained with the baseline encoding, remains stable under these changes. The largest degradation occurs at lower frame rates, particularly for vehicles, whose larger inter-frame displacements move farther outside the baseline training distribution. In contrast, doubling the GoP length has little effect, and performance remains strong even at a target bitrate of 1 Mbps, a regime representative of budget low-latency IP cameras. We further evaluate a setting allowing the use B-frames. Future-referenced MVs are mapped to the forward convention used by P-frames by reversing their sign, which ap-proximates motion under near-constant velocity between adjacent frames. 
+
+4.5 RGB Tracking Comparison 
+
+To benchmark against conventional RGB-based MOT pipelines, we first pair both MVDet and YOLO26n with ByteTrack under the dynamic evaluation pro-tocol. As shown in Tab. 5, MVDet with ByteTrack reaches a HOTA score close to the RGB baseline. It also obtains higher DetA and MOTA, suggesting that MV inputs provide strong evidence for detecting active objects. This advantage is especially pronounced for pedestrians, since MVDet operates on MVs extracted MVTrack 11                                                              
+
+> Table 4: Model robustness under variable codec settings and bitstream degradations. Codec Config. Variation mAP mAP 50 mAP pmAP v
+> FPS 25 36.29 74.29 22.86 49.73 FPS 20 35.08 73.49 21.91 48.26 FPS 15 33.73 73.36 21.50 45.95 GOP 2 s 36.35 73.29 22.05 50.56 Bitrate 2 Mbps 35.36 73.82 21.93 48.79 Bitrate 1 Mbps 34.93 73.12 21.60 48.27 B-frames usage 35.01 72.54 21.07 48.96
+> Table 5: Tracking performance under the dynamic evaluation protocol. Detector Association Module HOTA HOTA pHOTA vDetA AssA MOTA IDF1 YOLO26n ByteTrack 52.78 41.00 64.56 48.97 57.24 54.56 66.94 MVDet ByteTrack 51.92 44.48 59.36 53.34 50.91 62.18 65.86 MVDet MVLink 53.88 45.81 61.95 53.47 54.63 63.68 70.50
+
+from the native resolution, whereas YOLO26n processes resized RGB frames that can suppress small-object detail. The main limitation of the ByteTrack variant is association quality: its lower AssA reflects the difficulty of maintaining identities when motion-only detec-tions are temporarily unavailable. MVLink directly targets this failure mode. By spotting stopped tracks through kinematic cues, it substantially improves AssA, IDF1, and HOTA, surpassing the RGB baseline on the latter two metrics. The residual AssA and vehicle-HOTA gaps are likely caused by long stationary in-tervals, especially parked vehicles, that exceed MVLink’s stopped-track horizon. Thus, MVTrack recovers much of the identity continuity lost in a purely motion-driven setting while retaining the efficiency and privacy benefits of compressed-domain tracking. As reported in Tab. 6, MVDet results are achieved with over 60 × fewer pa-rameters and 40 × fewer FLOPs, while also reducing inference latency by nearly one order of magnitude on a consumer CPU. We report detector latency (forward pass, bounding-box decoding, and post-processing), as it dominates runtime in TbD pipelines without appearance-based re-identification. Consequently, we do not separately report the overhead of bitstream parsing compared to full RGB decoding, or data association, as these components are detector-agnostic and contribute only a minor fraction of the end-to-end runtime. When exported to ONNX, MVDet further reduces latency to 2.17 ms, enabling real-time processing of multiple streams on edge devices. 12 I. Erregue et al .        
+
+> Table 6: Computational cost comparison of MVDet and YOLO26n. Detector Params FLOPs Latency (ms) YOLO26n 2.5M 5.4B 44.80 MVDet 41K 139M 5.21
+
+4.6 Qualitative Results 
+
+Figure 2a highlights MVDet’s ability to detect small moving objects. Even dis-tant pedestrians that occupy only a few pixels produce coherent motion patterns that are sufficient for localization. The example also illustrates the benefit of ag-gregating motion over multiple frames: detections remain stable through short partial occlusions, such as the tree occlusion shown in the sequence. Figure 2b shows a scene with substantial pedestrian overlap and strong illumi-nation variation, making instance separation challenging from RGB appearance alone. In contrast, the HSV visualization of the MV field reveals a coherent mo-tion structure for the group, from which MVDet recovers individual bounding boxes. At the same time, it effectively disentangles pedestrians from their cast shadows. Figure 2a and Fig. 2c further demonstrate the task-specific selectivity of the proposed representation. Moving distractors such as dogs are ignored, while static scene elements such as parked vehicles do not trigger detections. In Fig. 2c, cyclists and motorcyclists are localized and assigned to the pedestrian class de-spite their larger MV magnitudes. Across these examples, MVDet remains robust to dynamic background motion, such as swaying trees, and to visible compression artifacts, supporting MVs as a reliable signal for surveillance tracking. The failure cases in Fig. 3 illustrate the main limitations of relying exclusively on compressed-domain motion. Although MVDet handles large overlapping ob-jects and small isolated pedestrians well, performance degrades when both con-ditions occur simultaneously. Small pedestrians moving in close proximity can generate highly correlated MV patterns that collapse into a single motion blob. As shown in Fig. 3a, this causes two neighboring pedestrians to be merged into one detection. This behavior is further amplified by MVDet’s architecture, as dis-cussed in Sec. 3.2, because each output cell can regress only a single bounding box. The example also highlights a fundamental trade-off of compressed-domain analysis: even when the object is detected, localization can be imprecise because MV fields are spatially coarse and affected by codec quantization. Ambiguous motion from non-target objects provides a second source of er-rors. In Fig. 3b, a rigid moving object produces a motion pattern similar to that of a pedestrian, resulting in a false positive. We also observe a mild sensitivity to motion-blob geometry: vertically elongated blobs can favor pedestrian pre-dictions, whereas horizontally elongated blobs can favor vehicle predictions. As shown in Fig. 3c, this can cause a cyclist to be initially classified as a vehicle before being correctly reassigned once the observed motion structure changes. MVTrack 13  
+
+> (a)
+> (b)
+> (c)
+> Fig. 2: Qualitative results of MVTrack under challenging surveillance conditions.
+
+Nevertheless, this effect is limited in aggregate, as MVDet still achieves higher overall detection metrics than the RGB-based detector. 
+
+# 5 Summary and Future Work 
+
+We presented MVTrack, a tracking framework for moving objects directly from compressed H.264 bitstreams. Instead of using MVs as an auxiliary shortcut between periodic RGB detections, MVTrack employs an always-fast design where codec metadata serves as the primary sensing signal. The framework combines MVDet, a compact CenterNet-style detector with gated temporal aggregation and MB-partition cues, with MVLink, a modified ByteTrack association module that preserves identities through short stationary periods. On VIRAT, MVTrack surpasses the RGB YOLO26n-ByteTrack baseline while using substantially fewer 14 I. Erregue et al .   
+
+> (a) (b) (c)
+> Fig. 3: Representative failure cases of MVTrack.
+
+parameters and FLOPs, and achieving lower CPU latency. The experiments also clarify why compressed-domain tracking is effective. Temporal aggregation improves robustness to noisy MV fields, while MB-partition metadata provides useful spatial structure. Overall, MVDet learns transferable motion patterns rather than merely memorizing scene-specific statistics, and remains effective beyond a single controlled compression setting, including challenging cases with small objects or severe overlaps. More broadly, MVTrack suggests a practical role for compressed-domain models as always-on front ends for large-scale video analytics. A lightweight MV tracker can continuously monitor many streams on CPU-only edge hard-ware, skip static intervals, and trigger selective RGB decoding or higher-capacity models only when meaningful activity occurs. Future work should evaluate the transferability of MVTrack to infrared imagery, severe weather and precipitation, additional codecs such as H.265, and a wider range of camera viewpoints and deployment conditions. Another promising direction is to extend the framework toward conventional MOT by initializing tracks with an RGB detector at the beginning of a sequence, thereby exposing objects that are initially stationary before relying primarily on compressed-domain motion. Although our primary focus was on detection, MV fields could also be exploited more explicitly during association, for example through velocity-aware affinity terms or by replacing Kalman filters. Overall, these findings indicate that MVs are not merely a computational shortcut for RGB pipelines, but a powerful representation for scalable, privacy-preserving, and resource-efficient surveillance tracking. 
+
+# Acknowledgements 
+
+This work has been partially supported by the Spanish project PID2025-170489NB-I00, by ICREA under the ICREA Academia programme, and by the Milestone Research Program at the University of Barcelona. MVTrack 15 
+
+# References 
+
+1. Akiba, T., Sano, S., Yanase, T., Ohta, T., Koyama, M.: Optuna: A next-generation hyperparameter optimization framework. In: Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery and Data Min-ing (2019) 2. Alvar, S.R., Bajić, I.V.: Mv-yolo: Motion vector-aided tracking by semantic object detection. 2018 IEEE 20th International Workshop on Multimedia Signal Pro-cessing (MMSP) pp. 1–5 (2018), https://api.semanticscholar.org/CorpusID: 25756869 
+
+3. Ballas, N., Yao, L., Pal, C.J., Courville, A.: Delving deeper into convolutional net-works for learning video representations. In: International Conference on Learning Representations (ICLR) (2016) 4. Bernardin, K., Stiefelhagen, R.: Evaluating multiple object tracking performance: The clear mot metrics. EURASIP Journal on Image and Video Processing 2008 
+
+(01 2008). https://doi.org/10.1155/2008/246309 
+
+5. Bombardelli, F., Gül, S., Becker, D., Schmidt, M., Hellge, C.: Efficient object track-ing in compressed video streams with graph cuts. In: 2018 IEEE 20th International Workshop on Multimedia Signal Processing (MMSP). pp. 1–6. IEEE (2018) 6. Bommes, L., Lin, X., Zhou, J.: Mvmed: Fast multi-object tracking in the compressed domain. In: 2020 15th IEEE Conference on Industrial Electronics and Applications (ICIEA). pp. 1419–1424 (2020). https://doi.org/10.1109/ ICIEA48937.2020.9248145 
+
+7. Chen, P., Yang, W., Sun, L., Wang, S.: When bitstream prior meets deep prior: Compressed video super-resolution with learning from decoding. In: Proceedings of the 28th ACM International Conference on Multimedia. p. 1000–1008. MM ’20, Association for Computing Machinery, New York, NY, USA (2020). https://doi. org/10.1145/3394171.3413504 , https://doi.org/10.1145/3394171.3413504 
+
+8. Chen, P., Yang, W., Wang, M., Sun, L., Hu, K., Wang, S.: Compressed domain deep video super-resolution. IEEE Transactions on Image Processing 30 , 7156– 7169 (2021). https://doi.org/10.1109/TIP.2021.3101826 
+
+9. Chen, Y.W., Chen, K., Yuan, S.Y., Kuo, S.Y.: Moving object counting using a tripwire in h.265/hevc bitstreams for video surveillance. IEEE Access 4, 2529–2541 (2016). https://doi.org/10.1109/ACCESS.2016.2572121 
+
+10. Duché, A., Chatelain, C., Gasso, G.: See without decoding: Motion-vector-based tracking in compressed video. arXiv preprint arXiv:2602.00153 (2026) 11. El Khoury, K., Samelson, J., Macq, B.: Deep learning-based object tracking via compressed domain residual frames. Frontiers in Signal Processing Vol-ume 1 - 2021 (2021). https://doi.org/10.3389/frsip.2021.765006 , https: / / www . frontiersin . org / journals / signal - processing / articles / 10 . 3389 / frsip.2021.765006 
+
+12. Everingham, M., Van Gool, L., Williams, C., Winn, J., Zisserman, A.: The pascal visual object classes (voc) challenge. International Journal of Computer Vision 88 ,303–338 (06 2010). https://doi.org/10.1007/s11263-009-0275-4 
+
+13. Grönquist, P., Ren, Y., He, Q., Verardo, A., Süsstrunk, S.: Efficient temporally-aware deepfake detection using h. 264 motion vectors. arXiv preprint arXiv:2311.10788 (2023) 14. Hu, Y., He, Y., Li, Y., Li, J., Han, Y., Wen, J., Liu, Y.J.: Efficient semantic segmentation by altering resolutions for compressed videos. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 22627–22637 (June 2023) 16 I. Erregue et al .15. Huang, B., Wang, N., Pakrashi, A., Dev, S.: Moclip-lite: Efficient video recognition by fusing clip with motion vectors. In: 2025 18th International Congress on Im-age and Signal Processing, BioMedical Engineering and Informatics (CISP-BMEI). pp. 1–6 (2025). https://doi.org/10.1109/CISP-BMEI68103.2025.11259157 
+
+16. Huang, B., Wang, N., Yao, W., Dev, S.: Mvp: Motion vector propagation for zero-shot video object detection. arXiv preprint arXiv:2509.18388 (2025) 17. Hwang, J., Kim, M., Kim, D., Nam, S., Kim, Y., Kim, D., Sharma, H., Park, J.: Cova: Exploiting compressed-domain analysis to accelerate video analytics. In: 2022 USENIX annual technical conference (USENIX ATC 22). pp. 707–722 (2022) 18. Jocher, G., Qiu, J.: Ultralytics YOLO26 (2026), https : / / github . com / ultralytics/ultralytics 
+
+19. Kingma, D.P., Ba, J.: Adam: A method for stochastic optimization. In: Interna-tional Conference on Learning Representations (ICLR) (2015) 20. Kitware, I.: Data, algorithms, and framework for automated analytics of videos with activities. Tech. rep., Intelligence Advanced Research Projects Activity (IARPA), DIVA Program (2019), DIVA-V1 dataset. Annotations publicly released via NIST ActEV. Available: https://viratdata.org/ 
+
+21. Laumer, M., Amon, P., Hutter, A., Kaup, A.: Compressed domain moving object detection based on h.264/avc macroblock types. In: Proceedings of the 8th Interna-tional Conference on Computer Vision Theory and Applications (VISAPP 2013). pp. 219–228. SCITEPRESS, Barcelona, Spain (2013) 22. Laumer, M., Amon, P., Hutter, A., Kaup, A.: Moving object detection in the h.264/avc compressed domain. APSIPA Transactions on Signal and Information Processing 5 (01 2016). https://doi.org/10.1017/ATSIP.2016.18 
+
+23. Lin, T.Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Dollár, P., Zitnick, C.L.: Microsoft coco: Common objects in context. In: Fleet, D., Pajdla, T., Schiele, B., Tuytelaars, T. (eds.) Computer Vision – ECCV 2014. pp. 740–755. Springer International Publishing, Cham (2014) 24. Liu, Q., Liu, B., Wu, Y., Li, W., Yu, N.: Real-time online multi-object tracking in compressed domain. IEEE Access 7, 76489–76499 (01 2019). https://doi.org/ 10.1109/ACCESS.2019.2921975 
+
+25. Luiten, J., Osep, A., Dendorfer, P., Torr, P., Geiger, A., Leal-Taixé, L., Leibe, B.: Hota: A higher order metric for evaluating multi-object tracking. International Journal of Computer Vision 129 , 1–31 (02 2021). https://doi.org/10.1007/ s11263-020-01375-2 
+
+26. Mezaris, V., Kompatsiaris, I., Boulgouris, N., Strintzis, M.: Real-time compressed-domain spatiotemporal segmentation and ontologies for video indexing and re-trieval. IEEE Transactions on Circuits and Systems for Video Technology 14 (5), 606–621 (2004). https://doi.org/10.1109/TCSVT.2004.826768 
+
+27. Mezaris, V., Kompatsiaris, Y., Boulgouris, N.V., Strintzis, M.G.: Real-time compressed-domain spatiotemporal segmentation and ontologies for video indexing and retrieval. IEEE Transactions on Circuits and Systems for Video Technology 
+
+14 , 606–621 (2004), https://api.semanticscholar.org/CorpusID:12563363 
+
+28. Moura, R., Hemerly, E., Cunha, A.: Temporal motion vector filter for fast object de-tection on compressed video. JOURNAL OF COMMUNICATIONS AND INFOR-MATION SYSTEMS 29 (05 2014). https://doi.org/10.14209/jcis.2014.1 
+
+29. Nguyen, D., Choi, J.: Toward scalable video analytics using compressed-domain features at the edge. Applied Sciences (2020), https://api.semanticscholar. org/CorpusID:226733466 MVTrack 17 30. Oh, S., Hoogs, A., Perera, A., Cuntoor, N., Chen, C.C., Lee, J.T., Mukherjee, S., Aggarwal, J.K., Lee, H., Davis, L., Swears, E., Wang, X., Ji, Q., Reddy, K., Shah, M., Vondrick, C., Pirsiavash, H., Ramanan, D., Yuen, J., Torralba, A., Song, B., Fong, A., Roy-Chowdhury, A., Desai, M.: A large-scale benchmark dataset for event recognition in surveillance video. In: CVPR 2011. pp. 3153–3160 (2011). 
+
+https://doi.org/10.1109/CVPR.2011.5995586 
+
+31. Patel, K.: Motion detection and segmentation in h.264 compressed domain for video surveillance application. International Journal of Engineering Re-search & Technology (IJERT) 3(4), IJERTV3IS041541 (2014). https://doi. org/10.17577/IJERTV3IS041541 , https://www.ijert.org/research/motion-detection - and - segmentation - in - h . 264 - compressed - domain - for - video -surveillance-application-IJERTV3IS041541.pdf 
+
+32. Poppe, C., De Bruyne, S., Paridaens, T., Lambert, P., Van de Walle, R.: Moving object detection in the h.264/avc compressed domain for video surveillance appli-cations. Journal of Visual Communication and Image Representation 20 (6), 428– 437 (2009). https://doi.org/https://doi.org/10.1016/j.jvcir.2009.05.001 ,
+
+https://www.sciencedirect.com/science/article/pii/S1047320309000650 
+
+33. Ranjbar Alvar, S., Choi, H., Bajic, I.V.: Can you tell a face from a hevc bitstream? In: 2018 IEEE Conference on Multimedia Information Processing and Retrieval (MIPR). pp. 257–261 (2018). https://doi.org/10.1109/MIPR.2018.00060 
+
+34. Ristani, E., Solera, F., Zou, R.S., Cucchiara, R., Tomasi, C.: Performance measures and a data set for multi-target, multi-camera tracking. In: ECCV Workshops (2016) 35. Sarkar, S.D., Pautrat, R., Miksik, O., Pollefeys, M., Armeni, I., Rad, M., Dus-manu, M.: Cope-videolm: Leveraging codec primitives for efficient video language modeling. arXiv preprint arXiv:2602.13191 (2026) 36. Solana-Cipres, C., Fernandez-Escribano, G., Rodriguez-Benitez, L., Moreno-Garcia, J., Jimenez-Linares, L.: Real-time moving object segmentation in h.264 compressed domain based on approximate reasoning. International Journal of Approximate Reasoning 51 (1), 99–114 (2009). https://doi.org/https://doi. org/10.1016/j.ijar.2009.09.002 , https://www.sciencedirect.com/science/ article/pii/S0888613X0900139X 
+
+37. Song, Z., Wu, F., Liu, X., Ke, J., Jing, N., Liang, X.: Vr-dann: Real-time video recognition via decoder-assisted neural network acceleration. In: 2020 53rd Annual IEEE/ACM International Symposium on Microarchitecture (MICRO). pp. 698– 710 (2020). https://doi.org/10.1109/MICRO50266.2020.00063 
+
+38. Tan, Z., Liu, B., Chu, Q., Zhong, H., Wu, Y., Li, W., Yu, N.: Real time video object segmentation in compressed domain. IEEE Transactions on Circuits and Systems for Video Technology 31 (1), 175–188 (2021). https://doi.org/10.1109/TCSVT. 2020.2971641 
+
+39. Tran, R., Kanaujia, A., Parameswaran, V.: Fast object detection in high-resolution videos. In: 2023 IEEE/CVF International Conference on Computer Vision Work-shops (ICCVW). pp. 1461–1470 (2023). https://doi.org/10.1109/ICCVW60793. 2023.00159 
+
+40. True, J., Khan, N.: Motion vector extrapolation for video object detection. Journal of Imaging 9(7) (2023). https://doi.org/10.3390/jimaging9070132 
+
+41. Ujiie, T., Hiromoto, M., Sato, T.: Interpolation-based object detection using mo-tion vectors for embedded real-time tracking systems. In: 2018 IEEE/CVF Con-ference on Computer Vision and Pattern Recognition Workshops (CVPRW). pp. 729–7298 (2018). https://doi.org/10.1109/CVPRW.2018.00104 18 I. Erregue et al .42. Wang, S., Group, A., Lu, H., Deng, Z.: Fast object detection in compressed video. In: 2019 IEEE/CVF International Conference on Computer Vision (ICCV). pp. 7103–7112 (2019). https://doi.org/10.1109/ICCV.2019.00720 
+
+43. Wu, C.Y., Zaheer, M., Hu, H., Manmatha, R., Smola, A.J., Krähenbühl, P.: Com-pressed video action recognition. In: Proceedings of the IEEE conference on com-puter vision and pattern recognition (CVPR). pp. 6026–6035 (2018) 44. Xu, K., Yao, A.: Accelerating video object segmentation with compressed video. In: 2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 1332–1341 (2022). https://doi.org/10.1109/CVPR52688.2022. 00140 
+
+45. Xu, M., Jiang, L., Sun, X., Ye, Z., Wang, Z.: Learning to detect video saliency with hevc features. IEEE Transactions on Image Processing 26 (1), 369–385 (2017). 
+
+https://doi.org/10.1109/TIP.2016.2628583 
+
+46. Zhang, B., Wang, L., Wang, Z., Qiao, Y., Wang, H.: Real-time action recognition with enhanced motion vector cnns. In: 2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR). pp. 2718–2726 (2016). https://doi.org/10. 1109/CVPR.2016.297 
+
+47. Zhang, Y., Sun, P., Jiang, Y., Yu, D., Weng, F., Yuan, Z., Luo, P., Liu, W., Wang, X.: Bytetrack: Multi-object tracking by associating every detection box. In: European conference on computer vision (ECCV). pp. 1–21. Springer (2022) 48. Zhao, Z., Huo, Y., Yue, T., Guo, L., Lu, H., Wang, B., Chen, W., Liu, J.: Efficient motion-aware video mllm. In: 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). pp. 24159–24168 (2025). https://doi.org/10. 1109/CVPR52734.2025.02250 
+
+49. Zheng, Z., Wang, P., Ren, D., Liu, W., Ye, R., Hu, Q., Zuo, W.: Enhancing geometric factors in model learning and inference for object detection and in-stance segmentation. IEEE Transactions on Cybernetics 52 (8), 8574–8586 (2022). 
+
+https://doi.org/10.1109/TCYB.2021.3095305 
+
+50. Zhou, S., Jiang, X., Tan, W., He, R., Yan, B.: Mvflow: deep optical flow estimation of compressed videos with motion vector prior. In: Proceedings of the 31st ACM International Conference on Multimedia. pp. 1964–1974 (2023) 51. Zhou, X., Wang, D., Krähenbühl, P.: Objects as points. In: arXiv preprint arXiv:1904.07850 (2019)

@@ -41,17 +41,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-08-11</span>
+      <span class="dpr-home-dashboard-kicker">2026-08-13</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 19 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 10 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>8</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>11</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>6</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>4</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-08-11 20:41:12 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-08-13 21:34:06 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -62,9 +62,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日共梳理19篇论文（精读8篇/速读11篇），核心聚焦世界模型在具身智能与手术机器人中的应用。</p>
-<p>最值一看：9分精读《LUCID》实现人形机器人长时程“运动-操作”统一控制，《SurgWMBench》构建手术器械运动规划视觉基准；8分速读覆盖VLA几何感知、因果世界模型等方向。</p>
-<p>普通读者可优先精读这两篇9分工作，后续可跟踪世界模型在低数据泛化与安全控制中的评测进展。</p>
+<p>今日精读聚焦目标跟踪前沿：高光谱流形引导提示网络与压缩码流级超快运动跟踪双双获9.0高分。速读关注多智能体验证、强化学习场景树及视觉-语言动态上下文适配。建议优先深入两篇精读论文，把握跟踪任务在特殊信号与极速场景下的新方法。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -73,12 +71,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">8 篇</strong>
+    <strong class="dpr-home-dashboard-count">6 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="LUCID: Latent-Skill Unified Control via Imagined Dynamics for Long-Horizon Humanoid Loco-Manipulation">LUCID: Latent-Skill Unified Control via Imagined Dynamics for Long-Horizon Humanoid Loco-Manipulation</span></li><li><span class="dpr-home-dashboard-paper-title" title="SurgWMBench: A Vision-Based Benchmark for World-Modeling Surgical Instrument Motion Planning">SurgWMBench: A Vision-Based Benchmark for World-Modeling Surgical Instrument Motion Planning</span></li><li><span class="dpr-home-dashboard-paper-title" title="Latent World Models with Monotone Planning Costs for Image-Goal Navigation">Latent World Models with Monotone Planning Costs for Image-Goal Navigation</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="MSP-Net: Manifold-Guided Spectral Prompt Network for Hyperspectral Object Tracking">MSP-Net: Manifold-Guided Spectral Prompt Network for Hyperspectral Object Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="MVTrack: Ultrafast Appearance-Free Moving Object Tracking from Compressed Bitstreams">MVTrack: Ultrafast Appearance-Free Moving Object Tracking from Compressed Bitstreams</span></li><li><span class="dpr-home-dashboard-paper-title" title="VIScore: Diagnosing Planning-Relevant Quality in Latent World Models">VIScore: Diagnosing Planning-Relevant Quality in Latent World Models</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>6</strong></span><span class="dpr-home-dashboard-tag">vt <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>4</strong></span><span class="dpr-home-dashboard-tag">vt <strong>2</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -86,12 +84,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">11 篇</strong>
+    <strong class="dpr-home-dashboard-count">4 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="GWM-VLA: Geometry-Aware Latent World Modeling for Vision-Language-Action Learning">GWM-VLA: Geometry-Aware Latent World Modeling for Vision-Language-Action Learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="CausalNav: Reliability-Certified Causal World Models for Control under Physical-Parameter Shift">CausalNav: Reliability-Certified Causal World Models for Control under Physical-Parameter Shift</span></li><li><span class="dpr-home-dashboard-paper-title" title="4D-WAM: Infusing Spatiotemporal Awareness into World Action Models through Trajectory Fields">4D-WAM: Infusing Spatiotemporal Awareness into World Action Models through Trajectory Fields</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Multi-Agent Target-Existence Verification and Learned Mask Geometry Refinement: Winning Report of the MeViS-Text Track at the 8th LSVOS Challenge 2026">Multi-Agent Target-Existence Verification and Learned Mask Geometry Refinement: Winning Report of the MeViS-Text Track at the 8th LSVOS Challenge 2026</span></li><li><span class="dpr-home-dashboard-paper-title" title="Control-Oriented Scenario Tree Construction through Reinforcement Learning">Control-Oriented Scenario Tree Construction through Reinforcement Learning</span></li><li><span class="dpr-home-dashboard-paper-title" title="Dynamic Context Adapters: Efficiently Infusing History into Vision-and-Language Models">Dynamic Context Adapters: Efficiently Infusing History into Vision-and-Language Models</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">world-model <strong>9</strong></span><span class="dpr-home-dashboard-tag">vt <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vt <strong>2</strong></span><span class="dpr-home-dashboard-tag">world-model <strong>2</strong></span></div>
 </section>
 </div>
 

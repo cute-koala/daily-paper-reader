@@ -1,0 +1,785 @@
+Title: MSP-Net: Manifold-Guided Spectral Prompt Network for Hyperspectral Object Tracking
+
+URL Source: https://arxiv.org/pdf/2608.09575v1
+
+Published Time: Tue, 11 Aug 2026 02:19:47 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# MSP-Net: Manifold-Guided Spectral Prompt Network for Hyperspectral Object Tracking 
+
+Juliu Li, Hanlin Qin, Shuowen Yang, Jingjing Li, Yuedong Tan, Shuai Yuan, Huixin Zhou 
+
+Abstract —Hyperspectral object tracking leverages abundant spectral information to provide unique advantages for target discrimination in complex scenes. However, existing methods typically treat hyperspectral images as multi-channel extensions of RGB images, performing feature fusion in fixed band order. This approach leads to models dependent on specific sensor configurations while neglecting manifold relationships between bands, making generalization to heterogeneous sensors difficult. Moreover, the discriminative contribution of bands dynamically changes with target attributes and scene variations, further lim-iting the representational capacity of static fusion strategies. To address this, we propose the Manifold-Guided Spectral Prompt Network (MSP-Net). This network first reconstructs band rela-tionships and forms adaptive spectral grouping through graph-driven manifold routing, then jointly integrates grouped spectral statistics with template appearance to construct target-related dynamic conditional prompts, enhancing target features while suppressing background interference. Furthermore, as tracking progresses, spectral conditions continuously evolve based on intermediate target representations, enabling target prompts to adapt in real-time to appearance and scene changes. Meanwhile, reliable historical states are used to constrain target localiza-tion and scale fluctuations, significantly improving temporal stability in cross-sensor tracking. Experiments on HOT2020 and HOT2023 demonstrate that MSP-Net achieves AUC and Precision exceeding 0.80 and 0.96, respectively, exhibiting exceptional robustness under heterogeneous sensors, target deformation, and complex background conditions. The code will be released at https://github.com/GGML668897/MSP-Net. 
+
+Index Terms —Hyperspectral Object Tracking, Manifold-aware Routing, Prompt Modulation, Graph Convolutional Network, Temporal memory. 
+
+I. I NTRODUCTION 
+
+# VISUAL object tracking plays an important role in ap-plications such as video surveillance, medical diagnosis, autonomous driving, smart agriculture, and intelligent early-warning systems [1]–[3]. However, RGB-based trackers often struggle with strongly cluttered backgrounds [4], similar distractors, deformation, and occlusion, leading to tracking drift [5], [6]. The early mainstream RGB tracking methods developed from correlation tracking methods, such as KCF [7] and BACF [8], then advanced to Siamese networks [9] incorporating deep learning, and further developed into transformer-based methods like OSTrack [10], MixFormer [11], and STARK [12], all of which have made leading research for target tracking. But relying solely on RGB information as a tracking driver cannot effectively alleviate tracking drift problems in scenarios such as target deformation and occlusion. Unlike RGB tracking, hyperspectral imaging provides wavelength-dependent material responses that support more 
+
+Manuscript received April 19, 2021; revised August 16, 2026. L₁              
+
+> L₂
+> L₃
+> ⋮
+> Lᶜ
+> Group 1: bands 1 –3, etc.
+> Group 2: bands 4 –6, etc.
+> Group 3: bands 7 –9, etc.
+> Group N: bands C –(C -3), etc.
+> …
+> Group 1
+> Group 2
+> Group 3
+> Group N
+> …
+> L₁
+> L₂
+> Lᶜ
+> ⋮
+> Group 1: (L₁ weight: l₁)
+> Group 2: (L₂ weights l₂)
+> Weighted groups
+> ⋮
+> L₁
+> L₂
+> Lᶜ
+> ⋮
+> Group 1:
+> {L₁, L₁₀, L₂₅, …}
+> Group 2:
+> {L₂, L₈, L₁₅, …}
+> Group N:
+> {L 3, L 6, L 9, …}
+> 𝑎 𝐹𝑖𝑥𝑒𝑑 𝐵𝑎𝑛𝑑 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔 𝑏 𝑆𝑒𝑞𝑢𝑒𝑛𝑡𝑖𝑎𝑙 𝐵𝑎𝑛𝑑 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔
+> 𝑐 𝑊𝑒𝑖𝑔ℎ𝑡 𝐵𝑎𝑛𝑑 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔 𝑑 𝑃𝑟𝑜𝑝𝑜𝑠𝑒𝑑 𝑀𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝐴𝑑𝑎𝑝𝑡𝑖𝑣𝑒 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔
+> 𝑊𝑒𝑖𝑔ℎ𝑡 𝑀𝑜𝑑𝑢𝑙𝑒
+> 𝐻𝑆𝐼 𝑑𝑎𝑡𝑎 𝐻𝑆𝐼 𝑑𝑎𝑡𝑎
+> 𝐻𝑆𝐼 𝑑𝑎𝑡𝑎 𝐿𝑒𝑎𝑟𝑛𝑒𝑑 𝑤𝑒𝑖𝑔ℎ𝑡𝑠 𝑊𝑒𝑖𝑔ℎ𝑡𝑠 𝑔𝑟𝑜𝑢𝑝𝑖𝑛𝑔 𝐶ℎ𝑎𝑟𝑎𝑐𝑡𝑒𝑟𝑖𝑧𝑒𝑠 𝑖𝑛𝑡𝑒𝑟 − 𝑏𝑎𝑛𝑑 𝑟𝑒𝑙𝑎𝑡𝑖𝑜𝑛𝑠ℎ𝑖𝑝𝑠
+> 𝑎𝑠 𝑎 𝑔𝑟𝑎𝑝ℎ 𝑠𝑡𝑟𝑢𝑐𝑡𝑢𝑟𝑒 𝑡𝑜 𝑟𝑒𝑚𝑢𝑟𝑒
+> 𝑎𝑛𝑑 𝑙𝑒𝑎𝑟𝑛 𝑑𝑎𝑡𝑎 − 𝑎𝑑𝑎𝑝𝑡𝑖𝑣𝑒 𝑏𝑎𝑛𝑑 𝑔𝑟𝑜𝑢𝑝𝑖𝑛𝑔
+> 𝐼𝑛𝑡𝑟𝑖𝑛𝑠𝑖𝑐 𝑀𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝐶𝑜𝑟𝑟𝑒𝑙𝑎𝑡𝑖𝑜𝑛
+> 𝑚𝑎𝑡𝑟𝑖𝑥 𝑖𝑛 𝑏𝑎𝑐𝑘𝑔𝑟𝑜𝑢𝑛𝑑
+> 𝑀𝑎𝑥𝑖𝑚𝑖𝑧𝑖𝑛𝑔 𝑢𝑡𝑖𝑙𝑖𝑧𝑎𝑡𝑖𝑜𝑛 𝑜𝑓
+> 𝑚𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝑑𝑎𝑡𝑎 𝑠𝑡𝑟𝑢𝑐𝑡𝑢𝑟𝑒
+> 𝑃𝑟𝑜𝑗𝑒𝑐𝑡𝑒𝑑 𝑜𝑛𝑡𝑜 𝑎 ℎ𝑖𝑔ℎ − 𝑑𝑖𝑚𝑒𝑛𝑠𝑖𝑜𝑛𝑎𝑙 𝑀𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝑠𝑝𝑎𝑐𝑒
+> 𝐺𝑟𝑜𝑢𝑝𝑠 𝑎𝑟𝑒 𝑛𝑜𝑛 − 𝑎𝑑𝑎𝑝𝑡𝑖𝑣𝑒 𝑎𝑛𝑑 𝑓𝑖𝑥𝑒𝑑
+> 𝑟𝑒𝑔𝑎𝑟𝑑𝑙𝑒𝑠𝑠 𝑜𝑓 𝑑𝑎𝑡𝑎 𝑐𝑜𝑛𝑡𝑒𝑛𝑡 𝑀𝑢𝑙𝑡𝑖 − 𝑐ℎ𝑎𝑛𝑛𝑒𝑙 𝑏𝑙𝑜𝑐𝑘𝑠 𝑜𝑛𝑐𝑒, 𝑏𝑜𝑛𝑑𝑖𝑛𝑔 𝑚𝑢𝑙𝑡𝑖 − 𝑐ℎ𝑎𝑛𝑛𝑒𝑙 𝑖𝑚𝑎𝑔𝑒𝑠,
+> 𝑖𝑔𝑛𝑜𝑟𝑒𝑠 𝑖𝑛𝑡𝑟𝑖𝑛𝑠𝑖𝑐 𝑚𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝑠𝑡𝑟𝑢𝑐𝑡𝑢𝑟𝑒
+> 𝐺𝑟𝑎𝑝ℎ − 𝐷𝑟𝑖𝑣𝑒𝑛
+> 𝑀𝑎𝑛𝑖𝑓𝑜𝑙𝑑 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙
+> 𝑅𝑜𝑢𝑡𝑖𝑛𝑔 𝐺𝑀𝑆𝑅
+> 𝑀𝑜𝑑𝑢𝑙𝑒
+> ⋮
+> 𝐶 1
+> 𝐶 2
+> 𝐶 3
+> 𝐶 𝐶
+> 𝐶 1
+> 𝐶 2
+> 𝐶 3
+> 𝐶 𝐶
+> ⋮
+
+Fig. 1. Comparison between the existing (a) fixed grouping dimensionality reduction, (b) spectral segment sorting grouping dimensionality reduction, (c) weight grouping dimensionality reduction paradigms and the proposed (d) adaptive manifold paradigm. 
+
+reliable target identification in complex scenes [13]–[15]. By exploiting spectral–spatial–temporal information, hyperspec-tral object tracking methods can be broadly divided into two categories. One is full-spectrum information perception, such as CHP [16] with full-band mapping, HHTrack [17] with raw hyperspectral cubes, and E2E-MPT [18] with embed-ded spectral unmixing for material-abundance estimation. The other is spectral dimensionality reduction, such as SEE-Net [19] and SiamBAG [20], typically converting hyperspectral images into several three-channel pseudo-RGB groups for feature extraction and fusion. This strategy facilitates the use of pretrained RGB trackers and has been adopted by COALT [21] through spectral band select, HyA-T [22] through color-matching functions, and TBRNet [23] through dynamic spectral projection and pseudo-color reorganization. The two mainstream paradigms reveal a fundamental trade-off between spectral fidelity and computational efficiency: full-spectrum modeling preserves richer information but suffers from redundancy and high computational cost, whereas dimen-sionality reduction facilitates real-time inference and RGB-model transfer at the risk of losing discriminative spectral cues. Considering practical deployment, we adopt spectral dimensionality reduction but shift the focus from simple compression to preserving intrinsic inter-band structures. As illustrated in Fig. 1, conventional fixed, sequential, weighted, and similarity-based grouping strategies rely on rigid partitions that may disrupt spectral continuity and topology, motivating our manifold-adaptive grouping scheme. However, effective spectral grouping alone is insufficient for long-term track-ing: evolving illumination, deformation, and occlusion can gradually invalidate spectral conditions, while static scale penalties struggle to balance deformation adaptation against arXiv:2608.09575v1 [cs.CV] 10 Aug 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+drift suppression. These coupled challenges motivate the joint modeling of manifold-aware spectral representations, temporal condition evolution, and adaptive tracking stabilization. Thus, we propose the Manifold-Guided Spectral Prompt Network (MSP-Net), which jointly models inter-band struc-tures, target-conditioned information, and temporal states. First, the Graph-Driven Manifold Spectral Routing (GMSR) module constructs a band-relation graph and performs adaptive band routing and group-level aggregation according to content correlations. The routing strategy derived from the search region is consistently applied to both the template and search branches, ensuring aligned spectral representations. Based on the grouped features, the Decoupled Spectral-Condition Evolu-tion (DSCE) strategy integrates group-level spectral statistics, template appearance information, and group-level weights to construct a joint spectral–target condition. During infer-ence, this condition is periodically updated using intermediate template features. Subsequently, the Dual-Stream Spectral-Conditioned Prompt Modulation (DSCPM) mechanism gen-erates target-aware prompts from the resulting condition. Through cross-attention and cosine-similarity gating, DSCPM selectively enhances the template and search features at suc-cessive Transformer layers, improving discrimination against similar background distractors. In addition, the Temporal Mor-phology Memory-Adaptive (TMMA) mechanism serves as an independent inference-stage post-processing module. It adap-tively calibrates tracking predictions using historical states, spatial displacements, and morphological variations, thereby improving localization stability under substantial deforma-tion and rapid motion. MSP-Net is systematically evaluated on four hyperspectral object-tracking benchmarks—HOT2020, HOT2023, HOT2024, and IMEC25. The experimental results demonstrate the effectiveness and generalization capability of the proposed method. The main contributions are summarized as follows: (1) MSP-Net is proposed as a unified hyperspectral tracking framework that combines manifold-aware spectral modeling with dynamic prompt evolution to reduce spectral information loss, feature lag, and tracking drift. (2) GMSR and DSCPM enhance spectral representation: GMSR performs graph-based routing in a nonlinear manifold space, while DSCPM exploits complementary spectral and ap-pearance cues for stronger target-background discrimination. (3) DSCE and TMMA improve temporal adaptation and lo-calization stability. DSCE updates spectral conditions without parameter optimization, whereas TMMA adaptively regulates spatial and morphological variations. Experiments on hyper-spectral datasets demonstrate strong robustness to deformation, illumination changes, and background interference. II. R ELATE WORK 
+
+This chapter discusses the related work of Hyperspectral tracking, including hyperspectral object tracking, dynamic routing and MoE, manifold learning and prompt learning. 
+
+A. Hyperspectral Object Tracking 
+
+Hyperspectral object tracking has evolved from correlation-filter methods to deep Siamese and Transformer-based frame-works. Early trackers such as DeepHKCF [24], CNHT [25], and MHT [13] incorporated deep features, spectral–spatial cues, and material representations into correlation filtering, but remained vulnerable to deformation, illumination changes, and background interference. Subsequent methods, includ-ing BAE-Net [26], SEE-Net [19], HA-Net [27], SiamBAG [20], and SiamHYPER [28], improved spectral discrimination through band attention, ensemble learning, and Siamese ar-chitectures. More recently, HHTrack [17], HyA-T [22], SGAT [29], and E2E-MPT [18] have introduced hybrid attention, lightweight adapters, spectral gating, and material prompts to strengthen feature extraction and fusion. Despite this progres-sion, many existing methods still rely on band selection, fixed grouping, pseudo-color transformation, or computationally in-tensive fusion, which may disrupt inter-band relationships and provide limited adaptation to the continuous spectral and appearance evolution of targets in long sequences. Despite recent progress, multi-branch attention and complex fusion increase computational costs, while reliance on fixed spectral compression and limited template updates makes it difficult to follow continuous changes in target appearance, spectral response, and motion. To overcome these, our method adaptively routes bands within a nonlinear spectral-manifold space and dynamically evolves target representations over time, jointly preserving intrinsic spectral relationships and tracking temporal state variations in long sequences. 
+
+B. Dynamic Routing and MoE 
+
+As a core paradigm of conditional computation, the Mixture-of-Experts (MoE) architecture [30] dynamically ac-tivates sparse subnetworks through a gating network, thereby substantially increasing model capacity while keeping compu-tational cost relatively stable. This mechanism first achieved notable success in natural language processing. Representative models such as Switch Transformer [31],V-MoE [32] and DeepSeekMoE [33] significantly improved the training effi-ciency and generalization ability of large-scale models through simplified routing strategies and shared-expert designs. In recent years, MoE has also been extended to vision and multimodal learning. For example, MoCLE [34] incorporates a gating mechanism into Transformer attention layers and activates experts according to instruction clusters, improving generalization to unseen data while maintaining computational efficiency. In the challenging task of hyperspectral object tracking, the application of MoE architectures has gradually emerged as a promising research direction. HoT-MoE [35] and FSMT [36] was the pioneer introduce MoE into hyperspectral tracking, demonstrating its potential for modeling high-dimensional structured features and supporting cross-modal adaptation. More recently, DRSST-Net [1], built upon the Mamba archi-tecture [37], further integrates MoE with state-space models and employs a gating network to dynamically select infor-mative band combinations, thereby alleviating the information loss caused by static dimensionality reduction. However, exist-ing hyperspectral MoE methods mainly employ expert routing for channel compression or coarse-grained feature distribution. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3
+
+They still treat spectral bands as relatively independent com-binations and have not established a unified mechanism that couples dynamic band grouping with the nonlinear topology of continuous bands, namely the spectral manifold. Such band processing lacks sufficient physical structure awareness and limits fine-grained feature allocation in complex scenes. This limitation motivates our exploration of adaptive spectral routing based on the intrinsic physical properties and manifold structure of hyperspectral bands. 
+
+C. Prompt Learning 
+
+Prompt learning [38], originally developed in natural lan-guage processing, adapts frozen pretrained models to down-stream tasks by introducing only a small number of learnable parameters. This parameter-efficient paradigm has since been extended to computer vision through representative methods such as Visual Prompt Tuning (VPT) [39] and AdaptFormer [40], demonstrating that large visual backbones can be ef-ficiently adapted without full fine-tuning. EVP [41] further combines prompt learning with high-frequency feature en-hancement and quaternion networks [42] to facilitate cross-modal and domain-specific knowledge transfer. Prompt-based adaptation has increasingly narrowed modal-ity gaps in visual tracking, from unified representation learning in ProTrack [43] and modality-specific prompts in ViPT [44] to bidirectional interaction in BAT [45] and hyperspectral extensions such as SP-HST [46], PHTrack [47], and ProFiT [48]. However, most existing prompts remain static or rely on shallow modality fusion, making them vulnerable to ap-pearance variations and tracking drift in long sequences. To overcome this limitation, we introduce Dual-Stream Spectral-Conditioned Prompt Modulation (DSCPM) with a decoupled condition evolution strategy, enabling prompts to adapt dy-namically to evolving spectral context and target appearance without additional parameter updates during inference. 
+
+D. Manifold Learning 
+
+In hyperspectral data processing, continuous spectral re-sponses and complex spectral-spatial interactions form a high-dimensional nonlinear space. Manifold learning, such as lo-cally linear embedding (LLE) [49], [50], provides an effective way to uncover its intrinsic low-dimensional structure. RLMR [51] preserves local manifold geometry through hierarchical neighborhood selection and adaptive weighting, while LML [52] converts local geometric relations into sparse graph structures for semi-supervised classification. To model broader inter-band dependencies, FRPCALG [53] combines Laplacian graph regularization with robust principal component anal-ysis, and LLRSC [54] further integrates low-rank subspace clustering with local manifold constraints. MPWR [55] per-forms unsupervised band selection using manifold-preserving importance and weak redundancy constraints, whereas Man-ifold Ranking [56] formulates salient band selection as a graph-based ranking problem. More recently, MSDiff [57] has explored diffusion modeling in low-dimensional manifold space to improve robust spectral-spatial representation under degraded conditions. Although manifold representations provide a valuable foun-dation for hyperspectral spectral-spatial modeling, the spectral manifold topology may continuously deform and drift in long sequences because of severe illumination changes, occlusion, and target deformation. Such dynamic evolution is difficult to capture in real time using static dimensionality reduction, fixed graph constraints, or non-adaptive interaction mechanisms. Therefore, integrating real-time content awareness with online dynamic graph modeling and adaptive feature routing directly in the original nonlinear spectral manifold space is emerging as a key research direction for advancing hyperspectral tracking toward long-term, dynamic, and robust perception. III. P ROPOSED METHOD 
+
+This section introduces the proposed Manifold-Guided Spectral Prompt Network (MSP-Net) for hyperspectral object tracking, whose overall data flow is illustrated in Fig.2. The network consists of four main components: the Graph-Driven Manifold Spectral Routing (GMSR) module, the Dual-Stream Spectral-Conditioned Prompt Modulation (DSCPM) module, the Decoupled Spectral Condition Evolution (DSCE) strategy, and the Temporal Morphology Memory-Adaptive (TMMA) post-processing module. 
+
+A. Graph-Driven Manifold Spectral Routing 
+
+Considering hyperspectral images contain numerous highly redundant bands that form a nonlinear spectral manifold, whereas conventional grouping methods rely on fixed wave-length order and may disrupt intrinsic inter-band relation-ships, limiting their robustness to appearance and illumination changes. Thus, we propose Graph-Driven Manifold Spectral Routing (GMSR), which formulates spectral grouping as a learnable routing problem. By treating each band as a graph node and dynamically constructing edges according to feature similarity, GMSR enables information to propagate and ag-gregate across semantically related bands, thereby achieving scene-adaptive spectral grouping beyond fixed wavelength constraints. In terms of specific implementation, for the input hyperspec-tral tensor ( X ∈ RB×C×H×W ), adaptive average pooling is first applied over the spatial dimensions to obtain the spectral-band node representation (V): 
+
+V = AdaptiveAvgPool2d( X) ∈ RB×C×d. (1) where d denotes the dimensionality of the compressed node features. Based on the obtained spectral-band node represen-tations, we compute the pairwise squared Euclidean distances between nodes and employ a dynamic Gaussian kernel to construct the feature adjacency matrix (A ∈ RB×C×C ), thereby characterizing the underlying spectral manifold: 
+
+Ai,j = exp − ∥Vi − Vj ∥22
+
+2 ζ(σ)2 + ϵ
+
+!
+
+, (2) where Vi and Vj denote the node feature vectors of the i-th and j-th spectral bands, respectively; σ is a learnable scalar parameter that controls the bandwidth of the kernel function; JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4𝐻 × 𝑊 × 𝐶 
+
+> 𝐻 × 𝑊 × 𝐶
+
+𝑇𝑒𝑚𝑝𝑙𝑎𝑡𝑒 𝑍 
+
+𝑆𝑒𝑎𝑟𝑐ℎ 𝑋 
+
+…
+
+…
+
+> 𝑇𝑜𝑘𝑒𝑛 𝑍 𝑎𝑛𝑑 𝑋
+
+𝐿𝑁  𝑀𝑢𝑙𝑡𝑖 − 𝐻𝑒𝑎𝑑  
+
+> 𝑆𝑒𝑙𝑓 − 𝐴𝑡𝑡𝑒𝑛𝑡𝑖𝑜𝑛
+
+𝐿𝑁  𝑀𝐿𝑃 
+
+𝐷𝑆𝐶𝑃𝑀  12 𝑃𝑟𝑜𝑚𝑝𝑡𝑠 
+
+𝐿𝑁  𝑀𝑢𝑙𝑡𝑖 − 𝐻𝑒𝑎𝑑  
+
+> 𝑆𝑒𝑙𝑓 − 𝐴𝑡𝑡𝑒𝑛𝑡𝑖𝑜𝑛
+
+𝐿𝑁  𝑀𝐿𝑃 
+
+𝐷𝑆𝐶𝑃𝑀  12 𝑃𝑟𝑜𝑚𝑝𝑡𝑠 
+
+…
+
+𝐻𝑒𝑎𝑑 
+
+𝑇𝑀𝑀𝐴 … 
+
+> 𝐼𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒 𝑅𝑒𝑠𝑢𝑙𝑡
+
+𝐷𝑆𝐶𝐸  𝐷𝑆𝐶𝐸  
+
+> 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑇𝑜𝑘𝑒𝑛𝑠 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑇𝑜𝑘𝑒𝑛𝑠
+
+… 
+
+> 97 − 𝐷 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑇𝑜𝑘𝑒𝑛𝑠
+> 𝑇𝑟𝑎𝑖𝑛𝑖𝑛𝑔 𝑖𝑛𝑝𝑢𝑡
+> 𝐼𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒 𝑈𝑝𝑑𝑎𝑡𝑒
+
+… 
+
+> 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑈𝑝𝑑𝑎𝑡𝑒 𝑖𝑛 𝑏𝑙𝑜𝑐𝑘3,6,9 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑈𝑝𝑑𝑎𝑡𝑒 𝑖𝑛 𝑏𝑙𝑜𝑐𝑘3,6,9
+
+…
+
+…… 
+
+> 4 × 4 𝑛𝑜𝑑𝑒𝑠 𝑀𝑎𝑛𝑖𝑓𝑜𝑙𝑑
+> 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐴𝑠𝑠𝑖𝑔𝑛𝑚𝑒𝑛𝑡
+> 𝑀𝑜𝐸 𝑊𝑒𝑖𝑔ℎ𝑡𝑠
+> 𝐺𝑢𝑚𝑏𝑒𝑙_𝑠𝑜𝑓𝑡𝑚𝑎𝑥 𝑡𝑟𝑎𝑖𝑛𝑔𝑖𝑛𝑔 𝐶𝑜𝑛𝑠𝑡𝑟𝑢𝑐𝑡𝑖𝑜𝑛 𝐵 × 𝐶
+> 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐴
+
+…
+
+…
+
+> 𝑍 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔
+> 𝑋 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐺𝑟𝑜𝑢𝑝𝑖𝑛𝑔
+
+…
+
+…
+
+𝑃𝑎𝑡𝑐ℎ 𝐸𝑚𝑏𝑒𝑑𝑑𝑖𝑛𝑔 
+
+𝑃𝑎𝑡𝑐ℎ 𝐸𝑚𝑏𝑒𝑑𝑑𝑖𝑛𝑔 
+
+…
+
+…
+
+> 𝑀𝑜𝐸
+> 𝑊𝑒𝑖𝑔ℎ𝑡𝑒𝑑
+> 𝐹𝑢𝑠𝑖𝑜𝑛
+
+…
+
+…
+
+> 𝑋 𝐺𝑟𝑜𝑢𝑝𝑠
+> 𝑍 𝐺𝑟𝑜𝑢𝑝𝑠
+
+𝐷𝑆𝐶𝐸 …  
+
+> 97 − 𝐷 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑇𝑜𝑘𝑒𝑛𝑠
+> 𝑀𝑜𝐸 𝑊𝑒𝑖𝑔ℎ𝑡𝑠
+> 𝐵 × 𝐺 × 𝑁 × 𝐷
+> 𝐵 × 𝐺 × 𝑁 × 𝐷 𝑇𝑜𝑘𝑒𝑛𝑠 𝑋
+> 𝑇𝑜𝑘𝑒𝑛𝑠 𝑍 𝑍 ∈ ℝ 𝐵×𝑁 Z×𝐷
+> 𝑋 ∈ ℝ 𝐵×𝑁 𝑥 ×𝐷
+
+𝐺𝑀𝑆𝑅 𝑚𝑜𝑑𝑢𝑙𝑒 
+
+𝑇𝑟𝑎𝑖𝑛𝑎𝑏𝑙𝑒 𝑃𝑎𝑟𝑎𝑚𝑒𝑡𝑒𝑟𝑠  𝑅𝑒𝑠𝑖𝑑𝑢𝑎𝑙 𝐶𝑜𝑛𝑛𝑒𝑐𝑡𝑖𝑜𝑛  𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑣𝑒𝑐𝑡𝑜𝑟(𝐼𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒 𝑜𝑛𝑙𝑦)  𝐿𝑁  𝐿𝑎𝑦𝑒𝑟_𝑁𝑜𝑟𝑚 
+
+𝑋_𝑡𝑜𝑘𝑒𝑛 
+
+𝐼𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒 𝑃𝑎𝑟𝑎𝑚𝑒𝑡𝑒𝑟𝑠 
+
+> 𝐻 × 𝑊 × 𝐶
+> 𝐻 × 𝑊 × 𝐶
+> 𝑠𝑜𝑓𝑡𝑚𝑎𝑥 𝑖𝑛 𝑖𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒
+
+Fig. 2. The overall framework diagram of MSP-Net, including the Graph Driven Manifold Spectral Routing (GMSR) module, Dual Stream Spectral Conditional Prompt Modulation (DSCPM) module, Decoupled · Spectral Condition Evolution (DSCE) module, and Temporal Pathology Memory Adaptive Post Processing (TMMA) module. 
+
+ζ(·) denotes the Softplus activation function, which ensures a positive variance; and ϵ is a small constant introduced to prevent numerical instability caused by division by zero. In the spectral manifold, some bands may exhibit high similarity to many other bands, resulting in graph nodes with large degrees, whereas other bands may be relatively independent and thus have smaller degrees. Directly using the unprocessed adjacency matrix A during graph convolutional message passing may cause the aggregated features of high-degree nodes to grow excessively, potentially leading to gradi-ent explosion, while the features of low-degree nodes may be overwhelmed. Therefore, we compute the node degree matrix 
+
+D and apply symmetric normalization to the adjacency matrix to stabilize gradient propagation: 
+
+eA = D− 12 AD − 12 , Di,i = X
+
+> j
+
+Ai,j . (3) where Di,i denotes the element in the i-th row and i-th column on the diagonal of the degree matrix D, and Ai,j represents the connection weight, or similarity, between the i-th node (i.e., the i-th spectral band) and the j-th node in the adjacency matrix A constructed using the Gaussian kernel. After obtaining the node feature matrix, information is propagated over the spectral manifold. Specifically, the graph convolutional weight matrix Wgcn ∈ Rd×dgcn is employed to aggregate and update the node features, enabling each node to incorporate spectral information from its neighboring nodes on the manifold: 
+
+Hnew = GELU 
+
+ eAV W gcn 
+
+
+
+. (4) 
+
+W (t+1) gcn = W (t)gcn − η ∂L
+
+∂W (t)gcn 
+
+. (5) where Hnew ∈ RB×C×dgcn denotes the updated manifold node features, and GELU is the nonlinear activation function. In addition, t denotes the current training iteration, η represents the learning rate, and L denotes the loss computed between the predictions produced by the GCN during forward propagation and the corresponding ground-truth labels. To capture the target motion state in real time, we employ state-aware dynamic routing to maximize the representation of target-relevant information. Since spectral bands within different wavelength ranges exhibit heterogeneous responses, equally fusing all bands may introduce redundant or even con-flicting spectral representations. Therefore, manifold-guided band routing is adopted to adaptively group spectrally corre-lated bands. During training, Gumbel–Softmax with hard as-signment produces discrete one-hot routing decisions. Directly retaining such hard assignments during inference may make the routing boundaries overly sensitive and unstable. There-fore, the routing mechanism is switched to softmax-based soft assignment at inference, which provides smoother and more JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5…
+
+…  
+
+> 𝑄_𝑃𝑟𝑜𝑗𝑒𝑐𝑡𝑖𝑜𝑛 𝐾_𝑃𝑟𝑜𝑗𝑒𝑐𝑡𝑖𝑜𝑛 𝑉_𝑃𝑟𝑜𝑗𝑒𝑐𝑡𝑖𝑜𝑛
+> 𝑇𝑜𝑘𝑒𝑛𝑠 𝑍
+> 𝑇𝑜𝑘𝑒𝑛𝑠 𝑋
+
+… 
+
+> 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛 𝑇𝑜𝑘𝑒𝑛𝑠
+> 𝐶𝑟𝑜𝑠𝑠 − 𝐴𝑡𝑡𝑒𝑛𝑡𝑖𝑜𝑛
+> 𝐶𝑜𝑠𝑖𝑛𝑒_𝑆𝑖𝑚 𝑆𝑖𝑔𝑚𝑜𝑖𝑑
+
+…
+
+…   
+
+> 𝐿𝑒𝑎𝑟𝑛𝑎𝑏𝑙𝑒 𝑠𝑐𝑎𝑙𝑎𝑟
+> 𝑋 𝑎𝑡𝑡𝑛
+> 𝑀
+> 𝑋 𝑜𝑢𝑡
+> 𝛼
+> 𝑃
+> 𝑋 𝑖𝑛
+> 𝑃 𝑐𝑒𝑛𝑡𝑒𝑟
+> 𝑋 𝑖𝑛
+> 𝑃𝑟𝑜𝑚𝑝𝑡_𝐺𝑒𝑛𝑒𝑟𝑎𝑡𝑜𝑟
+> 𝐶c 𝑜𝑛𝑑
+> 𝑅𝑒𝑠𝑖𝑑𝑢𝑎𝑙 𝐶𝑜𝑛𝑛𝑒𝑐𝑡𝑖𝑜𝑛 𝐸𝑙𝑒𝑚𝑒𝑛𝑡 𝑀𝑢𝑙𝑡𝑖𝑝𝑙𝑖𝑐𝑎𝑡𝑖𝑜𝑛𝑛
+> Fig. 3. Overview of the DSCPM module. The spectral conditions generated by DSCE are mapped into dynamic prompts, which modulate the joint template–search tokens through cross-attention and cosine gating. A residual connection is then applied to obtain the enhanced feature representation.
+
+stable routing without introducing additional parameters. The corresponding formulation is given in Eq.6: 
+
+N =
+
+(Gumbel -Softmax( L, τ ), if Training ,
+
+Softmax( L), if Inference . (6) where N denotes the routing assignment matrix, and L rep-resents the logits obtained by projecting the updated manifold node features Hnew into a predefined grouping space. After obtaining the dynamic routing matrix N , it is used to perform weighted aggregation of Hnew , thereby generating a representative feature Fgroup for each spectral group: 
+
+Fgroup = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+Ni,c, : ⊙ Hnew , i,c, :. (7) Subsequently, to evaluate the contribution of each spectral group to the current tracking scenario, the group features are projected and normalized to generate the expert-mixture weights Wmoe :
+
+Wmoe = Softmax ( Fgroup Wproj ) . (8) where Wproj denotes the learnable linear projection matrix. The resulting weights Wmoe are used not only for subse-quent weighted feature fusion, but also as important prior information for the Dual-Stream Spectral-Conditioned Prompt Modulation (DSCPM) module, thereby supporting effective feature perception and modulation. 
+
+B. Dual-Stream Spectral-Conditioned Prompt-Modulation 
+
+Although GMSR captures manifold-aware inter-band rela-tionships, static prompts remain vulnerable to spectral drift, target deformation, illumination changes, and background in-terference in hyperspectral videos. To address this limitation, we propose the Dual-Stream Spectral-Conditioned Prompt Modulation (DSCPM) module, as shown in Fig.3. DSCPM dynamically generates scene-adaptive prompts by jointly ex-ploiting spectral-manifold context and target appearance cues, enabling the model to distinguish objects with similar spatial structures but different spectral signatures. Specifically, for each aggregated group feature Fgroup , we adopt a multidimensional statistical perception strategy to preserve the high-order statistical properties of the spectral manifold in a low-dimensional space. On the one hand, its spatial and channel-wise means are computed to characterize the global low-frequency context layout of the spectral man-ifold. On the other hand, its standard deviation is calculated to capture high-frequency spectral volatility. Together, these statistics constitute the grouped-band condition vector Cgroup ,which serves as an environmental probe of the manifold space. Meanwhile, the mean and maximum responses of the template features are extracted to generate the template condition vector 
+
+Ctemplate , which encodes the explicit geometric and textural characteristics of the target. The two heterogeneous informa-tion streams are then concatenated with the adaptive mixture weights Wmoe produced by the mixture-of-experts module, yielding the disentangled spectral–target dual-stream condition vector Ccond :
+
+Ccond = Concat ( Cgroup , C template , W moe ) . (9) Subsequently, the Prompt Generator takes the condition vector Ccond as a dynamic reference and maps it end-to-end into a dynamic prompt vector P tailored to the current scene. To seamlessly inject this dynamic spectral–target prior into the backbone network, the input image tokens Xin are used as the Query, while the adaptively generated dynamic prompt P serves as both the Key and Value to perform cross-modal/cross-dimensional cross-attention: 
+
+Xattn = Softmax (Xin Wq ) ( P W k)⊤
+
+√dh
+
+!
+
+(P W v ) . (10) where Xattn denotes the attention-modulated features jointly guided by the manifold context and target appearance. It preserves the fine-grained spatial structure of the input image while acquiring enhanced discriminative capability against spectral ambiguity. Wq , Wk, and Wv are learnable linear projection matrices that map the input features into the query, key, and value spaces, respectively. The variable dh denotes the feature dimension of each attention head, and √dh serves as a scaling factor. Since dot-product values can become JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6𝑚𝑒𝑎𝑛 & 𝑠𝑡𝑑   
+
+> 𝑆𝑒𝑎𝑟𝑐ℎ 𝑝𝑒𝑟 𝑔𝑟𝑜𝑢𝑝𝑠 60 − 𝐷 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛
+> 32 − 𝐷 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛
+> 97 − 𝐷 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛
+> C
+
+…
+
+…
+
+… 
+
+> 𝑍 ∈ ℝ 𝐵×𝑁 Z×𝐷
+> 𝑇𝑜𝑘𝑒𝑛𝑠 𝑋 𝑋 ∈ ℝ 𝐵×𝑁 𝑥 ×𝐷
+> 𝑀𝑜𝐸 𝑊𝑒𝑖𝑔ℎ𝑡𝑠
+> 𝑝𝑎𝑑/ 𝑡𝑟𝑢𝑛𝑐𝑎𝑡𝑒
+> 5 − 𝐷 𝑆𝑝𝑒𝑐𝑡𝑟𝑎𝑙 𝐶𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛
+
+…
+
+…
+
+> …
+> 𝑋 = 1
+> 𝑋 = 2
+> 𝑋 = 𝐺
+
+…
+
+…
+
+…  
+
+> … 𝐿𝑖𝑛𝑒𝑎𝑟
+> 𝐺𝑟𝑜𝑢𝑝 𝑑𝑒𝑠𝑐𝑟𝑖𝑝𝑡𝑜𝑟𝑠
+> 𝑇𝑜𝑘𝑒𝑛𝑠 𝑍 𝑙
+> 𝐼𝑛𝑖𝑡𝑖𝑎𝑙𝑙𝑦 𝑍 0
+> 𝑟𝑒𝑓𝑟𝑒𝑠ℎ𝑒𝑑 𝑎𝑡𝑠𝑒𝑙𝑒𝑐𝑡𝑒𝑑 𝑙𝑎𝑦𝑒𝑟𝑠{3,6,9}
+> 𝑚𝑒𝑎𝑛 & 𝑚𝑎𝑥 𝑀𝐿𝑃 𝐿𝑖𝑛𝑒𝑎𝑟 𝐺𝐸𝐿𝑈
+> 𝑤 ∈ ℝ 𝐵×𝐺
+> 𝑇𝑟𝑎𝑖𝑛𝑖𝑛𝑔: 𝑢𝑠𝑒 𝑖𝑛𝑖𝑡𝑖𝑎𝑙 𝑠𝑡𝑎𝑡𝑖𝑐 𝑐𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛, 𝑛𝑜 𝑟𝑒𝑓𝑟𝑒𝑠ℎ
+> 𝐼𝑛𝑓𝑒𝑟𝑒𝑛𝑐𝑒: 𝑧𝑒𝑟𝑜 𝑛𝑒𝑤 𝑝𝑎𝑟𝑎𝑚𝑒𝑡𝑒𝑟 𝑐𝑜𝑛𝑑𝑖𝑡𝑖𝑜𝑛
+> 𝑟𝑒𝑓𝑟𝑒𝑠ℎ 𝑎𝑡 𝑙𝑎𝑦𝑒𝑟 {3,6,9}
+
+★
+
+Fig. 4. Overview of the DSCE module. The module integrates the grouped search features, current template tokens, and MoE weights to construct a 97-dimensional spectral condition vector. The initial condition is used during training, whereas during inference, the condition is dynamically refreshed at predefined backbone layers using the current template tokens without introducing additional parameters. 
+
+excessively large in high-dimensional spaces, the Softmax function may be driven into saturated regions with extremely small gradients. Dividing the attention scores by √dh smooths their distribution, alleviates gradient vanishing, and promotes stable model convergence. To prevent the prompt information from interfering with background regions, we compute the cosine similarity between 
+
+Xin and the prompt center, and use the resulting spatial mask 
+
+M to constrain the modulation process: 
+
+M = σ (γ · CosSim ( Xin , P center ) + β) . (11) where σ denotes the Sigmoid function, and γ and β are learnable parameters. The final modulated feature is given by: 
+
+Xout = Xin + α (M ⊙ Xattn ) . (12) 
+
+C. Decoupled Spectral-Condition-Evolution 
+
+In long-term hyperspectral tracking, illumination changes, occlusions, and target deformation can make first-frame spec-tral priors increasingly inconsistent with the current target state, causing prompt degradation and tracking drift. To ad-dress this issue without costly online fine-tuning or additional memory networks, we propose Decoupled Spectral Condition Evolution (DSCE), as shown in Fig.4. DSCE extracts updated target representations from intermediate template tokens at selected Transformer layers and reroutes them to dynamically evolve the spectral conditions. This establishes an online prompt-calibration loop without updating network parameters or introducing additional inference parameters. In detail, at the l-th layer of the visual Transformer, the input consists of the concatenated template and search tokens, denoted as T (l−1) = [ Z(l−1) , X (l−1) ]. After processing by multi-head self-attention and the feed-forward network, the output of the current layer is obtained as: 
+
+T (l) = Block l
+
+
+
+T (l−1) 
+
+. (13) To capture the target’s latest physical state in the current frame without introducing additional parameters, we dynam-ically split and decouple the updated joint sequence along the sequence dimension. Specifically, the first Iz tokens are extracted as the deep template representation Z(l), which encodes rich temporal and environmental context at the current network depth: 
+
+Z(l) = T (l)[: , 0: Iz ]. (14) Based on the extracted deep template features Z(l), the DSCE module updates the spectral condition vector Ccond through a discrete gated condition-evolution mechanism. To achieve the optimal Pareto balance between computational efficiency and temporal update frequency, we define a set of update-layer indices Ω within the backbone network. In our implementa-tion, Ω = 3 , 6, 9. The layer-wise evolution rule of the spectral condition is formulated as follows: 
+
+C(l)cond =
+
+(Xext 
+
+ Fgroup , W moe , Z (l) , l ∈ Ω inference ,C(l−1) cond , otherwise .
+
+(15) where Xext (·) denotes the dual-stream condition extractor defined in DSCPM, Fgroup represents the grouped and mod-ulated spectral features, and Wmoe denotes the corresponding mixture-of-experts weights. Subsequently, for prompt modulation at the l-th layer, the prompt generator produces the corresponding visual prompt based on the latest spectral condition: 
+
+P (l) = Gprompt 
+
+
+
+C(l)cond 
+
+
+
+. (16) where P (l) denotes the sequence of dynamic visual prompt vectors generated at the l-th layer of the backbone. It encodes contextual guidance specific to the feature space at the current depth and is subsequently used directly as the key and value in the cross-attention modulation of DSCPM. Gprompt denotes the mapping function of the prompt generator network, while 
+
+C(l)cond represents the latest spectral condition vector obtained JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+through the parameter-free evolution of the DSCE module at the l-th layer. During training, i.e., Phase = Training , the condition evolution mechanism remains inactive, such that C(l)cond =
+
+C(0) cond . The model parameters are updated solely through global gradient optimization, ensuring stable convergence of the backbone network. During inference, the DSCE module is dynamically activated, progressively recalibrating the vi-sual prompts P (l) as the network depth increases, thereby enabling adaptive responses to substantial target appearance variations. By decoupling condition evolution from parameter optimization, this strategy achieves dynamic state adaptation without introducing additional parameters or requiring online fine-tuning. Consequently, it alleviates the feature mismatch caused by conventional static prompts in long-term tracking and improves long-term tracking robustness. 
+
+D. Temporal Morphology Memory-Adaptive Post-processing 
+
+Conventional post-processing relies on static scale penalties and Hann windows to smooth predictions, but rigid constraints may suppress genuine target deformation, whereas relaxed constraints increase drift toward spectrally similar distractors. To balance stability and adaptability, we propose Temporal Morphological Memory Adaptation (TMMA), as shown in Fig.5. TMMA compares the predicted spatial displacement and morphological variation with reliable historical states through Spatial Jump Lock and Morphological Fluctuation Sensing, allowing it to distinguish genuine non-rigid deformation from distractor-induced shifts and adaptively stabilize the bounding box. Firstly, let the initial bounding box predicted by the network at frame t be denoted as Bt = ( xt, y t, w t, h t), with its center coordinates given by Ct = ( xt + wt/2, y t + ht/2) . To prevent abnormal spatial position mutations in the target bounding box induced by similar interferences, this paper constructs an adaptive spatial mutation lock threshold based on the spatial scale of the target itself. Specifically, the Euclidean distance 
+
+∆d between the current center Ct and the center of the previous frame Ct−1, together with the diagonal length Dt
+
+of the current target, is computed as follows: 
+
+∆d = ∥Ct − Ct−1∥2 , Dt =
+
+q
+
+w2 
+
+> t
+
++ h2 
+
+> t
+
+. (17) Accordingly, the spatial-jump indicator function Ijump is defined as: 
+
+Ijump =
+
+(1, ∆d > λD t,
+
+0, otherwise . (18) where λ denotes the relative displacement tolerance, which is set to a stricter value of λ = 0 .5 in our implementation. When Ijump = 1 , the system identifies the current prediction as an abrupt jitter caused by a similar distractor and rejects the corresponding frame state from being stored in the memory bank. Provided that the tracking confidence score st exceeds the reliability threshold τs and no spatial jump is detected, i.e., Ijump = 0 , we extract the target morphology features, …        
+
+> 𝐹𝑖𝑛𝑎𝑙 𝑈𝑝𝑑𝑎𝑡𝑒 𝑇𝑜𝑘𝑒𝑛 𝑋
+> 𝐻𝑒𝑎𝑑
+> 𝑃𝑟𝑒𝑑𝑖𝑐𝑡𝑒𝑑 𝑏𝑏𝑜𝑥
+> 𝑆 𝑡
+> 𝐶𝑒𝑛𝑡𝑒𝑟_𝑡 𝐴𝑟𝑒𝑎_𝑡
+> 𝑤 ×ℎ
+> 𝑇𝑀𝑀𝐴 𝑚𝑜𝑑𝑢𝑙𝑒 𝑖𝑛𝑝𝑢𝑡
+> 𝐴𝑠𝑝𝑒𝑐𝑡 𝑟𝑎𝑡𝑖𝑜_𝑡
+> 𝑤/ℎ
+> 𝑡 𝐹𝑟𝑎𝑚𝑒
+> [𝑆 𝑡 𝜏 𝑠 ]≥&
+> 𝑁𝑜
+> 𝐴𝑠𝑝𝑒𝑐𝑡 𝑟𝑎𝑡𝑖𝑜_(𝑡 + 1)
+> Δ𝑑
+> 𝕀 𝑗𝑢𝑚𝑝
+> 𝐴𝑟𝑒𝑎_𝑡
+> 𝑤 ×ℎ
+> 𝐴𝑠𝑝𝑒𝑐𝑡 𝑟𝑎𝑡𝑖𝑜_𝑡
+> 𝑤/ℎ
+> 𝑀𝑒𝑚𝑜𝑟𝑦
+
+… 
+
+> 𝑀𝑒𝑚𝑜𝑟𝑦 𝑇𝑜𝑘𝑒𝑛𝑠
+> 𝑜𝑙𝑑 𝑛𝑒𝑤
+> 𝑁𝑜_ 𝕀 𝑗𝑢𝑚𝑝
+
+…
+
+… 
+
+> 𝐴𝑛𝑎𝑙𝑦𝑠𝑖𝑠
+> 𝒬 𝑡
+> 𝒱 𝑟
+> ℱ𝑎
+> 𝜂 𝑠𝑖𝑧𝑒
+> 𝑇𝑟𝑎𝑐𝑘_𝑟𝑒𝑠𝑢𝑙𝑡 𝐴𝑟𝑒𝑎_𝑉𝑎𝑟𝑖𝑎𝑡𝑖𝑜𝑛 𝑆𝑐𝑎𝑙𝑒 𝑎𝑑𝑗𝑢𝑠𝑡𝑚𝑒𝑛𝑡
+> ≥
+> Fig. 5. Framework of the TMMA module. The module constructs a temporal morphology memory from historical tracking states and adaptively adjusts the search region and scale parameters according to the current predicted bounding box and confidence score, thereby improving tracking stability and adaptability in long sequences.
+
+including the aspect ratio rt and area at, to construct the temporal morphology memory bank: 
+
+rt = wt
+
+ht + ϵ , at = wtht. (19) The resulting morphology tuple is then stored in a sliding-window memory bank Qt of length K, where K = 8 in our implementation. This memory bank retains only histor-ical target morphology states associated with high-confidence predictions and stable motion. To determine whether the target is undergoing sustained and substantial deformation, we compute recent morphology statistics from the memory bank. Specifically, we calculate the variance Vr of the aspect-ratio sequence and the max-to-min fluctuation rate Fa of the area sequence: 
+
+Vr = 1
+
+|Q t|
+
+X
+
+> i∈Q t
+
+(ri − ¯r)2 . (20) 
+
+Fa = max ( Qt(a)) min ( Qt(a)) + ϵ − 1. (21) where ¯r denotes the mean aspect ratio stored in the memory bank, and ϵ is a small constant introduced to prevent division-by-zero overflow. Based on the above morphology statistics, the TMMA module performs discrete gated modulation of the scale penalty factor ηsize for the current frame: 
+
+ηsize =
+
+(1.00 , Vr > μ r or Fa > μ a,ηbase , otherwise . (22) where μr and μa denote the variance threshold and area-fluctuation threshold used to trigger deformation awareness, JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8
+
+TABLE I PERFORMANCE COMPARISON IN TERMS OF COMPUTATIONAL COMPLEXITY .
+
+Method FPS FLOPs (G) Device 
+
+DeepHKCF [24] 0.91 – CPU CNHT [25] 2.61 – CPU MHT [13] 2.23 – CPU BAE-Net [26] 0.72 – CPU SiamBAG [20] 10.5 126.3 GPU SEE-Net [19] 12.8 244.2 GPU MMF-Net [14] 6.1 352.6 GPU SSTrack [59] 21.62 135.79 GPU SPIRIT [60] 26.2 133.4 GPU Trans-DAT [61] 23.2 30.3 GPU TIPSST [62] 26.6 136.5 GPU HOT-MoE [35] 30.2 58.37 GPU DRSST-Net [1] 22.3 62.52 GPU 
+
+MSP-Net 34.71 73.01 GPU Note: The best and second-best results are highlighted in red and blue, respectively. 
+
+respectively. In our implementation, they are set to μr = 0 .04 
+
+and μa = 0 .20 . ηbase denotes the baseline penalty for back-ground suppression and is set to 0.99 .IV. E XPERIMENTS 
+
+A. Experiments Setup 
+
+All experiments were implemented in PyTorch on an Intel Core i7-14700 CPU with two NVIDIA RTX 3090 GPUs. AdamW was used with an initial learning rate and weight decay of 1 × 10 −4, a batch size of 32, and 30 training epochs. The search and template images were resized to 256 × 256 
+
+and 128 × 128 pixels, respectively. In addition, to effectively evaluate MSPNet, the model is trained exclusively on the HOT2024 training set and tested on the validation sets of HOT2020 [13], HOT2023(https://www.hsitracking.com/), and HOT2024(https://www.hsitracking.com/). Considering the dis-tributional differences, IMEC25 [58] is trained and evaluated separately. As shown in Table I, MSP-Net achieves the highest infer-ence speed of 34.71 FPS with a moderate computational cost of 73.01 GFLOPs. Although its FLOPs are slightly higher than those of Trans-DAT and HOT-MoE, MSP-Net provides a better balance between tracking accuracy and efficiency, demonstrat-ing strong practical potential for real-time hyperspectral object tracking. 
+
+B. Comparison on HOT2020 Dataset 
+
+As shown in Table II, the proposed MSP-Net achieves out-standing tracking performance on the HOT2020 hyperspectral evaluation dataset, attaining a success score (AUC) of 0.8072 and a precision score (DP@20) of 0.9756. Compared with several mainstream and advanced tracking methods developed in recent years, MSP-Net demonstrates clear performance advantages. In particular, compared with the current state-of-the-art ProFit model, which achieves an AUC of 0.7580 and a DP@20 score of 0.9710, MSP-Net improves the success score and precision score by 4.92% and 0.46 %, respectively. These improvements are further illustrated intuitively in Fig.6. 
+
+TABLE II COMPARISON WITH STATE -OF -THE -ART HYPERSPECTRAL TRACKERS ON THE HOT2020 BENCHMARK .
+
+Algorithm Journal/Year AUC DP@20 
+
+BAE-Net [26] ICIP/2020 0.6158 0.8766 SEE-Net [19] TIP/2023 0.6752 0.9321 SiamBAG [20] TGRS/2023 0.6320 0.8930 SSTrack [59] IF/2024 0.7228 0.9551 SENSE [63] IF/2024 0.6691 0.9502 MMF-Net [14] TGRS/2024 0.7002 0.9308 SPIRIT [60] TGRS/2024 0.6884 0.9237 PHTrack [47] TGRS/2024 0.6699 0.9180 DASSP [64] PR/2025 0.6914 0.9163 HOT-MoE [35] TMM/2025 0.7223 0.9418 HyMamba [65] TIP/2025 0.7300 0.9630 ProFit [48] ISPRS/2025 0.7580 0.9710 
+
+TIPSST [62] ASC/2026 0.6870 0.8830 CSSTrack [66] PR/2026 0.7030 0.9510 DRSST-Net [1] ISPRS/2026 0.7200 0.9420 
+
+MSP-Net – 0.8072 0.9756 
+
+Note: Red and blue denote the best and second-best results, respectively. 0 5 10 15 20 25 30 35 40 45 50           
+
+> Pixel threshold
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Precision Precision Plot MSP-Net[0.9763] BAE-Net[0.8766] Dassp[0.9163] Hot-MoE[0.9418] MMF-Net[0.9308] PHTrack[0.9180] SEE-Net[0.9321] SENSE[0.9502] SPIRIT[0.9237] SSTRACK[0.9551] 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Overlap threshold
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Success Success Plot MSP-Net[0.8105] BAE-Net[0.6158] Dassp[0.6914] Hot-MoE[0.7223] MMF-Net[0.7002] PHTrack[0.6699] SEE-Net[0.6752] SENSE[0.6991] SPIRIT[0.6884] SSTRACK[0.7228]
+
+Fig. 6. Precision and success plots of all competing hyperspectral trackers on the HOT2020 dataset. 
+
+To further evaluate the applicability of MSP-Net across common tracking scenarios, we conduct an attribute-based evaluation on HOT2020 under 11 challenging conditions: fast motion (FM), background clutter (BC), illumination variation (IV), out-of-plane rotation (OPR), occlusion (OCC), motion blur (MB), low resolution (LR), scale variation (SV), in-plane rotation (IPR), out-of-view motion (OV), and deformation (DEF). The DP@20 metric is employed to assess the tracking performance of MSP-Net under each challenging attribute. As shown in Table III and Fig.7, MSP-Net ranks among the top three methods across all 11 challenging attributes in terms of the DP@20 metric. Specifically, it achieves the best performance in nine scenarios, including background clutter (BC), deformation (DEF), fast motion (FM), in-plane rotation (IPR), motion blur (MB), occlusion (OCC), out-of-plane rotation (OPR), out-of-view motion (OV), and scale variation (SV). It further ranks second under low resolution (LR) and third under illumination variation (IV). These results demonstrate the stable and robust tracking performance of MSP-Net across diverse challenging scenarios. 
+
+C. Comparison on HOT2023 Dataset 
+
+In HOT2023, we test MSP-Net on the VIS, RedNIR, and NIR modalities of HOT2023. As shown in Table IV, MSP-Net achieves state-of-the-art AUC and DP@20 performance across the three modalities. It surpasses the previous best methods JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+TABLE III ATTRIBUTE -BASED COMPARISON ON THE HOT2020 DATASET . T HE TOP -PERFORMING VALUES ARE HIGHLIGHTED IN RED AND BLUE .
+
+Tracker BC DEF FM IV IPR LR MB OCC OPR OV SV 
+
+BAE-Net [26] 0.921 0.940 0.871 0.816 0.985 0.734 0.882 0.790 0.982 0.864 0.889 SEE-Net [19] 0.959 0.938 0.991 0.874 0.983 0.940 0.981 0.885 0.976 0.860 0.927 SiamBAG [20] 0.899 0.936 0.883 0.930 0.846 0.839 0.899 0.831 0.906 0.891 0.892 SSTrack [59] 0.968 0.990 0.995 0.928 0.981 0.944 0.989 0.928 0.989 0.986 0.947 SENSE [63] 0.966 0.948 0.992 0.917 0.976 0.942 0.993 0.918 0.971 0.860 0.943 MMF-Net [14] 0.940 0.935 0.995 0.896 0.972 0.946 0.996 0.888 0.964 0.860 0.928 SPIRIT [60] 0.963 0.925 0.987 0.845 0.986 0.893 0.968 0.879 0.977 0.860 0.915 PHTrack [47] 0.925 0.919 0.993 0.863 0.952 0.891 0.986 0.880 0.947 0.855 0.914 DASSP [64] 0.890 0.972 0.958 0.917 0.967 0.944 0.961 0.917 0.958 0.991 0.922 HOT-MoE [35] 0.929 0.955 0.965 0.967 0.967 0.994 0.945 0.937 0.961 1.000 0.940 ProFit [48] 0.986 0.991 1.000 0.994 0.959 0.973 0.991 0.954 0.989 1.000 0.960 
+
+MSP-Net 0.995 1.000 1.000 0.961 0.997 0.984 1.000 0.960 0.995 1.000 0.964 
+
+Note: Red and blue denote the best and second-best results, respectively. #0001  #0080  #0110  #0425                 
+
+> #0001 #0345 #0500 #0605
+> #0234 #0130 #0001
+> #0001 #0150 #0276
+> #0267
+> #0306
+> MSP -Net SPIRIT SENSE SSTrack Dassp
+> MMF -Net Hot -MoE BAE -Net PHTrack SEE -Net GroundTruth
+> #0467
+> #0723
+> #322
+> #0360
+> #0213 #0100 #0001
+> #0001 #0164 #0197
+> #0309
+> #0207
+> #370
+> #0303
+
+Fig. 7. Visual comparisons, arranged from top to bottom, cover a set of scenes from the HOT2020 campus: coke, fruit, student, pedestrian2, student, and toy2 scene. 
+
+by 6.52% in AUC and 0.46% in DP@20 under NIR, and outperforms ProFit by 8.21% and 7.89% under RedNIR. Under VIS, although its DP@20 of 0.9138 is slightly below ProFit’s 0.9150, MSP-Net achieves the highest AUC of 0.7576. These results demonstrate its strong accuracy and robustness across diverse spectral representations and complex scenarios. 
+
+D. Comparison on HOT2024 Dataset 
+
+To further explore the performance of MSP-Net, we eval-uate on the challenging HOT2024 validation set across VIS, RedNIR, and NIR modalities. As shown in Table V, MSP-Net performs particularly well under NIR, achieving an AUC of 0.7954 and a DP@20 of 0.9428, which demonstrates strong generalization and resistance to tracking drift in complex het-erogeneous spectral scenes. However, its performance under VIS and RedNIR remains behind several competing methods, revealing that limited spectral dimensionality may weaken its high-dimensional feature-mining advantage, while complex spectral routing may interfere with fine-grained spatial align-ment. These findings expose the current boundary of MSP-Net 
+
+TABLE IV COMPARISON WITH STATE -OF -THE -ART HYPERSPECTRAL TRACKERS ON THE HOT2023 BENCHMARK .
+
+Tracker Venue/Year VIS2023 NIR2023 RedNIR2023 AUC DP@20 AUC DP@20 AUC DP@20 
+
+BAE-Net [26] ICIP/2020 0.5798 0.8199 0.4515 0.7805 0.4000 0.5191 VIPT [44] CVPR/2023 0.6501 0.8577 0.7355 0.9300 0.5735 0.7041 Trans-DAT [61] TCSVT/2023 0.4932 0.6594 0.6728 0.8822 0.5442 0.7150 SiamBAG [20] TGRS/2023 0.5630 0.7920 0.4790 0.7610 0.2890 0.4110 SSTrack [59] Inf. Fusion/2024 0.6669 0.8719 0.6601 0.8485 0.4085 0.4988 SENSE [63] Inf. Fusion/2024 0.6170 0.8260 0.5529 0.7627 0.4021 0.5001 SPIRIT [60] TGRS/2024 0.6175 0.8203 0.6227 0.8261 0.3891 0.5007 PHTrack [47] TGRS/2024 0.5900 0.7949 0.5410 0.7654 0.4226 0.5113 DASSP [64] PR/2025 0.6593 0.8620 0.7379 0.9324 0.5707 0.7038 HOT-MoE [35] TMM/2025 0.6625 0.8547 0.7158 0.9148 0.5114 0.6334 HyMamba [65] TIP/2025 0.6800 0.8960 0.7530 0.9620 0.5430 0.6830 ProFit [48] ISPRS/2025 0.7200 0.9150 0.7540 0.9470 0.6130 0.7550 MSP-Net – 0.7576 0.9138 0.8192 0.9666 0.6951 0.8339 
+
+Note: Red and blue indicate the best and second-best results, respectively. 
+
+TABLE V COMPARISON WITH STATE -OF -THE -ART HYPERSPECTRAL TRACKERS ON THE HOT2024 BENCHMARK .
+
+VIS2024 NIR2024 RedNIR2024 Algorithm Journal/Year AUC DP@20 AUC DP@20 AUC DP@20 
+
+BAE-Net [26] ICIP/2020 0.3290 0.4900 0.4630 0.7670 0.3070 0.4290 SiamBAG [20] TGRS/2023 0.3970 0.5590 0.5360 0.7830 0.2260 0.3580 Trans-DAT [61] TCSVT/2023 0.4173 0.5303 0.6076 0.7498 0.4358 0.5473 SSTrack [59] Inf. Fusion/2024 0.3994 0.4883 0.7235 0.8851 0.5205 0.6589 
+
+SENSE [63] Inf. Fusion/2024 0.3094 0.3991 0.5878 0.7847 0.3748 0.4651 MMF-Net [14] TGRS/2024 0.4880 0.6450 0.7010 0.8750 0.3950 0.5210 SPIRIT [60] TGRS/2024 0.3306 0.4082 0.6842 0.8427 0.3874 0.5158 PHTrack [47] TGRS/2024 0.3151 0.4123 0.5517 0.7495 0.2722 0.3644 UBSTrack [67] TGRS/2025 0.5474 0.6873 0.7575 0.8856 0.5047 0.6271 HOT-MOE [35] TMM/2025 0.5434 0.6934 0.7030 0.8457 0.4983 0.6245 
+
+MSP-Net – 0.4819 0.6222 0.7954 0.9428 0.5044 0.6461 
+
+Note: Red and blue indicate the best and second-best results, respectively. 
+
+under unseen and severely degraded conditions while provid-ing clear directions for improving its adaptability to modality-information loss and extreme long-sequence disturbances. 
+
+E. Comparison on IMEC25 Dataset 
+
+To further examine the universality and domain general-ization of MSP-Net beyond the HOT benchmark series, we JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+TABLE VI ATTRIBUTE -BASED COMPARISON ON THE IMEC25 DATASET . T HE BEST AND SECOND -BEST RESULTS ARE HIGHLIGHTED IN RED AND BLUE .
+
+Tracker BC DEF FM IV IPR LR MB OCC OPR OV SV 
+
+SEE-Net [19] 0.936 0.962 0.934 0.893 0.913 0.878 0.964 0.859 0.980 0.904 0.945 SiamBAG [20] 0.810 0.865 0.762 0.709 0.870 0.864 0.780 0.804 0.866 0.794 0.828 SENSE [63] 0.937 0.905 0.909 0.907 0.949 0.845 0.814 0.847 0.873 0.955 0.985 
+
+DASSP [64] 0.940 0.940 0.943 0.933 0.976 0.955 0.925 0.914 0.941 0.930 0.966 SiamTU [68] 0.914 0.966 0.931 0.895 0.956 0.917 0.943 0.916 0.980 0.908 0.959 MMF-Net [14] 0.910 0.866 0.910 0.860 0.944 0.925 0.865 0.865 0.977 0.826 0.952 SSTrack [59] 0.977 0.982 0.951 0.921 0.965 0.932 0.935 0.901 0.959 0.935 0.947 SPIRIT [60] 0.901 0.972 0.917 0.863 0.939 0.948 0.913 0.907 0.974 0.853 0.896 PHTrack [47] 0.895 0.945 0.935 0.935 0.885 0.993 0.913 0.893 0.878 0.976 0.919 SPTrack [69] 0.938 0.869 0.923 0.880 0.937 0.934 0.918 0.897 0.962 0.870 0.876 ProFit [48] 0.931 0.966 0.967 0.945 0.965 0.980 0.964 0.938 1.000 0.955 0.970 
+
+MSP-Net 0.945 0.989 0.963 0.959 0.972 0.949 0.965 0.971 0.980 0.942 0.995 
+
+Note: Red and blue denote the best and second-best results, respectively. 
+
+TABLE VII COMPARISON WITH STATE -OF -THE -ART HYPERSPECTRAL TRACKERS ON THE IMEC25 BENCHMARK .
+
+Algorithm Journal/Year AUC DP@20 
+
+SEE-Net [19] TIP/2023 0.6900 0.9391 SiamBAG [20] TGRS/2023 0.5360 0.8620 SENSE [63] Inf. Fusion/2024 0.7030 0.9371 DASSP [64] PR/2025 0.7143 0.9517 SiamTU [68] Infrared Phys. 0.6896 0.9395 MMF-Net [14] TGRS/2024 0.7030 0.9227 SSTrack [59] Inf. Fusion/2024 0.6414 0.9547 SPIRIT [60] TGRS/2024 0.6032 0.9290 PHTrack [47] TGRS/2024 0.7120 0.9410 SPTrack [69] RS/2025 0.5930 0.9209 CSSTrack [66] PR/2025 0.7420 0.9320 ProFit [48] ISPRS/2025 0.7540 0.9670 
+
+DRSST-Net [1] ISPRS/2026 0.7340 0.9170 
+
+MSP-Net – 0.7381 0.9725 
+
+Note: Red and blue indicate the best and second-best results, respectively. 
+
+evaluate it on the independently collected IMEC25 dataset, which features distinct scene distributions and imaging hard-ware. As shown in Table VII, MSP-Net achieves the highest DP@20 score of 0.9725, outperforming the state-of-the-art ProFit method at 0.9670, while its AUC of 0.7381 remains slightly below ProFit’s 0.7540. The performance trends are further visualized in Fig. 8. Although MSP-Net does not rank first on both metrics, its consistently competitive performance across this heterogeneous dataset demonstrates strong tracking capability and favorable cross-domain generalization. 0 5 10 15 20 25 30 35 40 45 50           
+
+> Pixel threshold
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Precision Precision Plot MSP-Net[0.9725] Dassp[0.9517] MMF-Net[0.9227] SEE-Net[0.9391] SENSE[0.9371] SPIRIT[0.9220] SPTrack[0.9209] SSTrack[0.9547] SiamTU[0.9395] 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Overlap threshold
+> 00.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+> Success Success Plot MSP-Net[0.7381] Dassp[0.7143] MMF-Net[0.7030] SEE-Net[0.6900] SENSE[0.7030] SPIRIT[0.6032] SPTrack[0.5930] SSTrack[0.6414] SiamTU[0.6896]
+
+Fig. 8. Precision and success plots of all competing hyperspectral trackers on the IMEC25 dataset. 
+
+According to the attribute-based categorization of the 
+
+TABLE VIII ABLATION STUDY OF MSP-N ET ON THE HOT2020 DATASET .
+
+Model GMSR DSCPM DSCE AUC ∆AUC DP@20 ∆DP@20 
+
+Model-1 ✗ ✗ ✗ 0.7247 – 0.9348 –Model-2 ✓ ✗ ✗ 0.7982 +7.35% 0.9684 +3.36% 
+
+Model-3 ✗ ✓ ✗ 0.7911 +6.64% 0.9557 +2.09% 
+
+Model-4 ✓ ✓ ✗ 0.7980 +7.33% 0.9606 +2.58% 
+
+Model-5 ✗ ✓ ✓ 0.8028 +7.81% 0.9728 +3.80% MSP-Net ✓ ✓ ✓ 0.8072 +8.25% 0.9752 +4.04% 
+
+Note: Red values indicate the best performance. 
+
+IMEC25 dataset, we further compare the tracking performance under different challenging scenarios using the DP@20 met-ric. As shown in Table VI, MSP-Net ranks among the top three methods across all 11 attributes. Specifically, it achieves the best performance in five scenarios, namely deformation (DEF), illumination variation (IV), motion blur (MB), occlu-sion (OCC), and scale variation (SV), while ranking second in four scenarios, including background clutter (BC), fast motion (FM), in-plane rotation (IPR), and out-of-plane rotation (OPR). 
+
+F. Ablation Study 
+
+All ablation experiments were conducted at HOT2020 to validate the effectiveness of each component. 
+
+1) Effectiveness of the individual proposed method: Un-der identical input and backbone settings, we progressively introduced each component into the baseline to evaluate its contribution. As shown in Table VIII, GMSR (Model-2) improves AUC and DP@20 by 7.35% and 3.36%, respec-tively, demonstrating the effectiveness of adaptive graph-based spectral routing. DSCPM (Model-3) yields gains of 6.64% in AUC and 2.09% in DP@20, confirming that dynamic spatial– spectral prompts provide stronger representations than static prompts. Since DSCE is a temporal updating strategy, it is not evaluated independently. Combining GMSR and DSCPM without DSCE (Model-4) achieves an AUC of 0.7980 and a DP@20 of 0.9606 but shows no clear complementary gain, indicating a mismatch between dynamically evolving spectral features and static prompt conditions. After introducing DSCE (Model-5), AUC further increases by 1.17%, demonstrating that online condition evolution improves module coordination JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 
+
+TABLE IX ABLATION STUDY OF THE GMSR STRUCTURE ON THE HOT2020 
+
+> DATASET
+
+.                
+
+> Method AUC ∆AUC DP@20 ∆DP@20
+> MSP-Net 0.8072 –0.9752 –GMSR No Manifold 0.7806 -2.66% 0.9426 -3.26%
+> GMSR Soft Routing 0.7958 -1.14% 0.9548 -2.04%
+> Note: Red values indicate the best performance.
+
+TABLE X ABLATION STUDY ON THE NUMBER OF MANIFOLD NODES IN GMSR ON THE HOT2020 DATASET .                      
+
+> Method AUC ∆AUC DP@20 ∆DP@20 MSP-Net ( 4×4)0.8072 –0.9752 –
+> 2×20.7947 -1.25% 0.9634 -1.18%
+> 8×80.7927 -1.45% 0.9636 -1.16%
+> Note: Red values indicate the best performance.
+
+Fig. 9. Example of cross spectral manifold grouping effect of GMSR model. 
+
+and reduces representation discrepancies caused by target appearance changes. 
+
+2) Effectiveness of GMSR: As shown in Table VIII, in-troducing GMSR significantly improves Model-1. Further ablations in Table IX show that removing manifold graph convolution ( GMSR No Manifold ) reduces AUC and DP@20 by 2.66% and 3.26%, confirming the importance of modeling nonlinear inter-band relationships. Replacing hard routing with soft assignment also degrades performance, as soft routing may cause cross-group semantic leakage, whereas hard routing preserves clearer group boundaries. In addition, the node-granularity study in Table X shows that 2×2 sampling insuffi-ciently represents the manifold topology, while 8×8 introduces excessive graph coupling. Therefore, the 4 × 4 configuration provides the best balance between spectral representation and computational efficiency. Fig.9 presents a visualization of the features processed by GMSR. By constructing a graph convolutional network in the reprojected feature space, GMSR dynamically estimates the manifold relationships among spectral bands. This mechanism relaxes the constraints imposed by physical band indices and adaptively routes non-adjacent but semantically correlated bands across a broad spectral range into the same feature sub-group. Consequently, GMSR suppresses background noise and redundant absorption bands while providing the subsequent ViT backbone with discriminative and decoupled high-order representations. 
+
+3) Effectiveness of DSCPM: DSCPM aims to generate scene adaptive prompts from the current spectral context and target appearance while preventing background noise from being indiscriminately amplified. As shown in Table XI, removing dynamic prompts ( No Prompt ) reduces AUC from 
+
+TABLE XI ABLATION STUDY OF THE DSCPM STRUCTURE ON THE HOT2020 
+
+> DATASET
+
+.                
+
+> Method AUC ∆AUC DP@20 ∆DP@20
+> MSP-Net 0.8072 –0.9752 –DSCPM No Prompt 0.7913 -1.59% 0.9654 -0.98%
+> DSCPM No CosGate 0.7820 -2.52% 0.9521 -2.31%
+> Note: Red values indicate the best performance.
+
+0.8072 to 0.7913 and DP@20 from 0.9752 to 0.9654, demon-strating the value of condition-driven prompt learning. More importantly, removing cosine-similarity gating causes larger drops of 2.52% in AUC and 2.31% in DP@20. Indicates that effective prompts require not only informative conditions but also selective modulation, allowing DSCPM to enhance target-relevant tokens while suppressing visually similar background regions. - -= =      
+
+> (a) (b)
+> X_Original X_DSCPM X_Delta Z_Original Z_DSCPM Z_Delta
+
+Fig. 10. Illustration of feature modulation in the DSCPM module. (a) and (b) present the visualizations of the search feature X and the template feature Z,respectively. From left to right, the figure compares the feature responses of 
+
+X and Z before and after DSCPM modulation. ∆ denotes the visualization of the response difference between the DSCPM-modulated features and the original features. 
+
+Fig.10 further presents the feature responses of the search and template regions before and after DSCPM modulation. Compared with the original features, the DSCPM responses are more concentrated in target-relevant regions, while the difference maps reveal the non-uniform adjustments applied to the target and background regions. Both the quantitative results and visualizations demonstrate that the performance gains of DSCPM arise not only from dynamic condition-prompt gen-eration but also from the selective control of prompt-injection locations and strengths through cosine-similarity gating. 
+
+4) Effectiveness of TMMA: This experiment evaluates whether TMMA can reduce bounding-box drift and scale jitter caused by distractors, target deformation, and abrupt motion in long-term tracking. As shown in Table XII, MSP-Net with TMMA achieves the best AUC and DP@20 of 0.8072 and 0.9752, outperforming the baseline by 8.25% and 4.04%, respectively. Removing TMMA decreases its AUC and DP@20 by 0.70% and 0.71%, while Model-2, Model-3, and Model-5 show ∆AUC values of -1.02%, -0.43%, and -0.36%. Although Model-1 and Model-4 obtain slight gains without TMMA, their absolute performance remains lower. These results suggest that TMMA is most effective when refining high-quality predictions, using reliable historical JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 
+
+TABLE XII ABLATION STUDY OF TMMA ON THE HOT2020 DATASET .                                                      
+
+> With TMMA No TMMA Model AUC ∆AUC DP@20 ∆DP@20 AUC ∆AUC DP@20 ∆DP@20
+> Model-1 0.7247 –0.9348 –0.7266 +0.19% 0.9383 +0.35%
+> Model-2 0.7982 +7.35% 0.9684 +3.36% 0.7880 -1.02% 0.9534 -1.50%
+> Model-3 0.7911 +6.64% 0.9557 +2.09% 0.7868 -0.43% 0.9516 -0.41%
+> Model-4 0.7980 +7.33% 0.9606 +2.58% 0.8042 +0.62% 0.9681 +0.75%
+> Model-5 0.8028 +7.81% 0.9728 +3.80% 0.7992 -0.36% 0.9652 -0.76% MSP-Net 0.8072 +8.25% 0.9752 +4.04% 0.8002 -0.70% 0.9681 -0.71%
+> Note: Red values indicate the best performance.
+
+states to suppress temporal fluctuations without restricting genuine target changes. The resulting overlap trajectories and confidence scores are visualized in Fig.11. 
+
+Fig. 11. MSP Net overlapping tracking results. (a)Student attribute: IV, SV (b) pedestrian7 attribute: BC, OCC, (c) L runner attribute: OCC, SV (d) motorcycle attribute: DEF, FM, IV, MB, OCC. The tracking results are marked in green. MSP -Net  SPIRIT  SENSE  SSTrack  UBSTrack                
+
+> Trans -DAT Hot -MoE PHTrack GroundTruth
+> #0001 #0156 #0255 #0268 #0315
+> #0001 #0110 #0205 #0320 #0555
+> #0001 #0099 #0268 #0365 #0590
+
+Fig. 12. Failure case analysis of MSP-Net, scenario is football2, pen, and s jump2 in the HOT2024 validation set. 
+
+5) Limtations: To examine the performance limits of MSP-Net, we conduct a failure-case analysis. Despite joint train-ing on HOT2024 and IMEC25, most failures occur in the VIS and RedNIR modalities of the HOT2024 validation set. As shown in Fig.12, this is mainly attributed to substantial distribution shifts caused by previously unseen backgrounds, target materials, and sensor-specific spectral response varia-tions. Under such out-of-distribution conditions, the spectral manifold topology may change significantly, making dynamic graph construction less reliable and weakening target-specific spectral representation. As a result, the tracker becomes more vulnerable to deceptive background clutter, abrupt appearance changes, and severe drift. Therefore, improving zero-shot cross-domain generalization to unseen materials and extreme environments remains an important direction for future hyper-spectral object tracking research. V. C ONCLUSION 
+
+This work aims to overcome tracking drift caused by drastic target appearance variations and interference from similar background clutter in complex hyperspectral scenarios. We propose the MSP-Net, a manifold-aware visual prompt tracking framework that integrates adaptive spectral modeling with temporal feature evolution. Within the framework, GMSR first captures nonlinear relationships among spectral bands through dynamic graph routing, providing informative spectral representations for subsequent processing. Building on these representations, DSCPM combines spectral statistics with tem-plate appearance cues to generate target-aware prompts and modulate the backbone features. DSCE further regularizes spectral conditions during training to improve their discrim-inability and periodically updates them during inference, en-abling the prompts to adapt to evolving target appearances without additional parameter optimization. Finally, TMMA exploits temporal morphological cues to stabilize target local-ization under deformation and abrupt disturbances. Extensive experiments on the HOT series and IMEC25 demonstrate that MSP-Net achieves strong tracking accuracy and robustness across heterogeneous hyperspectral scenarios. Future work will focus on mitigating manifold domain shifts and improving zero-shot generalization to unseen materials and open-world environments. REFERENCES [1] Z. Li, J. Wang, J. Zhang, D. Chen, G. Fu, J. Wang, and J. Lu, “Hyperspectral object tracking with dimensionality reduction and spa-tial–spectral–temporal modeling,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 238, pp. 14–32, 2026. [2] S. Javed, M. Danelljan, F. S. Khan, M. H. Khan, M. Felsberg, and J. Matas, “Visual object tracking with discriminative filters and siamese networks: A survey and outlook,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 5, pp. 6552–6574, 2023. [3] Y. Tan, W. Sun, J. Li, S. Hou, X. Li, Z. Wang, and B. Song, “Hyper-track: A unified network for hyperspectral video object tracking,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 36, no. 1, pp. 1015–1028, 2026. [4] S. Yuan, Y. Liu, X. Zhang, X. Yan, H. Qin, and N. Akhtar, “Sp-kan: Sparse-sine perception kolmogorov–arnold networks for infrared small target detection,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 234, pp. 1–19, 2026. [5] Y. Wu, J. Lim, and M.-H. Yang, “Online object tracking: A benchmark,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2013. [6] Y. Chen, Q. Yuan, B. Zhong, X. Hu, J. Zhou, X. Zhao, X. Su, Y. Tang, and L. Zhang, “Cass: A context-aware memory framework with spectral-spatial modulation for uav multispectral video tracking,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology , 2026. [7] J. F. Henriques, R. Caseiro, P. Martins, and J. Batista, “High-speed tracking with kernelized correlation filters,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 37, no. 3, pp. 583–596, 2015. [8] H. Kiani Galoogahi, A. Fagg, and S. Lucey, “Learning background-aware correlation filters for visual tracking,” in Proceedings of the IEEE International Conference on Computer Vision (ICCV) , Oct 2017. [9] L. Bertinetto, J. Valmadre, J. F. Henriques, A. Vedaldi, and P. H. Torr, “Fully-convolutional siamese networks for object tracking,” in European conference on computer vision . Springer, 2016, pp. 850–865. [10] B. Ye, H. Chang, B. Ma, S. Shan, and X. Chen, “Joint feature learning and relation modeling for tracking: A one-stream framework,” in European conference on computer vision . Springer, 2022, pp. 341– 357. [11] Y. Cui, C. Jiang, L. Wang, and G. Wu, “Mixformer: End-to-end tracking with iterative mixed attention,” in Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , 2022, pp. 13 608– 13 618. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+[12] B. Yan, H. Peng, J. Fu, D. Wang, and H. Lu, “Learning spatio-temporal transformer for visual tracking,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 10 448–10 457. [13] F. Xiong, J. Zhou, and Y. Qian, “Material based object tracking in hyperspectral videos,” IEEE Transactions on Image Processing , vol. 29, pp. 3719–3733, 2020. [14] Z. Li, F. Xiong, J. Zhou, J. Lu, Z. Zhao, and Y. Qian, “Material-guided multiview fusion network for hyperspectral object tracking,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–15, 2024. [15] S. Yang, H. Qin, S. Yuan, C. Tian, J. Li, and X. Yuan, “Variational bayesian inference-inspired network for compressive spectral imaging,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , 2025. [16] H. Wang, W. Li, X.-G. Xia, and Q. Du, “Causal hyperprompter: A framework for unbiased hyperspectral camouflaged object tracking,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [17] Y. Tan, W. Sun, J. Yuan, W. Du, Z. Wang, N. Mao, and B. Song, “Hhtrack: Hyperspectral object tracking based on hybrid attention,” in 
+
+2023 13th Workshop on Hyperspectral Imaging and Signal Processing: Evolution in Remote Sensing (WHISPERS) . IEEE, 2023, pp. 1–5. [18] X. Han, M. A. Islam, L. Wang, Z. Long, G. Fu, W. Cai, K. K. Paliwal, and J. Zhou, “End-to-end unmixing with material prompts for hyperspectral object tracking,” 2026. [19] Z. Li, F. Xiong, J. Zhou, J. Lu, and Y. Qian, “Learning a deep ensemble network with band importance for hyperspectral object tracking,” IEEE Transactions on Image Processing , vol. 32, pp. 2901–2914, 2023. [20] W. Li, Z. Hou, J. Zhou, and R. Tao, “Siambag: Band attention grouping-based siamese object tracking network for hyperspectral videos,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–12, 2023. [21] Y. Wang, M. Ma, G. Zhang, Y. Liu, T. Gao, and S. Mei, “Hyperspectral tracker with constrained object adaptive learning and trajectory construc-tion,” IEEE Transactions on Circuits and Systems for Video Technology ,2025. [22] L. Gao, Y. Zhang, L. Chen, Y. Jiang, G. He, W. Xie, and Y. Li, “Domain adapter for visual object tracking based on hyperspectral video,” Pattern Recognition , p. 112296, 2025. [23] H. Wang, W. Li, X.-G. Xia, Q. Du, J. Tian, and Q. Shen, “Transformer-based band regrouping with feature refinement for hyperspectral ob-ject tracking,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–14, 2024. [24] B. Uzkent, A. Rangnekar, and M. J. Hoffman, “Tracking in aerial hyperspectral videos using deep kernelized correlation filters,” IEEE Transactions on Geoscience and Remote Sensing , vol. 57, no. 1, pp. 449–461, 2019. [25] K. Qian, J. Zhou, F. Xiong, H. Zhou, and J. Du, “Object tracking in hyperspectral videos with convolutional features and kernelized correla-tion filter,” in International conference on smart multimedia . Springer, 2018, pp. 308–319. [26] Z. Li, F. Xiong, J. Zhou, J. Wang, J. Lu, and Y. Qian, “Bae-net: A band attention aware ensemble network for hyperspectral object tracking,” in 
+
+2020 IEEE international Conference on image processing (ICIP) . IEEE, 2020, pp. 2106–2110. [27] Z. Liu, Y. Zhong, G. Ma, X. Wang, and L. Zhang, “A deep temporal-spectral–spatial anchor-free siamese tracking network for hyperspectral video object tracking,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–16, 2024. [28] Z. Liu, X. Wang, Y. Zhong, M. Shu, and C. Sun, “Siamhyper: Learning a hyperspectral object tracker from an rgb-based tracker,” IEEE Trans-actions on Image Processing , vol. 31, pp. 7116–7129, 2022. [29] W. Zhao, Y. Zhang, S. Gao, and G. He, “Spectral feature gating adapter for hyperspectral object tracking,” IEEE Access , vol. 14, pp. 35 427– 35 439, 2026. [30] N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. Le, G. Hinton, and J. Dean, “Outrageously large neural networks: The sparsely-gated mixture-of-experts layer,” 2017. [31] W. Fedus, B. Zoph, and N. Shazeer, “Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity,” Journal of Machine Learning Research , vol. 23, no. 120, pp. 1–39, 2022. [32] C. Riquelme, J. Puigcerver, B. Mustafa, M. Neumann, R. Jenatton, A. Susano Pinto, D. Keysers, and N. Houlsby, “Scaling vision with sparse mixture of experts,” in Advances in Neural Information Process-ing Systems , M. Ranzato, A. Beygelzimer, Y. Dauphin, P. Liang, and J. W. Vaughan, Eds., vol. 34. Curran Associates, Inc., 2021, pp. 8583– 8595. [33] D. Dai, C. Deng, C. Zhao, R. X. Xu, H. Gao, D. Chen, J. Li, W. Zeng, X. Yu, Y. Wu, Z. Xie, Y. K. Li, P. Huang, F. Luo, C. Ruan, Z. Sui, and W. Liang, “Deepseekmoe: Towards ultimate expert specialization in mixture-of-experts language models,” 2024. [34] Y. Gou, Z. Liu, K. Chen, L. Hong, H. Xu, Z. Li, D.-Y. Yeung, J. T. Kwok, and Y. Zhang, “Mixture of cluster-conditional lora experts for vision-language instruction tuning,” IEEE Transactions on Image Processing ,vol. 35, pp. 3881–3892, 2026. [35] W. Sun, Y. Tan, J. Li, S. Hou, X. Li, Y. Shao, Z. Wang, and B. Song, “Hotmoe: Exploring sparse mixture-of-experts for hyperspectral object tracking,” IEEE Transactions on Multimedia , vol. 27, pp. 4072–4083, 2025. [36] L. Gao, Z. Liu, Y. Zhang, Y. Jiang, W. Xie, and Y. Li, “Fsmt: Frequency-spatial mixture-of-experts hyperspectral object tracking,” IEEE Transac-tions on Circuits and Systems for Video Technology , 2026. [37] A. Gu and T. Dao, “Mamba: Linear-time sequence modeling with selective state spaces,” 2024. [38] B. Lester, R. Al-Rfou, and N. Constant, “The power of scale for parameter-efficient prompt tuning,” in Proceedings of the 2021 Con-ference on Empirical Methods in Natural Language Processing . As-sociation for Computational Linguistics, 2021, pp. 3045–3059. [39] M. Jia, L. Tang, B.-C. Chen, C. Cardie, S. Belongie, B. Hariharan, and S.-N. Lim, “Visual prompt tuning,” in Computer Vision–ECCV 2022 .Springer, 2022, pp. 709–727. [40] S. Chen, C. Ge, Z. Tong, J. Wang, Y. Song, J. Wang, and P. Luo, “Adapt-Former: Adapting vision transformers for scalable visual recognition,” in Advances in Neural Information Processing Systems , vol. 35, 2022, pp. 16 664–16 678. [41] W. Liu, X. Shen, C.-M. Pun, and X. Cun, “Explicit visual prompting for low-level structure segmentations,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 19 434–19 445. [42] Q. Cao, Z. Xu, Y. Chen, C. Ma, and X. Yang, “Domain prompt learning with quaternion networks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 26 637–26 646. [43] J. Yang, Z. Li, F. Zheng, A. Leonardis, and J. Song, “Prompting for multi-modal tracking,” in Proceedings of the 30th ACM International Conference on Multimedia , 2022, pp. 3492–3500. [44] J. Zhu, S. Lai, X. Chen, D. Wang, and H. Lu, “Visual prompt multi-modal tracking,” in Proceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , 2023, pp. 9516–9526. [45] B. Cao, J. Guo, P. Zhu, and Q. Hu, “Bi-directional adapter for multi-modal tracking,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 2, 2024, pp. 927–935. [46] G. He, L. Gao, L. Chen, Y. Jiang, W. Xie, and Y. Li, “Hyperspectral object tracking with spectral information prompt,” IEEE Transactions on Circuits and Systems for Video Technology , 2025. [47] Y. Chen, Y. Tang, X. Su, J. Li, Y. Xiao, J. He, and Q. Yuan, “PHTrack: Prompting for hyperspectral video tracking,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–18, 2024, art. no. 5533918. [48] Y. Chen, Q. Yuan, Y. Tang, X. Wang, Y. Xiao, J. He, Z. Lihe, and X. Jin, “ProFiT: A prompt-guided frequency-aware filtering and template-enhanced interaction framework for hyperspectral video track-ing,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 226, pp. 164–186, 2025. [49] S. T. Roweis and L. K. Saul, “Nonlinear dimensionality reduction by locally linear embedding,” science , vol. 290, no. 5500, pp. 2323–2326, 2000. [50] D. Lunga, S. Prasad, M. M. Crawford, and O. Ersoy, “Manifold-learning-based feature extraction for classification of hyperspectral data: A review of advances in manifold learning,” IEEE Signal Processing Magazine ,vol. 31, no. 1, pp. 55–66, 2013. [51] D. Hong, N. Yokoya, and X. X. Zhu, “Learning a robust local manifold representation for hyperspectral dimensionality reduction,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing ,vol. 10, no. 6, pp. 2960–2975, 2017. [52] L. Ma, M. M. Crawford, X. Yang, and Y. Guo, “Local-manifold-learning-based graph construction for semisupervised hyperspectral image classification,” IEEE Transactions on Geoscience and Remote Sensing , vol. 53, no. 5, pp. 2832–2844, 2014. [53] W. Sun and Q. Du, “Graph-regularized fast and robust principal compo-nent analysis for hyperspectral band selection,” IEEE Transactions on Geoscience and Remote Sensing , vol. 56, no. 6, pp. 3185–3195, 2018. [54] H. Zhai, H. Zhang, L. Zhang, and P. Li, “Laplacian-regularized low-rank subspace clustering for hyperspectral image band selection,” IEEE Transactions on Geoscience and Remote Sensing , vol. 57, no. 3, pp. 1723–1740, 2019. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 14 
+
+[55] C. Sui, C. Li, J. Feng, and X. Mei, “Unsupervised manifold-preserving and weakly redundant band selection method for hyperspectral imagery,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 58, no. 2, pp. 1156–1170, 2020. [56] Q. Wang, J. Lin, and Y. Yuan, “Salient band selection for hyperspectral image classification via manifold ranking,” IEEE Transactions on Neural Networks and Learning Systems , vol. 27, no. 6, pp. 1279–1289, 2016. [57] B. Yang, N. Chen, X. Yue, Y. Luo, Y. Fan, H. Zhang, H. Ma, J. Yue, and S. Mao, “High-dimensional noise to low-dimensional manifolds: A manifold-space diffusion framework for degraded hyperspectral image classification,” 2026. [58] L. Chen, Y. Zhao, J. C.-W. Chan, and S. G. Kong, “Histograms of oriented mosaic gradients for snapshot spectral image description,” 
+
+ISPRS Journal of Photogrammetry and Remote Sensing , vol. 183, pp. 79–93, 2022. [59] Y. Chen, Q. Yuan, Y. Tang, Y. Xiao, J. He, T. Han, Z. Liu, and L. Zhang, “Ssttrack: A unified hyperspectral video tracking framework via modeling spectral-spatial-temporal conditions,” Information Fusion ,vol. 114, p. 102658, 2025. [60] Y. Chen, Q. Yuan, Y. Tang, Y. Xiao, J. He, and L. Zhang, “Spirit: Spectral awareness interaction network with dynamic template for hyperspectral object tracking,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–16, 2023. [61] Y. Wu, L. Jiao, X. Liu, F. Liu, S. Yang, and L. Li, “Domain adaptation-aware transformer for hyperspectral object tracking,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 34, no. 9, pp. 8041– 8052, 2024. [62] X. Teng, W. Jiang, P. Xiang, D. Zhao, S. Qi, J. Song, and H. Zhou, “Tipsst: Transformer-based hyperspectral object tracking with illumi-nation prompts and spatial-spectral-temporal context,” Applied Soft Computing , p. 114807, 2026. [63] Y. Chen, Q. Yuan, Y. Tang, Y. Xiao, J. He, and Z. Liu, “Sense: Hyperspectral video object tracker via fusing material and motion cues,” 
+
+Information Fusion , vol. 109, p. 102395, 2024. [64] Z. Li, F. Xiong, J. Lu, J. Wang, D. Chen, J. Zhou, and Y. Qian, “Multi-domain universal representation learning for hyperspectral object tracking,” Pattern Recognition , vol. 162, p. 111389, 2025. [65] L. Gao, Y. Zhang, Y. Jiang, W. Xie, and Y. Li, “Hyperspectral mamba for hyperspectral object tracking,” arXiv preprint arXiv:2509.08265 , 2025. [66] Z. Li, J. Wang, J. Zhang, D. Zhao, G. Fu, J. Wang, and J. Lu, “A unified spatial-spectral-temporal network for hyperspectral object tracking,” Pattern Recognition , p. 113005, 2025. [67] M. A. Islam, J. Zhou, W. Xing, Y. Gao, and K. K. Paliwal, “Ubstrack: Unified band selection and multi-model ensemble for hyperspectral object tracking,” IEEE Transactions on Geoscience and Remote Sensing ,2025. [68] J. Chen, K. Qian, W. Song, Y. Qiu, and S. Wang, “Siamtu: Hyperspectral video tracking against appearance changes using improved siamegat with adaptive template updating,” Infrared Physics & Technology , vol. 147, p. 105811, 2025. [69] G. Guo, Z. Li, W. An, Y. Wang, X. He, Y. Luo, Q. Ling, M. Li, and Z. Lin, “Sptrack: Spectral similarity prompt learning for hyperspectral object tracking,” Remote Sensing , vol. 16, no. 16, p. 2975, 2024.
