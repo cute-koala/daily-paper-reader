@@ -1,0 +1,1814 @@
+3D Tracking Any Point with Events and Frames
+Roberto Pellerito1,*
+Zijia Dai2,*
+Laurent Kneip2
+Davide Scaramuzza1
+*Equal contribution.
+1Robotics and Perception Group, University of Zurich 2Mobile Perception Lab, ShanghaiTech University
+Frames and Events
+TrackAnyMotion
+Dense 3D Points & Arbitrary-Pair Scene Flows
+High-frequency 3D Tracks
+Frame 1
+Frame i
+Frame n
+Frame i
+Frame j
+Figure 1. Tracking any point in 3D, including between RGB frames. TrackAnyMotion takes RGB frames and asynchronous events as
+input (left). It estimates dense 3D pointmaps and scene flow between pairs of timestamps (middle), providing 3D correspondences across
+time. These correspondences are used to recover point trajectories at and between RGB timestamps (right), with color encoding time.
+Abstract
+Tracking a fast-moving point in 3D is prohibitive when RGB
+frames are blurred or too far apart to reveal its motion.
+Event cameras record brightness changes between frames,
+providing measurements inside these temporal gaps. We in-
+troduce TrackAnyMotion, which combines monocular RGB
+frames and events to track arbitrary points in 2D and 3D,
+including at times when no RGB frame is available. The
+motion expected for a static point, given scene geometry
+and camera motion, provides a reference for identifying in-
+dependently moving objects.
+An independent-motion de-
+coder combines geometric motion cues with event guidance
+This work was supported by the European Union’s Horizon Eu-
+rope Research and Innovation Programme under grant agreement
+No. 101120732 (AUTOASSESS) and the European Research Council
+(ERC) under grant agreement No. 864042 (AGILEFLIGHT).
+and 2D tracks, feeding its predictions back into iterative 2D
+and 3D refinement. We also introduce HyperEvent, a syn-
+thetic RGB–Event dataset with high-frequency 3D trajec-
+tories, geometry, and independent-motion labels. At RGB
+frame timestamps on this benchmark, TrackAnyMotion re-
+duces 3D and 2D endpoint errors by 70% and 32%, respec-
+tively, relative to Track4World.
+1. Introduction
+Tracking any point in 3D is fundamental for a vast va-
+riety of tasks spanning from robot imitation and policy
+learning [47, 55], dynamic reconstruction [23, 51], motion-
+controlled video generation [10, 12], and physical infer-
+ence [3, 21, 57].
+Despite the recent success of 3D point trackers, these
+1
+arXiv:2611.32883v1  [cs.CV]  24 Nov 2026
+
+
+methods are fundamentally limited by the hardware or stan-
+dard cameras. A point on a fast-moving object travels far
+in the blind-time between consecutive frames, inevitably
+motion-blurring and corrupting its own observations. More-
+over, standard cameras notably suffer from a bandwidth-
+latency trade-off that limits their performance in such cases.
+At low bandwidth and low frame rates, fast-objects appear
+motion blurred, while at high frame rates, motion blur is
+minimized at the expense of high bandwidth.
+Event cameras have been shown to be an ideal com-
+plement to standard cameras in addressing the bandwidth-
+latency trade-off [7].
+They are bio-inspired sensors that
+asynchronously measure per-pixel brightness changes with
+microsecond temporal resolution.
+Due to their working
+principle, they trigger events sparsely, often in correspon-
+dence of moving edges yielding minimal bandwidth and
+providing information between subsequent frames.
+Recent frame–event trackers such as TAPFormer [29]
+exploit event-based motion, demonstrating high-frequency
+2D tracking between frames. Yet until now, there exists no
+event-based 3D point tracker that leverages a set of monoc-
+ular observations of events and frames to estimate the dis-
+placement of each point in a scene with high temporal reso-
+lution. Moreover, existing methods typically resort to track-
+ing a sparse set of points using complex hardware setups
+involving multiple cameras
+To overcome existing methods, we propose the first 3D
+track-any-point method, which leverages the high temporal
+resolution of event cameras in combination with standard
+frames to estimate 2D and 3D point displacement at high
+frequency.
+We use the expected motion for a static point as the refer-
+ence for tracking and disentangling motion caused by inde-
+pendently moving objects and by the static background. By
+fusing frames and event features and iteratively condition-
+ing 2D and 3D updaters with event features, we are able to
+extrapolate the geometry of the scene as well as the 2D-3D
+point displacement with high frequency.
+With this work, we introduce HyperEvent , a large scale
+simulated dataset consisting of high frequency ground truth
+of depth, 2D-3D tracks, poses, and interdependently mov-
+ing objects. with events and frames. To the best of our
+knowledge, this is the first dataset tailored for 3D track-
+ing and independently moving object segmentation using
+events and frames.
+Our tracker outperforms state-of-the-art baselines in both
+2D and 3D tracking by 70% and 32%, respectively. More-
+over, TrackAnyMotion enables scenarios that are inaccessi-
+ble to standard frame-based cameras by tracking points at
+arbitrary timestamps in time, outperforming interpolation-
+based baselines by 2x in both 2D and 3D.
+With this work we make the following contributions:
+1. We present TrackAnyMotion, a monocular RGB–event
+tracker that follows arbitrary query points in 2D and 3D,
+including at timestamps between RGB frames (Secs. 3.2
+and 3.3)
+2. We
+introduce
+geometry-conditioned
+independent-
+motion
+reasoning
+within
+iterative
+tracking,
+using
+deviations from camera-induced motion to predict
+motion masks and feed their features back into 2D and
+3D refinement (Secs. 3.3 and 3.4)
+3. We construct HyperEvent, a synthetic RGB–Event
+dataset with high-frequency 3D trajectories, geometry,
+and independent-motion labels for training and con-
+trolled evaluation.
+2. Related work
+Point tracking and dynamic 3D reconstruction.
+Image-
+space trackers such as CoTracker3 [22] learn correspon-
+dences from synthetic supervision and pseudo-labelled real
+videos, and a growing family of methods lifts these cor-
+respondences into 3D. SpatialTracker [58], DELTA [37],
+TAPIP3D [61] and TrackingWorld [31] rely on depth
+estimated by a separate network, whereas SpatialTrack-
+erV2 [59], St4RTrack [6], D4RT [62] and V-DPM [44]
+predict scene geometry and point motion jointly in a sin-
+gle feed-forward pass. Trace Anything [30] represents ev-
+ery trajectory as a B-spline in time, so that positions can
+be read off at any instant, and TrackCraft3R [36] and Re-
+Lift [42] start from the output of a reconstruction model
+and refine tracks on top of it. TrackEverything [20] extends
+dense tracking to videos of more than a thousand frames
+with a persistent world-space representation.
+Our track-
+ing backbone is Track4World [32], which predicts world-
+centric dense 2D and 3D flow and refines it with iterative
+updates in the style of RAFT [45]. All of these methods
+see only RGB frames and report positions at frame times.
+TrackAnyMotion adds the event stream of the same camera
+and predicts 2D and 3D positions in between frames.
+Tracking with events and frames.
+Event cameras report
+per-pixel brightness changes asynchronously and with mi-
+crosecond latency, so they observe how the scene moves
+while a frame camera is blind between exposures [7]. Early
+data-driven trackers followed frame-initialised features with
+events alone [34], and ETAP [14] and MATE [15] extended
+this to tracking any point from an event stream. Combining
+both modalities, FE-TAP [28], TAPFormer [29] and Blink-
+Track [41] fuse frames and events to output 2D tracks well
+above the frame rate, and our event encoder follows the de-
+sign of TAPFormer. Continuous-time formulations go one
+step further and model each pixel’s trajectory as a paramet-
+ric curve that can be sampled at any time [9, 48], but the tra-
+jectories remain in the image plane. In 3D, EMoTive [49]
+and Han et al. [16] recover optical flow together with motion
+in depth from events, which yields a 3D motion field over
+2
+
+
+a short horizon rather than persistent correspondences. The
+event-based trackers that do produce 3D trajectories need
+additional sensing: stereo events in E-3DTrack [25], a rig
+of four RGB and two event cameras in MER-Tracker [2], or
+a depth map as input in E-TraMamba [40]. We work with a
+single RGB camera and its co-located events, take no depth
+as input, and output long-range 3D tracks of arbitrary points
+at timestamps between frames.
+Visual geometry models with event information.
+Feed-
+forward geometry models such as VGGT [50], π3 [52]
+and Depth Anything 3 [27] predict depth, pointmaps and
+camera parameters directly from an arbitrary set of views,
+MonST3R [63] adapts this recipe to scenes with moving
+objects, and Flow3r [5] shows that correspondence supervi-
+sion can drive geometry and pose learning. Events have
+recently entered this family from two directions.
+Depth
+AnyEvent [1] and EventVGGT [39] distill RGB depth
+and geometry models into event-based estimators, while
+EAG3R [56] and Weerakoon et al. [54] add an event branch
+to pointmap reconstruction for dynamic scenes and diffi-
+cult lighting, and Interp3R [13] uses events to interpolate
+pointmaps and camera poses to timestamps where no frame
+exists. These models produce geometry at each timestamp
+but do not link material points across time. We rely on them
+for exactly that geometry: Depth Anything 3 provides the
+depth and camera poses that serve as the static-scene ref-
+erence for our tracking and for the rigid-flow computation
+described below.
+Independently moving objects segmentation.
+Separat-
+ing the motion a camera induces from the motion of objects
+is a long-standing problem, and the most common tool is a
+comparison between the observed motion and the rigid flow
+that camera motion alone would produce given the scene
+depth. GeoNet [60] introduced this decomposition for un-
+supervised depth and pose learning, treating the residual
+as object motion. Event-based methods adopted the same
+idea in several forms: through motion compensation and
+contrast maximization [43], by learning depth, ego-motion
+and motion masks jointly [35], or, in Un-EVIMO [53],
+by thresholding the rigid-flow residual into pseudo-labels
+for an event segmenter. More recent learned segmenters
+feed ego-motion-compensated events and temporal atten-
+tion to the network [11], predict masks together with future
+motion to suppress events on moving objects [38], or su-
+pervise boundary ownership alongside motion masks [18].
+On the RGB side, DynOSeg [17] fuses a geometry-aware
+residual map with depth features, and Segment Any Mo-
+tion [19] reads moving objects off long-range tracks. Track-
+ers themselves have started to carry motion structure: Spa-
+tialTracker [58] and MoSE3 [4] learn rigidity embeddings
+for trajectories, and TrackEverything [20] classifies points
+as static or dynamic and refines only the dynamic ones.
+What these approaches share is that the residual, or the
+static-versus-dynamic decision, is computed once, as pre-
+processing, as pseudo-labels, or as a single routing step. In
+TrackAnyMotion the residual is a running quantity instead:
+we recompute it from the current depth, pose and track es-
+timates inside every refinement iteration, and use it both to
+segment independently moving objects (IMOs) and to de-
+cide how much each update should trust the event evidence.
+3. Method
+Our method jointly estimates 2D and 3D point trajecto-
+ries and independent-motion masks from monocular RGB
+frames and synchronized events. Our central idea is to use
+camera-induced motion as a geometric reference within it-
+erative tracking: deviations from this reference help iden-
+tify independently moving points, whose learned motion
+features in turn condition trajectory refinement. For times-
+tamps without an RGB observation, event-conditioned pose
+and motion predictions supply the target geometry needed
+by the tracker. Fig. 2 summarizes these two mechanisms.
+3.1. Problem Setup
+Input
+and
+output.
+The
+inputs
+are
+RGB
+frames
+{Is, ts}S
+s=1 and events E
+=
+{(xj, tj, pj)}, with pixel
+location xj, timestamp tj, and polarity pj ∈{−1, +1}.
+We predict at RGB timestamps and requested inter-frame
+times tk.
+For bracketing RGB times t−
+k , t+
+k , define
+αk = (tk −t−
+k )/(t+
+k −t−
+k ).
+Given source point us,i,
+the tracker predicts target image position but,i, visibility,
+confidence, and a camera-coordinate residual:
+bPt,i = bPs,i + brs→t,i.
+(1)
+The endpoints use their respective camera frames, so this
+residual includes camera motion.
+We additionally pre-
+dict independent-motion probability pt,i on the source-point
+grid. Superscript n denotes refinement iteration and gt de-
+notes ground truth.
+Base tracker.
+We build on Track4World [32], using
+frozen DA3 [27] geometry to obtain RGB pointmaps and
+camera-to-world poses bTs = ( bRs,bts). Its recurrent decoder
+refines 2D and 3D residuals using appearance, context, and
+pointmap correlations. The geometry backbone stays frozen
+while tracking components and the added event and IMO
+modules are trained.
+3.2. Event-Conditioned Query Features
+Encoding and temporal fusion.
+At each query times-
+tamp, we form a ten-channel stack [14] event represen-
+tation from up to 400,000 preceding events, with succes-
+sively shorter count-based windows. A TAPFormer event
+3
+
+
+Geometry 
+Encoder
+Event 
+Encoder
+❄
+High-frequence 
+Poses
+Frames and Events 
+Feature Fusion
+Iterate Track
+Geometry Feature
+Context Feature
+Event Feature
+Fused Feature
+Motion-grounded
+Constraint
+IMO Estimation
+Tracks Prediction
+Figure 2. Overview of TrackAnyMotion. Frozen RGB geometry and event-conditioned features support iterative 2D and 3D tracking.
+At inter-frame timestamps, learned camera poses and coarse world motion construct target pseudo-pointmaps. An independent-motion de-
+coder combines tracking features with deviations from camera-induced motion; its features and probabilities feed back into both trajectory
+updates.
+encoder [29] maps the stack to stride-8 features Ek. Tem-
+poral fusion maintains a transient state: at RGB observa-
+tions it is reset from RGB context, then updated with the
+query’s events through a convolutional GRU. A local 7 × 7
+cross-attention uses source RGB context to query this state,
+producing an event correction δk through a learnable chan-
+nel gate.
+Query appearance.
+For an inter-frame query tk, stream
+a (appearance, context, or 3D descriptors) combines brack-
+eting RGB features with an event correction:
+eFa
+k = (1 −αk)Fa
+k−+ αkFa
+k+ + ga ⊙ψa(δk).
+(2)
+Here Fa
+k−and Fa
+k+ are the features at the preceding and
+following RGB frames, and αk is the query’s relative time
+between them. The learned 1 × 1 convolution ψa maps
+the event correction δk to the stream’s Ca channels. The
+learned vector ga ∈RCa scales each correction channel;
+⊙denotes channel-wise multiplication broadcast over spa-
+tial locations. These gates are shared across queries and
+spatial positions, with unconstrained values learned during
+training. RGB queries also receive event corrections at their
+corresponding slots. The correction and injection gates start
+at zero, preserving the RGB features initially. A fused con-
+text Fk, formed by adding δk to source RGB context, addi-
+tionally conditions the temporal geometry heads. Although
+event windows end at the query, the evaluated appearance
+and pose paths use both bracketing RGB frames and are
+therefore bidirectional.
+3.3. Geometry Between RGB Frames
+A 3D correspondence decoder needs target geometry even
+when no RGB frame exists at the requested time. We con-
+struct a pseudo-pointmap by predicting camera pose and
+spatially varying world motion.
+Event-conditioned pose.
+Let T k interpolate the detached
+bracketing RGB poses, using SLERP for rotation and linear
+interpolation for translation. A pooled fused feature and
+temporal phase predict a pose correction:
+bTk = T k exp(ξ∧
+k ),
+ξk = gθ(pool(Fk), αk).
+(3)
+The learned twist adjusts the interpolated camera trajectory
+without updating the frozen RGB geometry.
+Motion-conditioned
+pseudo-pointmaps.
+A
+convolu-
+tional head takes source RGB context and Fk to predict
+a coarse world-displacement field ∆Xw
+k,i on the stride-8
+grid. Each source point is moved in world coordinates and
+transformed into the query camera:
+ePk,i = bT −1
+k
+  bTs bPs,i + ∆Xw
+k,i
+
+.
+(4)
+Transforms act on 3D positions with translation included.
+We project and forward-splat these points into the target
+grid, using soft depth weights to favor nearer surfaces where
+projections overlap.
+Unfilled cells use the camera-only
+4
+
+
+transformed source pointmap. This pseudo-pointmap sup-
+plies the target geometric correlations, while eFa
+k supplies
+target appearance. The coarse field is computed once per
+forward pass and detached from the warp; a separate dis-
+placement loss trains its head. Thus camera motion and ob-
+ject motion both shape the geometry presented to iterative
+refinement.
+3.4. Independent-Motion Feedback
+Geometric reference.
+A static source point would appear
+at
+Prig
+t,i = bT −1
+t
+bTs bPs,i,
+urig
+t,i = πt(Prig
+t,i ),
+(5)
+where projection uses calibration estimated from predicted
+pointmaps. After each 2D update, we measure deviation
+from this rigid projection and the world displacement im-
+plied by the previous 3D estimate:
+a(n)
+t,i = bu(n)
+t,i −urig
+t,i ,
+(6)
+b(n)
+t,i = bTt bP(n−1)
+t,i
+−bTs bPs,i.
+(7)
+At the first iteration, the rigid target initializes this cue,
+giving zero world displacement. Image residuals are nor-
+malized by grid size and world displacement by source-
+point distance; bounded motion cues are combined with
+source/target confidence and geometric validity.
+These
+quantities provide evidence of independent motion despite
+camera movement and uncertain geometry.
+Track-aligned IMO decoding.
+At the current correspon-
+dence, we sample target event features and the target 3D
+descriptor. A shared spatial decoder combines them with
+source context, the current tracking state, the target-minus-
+source descriptor, and the geometric cues.
+Bidirectional
+temporal attention then aggregates features along each
+source-anchored track, without mixing spatial locations in
+the attention operation. The resulting feature z(n)
+t,i predicts
+an IMO logit ℓ(n)
+t,i and probability p(n)
+t,i = σ(ℓ(n)
+t,i ). The final
+mask thresholds this probability at 0.5. Pairwise inference
+has one target slot, so temporal aggregation reduces to that
+slot.
+Feedback into tracking.
+Two adapters convert the IMO
+feature and probability into residual tracking features:
+∆h(n)
+d
+= Ad
+ [z(n), p(n)]
+
+,
+d ∈{2D, 3D}.
+(8)
+The 3D adapter conditions the current 3D update; the 2D
+adapter conditions the next recurrent 2D update.
+Both
+adapters have zero-initialized output layers, initially pre-
+serving the pretrained updates. Their feedback connections
+retain gradients across iterations. Consequently, segmenta-
+tion uses the evolving correspondence estimates and returns
+learned motion information to trajectory refinement, rather
+than acting only as a final output.
+3.5. Training Objective
+We train on RGB and inter-frame query batches, supervis-
+ing tracking and IMO at all N = 4 refinement iterations.
+Geometry predictions remain frozen; all 3D supervision is
+expressed in the corresponding normalized geometry coor-
+dinates.
+Tracking
+supervision.
+Let
+⟨f⟩w
+=
+P
+i wifi/ max(P
+i wi, ϵ),
+with
+validity-masked
+visi-
+bility weights wi = vgt
+i
++ 0.2(1 −vgt
+i ). The trajectory
+losses are
+L(n)
+2D =
+D
+∥bu(n)
+t,i −ugt
+t,i∥1
+E
+w ,
+(9)
+L(n)
+3D =
+D
+∥br(n)
+s→t,i −rgt
+s→t,i∥1
+E
+w .
+(10)
+The target rgt uses the training geometry-scale alignment.
+Following the base tracker, visibility and confidence re-
+ceive binary cross-entropy losses; confidence targets indi-
+cate 2D error below 3 pixels. A squared spatial smooth-
+ness penalty regularizes physical displacement in source-
+camera axes over valid, same-instance geometric neighbors.
+Denote their weighted sum by L(n)
+track, using unit tracking
+weights and smoothness weight 0.05.
+IMO supervision.
+Native source-material IMO annota-
+tions supervise logits sampled at the same source points
+across target times. Unknown annotations, invalid corre-
+spondences, source-time queries, and padded slots are ex-
+cluded. A one-pixel boundary band softens targets using
+distances on the annotation grid; the remaining labels stay
+binary. The loss is the mean binary cross-entropy L(n)
+IMO
+over eligible points, without deriving labels from predicted
+motion.
+Temporal
+geometry
+supervision.
+On
+inter-frame
+batches, Lpose combines Frobenius rotation error and
+translation L1 error, and Lcoarse supervises the coarse
+world-displacement field with L1 error.
+Ground truth
+is transformed into the predicted reference frame and
+normalized scale before these comparisons. The complete
+objective is
+L =
+N
+X
+n=1
+γN−n L(n)
+track + L(n)
+IMO
+
++ Iinter
+ Lpose + 0.5Lcoarse
+
+,
+(11)
+with γ = 0.8 and Iinter indicating the temporal query
+branch.
+5
+
+
+Events on HyperEvent
+Events with aligned frames
+Point and 3D flow
+Ours
+Track4World
+Scene flow
+Ours
+Track4World
+Ours
+Track4World
+Ours
+Track4World
+2D flow
+Independently Moving Object Segmentation
+Figure 3. Qualitative comparison on HyperEvent. Top: events
+and their overlays on aligned RGB frames. TrackAnyMotion and
+Track4World are compared through 3D points and flow, scene
+flow, 2D flow, and independent-motion segmentation. Red boxes
+mark regions enlarged below. In the segmentation maps, orange
+denotes independently moving objects and blue denotes static re-
+gions.
+4. Experiments
+We evaluate TrackAnyMotion, trained solely on Hyper-
+Event, on high-frequency trajectory interpolation, 2D and
+3D point tracking, and independent-motion segmentation.
+Tests on synthetic and real-world datasets and ablations ex-
+amine event input, motion feedback, and tracking at and
+between RGB timestamps.
+Implementation details.
+Our model builds on pretrained
+Track4World tracking components and DA3 geometry. At
+RGB timestamps, the pairwise inference protocol pro-
+cesses each source–target pair independently using two
+RGB frames and four refinement iterations in half precision.
+Datasets.
+HyperEvent contains 1,499 scenes, split into
+1,199 training, 150 validation, and 150 test scenes. Across
+all 25,621 foreground objects, the average relative speed is
+1.458 m/s and the peak relative speed is 63.650 m/s. For
+the 3,029 dynamic objects, the average absolute speed is
+6.324 m/s and the peak absolute speed is 29.731 m/s. The
+native evaluation uses 256×256 RGB images and a 32×32
+material-point grid, with RGB observations at 50 Hz and
+geometric trajectories at 200 Hz. For external tracking eval-
+uation, we use 200 KITTI 2015 image pairs and the released
+PointOdyssey and ADT mini subsets. PointOdyssey im-
+ages are resized to 640 × 360, while ADT uses its native
+512 × 512 resolution. PointOdyssey and ADT are evalu-
+ated using independent frame-0-to-target pairs within 16-
+and 50-frame prefixes. Events are simulated for Kitti, ADT
+and PointOdissey datasets, while DSEC reports real events.
+4.1. High-frequency trajectory interpolation
+We predict 200 Hz trajectories from 25 Hz RGB frames and
+intervening events, including seven intermediate positions
+per 40 ms interval. Table 1 compares RGB timestamps (S)
+and intermediate timestamps (K) against linear interpola-
+tion (LI) of Track4World and TrackEverything tracks, and
+TAPFormer [29] for 2D tracking.
+At intermediate timestamps, TrackAnyMotion achieves
+0.132 px EPE2D, compared with 1.470 px for Track4World
++ LI and 0.497 px for TAPFormer. Its EPE3D is 0.148 m,
+versus 0.284 m and 0.382 m for Track4World + LI and
+TrackEverything + LI, respectively. Gains also extend to
+RGB timestamps and both IMO and static regions. These
+cross-model comparisons do not isolate the contributions of
+events or motion grounding; matched controls are discussed
+in the ablation study. The supplementary section provides
+the protocol and detailed results.
+4.2. 2D point tracking
+We measure 2D tracking accuracy using endpoint error in
+input-image pixels and the percentages of predictions with
+errors strictly below 1 and 3 pixels. Point coordinates are
+converted to input-image pixels before scoring. For our syn-
+thetic frame-time evaluation, eligible correspondences have
+valid, visible, in-frame source and target observations, fi-
+nite ground-truth coordinates, and positive depth. Errors
+and accuracy counts are pooled over eligible correspon-
+dence occurrences.
+Table 2 compares EKLT, DeepEvT,
+TAPFormer, and our method on fixed pilot cohorts of 494
+HyperEvent and 256 DSEC correspondence occurrences.
+6
+
+
+Table 1. 2D and 3D tracking at RGB observation timestamps (S axis) and bracketed intermediate timestamps (K axis). The 2D cohorts
+contain 560,615 and 153,519 correspondence occurrences, respectively. EPEs are in pixels for 2D and metres for 3D; accuracies are
+percentages. In 2D, AccS/AccR use strict 1/3-pixel thresholds; in 3D, they use absolute-or-relative thresholds of 0.05/0.10. Regional
+EPEs use valid source-frame IMO/static labels; static includes stationary objects and background. LI denotes linear interpolation between
+predicted RGB endpoints, used by both Track4World and TrackEverything on the K axis. Bold indicates the best values within each block.
+Method
+S axis
+K axis
+EPE ↓
+AccS ↑
+AccR ↑
+IMO EPE ↓
+Static EPE ↓
+EPE ↓
+AccS ↑
+AccR ↑
+IMO EPE ↓
+Static EPE ↓
+2D tracking (EPE in pixels)
+Track4World [32] + LI
+1.219
+68.38
+91.50
+1.950
+0.637
+1.470
+62.38
+89.32
+2.492
+0.913
+TrackEverything [20] + LI
+2.695
+40.52
+83.91
+4.252
+2.139
+2.466
+45.82
+85.60
+4.047
+1.910
+TAPFormer [29]
+1.230
+84.25
+94.90
+2.063
+1.000
+0.497
+90.47
+97.89
+1.984
+0.900
+Ours
+0.646
+89.49
+97.55
+1.910
+0.645
+0.132
+99.32
+99.97
+1.837
+0.590
+3D tracking (EPE in metres)
+Track4World [32] + LI
+0.318
+13.57
+36.95
+0.402
+0.287
+0.284
+19.26
+42.86
+0.365
+0.255
+TrackEverything [20] + LI
+0.417
+18.01
+49.39
+0.586
+0.357
+0.382
+23.95
+56.17
+0.540
+0.326
+Ours
+0.166
+38.83
+71.29
+0.342
+0.104
+0.148
+47.42
+73.92
+0.305
+0.093
+Table 2. 2D point tracking on HyperEvent and DSEC. EPE2D is
+in pixels; AccS/AccR are percentages of errors strictly below 1/3
+pixels. ∞indicates failed predictions retained as infinite error.
+Method
+HyperEvent
+DSEC
+EPE2D ↓
+AccS ↑
+AccR ↑
+EPE2D ↓
+AccS ↑
+AccR ↑
+EKLT [8]
+∞
+2.63
+12.96
+∞
+8.98
+16.02
+DeepEvT [33]
+7.338
+9.51
+38.66
+11.074
+12.89
+40.62
+TAPFormer [29]
+1.224
+80.36
+94.13
+1.932
+45.31
+86.72
+Ours
+0.728
+84.41
+96.56
+1.605
+55.86
+89.84
+Table 3. EPE3D ↓in metres for PointOdyssey/ADT and KITTI.
+L-16/L-50 denote independent frame-0-to-target pair evaluations.
+All the baselines use predicted geometry and all 50 clips per
+dataset while KITTI evaluations use 200 pairs. ∞denotes align-
+ment failures retained in the evaluation.
+Method
+PointOdyssey
+ADT
+KITTI
+L-16
+L-50
+L-16
+L-50
+Pairs (200)
+TrackEverything (Pi3) [20, 52]
+0.041
+0.078
+∞
+∞
+0.091
+POMATO [64]
+0.266
+0.319
+0.075
+0.124
+0.234
+MASt3R [24]
+0.339
+0.514
+0.206
+0.200
+0.519
+MonST3R + RAFT [45, 63]
+0.334
+0.525
+0.061
+0.123
+0.354
+ZeroMSF [26]
+0.082
+0.196
+0.072
+0.164
+0.111
+Track4World (DA3) [27, 32]
+0.062
+0.121
+0.043
+0.064
+0.077
+Ours
+0.047
+0.091
+0.025
+0.044
+0.076
+Our method achieves the lowest EPE2D and highest strict
+and relaxed accuracies on both datasets. Relative to TAP-
+Former, EPE2D decreases from 1.224 to 0.728 px on Hy-
+perEvent and from 1.932 to 1.605 px on DSEC.
+Table 4. IMO segmentation on HyperEvent (%). mIoU averages
+foreground/background IoU; pIoU is foreground IoU on pixel with
+at least one event.
+Method
+mIoU ↑
+pIoU ↑
+EVIMO [53]
+42.46
+6.21
+Un-EVIMO [53]
+45.75
+14.79
+Event Suppression [38]
+48.83
+23.56
+Ours
+81.36
+72.82
+4.3. 3D point tracking
+We jointly align each pair of predicted source and tar-
+get point clouds to ground truth using one shared scale
+and translation per method and pair.
+We report aligned
+3D residual error (EPE3D), strict and relaxed accuracies
+(AccS/AccR), and XYZ geometry metrics (AbsRel/δ1.25).
+These scores evaluate camera-coordinate residuals after
+alignment and do not establish absolute metric-scale recov-
+ery. KITTI errors and absolute thresholds use the released,
+uncalibrated coordinate scale. Exact computations and re-
+gional aggregation are given in the supplementary material.
+4.4. Independently Moving Object Estimation
+We evaluate segmentation on 150 synthetic scenes using na-
+tive 256 × 256 ground-truth masks and a prediction thresh-
+old of 0.5. We report mIoU and pIoU and averaging pro-
+cedure in the supplementary material. Event Suppression
+uses causal 50 ms event windows, while our method uses
+the source and next RGB frames with their event stacks.
+7
+
+
+Table 5. Ablations at 5 Hz RGB. A: Without IMO (T4W–TAPFormer); B: Ours; C: ETAP Encoder (T4W–ETAP); D: Without Events
+(Ours–ZeroEvents). Panels (a,c) evaluate RGB endpoints; (b) evaluates intermediate phases. Panel (a) shows static, medium-motion, and
+high-motion points. 2D/3D denote EPE2D (px) / aligned residual EPE3D (m), both lower is better. LI interpolates each model’s own RGB
+endpoints; ours are event-conditioned. IoU/F1 are fractions. Timing covers two-slot RGB inference with cached geometry, not the full
+temporal path. Protocol details are in the supplementary.
+(a) GT motion levels
+Method
+Static
+Medium
+High
+2D ↓3D ↓2D ↓3D ↓
+2D ↓
+3D ↓
+A
+0.341 2.968 1.968 2.772 16.576 3.269
+B
+0.525 0.077 1.653 0.138
+7.629
+0.461
+C
+0.560 7.556 2.355 4.644 10.590 4.370
+D
+0.378 0.057 1.469 0.139 15.435 0.506
+(b) Inter-frame phase
+Method
+ϕ = 0.25
+ϕ = 0.50
+ϕ = 0.75
+2D ↓3D ↓2D ↓3D ↓2D ↓3D ↓
+A
+1.508 0.814 2.463 2.275 2.925 2.882
+B
+1.366 0.082 2.072 0.120 2.521 0.147
+B + LI
+1.174 0.048 1.744 0.084 1.757 0.111
+C
+N/A
+N/A
+N/A
+N/A
+N/A
+N/A
+D
+1.495 0.079 2.396 0.115 2.953 0.131
+D + LI
+1.040 0.047 1.731 0.081 2.195 0.109
+(c) Components and event input
+Metric
+A
+B
+C
+D
+Overall 2D ↓
+3.365
+1.961
+2.608
+3.136
+Overall 3D ↓
+2.815
+0.150
+6.078
+0.149
+IMO 2D ↓
+6.550
+3.472
+4.765
+6.040
+IMO 3D ↓
+2.654
+0.227
+4.521
+0.245
+Static 2D ↓
+0.341
+0.525
+0.560
+0.378
+Static 3D ↓
+2.968
+0.077
+7.556
+0.057
+IoU ↑
+N/A
+0.9565
+N/A
+0.9517
+F1 ↑
+N/A
+0.9778
+N/A
+0.9752
+Params (M)
+1718.54 1719.34 1718.72 1719.34
+Time (s)
+0.137
+0.153
+0.116
+0.145
+4.5. Ablation Study
+We investigate tracking under sparse RGB observations us-
+ing three variants: T4W–TAPFormer (A), which combines
+Track4World with TAPFormer event encoding and fusion
+without IMO; Ours (B), which additionally introduces IMO
+prediction and conditioning; and T4W–ETAP (C), which
+uses ETAP encoding and its associated fusion without IMO.
+We also evaluate Ours–ZeroEvents (D), where we zeros
+event representation starting from B model while retaining
+its weights, fusion connections, IMO branch, timestamps,
+and temporal query axis.
+Setup and metrics.
+We evaluate three held-out scenes at
+5 Hz RGB and 200 Hz trajectory sampling, using two RGB
+frames 200 ms apart and 41 query timestamps. We report
+EPE2D (px) and aligned camera-residual EPE3D (m). De-
+tails about sampling, alignment, eligibility, motion group-
+ing, and timing are available in the supplementary material.
+Different Motion Levels.
+We compare static points with
+the medium- and high-motion GT-speed groups. Table 5(a)
+reports RGB-endpoint tracking errors. The largest event-
+input effect occurs in the high-motion group: zeroing events
+increases EPE2D from 7.629 to 15.435 px, a 102.31% in-
+crease. The effect is not uniform across groups: the zero-
+event control has lower static and medium-motion EPE2D.
+These results indicate that event input primarily reduces
+large 2D tracking errors associated with high speed motion.
+Accuracy Changes Between RGB Timestamps.
+Ta-
+ble 5(b) compares direct predictions with linear interpo-
+lation (LI) of each model’s own RGB endpoints at 25%,
+50%, and 75% of the inter-frame interval. Our endpoints
+are event-conditioned; endpoint and intermediate evalua-
+tions use different GT-valid cohorts.
+At the three reported phases, our method has lower na-
+tive EPE2D than its zero-event control, but higher aligned
+residual EPE3D. Interpolation of our own endpoints outper-
+forms our direct predictions at all three reported phases for
+both errors. Across all 39 phases, its interpolated predic-
+tions have lower EPE2D in 37 phases and lower EPE3D in
+38 phases. Thus, the sparse-RGB results support the advan-
+tage of using event for 2D tracking.
+C has no native learned intermediate output in the evalu-
+ated integration and is reported as N/A.
+Effectiveness of Components.
+Table 5(c) summarizes re-
+sults on the common RGB-endpoint cohort of 423 corre-
+spondences.
+IMO modeling: B versus A. B adds an IMO decoder with
+feedback into 2D and 3D refinement, using the architecture
+and supervision described in Secs. 3.4 and 3.5. B has lower
+overall tracking errors than A in this pilot.
+Event encoding and fusion: C versus A. C uses the ETAP
+encoder and gated residual adapters for dense 2D, 3D, and
+context features, replacing both A’s event encoder and its
+fusion mechanism.
+Event input: D versus B. Zeroing events increases overall
+EPE2D from 1.961 to 3.136 px (+59.93%) and IMO-region
+EPE2D from 3.472 to 6.040 px. However, overall aligned
+residual EPE3D slightly improves (0.150 to 0.149 m), as
+does the fraction of RGB-endpoint predictions below one
+pixel (0.6028 to 0.7021). Events therefore primarily reduce
+large 2D errors under high motion, rather than uniformly
+improving tracking.
+5. Conclusion and Limitations
+We presented TrackAnyMotion, a monocular RGB–event
+tracker that recovers 2D and 3D point trajectories between
+RGB frames.
+Its independent-motion feedback connects
+event measurements with scene geometry to guide itera-
+8
+
+
+tive trajectory refinement. We also introduced HyperEvent,
+providing synchronized frames, events, high-frequency tra-
+jectories, geometry, and independent-motion labels.
+To-
+gether, these contributions advance point tracking beyond
+RGB sampling rates. Reliance on monocular geometry and
+limited validation with real events remain limitations.
+9
+
+
+References
+[1] Luca Bartolomei, Enrico Mannocci, Fabio Tosi, Matteo
+Poggi, and Stefano Mattoccia. Depth AnyEvent: A cross-
+modal distillation paradigm for event-based monocular depth
+estimation. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision (ICCV), 2025. 3
+[2] Yiqian Chang, Qinghong Ye, Haoran Xu, Jianing Li,
+Dongyang Ma, Xuan Wang, Wei Zhang, Yonghong Tian, and
+Peixi Peng. MER-Tracker: Towards high-speed 3D point
+tracking via multi-view Event-RGB hybrid cameras. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 37032–37042, 2026.
+3
+[3] Yunuo Chen, Yafei Hu, Lingfeng Sun, Tushar Kusnur, Laura
+Herlant, and Chenfanfu Jiang.
+EMPM: Embodied MPM
+for modeling and simulation of deformable objects. IEEE
+Robotics and Automation Letters, 11(4):4179–4186, 2026. 1
+[4] Jiahuan Cheng, Zhiyi Li, Tian Xia, Ruojin Cai, Yilun Du,
+and Qianqian Wang. MoSE3: Learning world-space SE(3)
+at every pixel. In Advances in Neural Information Processing
+Systems (NeurIPS), 2026. 3
+[5] Zhongxiao Cong, Qitao Zhao, Minsik Jeon, and Shubham
+Tulsiani. Flow3r: Factored flow prediction for scalable vi-
+sual geometry learning. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 438–447, 2026. 3
+[6] Haiwen Feng, Junyi Zhang, Qianqian Wang, Yufei Ye,
+Pengcheng Yu, Michael J. Black, Trevor Darrell, and Angjoo
+Kanazawa. St4RTrack: Simultaneous 4D reconstruction and
+tracking in the world. In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), 2025.
+2
+[7] Guillermo Gallego, Tobi Delbruck, Garrick Orchard, Chiara
+Bartolozzi, Brian Taba, Andrea Censi, Stefan Leutenegger,
+Andrew J. Davison, Jorg Conradt, Kostas Daniilidis, and
+Davide Scaramuzza. Event-based vision: A survey. IEEE
+Transactions on Pattern Analysis and Machine Intelligence,
+44(1):154–180, 2022. 2
+[8] Daniel Gehrig, Henri Rebecq, Guillermo Gallego, and Da-
+vide Scaramuzza. EKLT: Asynchronous photometric feature
+tracking using events and frames. International Journal of
+Computer Vision, 2019. 7
+[9] Mathias Gehrig, Manasi Muglikar, and Davide Scaramuzza.
+Dense continuous-time optical flow from events and frames.
+IEEE Transactions on Pattern Analysis and Machine Intelli-
+gence, 2024. 2
+[10] Daniel Geng, Charles Herrmann, Junhwa Hur, Forrester
+Cole, Serena Zhang, Tobias Pfaff, Tatiana Lopez-Guevara,
+Yusuf Aytar, Michael Rubinstein, Chen Sun, et al. Motion
+prompting: Controlling video generation with motion tra-
+jectories. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages 1–
+12, 2025. 1
+[11] Stamatios Georgoulis, Weining Ren, Alfredo Bochicchio,
+Daniel Eckert, Yuanyou Li, and Abel Gawel.
+Out of the
+room: Generalizing event-based dynamic motion segmenta-
+tion for complex scenes. In International Conference on 3D
+Vision (3DV), pages 442–452, 2024. 3
+[12] Zekai Gu, Rui Yan, Jiahao Lu, Peng Li, Zhiyang Dou,
+Chenyang Si, Zhen Dong, Qifeng Liu, Cheng Lin, Ziwei Liu,
+et al. Diffusion as shader: 3D-aware video diffusion for ver-
+satile video generation control. In ACM SIGGRAPH 2025
+Conference Papers, pages 1–12, 2025. 1
+[13] Shuang Guo, Filbert Febryanto, Lei Sun, Luc Van Gool,
+and Guillermo Gallego. Interp3R: Continuous-time 3D ge-
+ometry estimation with frames and events. arXiv preprint
+arXiv:2603.14528, 2026. 3
+[14] Friedhelm Hamann,
+Daniel Gehrig,
+Filbert Febryanto,
+Kostas Daniilidis, and Guillermo Gallego.
+ETAP: Event-
+based tracking of any point. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 27186–27196, 2025. 2, 3
+[15] Han Han, Wei Zhai, Yang Cao, Bin Li, and Zheng-jun Zha.
+MATE: Motion-augmented temporal consistency for event-
+based point tracking. In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), 2025.
+2
+[16] Han Han, Wei Zhai, Tiesong Zhao, Bin Li, Yang Cao, and
+Zheng-jun Zha. Unsupervised 3D motion estimation using
+event camera. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), 2026.
+2
+[17] Xu Han, Yiduo Wang, Yiran Wang, and Viorela Ila.
+DynOSeg:
+Dynamic object segmentation via motion-
+geometry fusion.
+In Proceedings of the IEEE/CVF Win-
+ter Conference on Applications of Computer Vision (WACV),
+2027. 3
+[18] Zhiyuan Hua, Cornelia Ferm¨uller, and Yiannis Aloimonos.
+Moving border ownership for event-based motion segmenta-
+tion. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 37043–
+37052, 2026. 3
+[19] Nan Huang, Wenzhao Zheng, Chenfeng Xu, Kurt Keutzer,
+Shanghang Zhang, Angjoo Kanazawa, and Qianqian Wang.
+Segment any motion in videos.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2025. 3
+[20] Ayush Jain, Sreeharsha Paruchuri, Ishita Gupta, Fan Zhang,
+Tanner Schmidt, Jakob Engel, Katerina Fragkiadaki, and
+Adam W. Harley.
+TrackEverything: Long horizon dense
+tracking via de-duplicating 3D scene representations. arXiv
+preprint arXiv:2609.30222, 2026. 2, 3, 7
+[21] Hanxiao Jiang, Hao-Yu Hsu, Kaifeng Zhang, Hsin-Ni Yu,
+Shenlong Wang, and Yunzhu Li.
+PhysTwin:
+Physics-
+informed reconstruction and simulation of deformable ob-
+jects from videos. In Proceedings of the IEEE/CVF Interna-
+tional Conference on Computer Vision (ICCV), pages 7219–
+7230, 2025. 1
+[22] Nikita Karaev, Yuri Makarov, Jianyuan Wang, Natalia
+Neverova, Andrea Vedaldi, and Christian Rupprecht. Co-
+Tracker3:
+Simpler and better point tracking by pseudo-
+labelling real videos. In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), pages
+6013–6022, 2025. 2
+10
+
+
+[23] Jiahui Lei, Yijia Weng, Adam W Harley, Leonidas Guibas,
+and Kostas Daniilidis. MoSca: Dynamic Gaussian fusion
+from casual videos via 4D motion scaffolds. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 6165–6177, 2025. 1
+[24] Vincent Leroy, Yohann Cabon, and Jerome Revaud. Ground-
+ing image matching in 3D with MASt3R. In Proceedings
+of the European Conference on Computer Vision (ECCV),
+2024. 7
+[25] Siqi Li, Zhikuan Zhou, Zhou Xue, Yipeng Li, Shaoyi Du,
+and Yue Gao. 3D feature tracking via event camera. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 18974–18983, 2024.
+3
+[26] Yiqing Liang, Abhishek Badki, Hang Su, James Tompkin,
+and Orazio Gallo. Zero-shot monocular scene flow estima-
+tion in the wild. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+21031–21044, 2025. 7
+[27] Haotong Lin, Sili Chen, Jun Hao Liew, Donny Y. Chen,
+Zhenyu Li, Yang Zhao, Sida Peng, Hengkai Guo, Xiaowei
+Zhou, Guang Shi, Jiashi Feng, and Bingyi Kang. Depth Any-
+thing 3: Recovering the visual space from any views. In In-
+ternational Conference on Learning Representations (ICLR),
+2026. 3, 7
+[28] Jiaxiong Liu, Bo Wang, Zhen Tan, Jinpu Zhang, Hui
+Shen, and Dewen Hu.
+Tracking any point with frame-
+event fusion network at high frame rate.
+arXiv preprint
+arXiv:2409.11953, 2024. 2
+[29] Jiaxiong Liu, Zhen Tan, Jinpu Zhang, Yi Zhou, Hui Shen,
+Xieyuanli Chen, and Dewen Hu. TAPFormer: Robust ar-
+bitrary point tracking via transient asynchronous fusion of
+frames and events. In Proceedings of the IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+pages 37053–37062, 2026. 2, 4, 6, 7
+[30] Xinhang Liu, Yuxi Xiao, Donny Y. Chen, Jiashi Feng, Yu-
+Wing Tai, Chi-Keung Tang, and Bingyi Kang. Trace Any-
+thing: Representing any video in 4D via trajectory fields.
+In International Conference on Learning Representations
+(ICLR), 2026. 2
+[31] Jiahao Lu, Weitao Xiong, Jiacheng Deng, Peng Li, Tianyu
+Huang, Zhiyang Dou, Cheng Lin, Sai-Kit Yeung, and Yuan
+Liu. TrackingWorld: World-centric monocular 3D tracking
+of almost all pixels. In Advances in Neural Information Pro-
+cessing Systems (NeurIPS), 2025. 2
+[32] Jiahao Lu, Jiayi Xu, Wenbo Hu, Ruijie Zhu, Chengfeng
+Zhao,
+Sai-Kit
+Yeung,
+Ying
+Shan,
+and
+Yuan
+Liu.
+Track4World: Feedforward world-centric dense 3D tracking
+of all pixels. In Proceedings of the European Conference on
+Computer Vision (ECCV), 2026. 2, 3, 7
+[33] Nico Messikommer, Carter Fang, Mathias Gehrig, and Da-
+vide Scaramuzza.
+Data-driven feature tracking for event
+cameras. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+5642–5651, 2023. 7
+[34] Nico Messikommer, Carter Fang, Mathias Gehrig, and Da-
+vide Scaramuzza.
+Data-driven feature tracking for event
+cameras. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+5642–5651, 2023. 2
+[35] Anton Mitrokhin, Chengxi Ye, Cornelia Fermuller, Yian-
+nis Aloimonos, and Tobi Delbruck. EV-IMO: Motion seg-
+mentation dataset and learning pipeline for event cameras.
+In IEEE/RSJ International Conference on Intelligent Robots
+and Systems (IROS), 2019. 3
+[36] Jisu Nam, Jahyeok Koo, Soowon Son, Jaewoo Jung, Hong-
+gyu An, Junhwa Hur, and Seungryong Kim. TrackCraft3R:
+Repurposing video diffusion transformers for dense 3D
+tracking. arXiv preprint arXiv:2605.12587, 2026. 2
+[37] Tuan Duc Ngo, Peiye Zhuang, Chuang Gan, Evange-
+los Kalogerakis, Sergey Tulyakov, Hsin-Ying Lee, and
+Chaoyang Wang.
+DELTA: Dense efficient long-range 3D
+tracking for any video.
+In International Conference on
+Learning Representations (ICLR), 2025. 2
+[38] Roberto Pellerito, Nico Messikommer, Giovanni Cioffi,
+Marco Cannici, and Davide Scaramuzza. Anticipatory mo-
+tion suppression in event-based cameras. In Robotics: Sci-
+ence and Systems (RSS), 2026. 3, 7
+[39] Yinrui Ren, Jinjing Zhu, Kanghao Chen, Zhuoxiao Li, Jing
+Ou, Zidong Cao, Tongyan Hua, Peilun Shi, Yingchun Fu,
+Wufan Zhao, and Hui Xiong. EventVGGT: Exploring cross-
+modal distillation for consistent event-based depth estima-
+tion. In Proceedings of the European Conference on Com-
+puter Vision (ECCV), 2026. 3
+[40] Juwei Shen, Yujie Wu, and Changwen Chen. E-TraMamba:
+A new paradigm for efficient long-term 3D feature tracking
+with event cameras. arXiv preprint arXiv:2607.02866, 2026.
+3
+[41] Yichen Shen, Yijin Li, Shuo Chen, Guanglin Li, Zhaoyang
+Huang, Hujun Bao, Zhaopeng Cui, and Guofeng Zhang.
+BlinkTrack: Feature tracking over 80 FPS via events and im-
+ages. In Proceedings of the IEEE/CVF International Confer-
+ence on Computer Vision (ICCV), 2025. 2
+[42] Assaf Singer, Maroun Khriesh, Noam Rotstein, Yoni Kasten,
+and Or Litany. ReLift: Dense 3D tracking as lifted trajectory
+repair. arXiv preprint arXiv:2610.42136, 2026. 2
+[43] Timo Stoffregen, Guillermo Gallego, Tom Drummond,
+Lindsay Kleeman, and Davide Scaramuzza.
+Event-based
+motion segmentation by motion compensation. In Proceed-
+ings of the IEEE/CVF International Conference on Com-
+puter Vision (ICCV), 2019. 3
+[44] Edgar Sucar, Eldar Insafutdinov, Zihang Lai, and Andrea
+Vedaldi.
+V-DPM: 4D video reconstruction with dynamic
+point maps. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), 2026.
+2
+[45] Zachary Teed and Jia Deng. RAFT: Recurrent all-pairs field
+transforms for optical flow. In Proceedings of the European
+Conference on Computer Vision (ECCV), 2020. 2, 7
+[46] Stepan Tulyakov, Daniel Gehrig, Stamatios Georgoulis,
+Julius Erbach, Mathias Gehrig, Yuanyou Li, and Davide
+Scaramuzza. Time Lens: Event-based video frame interpola-
+tion. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 16155–
+16164, 2021. 16
+11
+
+
+[47] Mel Vecerik, Carl Doersch, Yi Yang, Todor Davchev, Yusuf
+Aytar, Guangyao Zhou, Raia Hadsell, Lourdes Agapito, and
+Jon Scholz. RoboTAP: Tracking arbitrary points for few-
+shot visual imitation. In IEEE International Conference on
+Robotics and Automation (ICRA), pages 5397–5403, 2024. 1
+[48] Zhexiong Wan, Jianqin Luo, Yuchao Dai, and Gim Hee Lee.
+Event-aided dense and continuous point tracking: Every-
+where and anytime. In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), pages
+7936–7946, 2025. 2
+[49] Zengyu Wan, Wei Zhai, Yang Cao, and Zhengjun Zha. EMo-
+Tive: Event-guided trajectory modeling for 3D motion esti-
+mation. In Proceedings of the IEEE/CVF International Con-
+ference on Computer Vision (ICCV), 2025. 2
+[50] Jianyuan Wang, Minghao Chen, Nikita Karaev, Andrea
+Vedaldi, Christian Rupprecht, and David Novotny. VGGT:
+Visual geometry grounded transformer. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 5294–5306, 2025. 3
+[51] Qianqian Wang, Vickie Ye, Hang Gao, Weijia Zeng, Jake
+Austin, Zhengqi Li, and Angjoo Kanazawa. Shape of mo-
+tion: 4D reconstruction from a single video. In Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), pages 9660–9672, 2025. 1
+[52] Yifan Wang, Jianjun Zhou, Haoyi Zhu, Wenzheng Chang,
+Yang Zhou, Zizun Li, Junyi Chen, Jiangmiao Pang, Chun-
+hua Shen, and Tong He. π3: Permutation-equivariant visual
+geometry learning. In International Conference on Learning
+Representations (ICLR), pages 10481–10497, 2026. 3, 7
+[53] Ziyun Wang, Jinyuan Guo, and Kostas Daniilidis.
+Un-
+EVIMO: Unsupervised event-based independent motion seg-
+mentation. In Proceedings of the European Conference on
+Computer Vision (ECCV), 2024. 3, 7
+[54] Dulanga Weerakoon, Darshana Rathnayake, Van Minh Do,
+Hemanth Sabbella, Kaichen Zhou, Fangneng Zhan, Alok
+Prakash, Sanjay E. Sarma, Archan Misra, and Paul Pu Liang.
+4D reconstruction with events & RGB. In Proceedings of the
+European Conference on Computer Vision Workshops (EC-
+CVW), 2026. 3
+[55] Chuan Wen, Xingyu Lin, John So, Kai Chen, Qi Dou, Yang
+Gao, and Pieter Abbeel. Any-point trajectory modeling for
+policy learning. In Robotics: Science and Systems (RSS),
+2024. 1
+[56] Xiaoshan Wu, Yifei Yu, Xiaoyang Lyu, Yihua Huang, Bo
+Wang, Baoheng Zhang, Zhongrui Wang, and Xiaojuan Qi.
+EAG3R: Event-augmented 3D geometry estimation for dy-
+namic and extreme-lighting scenes. In Advances in Neural
+Information Processing Systems (NeurIPS), pages 73314–
+73342, 2025. 3
+[57] Yuliang Wu, Wei Zhai, Yuxin Cui, Tiesong Zhao, Yang Cao,
+and Zheng-Jun Zha. Event-based visual deformation mea-
+surement. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+903–913, 2026. 1
+[58] Yuxi Xiao, Qianqian Wang, Shangzhan Zhang, Nan Xue,
+Sida Peng, Yujun Shen, and Xiaowei Zhou. SpatialTracker:
+Tracking any 2D pixels in 3D space.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 20406–20417, 2024. 2, 3
+[59] Yuxi Xiao, Jianyuan Wang, Nan Xue, Nikita Karaev, Yuri
+Makarov, Bingyi Kang, Xing Zhu, Hujun Bao, Yujun Shen,
+and Xiaowei Zhou. SpatialTrackerV2: Advancing 3D point
+tracking with explicit camera motion.
+In Proceedings of
+the IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 6726–6737, 2025. 2
+[60] Zhichao Yin and Jianping Shi. GeoNet: Unsupervised learn-
+ing of dense depth, optical flow and camera pose. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), 2018. 3
+[61] Bowei Zhang, Lei Ke, Adam W. Harley, and Katerina
+Fragkiadaki. TAPIP3D: Tracking any point in persistent 3D
+geometry.
+In Advances in Neural Information Processing
+Systems (NeurIPS), pages 135284–135303, 2025. 2
+[62] Chuhan Zhang, Guillaume Le Moing, Skanda Koppula, Ig-
+nacio Rocco, Liliane Momeni, Junyu Xie, Shuyang Sun,
+Rahul Sukthankar, Jo¨elle K. Barral, Raia Hadsell, Zoubin
+Ghahramani, Andrew Zisserman, Junlin Zhang, and Mehdi
+S. M. Sajjadi. Efficiently reconstructing dynamic scenes one
+D4RT at a time. In Proceedings of the IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+pages 7382–7392, 2026. 2
+[63] Junyi Zhang, Charles Herrmann, Junhwa Hur, Varun Jam-
+pani, Trevor Darrell, Forrester Cole, Deqing Sun, and Ming-
+Hsuan Yang. MonST3R: A simple approach for estimating
+geometry in the presence of motion. In International Con-
+ference on Learning Representations (ICLR), 2025. 3, 7
+[64] Songyan Zhang, Yongtao Ge, Jinyuan Tian, Guangkai Xu,
+Hao Chen, Chen Lv, and Chunhua Shen. POMATO: Mar-
+rying pointmap matching with temporal motion for dynamic
+3D reconstruction. arXiv preprint arXiv:2504.05692, 2025.
+7
+12
+
+
+3D Tracking Any Point with Events and Frames
+Supplementary Material
+A. Metric computation
+Notation and averaging.
+For source–target pair (s, t)
+and material point i, the model predicts source geometry
+bPs,i, target image position but,i, and residual brs→t,i, with
+bPt,i = bPs,i + brs→t,i. Source and target XYZ coordinates
+use their respective camera frames; rgt
+s→t,i = Pgt
+t,i −Pgt
+s,i
+therefore includes camera motion.
+Let Ωs,t contain eli-
+gible correspondences and N = P
+s,t |Ωs,t|.
+We write
+⟨f⟩= N −1 P
+s,t
+P
+i∈Ωs,t fs,t,i; ⟨h⟩E averages over their
+2N endpoints. Tracking scores pool counts across pairs and
+scenes, including repeated occurrences in overlapping win-
+dows. We use ε = 10−6.
+Geometry scale and alignment.
+Internally normalized
+geometry and residuals are restored using the returned ge-
+ometry scale before scoring. This restores backbone scale,
+not absolute metric scale.
+For each method and pair, a
+shared positive scale a and translation b align both endpoint
+clouds:
+L(a, b) =
+X
+j
+∥abPj + b −Gj∥1
+∥Gj∥2 + ε
+,
+a > 0.
+(S1)
+Here Gj is ground-truth XYZ. The released anchor-based
+solver sets b = Gk −abPk, solves for a per anchor, and
+retains the lowest-loss valid fit. Dense alignment uses mask-
+aware 32 × 32 endpoint samples; sparse alignment uses all
+selected queries. No rotation is fitted.
+2D tracking.
+With e2D
+=
+∥but −ugt
+t ∥2, we report
+EPE2D = ⟨e2D⟩and
+Acc2D(τ) = 100⟨1[e2D < τ]⟩,
+(S2)
+for τ ∈{1, 3} pixels. Material-grid coordinates are con-
+verted to input-image pixels.
+3D tracking.
+The shared translation cancels, giving
+e3D = ∥abrs→t −rgt
+s→t∥2 and EPE3D = ⟨e3D⟩. With
+q = e3D/(∥rgt
+s→t∥2 + ε),
+Acc3D(τ) = 100⟨1[e3D < τ ∨q < τ]⟩.
+(S3)
+AccS and AccR use τ = 0.05 and 0.10, respectively, with
+strict absolute-or-relative tests. Absolute errors are in me-
+ters when GT is metric; KITTI uses its released, uncali-
+brated coordinate scale for errors and thresholds. EPE is
+not normalized by depth, motion, or elapsed time.
+XYZ geometry.
+Define ePj = abPj + b and dj = ∥ePj −
+Gj∥2. Writing mj = min(∥Gj∥2, ∥ePj∥2), we evaluate
+both endpoints as
+AbsRelXY Z =
+
+dj
+∥Gj∥2 + ε
+
+E
+,
+(S4)
+δXY Z
+1.25
+= 100 ⟨1[dj < 0.25mj]⟩E .
+(S5)
+Eligibility and regional scores.
+Native RGB-time scor-
+ing requires valid, visible, in-frame source and target ob-
+servations, finite GT XYZ, positive depth, and s̸ = t.
+Intermediate-time scoring requires valid material corre-
+spondences, strict RGB bracketing, and non-query/non-
+padding timestamps; valid occluded or out-of-frame targets
+can contribute.
+External datasets use their specified GT
+masks. Predicted visibility and confidence do not select the
+cohort. Native IMO/static subsets use valid source-frame
+motion labels, exclude unknown labels, and reuse the over-
+all pair’s alignment.
+Independent-motion segmentation.
+Let P and G be pre-
+dicted (threshold 0.5) and GT foreground sets, M the valid
+mask, and E the nonzero signed-voxel support.
+Define
+JM(A, B) = |A ∩B ∩M|/|(A ∪B) ∩M|. Per-frame
+scores are
+mIoU = 50 [JM(P, G) + JM(P c, Gc)],
+pIoU = 100 JM∩E(P, G).
+(S6)
+B. High-frequency trajectory interpolation
+Protocol and baselines.
+RGB observations constrain
+track endpoints but do not specify the motion between them.
+We evaluate trajectories at 200 Hz from RGB observations
+at 25 Hz and intervening events, predicting seven interme-
+diate positions per 40 ms interval without intermediate im-
+ages. Native geometric trajectories provide the evaluation
+targets. We compare our predictions with linear interpola-
+tion of RGB-only tracks from Track4World and TrackEv-
+erything, and with TAPFormer for 2D tracking. The high-
+frequency tracking comparison in the main paper separates
+RGB observation timestamps (S axis) from strictly brack-
+eted intermediate timestamps (K axis), with 560,615 and
+153,519 correspondence occurrences in the 2D evaluation,
+respectively. Separate blocks report 2D endpoint error in
+pixels and 3D endpoint error in metres, strict and relaxed
+accuracies, and regional EPEs for independently moving
+objects and static regions. The 2D accuracy thresholds are
+strictly below 1 and 3 pixels; 3D AccS/AccR use absolute-
+or-relative thresholds of 0.05 and 0.10. For an intermediate
+13
+
+
+timestamp ta < t < tb, each linear 2D baseline predicts
+(1 −λ)bu(ta) + λbu(tb), where λ = (t −ta)/(tb −ta) and
+both endpoints are predicted from RGB observations.
+2D tracking results.
+At intermediate timestamps (K
+axis), our method obtains an EPE of 0.132 px, compared
+with 1.470 px for Track4World + LI and 0.497 px for TAP-
+Former, corresponding to reductions of 91.0% and 73.4%,
+respectively.
+The fraction of predictions below 1 px in-
+creases to 99.32%, from 62.38% and 90.47%, while 99.97%
+are below 3 px. At RGB timestamps, our EPE is 0.646 px, a
+reduction of 47.0% relative to the RGB baseline and 47.5%
+relative to TAPFormer. Thus, the improvement extends to
+observed timestamps, with a larger relative EPE reduction at
+intermediate timestamps. This pattern is consistent with the
+value of temporal information beyond the two RGB end-
+points.
+However, comparisons between different trained
+models do not isolate the contribution of events or motion
+grounding; that requires a matched no-event or component
+ablation.
+Regional tracking results.
+Regional scores show lower
+intermediate-time errors in both regions: our IMO EPE is
+1.837 px, compared with 2.492 px for linear interpolation
+and 1.984 px for TAPFormer, while static-region EPE de-
+creases to 0.590 px from 0.913 and 0.900 px, respectively.
+Static-region tracking remains nontrivial because camera
+motion changes the image locations of stationary world
+points. The gains therefore extend beyond independently
+moving objects to points whose image motion is induced
+by the camera.
+3D tracking results.
+For 3D interpolation, our K-axis
+EPE is 0.148 m, compared with 0.284 m for Track4World
++ LI and 0.382 m for TrackEverything + LI. Our strict
+and relaxed accuracies reach 47.42% and 73.92%, respec-
+tively, and both IMO and static-region EPEs are lower than
+those of either baseline. The advantage also holds at RGB
+timestamps, where our EPE is 0.166 m versus 0.318 m
+and 0.417 m, respectively. TrackEverything’s 2D EPEs are
+2.695 px on S and 2.466 px on K.
+C. Ablation evaluation protocol
+The
+ablations
+compare
+4
+different
+models:
+T4W–
+TAPFormer (A), Ours (B), T4W–ETAP (C), and Ours–
+ZeroEvents (D).
+Sampling and temporal support.
+We retain every tenth
+native RGB frame, reducing the frequency from 50 Hz to
+5 Hz. Native asynchronous events and the 200 Hz trajec-
+tory grid remain available without regeneration. The same
+three held-out synthetic scenes and source material points
+are reused with seed 42. Each scene contains 256 fixed
+source points: 128 IMO and 128 static points. Input res-
+olution remains 256 × 256, and geometry settings are un-
+changed.
+Each test window contains two retained RGB frames,
+separated by 200 ms, and 41 native trajectory timestamps.
+Eight RGB frames at 5 Hz would require 1.4 s, exceeding
+the native clip duration; therefore, we use the smallest sup-
+ported window. Relative to the earlier eight-frame pilot,
+both RGB context length and temporal coverage change.
+Comparisons between the two pilots are consequently not
+frequency-only comparisons.
+Alignment and aggregation.
+We use the EPE2D and
+aligned camera-residual EPE3D definitions in Section A,
+with pixels and metres as their respective units. The scale is
+fitted jointly to source and target points for each method and
+pair using the scale-and-XYZ-shift alignment in Eq. S1; the
+shift cancels in the residual. The same overall fit is reused
+for every motion group and IMO/static region. Errors are
+pooled by correspondence counts without filtering by pre-
+dicted confidence.
+Checkpoint settings.
+No additional training is per-
+formed.
+A/B/C
+reuse
+historical
+checkpoints
+with
+62k/88k/66k optimizer updates and effective batch sizes of
+8/12/4. They share RGB initialization and identical frozen
+geometry weights, but differ in trainable components and
+supervision history. A/B/D produce 41 joint temporal pre-
+dictions, whereas C directly predicts the two retained RGB
+slots.
+Motion groups.
+Static points are identified using valid
+source IMO labels with mask = 0. For moving points,
+we compute the norm of GT world displacement divided
+by the elapsed time across the retained RGB interval. This
+measures interval net-displacement speed. Tertile bound-
+aries, fixed from the selected GT cohort, are 0.773189 and
+2.112327 m/s. The RGB-endpoint cohort contains 423 cor-
+respondences: 217 static and 206 IMO, with 68, 69, and 69
+in the low-, medium-, and high-motion groups. The same
+cohort is used for the component comparison.
+Temporal phase and eligibility.
+For a native timestamp t
+between retained RGB timestamps ta and tb, we define
+ϕ = t −ta
+tb −ta
+.
+(S7)
+The 200 ms RGB interval contains 39 native intermediate
+timestamps. We score all intermediate phases and report
+ϕ ∈{0.25, 0.50, 0.75} at the three phases shown in the
+main paper, corresponding to 50, 100, and 150 ms after the
+14
+
+
+source frame. Each reported phase contains 768 correspon-
+dences.
+RGB-endpoint scoring requires known-visible, in-frame
+observations with valid positive-depth geometry. Interme-
+diate scoring retains the existing GT-valid-state cohort, in-
+cluding valid occluded and out-of-frame targets.
+We additionally evaluate linear interpolation (LI) of each
+model’s own bracketing RGB predictions. For our method,
+these endpoints are event-conditioned. We interpolate im-
+age coordinates and camera-residual XYZ components to-
+gether with the model source pointmap; no world-space tra-
+jectory interpolation is introduced.
+Runtime and parameter counts.
+Inference time is mea-
+sured on one GH200 GPU using the same first-scene batch,
+two-slot RGB answer axis, four refinement iterations, FP16,
+and cached frozen geometry. We average three synchro-
+nized forwards after an explicit warmup, excluding load-
+ing and preprocessing.
+Parameter counts include frozen
+weights.
+D. Datasets
+D.1. HyperEvent
+Synthetic Data Generation Pipeline
+We generate synthetic training data using a four-stage
+pipeline built on the Kubric simulator with MOVi-F-style
+scenes: (1) physics simulation with similarity time com-
+pression, (2) synchronized dual-rate rendering, (3) event
+simulation, and (4) analytical generation of sparse and
+dense tracking ground truth.
+(1) Scene simulation and similarity time compression.
+Each scene is simulated using PyBullet rigid-body physics.
+Objects first settle under normal gravity. We then apply sim-
+ilarity time compression with a factor of k = 4: linear and
+angular velocities are scaled by k, gravity by k2, and the
+simulation and rendering rates by k. The resulting trajecto-
+ries satisfy x′(t) = x(kt), meaning that the scene follows
+the same trajectory but evolves k times faster. This pro-
+duces the fast motion that motivates the use of event cam-
+eras, while preserving per-frame pixel displacement, frame
+count, and rendering cost.
+(2) Dual-rate rendering.
+We render two synchronized
+branches from the same physics simulation, ensuring tem-
+poral correspondence between the event and frame data:
+• High-rate (HR) branch. Frames are rendered at 250k =
+1000 Hz and 256×256 resolution using a GPU rasterizer,
+with motion blur disabled. These frames are used as input
+to the event simulator.
+• Low-rate (LR) branch. We render 50 RGB frames at
+30 fps and apply motion blur in post-processing. We also
+export aligned depth maps as uint16 PNG images, with
+depth in meters decoded as d = v/65535 × 100. These
+outputs are used as inputs to RGB baselines and for eval-
+uation.
+(3) Event simulation.
+We generate events from the HR
+frames using the CUDA backend of the Event Simulator
+(ESIM). Each frame is converted to log-luminance, L =
+log(0.299R+0.587G+0.114B). Between consecutive HR
+frames, log-luminance is assumed to vary linearly. An event
+is emitted when the interpolated log-luminance crosses a
+contrast threshold of ±0.2 relative to the per-pixel refer-
+ence. Event timestamps are obtained by linear interpolation
+and stored in microseconds. The resulting events are sorted
+by timestamp.
+(4) Ground-truth tracks and correspondences.
+We
+generate all labels analytically from the simulator state, in-
+cluding rigid-body poses and mesh geometry:
+• Sparse tracks. We sample 384 points per scene from
+mesh surfaces and record their world-space 3D positions,
+pixel projections, visibility, instance identities, and dy-
+namic or static labels. Under the Blender camera conven-
+tion, depth is defined as −zcam.
+• Dense geometry. We export dense geometry at 250 Hz,
+which is an integer divisor of the 1000 Hz HR rendering
+rate. Thus, every dense timestamp coincides with a ren-
+dered frame and requires no temporal interpolation. Each
+dense frame contains depth and a per-pixel surface iden-
+tity buffer comprising the instance ID, triangle ID, and
+perspective-correct barycentric weights. Both are stored
+at full resolution (256×256) and at 1/8 spatial resolution.
+Nearest-neighbor subsampling preserves discrete IDs.
+• Dense correspondences. We derive 2D and 3D scene
+flow, target coordinates, and four-state labels (visible, oc-
+cluded, out-of-frame, or invalid) analytically on demand
+from the identity buffers. Each surface point is recon-
+structed in object space, transformed into world coordi-
+nates at the source and target times using the stored object
+poses, and reprojected into the target view. Occlusion is
+determined by a depth test against the target depth recon-
+structed from the target pixel’s own identity buffer.
+Data splits.
+We generate datasets in tiers using determin-
+istic seeds and partition them into training, validation, and
+test sets with an 80/10/10 split.
+D.2. Real-World Dataset
+To construct a real-world dataset, we capture several fast-
+moving objects using a calibrated and synchronized setup
+15
+
+
+comprising a Prophesee Gen4 event camera and a FLIR
+Blackfly S color camera operating at 10 fps. The dataset has
+a spatial resolution of 945×649 and includes accurate cam-
+era poses provided by a motion capture system. We use this
+dataset to qualitatively evaluate our method on real-world
+scenes.
+D.3. Time Lens Dataset
+The High-Speed Event and RGB (HS-ERGB) dataset, in-
+troduced with Time Lens [46], contains real event streams
+and high-speed color videos of dynamic indoor and out-
+door scenes. The recording setup combines a Prophesee
+Gen4 event camera (1280 × 720) with a global-shutter
+FLIR Blackfly S RGB camera (1440 × 1080), separated
+by a 2.5 cm baseline and synchronized in hardware. The
+recorded sequences use RGB frame rates of 150–163 Hz.
+They comprise close-range scenes with fast, nonlinear ob-
+ject motion and distant scenes dominated by camera mo-
+tion, including spinning objects, bursting balloons, water
+splashes, and rapid camera rotations.
+Spatial alignment uses stereo rectification, with an ad-
+ditional feature-based homography for close-range planar
+scenes recorded with a stationary camera. HS-ERGB com-
+plements our synthetic benchmark with real sensor record-
+ings of challenging motion. Its high-rate RGB frames pro-
+vide image references for frame-interpolation evaluation;
+the original release does not include annotated 2D/3D point
+trajectories or independent-motion masks. It therefore sup-
+ports qualitative assessment of our tracking and segmenta-
+tion without providing ground truth for their endpoint errors
+or mask IoU.
+16

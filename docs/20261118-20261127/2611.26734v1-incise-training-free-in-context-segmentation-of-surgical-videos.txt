@@ -1,0 +1,1476 @@
+INCISE: Training-Free In-Context Segmentation of Surgical Videos
+Yifan Xu1
+Bofang Zheng1
+Guangyu Meng1
+Nishchal Sapkota1
+Xianshi Ma1
+Xu Cao2
+Tianjiao Yu3
+Danny Z. Chen1
+1University of Notre Dame
+2PediaMed AI
+3University of Illinois at Urbana-Champaign
+50
+70
+90
+20
+40
+60
+20
+40
+60
+30
+50
+70
+20
+40
+60
+50
+70
+90
+MedSAM2
+SegGPT
+INSID3
+Ours
+GT
+CholecSeg8k
+SISVSE
+DSAD
+EndoVis 2018
+SAR-RARP50
+CaDIS
+D-GEM
+SAM 3
+RSRM
+INSID3
+INCISE
+(a)
+(b)
+(c)
+In-context segmentation (INCISE)
+Target video
+Reference
++ mask
+ICS model
+Full-video
+masks
+≈
+Surgical video annotation
+Expert
+surgeons
+annotate
+Target video
+Reference
++ mask
+Medical
+students
+Full-video
+masks
+Figure 1. INCISE segments surgical videos in context without model training or target-video labels. (a) Qualitative comparison
+across a surgical video sequence. (b) Test mIoU (%) across six surgical benchmarks, where INCISE outperforms both fine-tuned models
+and methods given a target-video mask. (c) Just as surgeons annotate a few representative frames to guide medical students (top), INCISE
+selects references that cover the target video so a frozen model can segment it directly without training (bottom).
+Abstract
+Surgical video analysis requires video object segmentation
+(VOS), yet existing methods are commonly based on pre-
+trained model fine-tuning using a large number of expert
+labels. In-context segmentation (ICS) offers the promise of
+bypassing this high cost by segmenting a target video us-
+ing a few annotated references, which are the sole source
+of surgical knowledge for a frozen model. However, exist-
+ing ICS methods tend to draw such references at random,
+which concentrate on a few views that dominate a surgical
+video and can miss other objects of interest (e.g., transient
+instruments and small structures). To address these chal-
+lenges, we propose INCISE, a training-free ICS framework
+for surgical videos. INCISE selects unlabeled frames from
+multiple surgical videos that jointly cover the local appear-
+ances of a target video, and then segments the target video
+using these references. With only 1.7% of training frames
+selected and annotated as references and no target video
+frame labeled, INCISE obtains 67.2% mean mIoU and out-
+performs the best SOTA fine-tuned method by 9.2 points.
+We hope INCISE can help establish ICS as a practical al-
+ternative to fine-tuning in surgical video analysis and other
+domains with a costly labeling burden.
+1. Introduction
+Segmentation of instruments and anatomy in surgical
+videos supports both intraoperative guidance and surgical
+education. Models trained on such masks delineate safe and
+dangerous dissection zones during an operation [24, 32].
+They also support automatic assessment of the critical view
+of safety in laparoscopic cholecystectomy [26]. Such mod-
+els further help teach surgery [19, 51]: medical students
+learned from a trained model to recognize anatomical land-
+marks nearly as well as from a surgeon tutor [30].
+Yet most existing methods fine-tune pretrained models
+on thousands of pixel-level masks, which surgeons hardly
+have time to draw [25]. To scale up annotation, clinicians
+typically annotate a few representative frames as visual
+guidelines and train non-expert annotators such as medical
+students to label the remaining frames [6, 13, 42]. Even so,
+a medical student still needs about 25 minutes to annotate a
+single frame [39], so curating a training set remains a major
+1
+arXiv:2611.26734v1  [cs.CV]  19 Nov 2026
+
+
+(b) Semi-VOS
+(a) Fine-tuned
+(c) Frozen ICS
+(d) INCISE (Ours)
+Train
+Input
+Model
+Output
+No task
+fine-tuning
+Target video
++
+Target mask
+VFM(s)
+Supervised
+fine-tuning
+Target video
++
+Target mask
+Adapted
+model
+No task
+fine-tuning
+Target video
++
+Reference mask
+VFM(s)
+No task
+fine-tuning
+Target video
++
+Reference mask
+DINOv3 +
+SAM 3
+Figure 2. Training and input requirements. (a) Fine-tuned [23,
+38]: supervised fine-tuning plus a target-video mask. (b) Semi-
+VOS [5, 36]: a frozen VFM with such masks on one or more target
+frames. (c) Frozen ICS [44, 58]: random external references, often
+missing brief classes. (d) INCISE: external references selected to
+cover the target video. Circles mark a grasper, a reference selected
+by INCISE, which allows INCISE to segment it in the target video.
+bottleneck. Fine-tuned video methods built on vision foun-
+dation models (VFMs) inherit this cost [23, 38]: they adapt
+a VFM on such labeled frames and further require an expert
+to label at least one frame of each target video (Fig. 2a).
+In parallel, semi-supervised video object segmentation
+(Semi-VOS) [5, 36] removes the fine-tuning by keeping a
+VFM frozen, yet still needs expert masks on one or more
+frames of every target video (Fig. 2b).
+Such masks are
+rarely available in practice, because an expert must anno-
+tate each new video before it can be segmented. Even then,
+the labeled frames can miss classes that appear only else-
+where in the video, and choosing which frames to label is
+itself an open problem [10, 14, 55].
+In-context segmentation (ICS) removes both costs: a
+frozen VFM segments a target video from a few annotated
+images of other videos (called references) given at test time,
+with neither fine-tuning nor a target-video mask [9, 21, 50,
+58]. Just as medical students learn what to segment from
+a few surgeon-labeled examples, an ICS model takes such
+references as context and segments the target surgical video
+itself (Fig. 1c; Fig. 2c). If a few annotated surgical frames
+could stand in for a training set, clinicians would need to
+annotate only these frames. However, because these ref-
+erences are the sole source of surgical knowledge for the
+frozen VFM, existing ICS methods [44, 58] simply draw
+them at random [28].
+Choosing references at random may not work well since
+surgical appearances vary widely in duration and scale.
+Specifically, major tissues and routine tools may remain vis-
+ible in many frames, whereas a specialized instrument may
+enter the view only briefly [46] and a delicate structure may
+occupy only a small region [6, 13, 33]. Consequently, a
+handful of randomly drawn frames mostly capture frequent
+appearances [18] and miss these brief or small classes al-
+together, thus leaving a frozen VFM with no reference to
+segment them. Hence, we study whether a small budget of
+well-chosen references from other surgical videos can give
+a frozen VFM enough coverage to segment a target video.
+To this end, we introduce INCISE, a training-free ap-
+proach that augments frozen VFMs with references selected
+for each target video (Fig. 1a,b). It operates in two stages.
+(i) Coverage-based selection picks a few unlabeled frames
+from other videos that jointly cover the cluster centers of the
+target video with DINOv3 [41] local features. It weights
+the centers of rare clusters more, so brief instruments and
+small structures can also receive references. (ii) Segmenta-
+tion with independent pseudo-labels reads the video frame
+by frame with DINOv3 and SAM 3 and labels each frame
+with these references. Its memory keeps independent per-
+frame pseudo-labels instead of its own predictions, so errors
+do not accumulate. We make three contributions:
+• We identify a core limitation of existing surgical video
+segmentation paradigms: supervised methods demand
+costly domain or per-video annotations, whereas training-
+free in-context approaches fail under complicated spatio-
+temporal distributions.
+• We propose INCISE, a training-free framework coupling
+coverage-based reference selection over weighted-rare lo-
+cal clusters with a history of independent pseudo-labels
+that prevents temporal error accumulation in frozen foun-
+dation models.
+• Extensive evaluations across 6 surgical benchmarks and
+cross-domain transfers show that INCISE surpasses fine-
+tuned paradigms and that strategic visual coverage out-
+weighs raw annotation volume for robust generalization.
+2. Related Work
+Surgical video segmentation.
+Surgical scene segmen-
+tation is benchmarked on laparoscopic, robotic and micro-
+scopic videos with pixel-level masks [3, 13, 17, 33]. Super-
+vised models such as ISINet learn instrument classes from
+many annotated frames [12]. Recent methods adapt foun-
+dation models to medical and surgical video.
+MedSAM
+and SurgicalSAM adapt SAM to medical and surgical im-
+ages with mask supervision [22, 57]. MedSAM2 fine-tunes
+SAM 2.1 on large collections of annotated 3D medical im-
+ages and videos [23]. D-GEM trains a decoder on DINOv3
+features and stores annotated frames of each target video in
+a dual memory [38]. Both need masks drawn on frames of
+every target video, while INCISE trains nothing and uses no
+mask of the target video. Closest to our setting, Mousavi et
+al. [28] start SAM 2.1 in a cholecystectomy video from an
+annotated frame of another patient. They draw this frame at
+2
+
+
+1 Regional features
+Target video
+Unlabelled
+reference pool
+DINOv3
+Debiased φ
+2
+Reference selection
+Target clustering
+Rare (↑ weight wₖ)
+Greedy selection
+Select B pool frames
+3 Expert annotation
+B frames
+Expert
+Reveal masks
+4 Fixed references
+Reference set R
+1
+Dense label transfer
+Reference from R
+Current frame Iₜ
+DINOv3
+Coarse labels
+Debias
+φ
+2
+Affinity smoothing
+Coarse labels
+Pseudo-label Ỹₜ
+3
+Read then write
+Reference memory (fixed R)
+Pseudo-label history ℋₜ
+t − H ⋯
+t − 2
+t − 1
+SAM 3
+Prediction Ŷₜ
+Never written back
+Write into memory
+Bias retained ψₜ
+(a) Coverage-based reference selection
+(b) Segment with independent pseudo-label memory
+Figure 3. Overview of INCISE. (a) Coverage-based reference selection (Sec. 3.1): (1) Given a target video and an unlabeled pool, a
+frozen DINOv3 extracts debiased features ϕ. (2) We cluster the target features and greedily select B pool frames that jointly cover the
+cluster centers, where the weights wk favor rare appearances (e.g., the orange cluster). (3)–(4) Only these B frames are labeled by experts
+to form a fixed reference set R. (b) Segmentation with independent pseudo-labels (Sec. 3.2): For each target frame It, (1) dense label
+transfer matches ϕ against R to produce coarse labels, which (2) affinity smoothing refines into an independent pseudo-label ˜Yt using the
+original features ψt. (3) A frozen SAM 3 reads R and the history Ht of the last H pseudo-labels to predict ˆYt before ˜Yt is written to Ht.
+random, report a large variance across draws and leave the
+choice of frame to future work. INCISE makes this choice
+for each target video.
+In-context segmentation.
+In-context segmentation mod-
+els segment a target image from a few annotated refer-
+ences. Generalist models learn this ability from segmenta-
+tion data. Painter and SegGPT train one model on mixtures
+of dense prediction and segmentation datasets [49, 50], and
+COSINE trains a decoder on frozen DINOv2 and CLIP fea-
+tures [21]. UniverSeg and Tyche train such models on med-
+ical images [4, 35]. Training-free methods instead match
+the features of frozen VFMs. PerSAM turns matches be-
+tween the references and the target into point prompts for
+SAM [58].
+INSID3 segments with a single frozen DI-
+NOv3 backbone [9, 41], and RSRM applies such matching
+to cross-domain few-shot segmentation [44]. All of these
+methods take the references as given. On video, SegGPT,
+COSINE and PerSAM are prompted with annotations of the
+target video [21, 50, 58]. DC-SAM prompts SAM 2 from
+one external reference instead, but it trains a prompt gener-
+ator and parts of SAM 2 for this task [34].
+Reference selection.
+Video object segmentation meth-
+ods choose which frame of the target video to annotate [10,
+14, 55], so every new video needs annotations that no other
+video can reuse. Active learning selects samples to annotate
+for training a model [20, 40, 60], and with few labels repre-
+sentative samples work better than uncertain ones [15]. For
+a nearest-neighbor classifier, selecting training data reduces
+to maximizing a submodular facility-location function [52].
+Visual in-context learning usually retrieves references for
+each target image from a fully annotated pool [48, 59].
+Vote-k, SCS and MVPS are closest to ours because they
+select from an unlabeled pool [43, 45, 53]. They work on
+text or single images, and SCS and MVPS train a selection
+agent or retriever on labeled data. INCISE trains nothing
+and picks unlabeled frames of other videos that jointly cover
+the weighted-rare cluster centers of each target video.
+Memory in video segmentation.
+Memory-based video
+object segmentation reads past frames together with their
+predicted masks [8, 31]. SAM 2 propagates masks through
+a memory of recent frames encoded with its own predicted
+masks [36], and the SAM 3 tracker inherits this design [5].
+An erroneous mask in this memory is read again on later
+frames, so errors accumulate [11, 54]. Later trackers filter
+what enters the memory by confidence, motion or distractor
+cues [5, 11, 47, 54]. D-GEM likewise gates its predictions
+by confidence before writing them to memory [38]. In all
+of them, outputs of the tracker itself still enter the memory.
+Our history stores only pseudo-labels computed afresh from
+the references and the current frame, so no prediction is read
+back by later frames.
+3
+
+
+3. Method
+Our goal is to segment a target surgical video with B anno-
+tated references alone, using frozen VFMs without training.
+The references come from other videos of the same dataset
+and are chosen before any of their masks is revealed. Sur-
+gical masks cost expert time, so only the chosen frames are
+ever annotated. A key property of DINOv3 is the strong
+local self-similarity of its dense features [9]. We use it to
+find suitable references: the local appearances of the tar-
+get video group into clusters, and we select the pool frames
+that jointly cover their centers. To keep errors from accu-
+mulating in memory, we derive pseudo-labels from dense
+correspondences between each frame and these references.
+A frozen SAM 3 tracker stores these pseudo-labels in its
+memory instead of its own predictions.
+Our approach, named INCISE and illustrated in Fig. 3,
+first selects references from images alone so that they cover
+the local appearances of the target video (Sec. 3.1). It then
+segments the video frame by frame from these references
+(Sec. 3.2). Frozen DINOv3 features transfer labels, and a
+frozen SAM 3 tracker reads them with past pseudo-labels.
+Task definition.
+Each dataset provides a reference pool
+P = {Jj}N
+j=1, the N frames of its training split. Their
+masks Mj over C foreground classes and the background
+are hidden at first. This mirrors surgical practice, where
+recordings of similar procedures are plentiful but rarely an-
+notated. A target video V = (I1, . . . , IT ) comes from a
+different surgery than every frame in P. A selection rule
+summarizes the appearances of the unlabeled target video
+with image features alone and selects a reference set R of
+B pool frames. Only then are the masks {Mr}r∈R revealed.
+Conditioned on this fixed reference set, the segmenter reads
+V once in temporal order and predicts each frame ˆYt from
+I1:t and the annotated references. The same reference set
+serves all classes. Selecting R over the full unlabeled video
+suits post-operative analysis, surgical education, and dataset
+curation; once R is fixed (or reused from prior procedures),
+the segmenter itself is strictly causal and streams V online
+in a single pass.
+Once annotated, a pool frame serves every target video
+that selects it. The budget B counts references per target
+video, and methods are compared at equal B. The dataset
+cost
+ S
+V ∈V R(V )
+ counts the distinct frames annotated for
+all evaluated target videos V.
+3.1. Coverage-based reference selection
+Existing ICS methods draw references at random [28] or re-
+trieve frames by global feature similarity [48, 59]. Repeated
+anatomy can dominate retrieval, leaving brief instruments
+or small structures without reference labels. In Fig. 4, none
+of the ten references retrieved by global similarity contains
+the suction tool of a SAR-RARP50 target video. Coverage
+selects one at the lower left and recovers the tool (supple-
+Target video frame
+Local matching
+Prediction
+Reference #6
+Local matching
+Prediction
+Similarity (0/10 refs)̄
+h = 0.90
+IoU 0.0%
+Coverage (1/10 refs)̄
+h = 0.94
+IoU 87.4%
+Figure 4. Coverage-based selection recovers a tool missed by
+global similarity retrieval.
+Left: A target frame from SAR-
+RARP50 containing a suction tool (yellow box) and the external
+reference (#6, yellow arrow) selected by our local coverage ob-
+jective. Middle & Right: Local patch matching and segmenta-
+tion predictions for global similarity retrieval (top, which selects
+0/10 references containing the suction tool) versus our coverage
+selection (bottom, 1/10 references). Heatmaps show the maximum
+reference patch similarity h; right panels show predicted masks
+(green), the ground truth (white contours).
+mentary material).
+We thus select references to cover the target video’s local
+appearances, such as instrument parts or organ surfaces.
+Target clusters.
+Let ϕ(I) be the debiased DINOv3 patch
+features of a frame I (Sec. 3.2). Average pooling over a
+G×G grid and normalizing each cell gives G2 regional fea-
+tures zg(I), reducing the cost of clustering all target frames.
+Spherical k-means yields K centers ck with assignment
+fractions pk. Each frame counts equally, so pk measures
+an appearance’s prevalence. We weight each center by
+wk =
+pβ
+k
+P
+j pβ
+j
+,
+(1)
+where β ∈[0, 1] balances common and rare clusters. β =
+1 keeps observed frequencies and favors dominant views;
+β = 0 weights clusters equally but overweights outliers.
+Coverage objective.
+A pool frame covers a cluster center
+as well as its best-matching region does:
+sk(Jj) = 1
+2
+
+1 + max
+g
+⟨ck, zg(Jj)⟩
+
+∈[0, 1].
+(2)
+A reference set covers the target by the weighted best cov-
+erage of each cluster center:
+F(R) =
+K
+X
+k=1
+wk max
+j∈R sk(Jj).
+(3)
+4
+
+
+We maximize F greedily: starting from an empty set, we
+add the pool frame with the largest gain until |R| = B. Re-
+peated appearances add little; improving a center’s coverage
+contributes its weight times the increase in similarity.
+Properties.
+F is a monotone submodular facility-location
+function, so greedy selection attains at least a (1−1/e) frac-
+tion of the optimal coverage [29]. Greedy selection gives
+nested reference sets, so annotators can follow the selected
+order and stop at any budget. Selection uses no mask, and
+pool features are extracted once per dataset.
+3.2. Segmentation with independent pseudo-labels
+The segmenter combines two complementary sources. La-
+bel transfer matches every patch of a frame against the ref-
+erences, so it finds each class wherever its appearance oc-
+curs but gives coarse boundaries. SAM 3 memory attention
+gives sharp and temporally consistent masks, but it can only
+follow classes held in its memory. We combine the two so
+that each covers the weakness of the other.
+Dense label transfer.
+DINOv3 features carry a posi-
+tional bias, so patches at similar positions match even across
+unrelated images [9]. Following INSID3, we remove the
+leading singular directions of a black image’s features from
+the frozen DINOv3 [41] features ψ and renormalize, which
+gives the debiased features ϕ. Label transfer works on in-
+dividual DINOv3 patches rather than on the pooled grid
+cells used for selection. Each reference patch v carries the
+class distribution y(v) of its mask pixels, since a 16 × 16
+patch can span several classes. A patch u of frame It takes
+the softmax-weighted labels of its k most similar patches
+Nk(u) among all patches of the references:
+pt(u) =
+X
+v∈Nk(u)
+e⟨ϕt(u),ϕ(v)⟩/τ
+P
+v′∈Nk(u) e⟨ϕt(u),ϕ(v′)⟩/τ y(v).
+(4)
+To make these estimates consistent within the frame, we
+smooth them over its patch affinity graph by label propa-
+gation [61], a step we call affinity smoothing. We build
+this graph from the original features ψ, which INSID3 also
+uses to group patches within an image. Within one frame,
+their positional component helps group nearby patches of
+the same structure, while across images the same structure
+can appear anywhere. Each patch links to its kd most simi-
+lar patches D(u) of the same frame:
+q(s+1)
+t
+(u) = (1 −λ) pt(u) + λ
+X
+u′∈D(u)
+auu′ q(s)
+t (u′),
+(5)
+where auu′ are softmax affinities and q(0)
+t
+= pt.
+After
+L steps, upsampling q(L)
+t
+and taking the most likely class
+gives the pseudo-label ˜Yt of the frame.
+Reference
+memory
+and
+independent
+pseudo-
+labels.
+The SAM 3 tracker [5] encodes each reference
+with its mask as a conditioning frame, one object per class
+present in the references. These memories are written once
+and never overwritten, so the references stay available for
+the whole video. The pseudo-label ˜Yt depends only on the
+references and the current frame.
+Pseudo-label history.
+Past frames provide context that
+no reference can: the same instruments, in the same light,
+a moment earlier. For frame t, the tracker attends jointly to
+the reference memories and to the pseudo-labels of the last
+H frames. Reading the video once in temporal order with
+a bounded history matches the streaming trackers we com-
+pare against, and it keeps memory constant on long videos.
+This read gives the prediction ˆYt. The history stores ˜Y ,
+never ˆY . A prediction written back into memory would be
+read again by every later frame, so a single error could per-
+sist and spread (Sec. 4.4).
+4. Experiments
+We evaluate INCISE on six surgical benchmarks against
+methods that receive a ground-truth mask of each target
+video. We also compare with methods that, like ours, re-
+ceive no mask of the target video and segment it from an-
+notated references of other surgeries. We report these re-
+sults and the transfer to polyp segmentation in Sec. 4.2. We
+then analyze how references are chosen and how many are
+needed (Sec. 4.3), and we ablate the segmenter (Sec. 4.4).
+4.1. Experimental setup
+Datasets.
+We evaluate on six multi-class surgical bench-
+marks from three specialties:
+general surgery (Cholec-
+Seg8k [17], SISVSE [56] and DSAD [6]), urology (En-
+doVis 2018 [3] and SAR-RARP50 [33]) and ophthalmol-
+ogy (CaDIS [13]).
+DSAD labels only organs and SAR-
+RARP50 only tools and suture material; the others label
+both anatomy and instruments. Each training split forms
+the reference pool, and each test video is a target video
+(supplementary material). PolypGen [1] tests transfer to
+colonoscopy.
+Metrics.
+We report mIoU including background, except
+on CaDIS, which has no background class. Class IoUs are
+averaged within each frame, omitting classes absent from
+both prediction and ground truth. Frames are then aver-
+aged per target video, target videos per dataset, and the six
+datasets equally for the mean. On PolypGen we report the
+frame-averaged Dice and IoU defined in their paper [1].
+Implementation and protocol.
+INCISE uses DINOv3
+ViT-L/16 [41] and the SAM 3 tracker [5], both frozen. Se-
+lection uses K = 128 centers, β = 0.5 and B = 10 ref-
+erences per target video, and the segmenter keeps H = 12
+history frames. One configuration serves every dataset.
+5
+
+
+Table 1. Comparison with state-of-the-art methods on six surgical benchmarks (mIoU in % , ↑). Our evaluations exclude the first
+frame of each target video. Encoder: image backbone. Fine-tuned: trained with mask supervision for in-context, medical or surgical
+segmentation; training-free: pretrained models used as released. + our refs.: the baseline receives the reference sets selected by INCISE.
+Gray: trained on the training split of the corresponding dataset. Best result in bold; second best underlined.
+General surgery
+Urology
+Ophthalmology
+Method
+Encoder
+CholecSeg8k
+SISVSE
+DSAD
+EndoVis 2018
+SAR-RARP50
+CaDIS
+Mean
+Fine-tuned: mask of the target video given
+MedSAM2 [23]
+Hiera
+86.9
+16.1
+23.5
+17.0
+23.5
+43.4
+35.1
+SegGPT [50]
+ViT
+85.7
+16.5
+30.6
+39.7
+20.3
+60.1
+42.1
+COSINE [21]
+DINOv2 + CLIP
+76.3
+15.9
+29.7
+32.5
+22.1
+39.5
+36.0
+D-GEM [38]
+DINOv3
+78.9
+53.3
+50.1
+56.3
+52.5
+57.0
+58.0
+Training-free: mask of the target video given
+SAM 2 [36]
+Hiera
+72.4
+24.2
+44.9
+50.1
+33.6
+76.0
+50.2
+SAM 3 [5]
+PE
+76.7
+28.1
+44.9
+54.8
+36.3
+74.2
+52.5
+Training-free: no mask of the target video
+PerSAM [58]
+SAM
+35.2
+12.4
+20.9
+23.4
+12.6
+30.8
+22.5
+RSRM [44]
+DINOv3
+40.4
+30.3
+23.4
+28.1
+27.1
+60.2
+34.9
+↰
++ our refs.
+DINOv3
+59.2
+31.6
+30.9
+38.2
+31.5
+61.1
+42.1
+INSID3 [9]
+DINOv3
+63.0
+34.0
+27.9
+36.4
+32.5
+47.9
+40.3
+↰
++ our refs.
+DINOv3
+70.8
+35.1
+27.8
+41.2
+32.3
+50.2
+42.9
+INCISE (ours)
+DINOv3 + SAM 3
+88.3
+54.3
+55.8
+66.1
+56.5
+82.1
+67.2
+4.2. Main results
+Baselines.
+Table 1 compares INCISE with state-of-the-
+art surgical, medical and in-context segmentation meth-
+ods in mIoU on the six surgical benchmarks. We group
+the baselines by whether they train and whether they are
+given a mask of the target video.
+The primary base-
+lines are training-free ICS methods such as PerSAM [58],
+RSRM [44] and INSID3 [9], which share our setting. They
+receive no mask of the target video and segment it from ref-
+erences of other surgeries drawn at random. For RSRM and
+INSID3, we also report variants that receive the reference
+sets selected by INCISE. We also report methods that re-
+ceive a ground-truth mask of each target video, such as the
+training-free trackers SAM 2 [36] and SAM 3 [5]. Fine-
+tuned methods such as MedSAM2 [23], SegGPT [50], CO-
+SINE [21] and D-GEM [38] take the same mask as input
+and also train with mask supervision. These methods need
+an expert to annotate every target video, so they operate un-
+der a stronger supervision regime than ours. INCISE trains
+nothing and uses no mask of the target video, and it alone
+selects its references to cover that video.
+Surgical video segmentation.
+INCISE achieves the
+best result on all six benchmarks without training or any
+mask of the target video (Tab. 1). Its mean of 67.2% is
+9.2 points above the strongest fine-tuned method and 14.7
+points above SAM 3 prompted with a mask of the target
+video. INCISE leads in each specialty, by 5.4 points in
+general surgery, 6.9 in urology and 6.1 in ophthalmology.
+Figure 5 shows qualitative results.
+Methods given a mask of the target video, such as Seg-
+GPT and COSINE, can follow only the classes in that mask.
+Classes that appear later are common in surgery: across the
+six benchmarks, 117 of the 370 classes of the target videos
+are absent from the given mask. The references of INCISE
+stay in memory for the whole video, so a class that enters
+late can still be matched.
+Training-free ICS methods share our setting, yet INCISE
+outperforms them by 26.9 points or more. Their references
+come from random draws or similarity retrieval (Sec. 4.3),
+and they segment each frame independently, without tem-
+poral information (Sec. 4.4). However, our selection helps
+RSRM and INSID3 (7.2 and 2.6 points in mean mIoU), as
+the selected references cover the appearances of the target
+video. In contrast, INCISE also uses temporal information
+through its pseudo-label history and stays 24.3 points ahead
+of both with the same references. Across the six reference
+pools, INCISE annotates 1.7% of the pool frames (supple-
+mentary material). Of its reference slots, 18.9% reuse a
+frame already annotated for another target video.
+Polyp segmentation.
+PolypGen collects its data at six
+medical centres, and its benchmark tests whether a seg-
+menter generalizes to a centre it has not seen. Its supervised
+baselines are trained on five centres and tested on video se-
+quences of the sixth. INCISE draws its references from the
+same five centres and keeps the configuration used for surgi-
+cal video. INCISE reaches a Dice of 72.9% (Tab. 2), above
+the DeepLabV3+ and ResNet-UNet baselines.
+6
+
+
+General surgery
+Urology
+Ophthalmology
+Image
+SegGPT
+PerSAM
+INCISE
+GT
+Image
+SegGPT
+PerSAM
+INCISE
+GT
+Figure 5. Qualitative comparison on six surgical benchmarks. Datasets are grouped as in Tab. 1.
+Table 2. Transfer to polyp segmentation on PolypGen. INCISE
+uses their frames only as references and is never trained on them.
+Baseline values are reported by [1] and rounded there. INCISE
+keeps the surgical configuration fixed.
+Method
+Training
+Dice
+IoU
+ResNet-UNet [16, 37]
+supervised
+70
+65
+DeepLabV3+ [7]
+supervised
+71
+65
+INCISE (ours)
+none
+72.9
+67.5
+Table 3. Effect of reference selection. mIoU (%) of coverage,
+random and similarity references on CholecSeg8k (Chol.), En-
+doVis 2018 (EV18) and SAR-RARP50 (SAR). Random: frames
+drawn uniformly from the pool.
+Similarity: the frames whose
+global DINOv3 feature is most similar to the mean feature of the
+target video. All rows use the earlier configuration (supplementary
+material).
+Selection
+Chol. EV18 SAR Mean
+Dense label transfer
+random
+68.5
+48.0
+43.3
+53.3
+similarity
+70.4
+56.2
+45.2
+57.3
+coverage (ours)
+80.9
+60.6
+47.1
+62.8
+Full INCISE
+random
+78.0
+48.8
+49.8
+58.9
+similarity
+79.6
+58.1
+52.5
+63.4
+coverage (ours)
+87.1
+65.3
+55.6
+69.3
+4.3. On the choice of references
+Since the references are the only source of surgical knowl-
+edge for the frozen models, we ask which frames should be
+annotated and how many are needed.
+Coverage versus similarity.
+We first compare cover-
+age with random references and with similarity retrieval in
+Tab. 3. Similarity retrieval is the usual choice in visual in-
+context learning [48, 59]: it ranks pool frames by the co-
+sine similarity of their global DINOv3 feature to the mean
+feature of the target video, which favors its dominant view.
+Coverage improves every dataset with both segmenters, in-
+dicating that the gain originates in the references rather
+than in SAM 3. With the full INCISE it adds 5.9 points
+over similarity and 10.5 over random references, and with
+dense label transfer alone it adds 5.6 and 9.6. As shown
+in Fig. 6b, performance stays stable across the balancing
+strength β, since clustering local features already enforces
+broad visual diversity; setting β = 0.5 yields the best over-
+all mean (70.3%) and improves worst-frame coverage and
+tool-heavy benchmarks such as SAR-RARP50 (+0.5 points
+over β = 1, supplementary material).
+Annotation budget and cost.
+Finally, we study the num-
+ber of references per target video and its cost in Fig. 6c and d
+(per dataset in the supplementary material). Accuracy rises
+steeply up to about ten references and then saturates, in-
+dicating that beyond a small budget the choice of frames
+matters more than their number. Going from one to ten
+references raises the mean by 8.6 points, while more refer-
+ences add at most 0.17. The coverage objective explains this
+saturation: it is submodular, so each added reference con-
+tributes less new coverage of the target video than the one
+before. Notably, even at B = 1—matching the single-mask
+budget of target-guided baselines—INCISE reaches 60.7%
+mean mIoU (supplementary material), already surpassing
+SAM 3 [5] (55.9%) and SegGPT [50] (48.6%) prompted
+with the ground-truth first-frame mask of the target video.
+We also give the target-guided baselines the masks of the
+first ten frames of each target video, close to the 8.1 pool
+frames that INCISE annotates per target video on average.
+INCISE still exceeds the mean mIoU of SAM 3 by 6.6
+points and of SAM 2 by 7.7 points (supplementary mate-
+rial). Its margins over D-GEM and MedSAM2 are 12.6 and
+25.9 points. From 10 to 100 references, peak GPU memory
+rises from 7.46 to 33.90 GB and per-frame time from 0.95
+to 2.54 s. We therefore use ten references per target video.
+4.4. Ablation study
+To understand how the segmenter turns the selected refer-
+ences into masks, we ablate each of its components in Tab. 4
+and its history length in Fig. 6a.
+Dense label transfer. We first study the dense label trans-
+fer stage that produces each frame’s pseudo-label. Without
+feature debiasing, patches at similar spatial positions spu-
+7
+
+
+0
+1
+3
+6
+12
+24
+48
+history length H
+50
+60
+70
+80
+90
+mIoU (%)
+0
+0.25
+0.5
+0.75
+1
+balancing strength ¯
+50
+60
+70
+80
+90
+mIoU (%)
+1
+10
+100
+references per video B
+50
+60
+70
+80
+90
+mIoU (%)
+1
+10
+100
+references per video B
+10
+20
+30
+memory (GB)
+1.0
+1.5
+2.0
+2.5
+time (s)
+(a)
+(b)
+(c)
+(d)
+CholecSeg8k
+EndoVis 2018
+SAR-RARP50
+Mean
+GPU memory
+Time / frame
+Figure 6. History length, cluster balancing, annotation budget and computational cost. mIoU against (a) the history length H and
+(b) balancing strength β. (c) mIoU against reference number per target video. (d) Peak GPU memory in GB and time per frame (seconds).
+Table 4. Effect of segmenter components. We ablate the seg-
+menter on CholecSeg8k (Chol.), EndoVis 2018 (EV18) and SAR-
+RARP50 (SAR) in mIoU (%).
+Variant
+Chol. EV18 SAR Mean
+Adding components
+label transfer
+74.6
+55.9
+45.4
+58.7
++ debiasing
+77.2
+58.8
+47.7
+61.2
++ affinity smoothing
+83.1
+62.2
+46.9
+64.1
++ pseudo-label history
+84.4
+66.9
+49.9
+67.1
++ reference memory (full model)
+88.3
+66.1
+56.5
+70.3
+Full model
+recursive history
+83.5
+62.4
+55.1
+67.0
+riously match even across unrelated frames; without affin-
+ity smoothing, each patch is classified in isolation. Adding
+debiasing raises the mean from 58.7 to 61.2, and affinity
+smoothing raises it further to 64.1, confirming that posi-
+tional bias and isolated patch noise both limit label transfer.
+The remaining label-transfer parameters change the mean
+by at most 0.2 points, so we keep them fixed.
+Pseudo-label history and reference memory.
+We next
+add the two memory banks that SAM 3 attends to: the
+pseudo-label history provides temporal context from the
+current video, while the reference memory provides anno-
+tated masks of every selected class. Conditioning on the
+pseudo-labels of past frames adds 3.0 points to label trans-
+fer, and the reference memory adds another 3.2.
+Independent pseudo-labels.
+We then examine what
+the temporal memory should store. Video trackers (e.g.,
+SAM 3) recursively write their own decoded predictions
+back into memory, allowing a single frame’s error to persist
+across all subsequent frames; our pseudo-labels instead de-
+pend only on the references and the current frame. Replac-
+ing our independent pseudo-labels with recursive predic-
+tions hurts every dataset and drops the mean by 3.3 points,
+no better than removing the reference memory.
+History length.
+Finally, we vary the number of past
+frames H retained for SAM 3 in Fig. 6a. Removing the
+pseudo-label history (H = 0, which reduces to prompting
+SAM 3 with the selected reference memories alone) drops
+Table 5. Cross-dataset transfer (mIoU %). Best in bold.
+Reference →Target
+Random
+Similarity
+Coverage
+Within-procedure
+Endoscapes →CholecSeg8k
+39.38
+55.43
+63.09
+EndoVis 2017 →2018
+63.61
+60.62
+69.12
+Cross-procedure
+DSAD →CholecSeg8k
+51.93
+81.43
+83.34
+Synthetic-to-real
+Synth-Colon →PolypGen C6
+76.83
+76.52
+78.51
+the mean by 6.1 points, and a single past frame already re-
+covers 4.1 of them. Accuracy rises steeply and saturates
+around H = 12, changing by less than 0.2 points between
+12 and 48 frames, which indicates that most temporal con-
+text comes from the most recent frames. We therefore keep
+H = 12 history frames.
+4.5. Cross-dataset transfer
+Finally, we test whether INCISE can segment a target video
+with references from another dataset (Tab. 5). The source
+pools transfer within a procedure (Endoscapes [26] and En-
+doVis 2017 [2]), across procedures (DSAD [6]) and from
+synthetic to real images (Synth-Colon [27]).
+Each pool
+holds all eligible source images, and we evaluate on the
+classes shared with the target.
+Coverage gives the best mIoU in all four pairs, with
+the largest gain of 7.66 points over the stronger baseline
+on Endoscapes →CholecSeg8k.
+Under the appearance
+shifts of EndoVis 2017 →2018 and Synth-Colon →Polyp-
+Gen C6, similarity retrieval even falls below random selec-
+tion. Matching the mean target feature then selects redun-
+dant source frames of a single visual mode, which coverage
+avoids by covering the whole target video. These results
+show that INCISE can reuse existing annotated datasets, in-
+cluding synthetic renders, for new surgical procedures and
+clinical centers without target-domain annotations.
+8
+
+
+5. Conclusion
+We showed that in-context segmentation can be an
+alternative to fine-tuning for surgical video once its
+references are chosen with care.
+INCISE selects a few
+frames of other surgeries that jointly cover the local
+appearances of each target video. A frozen tracker then
+reads these references with a history of independent
+pseudo-labels, so errors do not accumulate.
+Without
+training or any mask of the target video, it outperforms
+methods fine-tuned on thousands of surgical frames.
+Beyond a small budget, which frames are annotated matters
+more than how many.
+We hope this work makes ICS
+practical in surgery and other domains with costly labels.
+References
+[1] Sharib Ali, Debesh Jha, Noha Ghatwary, Stefano Realdon,
+Renato Cannizzaro, Osama E Salem, Dominique Lamarque,
+Christian Daul, Michael A Riegler, Kim V Anonsen, et al.
+A multi-centre polyp detection and segmentation dataset for
+generalisability assessment. Scientific Data, 10(1):75, 2023.
+5, 7
+[2] Max Allan, Alex Shvets, Thomas Kurmann, Zichen Zhang,
+Rahul Duggal, Yun-Hsuan Su, Nicola Rieke, Iro Laina,
+Niveditha Kalavakonda, Sebastian Bodenstedt, et al. 2017
+robotic instrument segmentation challenge. arXiv preprint
+arXiv:1902.06426, 2019. 8
+[3] Max Allan, Satoshi Kondo, Sebastian Bodenstedt, Stefan
+Leger, Rahim Kadkhodamohammadi, Imanol Luengo, Fe-
+lix Fuentes, Evangello Flouty, Ahmed Mohammed, Marius
+Pedersen, et al. 2018 robotic scene segmentation challenge.
+arXiv preprint arXiv:2001.11190, 2020. 2, 5
+[4] Victor Ion Butoi, Jose Javier Gonzalez Ortiz, Tianyu Ma,
+Mert R Sabuncu, John Guttag, and Adrian V Dalca. Uni-
+verSeg: Universal medical image segmentation.
+In 2023
+IEEE/CVF international conference on computer vision
+(ICCV), pages 21381–21394. IEEE, 2023. 3
+[5] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. SAM 3: Segment anything with concepts. In
+International conference on learning representations, pages
+138846–138923, 2026. 2, 3, 5, 6, 7
+[6] Matthias Carstens, Franziska M Rinner, Sebastian Bodenst-
+edt, Alexander C Jenke, J¨urgen Weitz, Marius Distler, Ste-
+fanie Speidel, and Fiona R Kolbinger. The Dresden surgical
+anatomy dataset for abdominal organ segmentation in surgi-
+cal data science. Scientific Data, 10(1):3, 2023. 1, 2, 5, 8
+[7] Liang-Chieh Chen, Yukun Zhu, George Papandreou, Florian
+Schroff, and Hartwig Adam. Encoder-decoder with atrous
+separable convolution for semantic image segmentation. In
+European conference on computer vision, pages 833–851.
+Springer, 2018. 7
+[8] Ho Kei Cheng and Alexander G Schwing. XMem: Long-
+term video object segmentation with an Atkinson-Shiffrin
+memory model. In European conference on computer vision,
+pages 640–658. Springer, 2022. 3
+[9] Claudia Cuttano, Gabriele Trivigno, Christoph Reich, Daniel
+Cremers, Carlo Masone, and Stefan Roth.
+INSID3:
+Training-free in-context segmentation with DINOv3.
+In
+Third Workshop on Visual Concepts, 2026. 2, 3, 4, 5, 6
+[10] Thanos Delatolas, Vicky Kalogeiton, and Dim P Papadopou-
+los. Learning the what and how of annotation in video object
+segmentation. In 2024 IEEE/CVF Winter Conference on Ap-
+plications of Computer Vision (WACV), pages 6936–6946.
+IEEE, 2024. 2, 3
+[11] Shuangrui Ding, Rui Qian, Xiaoyi Dong, Pan Zhang, Yuhang
+Zang, Yuhang Cao, Yuwei Guo, Dahua Lin, and Jiaqi Wang.
+SAM2Long: Enhancing SAM 2 for long video segmenta-
+tion with a training-free memory tree. In 2025 IEEE/CVF
+International Conference on Computer Vision (ICCV), pages
+13614–13624. IEEE, 2025. 3
+[12] Cristina Gonz´alez, Laura Bravo-S´anchez, and Pablo Arbe-
+laez. ISINet: an instance-based approach for surgical instru-
+ment segmentation. In International conference on medical
+image computing and computer-assisted intervention, pages
+595–605. Springer, 2020. 2
+[13] Maria Grammatikopoulou, Evangello Flouty, Abdolrahim
+Kadkhodamohammadi, Gwenol´e Quellec, Andre Chow,
+Jean Nehme, Imanol Luengo, and Danail Stoyanov. CaDIS:
+Cataract dataset for surgical RGB-image segmentation. Med-
+ical Image Analysis, 71:102053, 2021. 1, 2, 5
+[14] Brent A Griffin and Jason J Corso.
+BubbleNets: Learn-
+ing to select the guidance frame in video object segmenta-
+tion by deep sorting frames. In 2019 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+8906–8915. IEEE, 2019. 2, 3
+[15] Guy Hacohen, Avihu Dekel, and Daphna Weinshall. Active
+learning on a budget: Opposite strategies suit high and low
+budgets. arXiv preprint arXiv:2202.02794, 2022. 3
+[16] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+Deep residual learning for image recognition. In Proceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, pages 770–778, 2016. 7
+[17] W-Y Hong, C-L Kao, Y-H Kuo, J-R Wang, W-L Chang, and
+C-S Shih. CholecSeg8k: a semantic segmentation dataset
+for laparoscopic cholecystectomy based on Cholec80. arXiv
+preprint arXiv:2012.12453, 2020. 2, 5
+[18] Bingyi Kang, Saining Xie, Marcus Rohrbach, Zhicheng Yan,
+Albert Gordo, Jiashi Feng, and Yannis Kalantidis. Decou-
+pling representation and classifier for long-tailed recogni-
+tion. arXiv preprint arXiv:1910.09217, 2019. 2
+[19] Kazuya Kinoshita, Tetsuro Maruyama, Nao Kobayashi,
+Shunsuke Imanishi, Michihiro Maruyama, Gaku Ohira,
+Satoshi Endo, Toru Tochigi, Mayuko Kinoshita, Yudai
+Fukui, et al.
+An artificial intelligence-based nerve recog-
+nition model is useful as surgical support technology and as
+an educational tool in laparoscopic and robot-assisted rec-
+tal cancer surgery. Surgical Endoscopy, 38(9):5394–5404,
+2024. 1
+[20] Han Liu, Hao Li, Xing Yao, Yubo Fan, Dewei Hu, Benoit M
+Dawant, Vishwesh Nath, Zhoubing Xu, and Ipek Oguz.
+COLosSAL: A benchmark for cold-start active learning for
+3D medical image segmentation. In International Confer-
+9
+
+
+ence on Medical Image Computing and Computer-Assisted
+Intervention, pages 25–34. Springer, 2023. 3
+[21] Yang Liu, Yufei Yin, Chenchen Jing, Muzhi Zhu, Hao Chen,
+Yuling Xi, Bo Feng, Hao Wang, Shiyu Li, and Chunhua
+Shen. Unified open-world segmentation with multi-modal
+prompts. In 2025 IEEE/CVF International Conference on
+Computer Vision (ICCV), pages 21557–21567. IEEE, 2025.
+2, 3, 6
+[22] Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, and
+Bo Wang.
+Segment anything in medical images.
+Nature
+communications, 15(1):654, 2024. 2
+[23] Jun Ma, Zongxin Yang, Sumin Kim, Bihui Chen, Mo-
+hammed Baharoon, Adibvafa Fallahpour, Reza Asakereh,
+Hongwei Lyu, and Bo Wang.
+MedSAM2: Segment any-
+thing in 3D medical images and videos.
+arXiv preprint
+arXiv:2504.03600, 2025. 2, 6
+[24] Amin Madani, Babak Namazi, Maria S Altieri, Daniel A
+Hashimoto, Angela Maria Rivera, Philip H Pucher, Allison
+Navarrete-Welton, Ganesh Sankaranarayanan, L Michael
+Brunt, Allan Okrainec, et al. Artificial intelligence for in-
+traoperative guidance: using semantic segmentation to iden-
+tify surgical anatomy during laparoscopic cholecystectomy.
+Annals of surgery, 276(2):363–369, 2022. 1
+[25] Lena Maier-Hein, Matthias Eisenmann, Duygu Sarikaya,
+Keno M¨arz, Toby Collins, Anand Malpani, Johannes Fallert,
+Hubertus Feussner, Stamatia Giannarou, Pietro Mascagni,
+et al. Surgical data science–from concepts toward clinical
+translation. Medical image analysis, 76:102306, 2022. 1
+[26] Pietro Mascagni, Deepak Alapatt, Aditya Murali, et al. En-
+doscapes, a critical view of safety and surgical scene seg-
+mentation dataset for laparoscopic cholecystectomy. Scien-
+tific Data, 12:331, 2025. 1, 8
+[27] Enric Moreu, Kevin McGuinness, and Noel E. O’Connor.
+Synthetic data for unsupervised polyp segmentation. arXiv
+preprint arXiv:2202.08680, 2022. 8
+[28] Seyed Amir Mousavi, Utku Ozbulak, Francesca Tozzi,
+Nikdokht Rashidian, Wouter Willaert, Joris Vankerschaver,
+and Wesley De Neve. One patient’s annotation is another
+one’s initialization: Towards zero-shot surgical video seg-
+mentation with cross-patient initialization.
+arXiv preprint
+arXiv:2503.02228, 2025. 2, 4
+[29] George L Nemhauser, Laurence A Wolsey, and Marshall L
+Fisher. An analysis of approximations for maximizing sub-
+modular set functions—I. Mathematical programming, 14
+(1):265–294, 1978. 5
+[30] Shigeo Ninomiya, Yusuke Matsunobu, Tabito Oyama, Hi-
+roomi Takayama, Takashi Masuda, Teijiro Hirashita, Yuichi
+Endo, Tatsushi Tokuyasu, and Masafumi Inomata. Educa-
+tional impact of artificial intelligence-navigation surgery on
+anatomical landmark recognition in medical students. An-
+nals of Gastroenterological Surgery, 10(3):843–850, 2026.
+1
+[31] Seoung Wug Oh, Joon-Young Lee, Ning Xu, and Seon Joo
+Kim. Video object segmentation using space-time memory
+networks. In 2019 IEEE/CVF International Conference on
+Computer Vision (ICCV), pages 9225–9234. IEEE, 2019. 3
+[32] Sergey Protserov, Jaryd Hunter, Haochi Zhang, Pouria
+Mashouri, Caterina Masino, Michael Brudno, and Amin
+Madani. Development, deployment and scaling of operat-
+ing room-ready artificial intelligence for real-time surgical
+decision support. NPJ Digital Medicine, 7(1):231, 2024. 1
+[33] Dimitrios
+Psychogyios,
+Emanuele
+Colleoni,
+Beatrice
+Van Amsterdam, Chih-Yang Li, Shu-Yu Huang, Yuchong Li,
+Fucang Jia, Baosheng Zou, Guotai Wang, Yang Liu, et al.
+SAR-RARP50: Segmentation of surgical instrumentation
+and action recognition on robot-assisted radical prostatec-
+tomy challenge. arXiv preprint arXiv:2401.00496, 2023. 2,
+5
+[34] Mengshi Qi, Pengfei Zhu, Xiangtai Li, Xiaoyang Bi, Lu Qi,
+Huadong Ma, and Ming-Hsuan Yang. DC-SAM: In-context
+segment anything in images and videos via dual consistency.
+IEEE Transactions on Pattern Analysis and Machine Intelli-
+gence, 2025. 3
+[35] Marianne Rakic, Hallee E Wong, Jose Javier Gonzalez Or-
+tiz, Beth A Cimini, John V Guttag, and Adrian V Dalca.
+Tyche: Stochastic in-context learning for medical image seg-
+mentation. In 2024 IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 11159–11173.
+IEEE, 2024. 3
+[36] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang
+Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman
+R¨adle, Chloe Rolland, Laura Gustafson, et al. SAM 2: Seg-
+ment anything in images and videos. In International Con-
+ference on Learning Representations, pages 28085–28128,
+2025. 2, 3, 6
+[37] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-
+Net: Convolutional networks for biomedical image segmen-
+tation. In International Conference on Medical image com-
+puting and computer-assisted intervention, pages 234–241.
+Springer, 2015. 7
+[38] Nishchal Sapkota, Yejia Zhang, Bofang Zheng, Xianshi Ma,
+Haoyan Shi, Yohannes Mariam, and Danny Z Chen. Sparsely
+supervised surgical video segmentation with reliable asym-
+metric dual memory. In International Conference on Med-
+ical Image Computing and Computer-Assisted Intervention,
+pages 509–519. Springer, 2026. 2, 3, 6
+[39] Paul Maria Scheikl, Stefan Laschewski, Anna Kisilenko,
+Tornike Davitashvili, Benjamin M¨uller, Manuela Capek,
+Beat P M¨uller-Stich, Martin Wagner, and Franziska Mathis-
+Ullrich. Deep learning for semantic segmentation of organs
+and tissues in laparoscopic surgery. Current Directions in
+Biomedical Engineering, 6(1):20200016, 2020. 1
+[40] Ozan Sener and Silvio Savarese. Active learning for convolu-
+tional neural networks: A core-set approach. arXiv preprint
+arXiv:1708.00489, 2017. 3
+[41] Oriane Sim´eoni, Huy V Vo, Maximilian Seitzer, Federico
+Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov,
+Marc Szafraniec, Seungeun Yi, Micha¨el Ramamonjisoa,
+et al. DINOv3. arXiv preprint arXiv:2508.10104, 2025. 2,
+3, 5
+[42] Garrett Skinner, Tina Chen, Gabriel Jentis, Yao Liu, Christo-
+pher McCulloh, Alan Harzman, Emily Huang, Matthew
+Kalady, and Peter Kim.
+Real-time near infrared artificial
+intelligence using scalable non-expert crowdsourcing in col-
+orectal surgery. NPJ Digital Medicine, 7(1):99, 2024. 1
+10
+
+
+[43] Hongjin Su, Jungo Kasai, Chen Henry Wu, Weijia Shi,
+Tianlu Wang, Jiayi Xin, Rui Zhang, Mari Ostendorf, Luke
+Zettlemoyer, Noah A Smith, et al.
+Selective annotation
+makes language models better few-shot learners.
+arXiv
+preprint arXiv:2209.01975, 2022. 3
+[44] Sujun Sun, Mingwu Ren, and Haofeng Zhang.
+Training-
+free cross-domain few-shot segmentation via robust seman-
+tic representation and matching. In European Conference on
+Computer Vision, pages 370–388. Springer, 2026. 2, 3, 6
+[45] Wei Suo, Lanqing Lai, Mengyang Sun, Hanwang Zhang,
+Peng Wang, and Yanning Zhang. Rethinking and improving
+visual prompt selection for in-context learning segmentation.
+In European Conference on Computer Vision, pages 18–35.
+Springer, 2024. 3
+[46] Andru P Twinanda, Sherif Shehata, Didier Mutter, Jacques
+Marescaux, Michel De Mathelin, and Nicolas Padoy. En-
+doNet: a deep architecture for recognition tasks on laparo-
+scopic videos. IEEE transactions on medical imaging, 36
+(1):86–97, 2017. 2
+[47] Jovana Videnovic, Alan Lukezic, and Matej Kristan.
+A
+distractor-aware memory for visual object tracking with
+SAM2.
+In 2025 IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 24255–24264.
+IEEE, 2025. 3
+[48] Assefa Wahd,
+Jacob Jaremko,
+and Abhilash Hareen-
+dranathan. Time-contrastive pretraining for in-context im-
+age and video segmentation. In International Conference on
+Medical Image Computing and Computer-Assisted Interven-
+tion, pages 630–639. Springer, 2025. 3, 4, 7
+[49] Xinlong Wang, Wen Wang, Yue Cao, Chunhua Shen, and
+Tiejun Huang. Images speak in images: A generalist painter
+for in-context visual learning. In 2023 IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+pages 6830–6839. IEEE, 2023. 3
+[50] Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang,
+Chunhua Shen, and Tiejun Huang. SegGPT: Towards seg-
+menting everything in context. In 2023 IEEE/CVF Interna-
+tional Conference on Computer Vision (ICCV), pages 1130–
+1140. IEEE, 2023. 2, 3, 6, 7
+[51] Thomas M Ward, Pietro Mascagni, Amin Madani, Nicolas
+Padoy, Silvana Perretta, and Daniel A Hashimoto. Surgical
+data science and artificial intelligence for surgical education.
+Journal of Surgical Oncology, 124(2):221–230, 2021. 1
+[52] Kai Wei, Rishabh Iyer, and Jeff Bilmes. Submodularity in
+data subset selection and active learning. In International
+conference on machine learning, pages 1954–1963. PMLR,
+2015. 3
+[53] Chenwei Wu, David Restrepo, Zitao Shuai, Zhongming Liu,
+and Liyue Shen. Efficient in-context medical segmentation
+with meta-driven visual prompt selection. In International
+Conference on Medical Image Computing and Computer-
+Assisted Intervention, pages 255–265. Springer, 2024. 3
+[54] Cheng-Yen Yang,
+Hsiang-Wei Huang,
+Wenhao Chai,
+Zhongyu Jiang, and Jenq-Neng Hwang.
+SAMURAI:
+Adapting segment anything model for zero-shot visual
+tracking with motion-aware memory.
+arXiv preprint
+arXiv:2411.11922, 2024. 3
+[55] Zhaoyuan Yin, Jia Zheng, Weixin Luo, Shenhan Qian, Han-
+ling Zhang, and Shenghua Gao.
+Learning to recommend
+frame for interactive video object segmentation in the wild.
+In 2021 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 15440–15449. IEEE, 2021.
+2, 3
+[56] Jihun Yoon, SeulGi Hong, Seungbum Hong, Jiwon Lee,
+Soyeon Shin, Bokyung Park, Nakjun Sung, Hayeong Yu,
+Sungjae Kim, SungHyun Park, et al. Surgical scene segmen-
+tation using semantic image synthesis with a virtual surgery
+environment. In International Conference on Medical Im-
+age Computing and Computer-Assisted Intervention, pages
+551–561. Springer, 2022. 5
+[57] Wenxi Yue, Jing Zhang, Kun Hu, Yong Xia, Jiebo Luo,
+and Zhiyong Wang. SurgicalSAM: Efficient class prompt-
+able surgical instrument segmentation.
+In Proceedings of
+the AAAI Conference on Artificial Intelligence, pages 6890–
+6898, 2024. 2
+[58] Renrui Zhang, Zhengkai Jiang, Ziyu Guo, Shilin Yan, Junt-
+ing Pan, Hao Dong, Yu Qiao, Gao Peng, and Hongsheng Li.
+Personalize segment anything model with one shot. In In-
+ternational Conference on Learning Representations, pages
+18250–18279, 2024. 2, 3, 6
+[59] Yuanhan Zhang, Kaiyang Zhou, and Ziwei Liu. What makes
+good examples for visual in-context learning?
+Advances
+in Neural Information Processing Systems, 36:17773–17794,
+2023. 3, 4, 7
+[60] Hao Zheng, Lin Yang, Jianxu Chen, Jun Han, Yizhe Zhang,
+Peixian Liang, Zhuo Zhao, Chaoli Wang, and Danny Z Chen.
+Biomedical image segmentation via representative annota-
+tion. In Proceedings of the AAAI Conference on Artificial
+Intelligence, pages 5901–5908, 2019. 3
+[61] Dengyong Zhou, Olivier Bousquet, Thomas Lal, Jason We-
+ston, and Bernhard Sch¨olkopf.
+Learning with local and
+global consistency. Advances in neural information process-
+ing systems, 16, 2003. 5
+11

@@ -1,0 +1,2396 @@
+Distractors are the Real Enemy: Visual Distraction Adversarial Perturbations on
+SAM2-Based Video Tracking and Segmentation
+Adonay Demewez Gebremedhin1
+Mohamad Alansari2
+Wessam Shehieb1
+Muzammal Naseer2,3
+1Ajman University, Ajman, UAE
+2Khalifa University, Abu Dhabi, UAE
+3University of Western Australia, Australia
+202311465@ajmanuni.ac.ae
+100061914@ku.ac.ae
+w.shehieb@ajman.ac.ae
+muhammadmuzammal.naseer@ku.ac.ae
+Abstract
+Promptable video trackers such as SAM2 achieve accurate
+and robust performance through strong temporal consis-
+tency, making them important foundations for downstream
+video understanding and tracking applications.
+As their
+use continues to expand, understanding their robustness
+to adversarial perturbations becomes increasingly impor-
+tant.
+Existing attacks on SAM2 largely focus on local
+mask degradation and short-term temporal feature disrup-
+tion, leaving its longer-term dynamics and competing ob-
+ject interferences (Distractors) insufficiently explored. We
+observe that SAM2 itself exposes useful distractor cues
+when tracking becomes uncertain.
+Based on these ob-
+servations, we propose DistractAttack, a white-box attack
+that uses background distractors to disrupt target tracking
+persistently. Its core procedure, Counterfactual Distrac-
+tor Search (CDS), propagates clean and attacked trajec-
+tories in parallel to discover plausible competing regions
+and identify those that become increasingly effective un-
+der perturbation. The discovered evidence is accumulated
+over time to weaken target support and promote recur-
+rent alternatives or disappearance predictions. Extensive
+experiments under video-level and one-shot perturbations
+across Visual Object Tracking and Video Object Segmenta-
+tion demonstrate strong attack effectiveness, raising DRE to
+4.4× and NRE to 7.3× their nearest baselines under video
+perturbation, while transferring effectively across model
+scales and tracker variants in black-box settings. Project
+page: https://adonaydem.github.io/sam2-
+da-page/.
+1. Introduction
+Recent advances in promptable video segmentation have
+demonstrated strong and generalizable performance across
+downstream tasks such as Visual Object Tracking (VOT)
+SegPGD
+FAN
+UAP-SAM2
+Ours
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+Error rate (%)
+1.89
+2.16
+2.47
+10.83
+1.48
+1.94
+2.16
+15.77
+DRE
+NRE
+Figure 1. Drift-Rate Error (DRE) vs Not-Reported Error (NRE)
+performance across video perturbation methods. Higher DRE and
+NRE represent a balanced and comprehensive attack success.
+and Video Object Segmentation (VOS). SAM2 [33], in par-
+ticular, extends promptable segmentation to video through a
+recurrent memory mechanism that propagates object infor-
+mation across frames. Building on this foundational model,
+recent methods have further improved long-term tracking
+through stronger motion modeling, memory management,
+and distractor handling [4, 9, 37, 41, 42]. While prompt-
+able trackers have become increasingly robust, it remains
+unclear whether their specialized designs resist adversarial
+perturbations or share transferable vulnerabilities.
+Attacks against single-object tracking and VOS manipu-
+late classification, bounding-box regression, temporal con-
+sistency, trajectories, and motion cues [5, 6, 13, 14, 18, 25],
+or exploit initialization errors and hard regions to induce
+persistent segmentation failure [19, 24].
+Although these
+studies show that temporal recurrence and stored repre-
+sentations can amplify brief perturbations, their objectives
+were developed largely for earlier architectures such as
+Siamese networks [25] and do not readily transfer to foun-
+dation models such as SAM2.
+In parallel, attacks on
+the Segment Anything Model (SAM) [22] consider mask
+manipulation, universal and prompt-agnostic perturbations,
+and feature-specific objectives [1, 15, 17, 20, 26, 28, 32,
+35, 38, 39, 43, 45, 46], but remain image-based and over-
+look the memory-driven dynamics of promptable video
+arXiv:2611.32011v1  [cs.CV]  24 Nov 2026
+
+
+trackers.
+For SAM2, Robust-SAM showed that adver-
+sarial perturbations can disrupt temporal consistency [27],
+while UAP-SAM2 jointly perturbs semantic features and
+consecutive-frame consistency [47].
+BadVSFM further
+considers training-time backdoors [44]. Yet existing SAM2
+attacks still largely target segmentation degradation or mask
+disappearance, while their temporal objectives remain cen-
+tered on relatively local feature interactions rather than the
+long-term object trajectory. This leaves open how an at-
+tack can exploit the longer-term mechanisms that modern
+promptable trackers use to preserve and recover target iden-
+tity under adverse challenges.
+We introduce DistractAttack, a distractor-centric white-
+box attack for recurrent promptable segmentation that uses
+model-supported distractors to destabilize target tracking
+rather than merely erase the current mask. Its core, Coun-
+terfactual Distractor Search (CDS), propagates clean and
+attacked trajectories in parallel: the clean trajectory iden-
+tifies plausible non-target competitors, while the attacked
+trajectory reveals which become increasingly influential un-
+der a bounded ℓ∞perturbation. Accumulating this evidence
+over time, CDS turns local ambiguity into persistent track-
+ing failures, including wrong-object capture, spatial dis-
+placement, unstable localization, and disappearance. We
+evaluate video-level and one-shot perturbations across VOT
+and VOS, with transfer studies across model scales and
+state-of-the-art tracker variants. SAM2’s memory mech-
+anism is particularly vulnerable to one-shot initialization
+perturbations, whose effects persist throughout the video.
+Under video-perturbation and matched protocol, Distrac-
+tAttack achieves the highest Drift-Rate Error (DRE) and
+Not-Reported Error (NRE) [23] by a substantial margin (see
+Fig. 1).
+Our core contributions are summarized as follows:
+• We propose the first distractor-centric adversarial attack
+against SAM2, exposing its vulnerability to distractors
+in the surrounding scene.
+Counterfactual Distractor
+Search couples clean and attacked trajectories to exploit
+evolving distractor evidence and induce persistent track-
+ing failure.
+• We extensively study DistractAttack under two comple-
+mentary perturbation settings: Video Perturbation (VP)
+and One-shot Perturbation (OP) across both VOT and
+VOS tasks.
+• We provide a broad evaluation against existing attacks
+and assess real-world practicality of our method via
+black-box transferability across model sizes and SAM2
+tracker variants.
+2. Related Work
+2.1. Promptable Video Segmentation and Tracking
+SAM introduced promptable class-agnostic image segmen-
+tation [22], and SAM2 extended this paradigm to video
+through a streaming memory that propagates an initial-
+ized object across frames [33]. SAM2 further broadened
+the family toward concept-prompted detection, segmenta-
+tion, and tracking [3]. Recent SAM2 extensions strengthen
+long-term tracking through motion-aware memory selec-
+tion in SAMURAI [42], multiple temporal hypotheses in
+SAM2Long [9], distractor-aware memory in DAM4SAM
+[37], position prompting in SAMITE [41], and combined
+long- and short-term modeling in HiM2SAM [4].
+Their
+shared focus on distractors and memory reliability identi-
+fies identity confusion as a central challenge in promptable
+tracking. We study the complementary adversarial question
+of whether a bounded perturbation can exploit such distrac-
+tors to progressively confuse the tracker’s target representa-
+tion and disrupt its temporal consistency.
+2.2. Adversarial Video Tracking and Segmentation
+Adversarial video tracking has shown that recurrence, as-
+sociation, and stored representations can turn brief pertur-
+bations into persistent errors.
+In visual object tracking,
+FAN, IoU Attack, SPARK, CSA, and ABA attack tempo-
+ral box consistency, sparse online updates, classification re-
+sponses, and motion blur [5, 13, 14, 18, 25], while adver-
+sarial VOS exploits initialization errors that aim to induce
+mask degradation [19, 24]. However, these frameworks re-
+main closely tied to their victim architectures and have lim-
+ited compatibility with recent SAM-based trackers. Attacks
+on SAM have covered mask removal, targeted generation,
+prompt-agnostic feature manipulation, region suppression
+and spatial–frequency attacks [15, 17, 20, 26, 28, 32, 35,
+38, 39, 43, 45, 46]. Direct studies of SAM2 include Ro-
+bust SAM (CPA), UAP-SAM2, BadVSFM, and DarkLLM
+[27, 36, 44, 47]. Among these methods, UAP-SAM2 alone
+introduces an explicit temporal objective, yet it merely re-
+lates consecutive encoder features rather than the history
+accumulated in recurrent memory. We aim to exploit ac-
+cumulated target history and recurring distractor evidence
+to induce persistent confusion between the target and plau-
+sible competing regions.
+3. Preliminary
+Let x1:T denote a video, M0 the target annotation provided
+only at the first frame, and ht the recurrent tracker state at t.
+We follow standard single-object VOT and VOS protocols,
+where the target is initialized by a box and mask, respec-
+tively. SAM2 then performs:
+(M s
+t , ht, At) = Φ(xt, ht−1, M0),
+(1)
+
+
+2
+4
+6
+8
+10
+0.25
+0.50
+0.75
+Mask disagreement Dt
+(a)
+2
+4
+6
+8
+10
+0.25
+0.50
+0.75
+Off-target attention
+(b)
+Figure 2.
+Decoder ambiguity provides useful attack cues.
+Lower objectness confidence (x-axis) is associated with (a) greater
+mask disagreement Dt and (b) stronger off-target attention mass.
+The lines show averages across bins.
+where M s
+t is the selected mask and At collects auxiliary
+decoder outputs, including confidence and predicted-IoU
+scores. Here, Φ may be either a clean or attacked tracker,
+Φc or Φa, with encoder features F c
+t or F a
+t , respectively. The
+SAM2 decoder also produces multiple candidate masks be-
+fore selecting M s
+t . We refer to these candidates as Mask
+Hypotheses throughout the paper.
+We assume a white-box attack with access to the model
+code, parameters, auxillary ouputs and gradients, and can
+collect publicly available datasets. The attack acts exclu-
+sively through bounded perturbations to the RGB input,
+ext = clip(xt + δt),
+∥δt∥∞≤ε,
+(2)
+where ε denotes the perturbation budget.
+4. Methodology
+4.1. Observations and Overview
+Observation I: Mask hypotheses diverge as confidence
+falls. At each frame, the SAM2 decoder produces several
+mask hypotheses and selects one using their predicted-IoU
+scores. We measure their disagreement as
+Dt = 1 −1
+Nc
+X
+(i,j)∈Ct
+IoU
+
+M (i)
+t , M (j)
+t
+
+,
+Nc = |Ct|,
+(3)
+where Ct contains all pairs of predicted masks. A larger Dt
+therefore indicates greater disagreement. For this analysis,
+we run clean SAM2.1-L on ten randomly selected videos,
+collect frame-wise decoder outputs. As shown in Fig. 2(a),
+disagreement increases as confidence in the selected out-
+put falls. Further analysis shows that SAM 2 often shifts to
+distractors prior to tracking failure. The discarded hypothe-
+ses therefore provide model-generated proposals for regions
+that may compete with the target.
+Observation II: Decoder attention moves away from the
+target as confidence falls. The selected mask may remain
+stable even as attention shifts toward competing regions.
+We measure the fraction of mask-token attention outside
+the target object. Fig. 2(b) shows that this fraction rises
+as confidence falls, indicating growing support outside the
+target. The attention map therefore complements the alter-
+native masks in Obs. I by identifying non-target regions that
+already influence the decoder.
+Together, these observations motivate Counterfactual
+Distractor Search (CDS), which separates evidence collec-
+tion from perturbation optimization. A clean trajectory pro-
+vides target features and competing regions, while an at-
+tacked trajectory reveals how distractor evidence evolves
+under the bounded perturbation.
+Optimization then sup-
+presses target support, biases foreground responses toward
+discovered distractors, and corrupts target distinctiveness
+across multiple granularities.
+We consider two settings.
+Video Perturbation (VP) optimizes one perturbation per
+video, while One-shot Perturbation (OP) perturbs only
+the prompted frame [6, 19].
+DistractAttack is primarily
+classified as untargeted because no distractor identity is
+specified in advance. Its distractor proposals guide the opti-
+mization but may instead exhibit wrong-object capture, spa-
+tial displacement, unstable switching, or disappearance.
+4.2. Counterfactual Distractor Search (CDS)
+4.2.1. Target Prototype Bank
+For an arbitrary feature map F and region mask R, we de-
+fine a Prototype Generator:
+ψ(F, R) =
+1
+|R|
+X
+u∈R
+F(u).
+(4)
+where u indexes spatial locations within region R.
+We propagate a clean trajectory and store a reliable clean
+history of the target in a lightweight prototype bank T . Each
+reliable clean encoder features F c
+t with selected mask M s
+t
+contribute a foreground–background pair using the proto-
+type generator,
+p+
+t = ψ(F c
+t , M s
+t ),
+p−
+t = ψ(F c
+t , 1 −M s
+t ).
+(5)
+The first frame pair is always retained. Later pairs are ad-
+mitted only when the model’s predicted-IoU score and ob-
+jectness logit exceed 0.5 and 0, respectively. To avoid re-
+peatedly storing near-duplicate target appearances, the re-
+sulting foreground prototype is further required to pass a
+cosine novelty gate:
+max
+m∈T cos
+ p+
+t , p+
+m
+
+< τnov
+=⇒
+T ←T ∪{(p+
+t , p−
+t )}.
+(6)
+We set τnov to 0.98. These mechanisms help us reject unre-
+liable and redundant updates while preserving appearance
+changes needed to distinguish the target from its surround-
+ings.
+4.2.2. Search Components
+During video propagation, CDS searches for plausible dis-
+tractors from a set of signals exposed by the clean and at-
+tacked trajectories. We consider three sources of evidence.
+
+
+Target 
+Prototype 
+Bank
+∎∎∎
+𝑭𝒕
+𝑷𝒎
++
+𝐶𝑜𝑠𝑠𝑖𝑚
+𝑓𝑔
+𝑷𝒎
+−
+Adversarial Trajectory
+𝒙𝒕
+𝜹
+Clean Trajectory
+𝒙𝒕
+Proposal 
+Set
+𝐶𝑜𝑠𝑠𝑖𝑚
+𝑏𝑔
+Semantic 
+Proposals
+Attention-Diffuse Search
+Off-target attention peaks
+𝑭𝒕
+𝒄
+𝑴𝒕
+𝒔
+𝑴𝒕
+𝒔
+Foreground Suppression
+Pull
+Push
+Multi-Granular Clutter 
+Corruption
+D.W. Foreground 
+Displacement
+Legend
+Effective Distractor Bank
+𝑭𝒕
+𝒂
+Global
+Pool
+Local
+Features
+Hypothesis Disagreement Obs.
+Update Policy
+Query q
+Merge
+Insert
+Replace
+M
+Effective Distractor Bank
+Target Prototype Bank
+Prototype Generator
+Pixel-wise Maximum
+Selected Hypothesis
+Unselected Hypothesis
+Effective Distractor Bank
+Mask tokens
+Image 
+Encoder
+Memory 
+Attention
+Mask 
+Decoder
+Memory 
+Encoder
+Prototype
+Generator
+Semantic Distractor Search
+Mask 
+Decoder
+Prototype
+Generator
+Memory 
+Encoder
+Image 
+Encoder
+Memory 
+Attention
+Mask 
+Decoder
+M
+(a)
+(b)
+Figure 3. Overview of DistractAttack. (a) Counterfactual Distractor Search: Clean and attacked trajectories provide counterfactual target
+references for proposing, validating, and accumulating distractors. (b) CDS evidence guides foreground suppression, multi-granular clutter
+corruption, and distractor-weighted foreground displacement to induce persistent tracking failure.
+A. Semantic Distractor Search. We use the target proto-
+type bank T and the current clean encoder feature map F c
+t
+to measure whether each spatial location resembles the tar-
+get more than its surrounding background.
+For each stored target prototype m, dm(u) measures how
+much location u resembles the target more than the back-
+ground:
+dm(u) =
+h
+cos
+ F c
+t (u), p+
+m
+
+−cos
+ F c
+t (u), p−
+m
+ i
++.
+(7)
+We then normalize each dm by its maximum response and
+average across stored target prototypes:
+St(u) =
+1
+|T |
+X
+m∈T
+dm(u)
+maxv dm(v) + ϵ.
+(8)
+St provides a spatial map of regions that remain similar to
+the target across its stored appearances [41]. We mask the
+selected target using M s
+t and retain the remaining spatially
+distinct high-response regions as semantic distractor pro-
+posals, Psem
+t
+.
+Proposals in Psem
+t
+capture plausible appearance-based
+distractors, but not the decoder’s evolving memory or
+longer-term temporal behavior. Following Observations I
+and II, we therefore examine SAM2’s tracking behavior to
+identify emerging mask-decoder vulnerabilities.
+B. Hypothesis Disagreement Observation.
+CDS com-
+pares the clean decoder’s alternative mask hypotheses with
+the selected mask M s
+t .
+If an alternative predicts a dis-
+tinct region outside M s
+t , we retain that region as an alter-
+native distractor proposal in the set Palt
+t . These proposals
+are particularly informative because they expose alternative
+regions the decoder already considers plausible. However,
+they may be unavailable when SAM2 is confident, leading
+to its mask hypotheses largely agreeing.
+C. Adversarial Attention-Diffuse Search. CDS further
+examines mask-token attention along a parallel attacked tra-
+jectory. We find that this attention begins to spread toward
+off-target regions before the predicted mask visibly fails.
+After scaling each attention map by its uniform spatial ex-
+pectation, we define
+Ht(u) = max
+k
+log
+ Aa
+t,k(u)
+
+,
+(9)
+where Aa
+t,k denotes the attention of mask token k outside
+the target. Positive values of Ht therefore indicate stronger
+attention. The resulting off-target regions enter the attention
+diffuse set Patt
+t
+.
+4.2.3. Effective Distractor Bank
+The three searches provide complementary distractor evi-
+dence in the form of binary masks. After removing overlap-
+ping regions, CDS combines all available proposals into
+Pt = Psem
+t
+∪Palt
+t
+∪Patt
+t
+.
+(10)
+Much like the target prototype bank T , an Effective Distrac-
+tor Bank E = {es}K
+s=1 admits a compact history of compet-
+ing appearances using Pt and the adversarial encoder fea-
+ture F a
+t . Unlike the target prototype bank, whose identity
+
+
+Algorithm 1. Effective Distractor Bank Update Policy
+Require: Pt: distractor proposal set, F a
+t : attacked fea-
+ture map, E = {es}: effective distractor bank
+Require: K: bank capacity, θmerge: merge threshold, η:
+EMA update rate
+for P j
+t ∈Pt do
+Form a prototype: q ←ψ(F a
+t , P j
+t )
+Find its closest pair in E: i ←arg maxs cos(q, es)
+if cos(q, ei) ≥θmerge then
+Merge: ei ←(1 −η)ei + ηq
+else if |E| < K then
+Insert q into E
+else
+Replace with the least used slot.
+end if
+end for
+is initiated by the initial prompt, these proposals carry no
+annotation anchors. Naive updates may therefore split one
+distractor across multiple slots or merge distinct distractors.
+We use conservative association and updates to maintain
+stable histories.
+Effective Distractor Bank Update Policy. Each proposal
+in Pt forms a prototype from gradient-detached F a
+t for
+comparison with occupied slots in E. If its closest slot is
+sufficiently similar, the two are merged through an expo-
+nential moving average (EMA) [34]. Otherwise, the candi-
+date fills an empty slot or replaces the least-used one when
+the bank is full. A least used slot is the one that has the least
+EMA update. This turns repeated evidence into a compact
+set of stable distractors, preventing the bank from growing
+with redundant regions and focusing the attack on a few ef-
+fective alternatives (See Algorithm 1).
+4.3. Attack Objectives
+The attack objective set is designed to induce persistent
+tracking failure. Using the target prototype and effective
+distractor banks accumulated over time, it suppresses fore-
+ground support on the target, promotes CDS-selected com-
+peting regions, and corrupts target distinctiveness along the
+attacked trajectory.
+Foreground suppression. Given the attacked mask M a
+t
+and the clean predicted target M s
+t from the parallel clean
+trajectory, we first suppress the attacked prediction M a
+t over
+the clean target M s
+t :
+Lmask = BCEM s
+t (M a
+t , 0) ,
+(11)
+where BCER evaluates binary cross entropy only within
+R.
+Unlike objectives that also suppress the background
+[43, 47], this leaves off-target regions available to receive
+foreground support.
+Distractor-weighted foreground displacement.
+Fore-
+ground suppression removes support from the target but
+does not specify where it should move. A complete dis-
+placement objective can instead promote foreground to be
+over the active CDS proposals:
+Ldisp =
+1
+|Pt|
+X
+j∈Pt
+BCEP j
+t (M a
+t , 1) ,
+(12)
+where Pt is the current distractor proposal set. Treating all
+proposals equally, however, ignores which regions repeat-
+edly expose the strongest vulnerabilities along the attacked
+trajectory [29]. Promoting multiple unrelated regions also
+conflicts with the tracker’s single-target nature and weak-
+ens the attack.
+We therefore leverage the effective dis-
+tractor bank which preserves evidence from the strongest
+proposal trajectories, providing long-term precedent and a
+coherent attack direction. For each proposal P j
+t , we pool
+zj
+t = ψ(F a
+t , P j
+t ) and define aj
+t as its maximum cosine sim-
+ilarity to the occupied distractor slots in E. We then apply
+softmax:
+wj
+t =
+e aj
+t/τw
+P
+q∈Pt e aq
+t /τw ,
+j ∈Pt,
+(13)
+so that wj
+t concentrates foreground on proposals most
+strongly supported by the accumulated distractor evidence.
+τw denotes temperature. The resulting enhanced objective
+is
+Ldisp =
+X
+j∈Pt
+wj
+t BCEP j
+t (M a
+t , 1) .
+(14)
+Multi-granular clutter corruption.
+Mask displacement
+biases foreground support toward competing regions, but
+the target may remain sufficiently distinct in feature space,
+deeming it sufficient enough for SAM2 to continue tracking
+the true target. We therefore contrast attacked feature maps
+against the effective distractor bank E and the clean target
+foreground prototypes T + = {p+
+m}.
+For an arbitrary feature q, we directly define a multi-
+positive contrastive loss as
+Lcon,q = −log
+X
+e∈E
+ecos(q,e)/τc
+X
+e∈E
+ecos(q,e)/τc +
+X
+p∈T +
+ecos(q,p)/τc . (15)
+Minimizing this loss pulls the representation toward ac-
+cumulated distractors while pushing it away from the clean
+target history [7, 21]. τc denotes contrastive temperature.
+From F a
+t , we form a global query qG
+t by average pooling
+and local queries qu
+t from its patch features, and evaluate
+the contrast at both granularities. The resulting objective is
+Lclut = ηG Lcon,qG
+t + ηL
+X
+u
+αu
+t Lcon,qu
+t .
+(16)
+
+
+where αu
+t is weight over target-region features, focusing the
+local contrastive loss on the target region to more effectively
+weaken its representation. The complete objective is
+L = λMLmask + λDLdisp + λCLclut.
+(17)
+where λM, λD, λC are loss coefficients. Using the com-
+puted gradient gW, the perturbation is a signed gradient up-
+date [11, 30]:
+δ ←Π∥δ∥∞≤ϵ (δ −α sign (gW)) ,
+(18)
+where α is the step size and the scope of δ follows one of
+the following perturbation settings:
+• Video Perturbation (VP): A separate perturbation δv is
+optimized for each video v. Once optimized, the same
+perturbation is applied across all frames of that video.
+• One-shot Perturbation (OP): We consider a more prac-
+tical setting in which the adversary can manipulate only
+the initially prompted frame [6, 19]. The attacked se-
+quence is defined as
+ext =
+(
+clip(x0 + δo),
+t = 0,
+xt,
+t > 0,
+∥δo∥∞≤ϵ.
+(19)
+At each optimization step, clean and attacked trajectories
+are initialized from the same prompt and propagated over
+a rollout of N frames to feed banks T and E. Here, N de-
+fines only the observation horizon for bank construction
+and introduces no additional prompts, annotations, or per-
+turbations to later frames. Both banks are detached and
+used as temporal context for the attack objective, while
+gradients are propagated only to δo. Once optimized, δo
+is applied once to the prompted frame, after which the
+tracker proceeds on the remaining clean frames without
+further adversarial intervention.
+Importantly, in both settings, only the initial mask and video
+frames are known to the adversary.
+5. Experiments
+Setup protocol. We evaluate VP and OP on visual object
+tracking (VOT) and video object segmentation (VOS). For
+VOT, we use LaSOT [10], UTB180 [2], GOT-10k [16], and
+LaSOT-ext [10], including the distractor-distilled DiDi [37].
+Each is initialized by the ground-truth box.
+Following
+VOTS [23], we macro-average tracking quality Q, accuracy
+Acc, robustness Rob, DRE, and NRE across sequences.
+For VOS, we use DAVIS 2017 (DAVIS) [31], YouTube-
+VOS 2018 (YT) [40], MOSEv2 [8], and the SA-V test
+set [33]. The ground-truth mask initializes frame 0, and we
+report the standard J &F. During optimization, OP may
+use N ∈{1, 10, 20} rollout frames, while its evaluation
+is on the complete sequence. We use the official SAM2.1
+checkpoint and none of the dataset sequences were used
+Table 1. Video (VP) and One-shot (OP) attack perturbation mech-
+anisms on SAM2.1-L. VOS results are given in J &F. Arrows
+indicate a stronger attack.
+VOT
+VOS
+Setting Method
+Q ↓Acc.↓Rob.↓DRE%↑NRE%↑DAVIS↓YT↓MOSEv2↓SA-V↓Avg.↓
+Clean inference
+0.836 0.842 0.989
+0.68
+0.42
+91.92
+86.66
+82.57
+87.43
+87.15
+VP
+AttackSAM [43]
+0.798 0.807 0.981
+1.10
+0.83
+80.34
+75.92
+72.88
+77.10
+76.56
+DarkSAM
+0.772 0.784 0.976
+1.38
+1.05
+77.42
+70.18
+69.55
+73.84
+72.75
+CPA [27]
+0.756 0.769 0.972
+1.56
+1.22
+74.90
+67.62
+66.81
+71.33
+70.17
+SegPGD [12]
+0.735 0.748 0.966
+1.89
+1.48
+72.88
+64.95
+65.72
+69.04
+68.15
+UAD [28]
+0.718 0.732 0.962
+2.04
+1.70
+71.56
+63.72
+64.40
+67.85
+66.88
+FAN [25]
+0.701 0.720 0.959
+2.16
+1.94
+69.31
+60.44
+61.87
+65.26
+64.22
+UAP-SAM2 [47]
+0.689 0.709 0.954
+2.47
+2.16
+62.81
+51.37
+62.55
+57.94
+58.67
+DistractAttack
+0.420 0.554 0.734
+10.83
+15.77
+59.38
+44.46
+49.42
+50.62
+50.97
+OP
+DarkSAM
+0.803 0.811 0.971
+1.15
+1.78
+61.48
+53.21
+58.75
+56.84
+57.57
+AttackSAM [43]
+0.816 0.822 0.976
+1.04
+1.36
+66.12
+57.44
+62.08
+60.35
+61.50
+CPA [27]
+0.791 0.802 0.865
+1.29
+12.21
+56.72
+47.63
+54.30
+51.18
+52.46
+SegPGD [12]
+0.775 0.787 0.952
+1.52
+3.26
+50.83
+41.57
+48.66
+45.21
+46.57
+UAD [28]
+0.764 0.778 0.668
+1.88
+31.31
+47.35
+38.72
+45.19
+42.60
+43.47
+FAN [25]
+0.354 0.369 0.520
+2.10
+45.87
+43.92
+34.88
+42.75
+39.46
+40.25
+UAP-SAM2 [47]
+0.245 0.266 0.481
+1.39
+50.54
+36.84
+26.95
+37.88
+31.75
+33.36
+ARA-Attack [24]
+0.213 0.235 0.423
+2.74
+54.92
+32.14
+22.81
+34.57
+28.93
+29.61
+VOSPGD [19]
+0.172 0.193 0.281
+2.55
+69.45
+19.43
+16.59
+37.31
+24.73
+24.52
+DistractAttackN=1
+0.131 0.148 0.270
+8.71
+64.34
+16.45
+11.12
+33.34
+27.09
+22.00
+DistractAttackN=10 0.101 0.126 0.278
+9.09
+63.14
+16.11
+10.12
+31.24
+25.76
+20.81
+DistractAttackN=20 0.076 0.115 0.250
+9.28
+65.73
+15.85
+9.38
+31.02
+21.99
+19.56
+to train it.
+VP uses ϵ = 8/255 and α = 2/255 while
+OP uses ϵ = 4/255 and α = 1/255. Both use 10 iter-
+ations, and a weight of 1.0 for all loss terms. We cap T
+and E at 20 and 10 prototypes, respectively, and set θmerge
+0.85 and the EMA rate η 0.1. Single-image and universal
+baselines retain their defining objectives and mechanisms
+when adapted to sample-wise VP and OP. Stronger attacks
+correspond to lower Q, accuracy, robustness, and J &F,
+and higher DRE and NRE. Experiments run on an NVIDIA
+A100 80GB GPU. Further protocol and baseline adaptation
+details are provided in Appendix 8.
+Comparison against other methods. We compare image-
+segmentation, tracking, and VOS attacks on SAM2.1-Large
+in Tab. 1. ARA-Attack and VOSPGD are reported only
+under OP because they perturb the annotated initializa-
+tion frame [19, 24]. DistractAttack is strongest overall in
+Q
+Acc
+Rob
+DRE
+NRE
+DAVIS
+YT↓
+MOSEv2 ↓
+SA-V ↓
+Average ↓
+VOT
+VOS
+SAM2 DM
+SR
+HM
+SM
+S2L
+0.420
+0.450
+0.411
+0.444
+0.439
+0.453
+0.554
+0.550
+0.488
+0.527
+0.521
+0.566
+0.734
+0.788
+0.762
+0.783
+0.774
+0.788
+10.83
+9.27
+11.48
+10.30
+12.21
+10.73
+15.77
+11.95
+12.34
+11.40
+9.82
+10.44
+59.38
+55.81
+49.12
+52.88
+54.63
+56.72
+44.46
+48.27
+43.86
+46.51
+47.92
+49.84
+49.42
+52.64
+47.35
+50.24
+51.38
+53.57
+50.62
+54.12
+48.67
+51.73
+53.06
+55.11
+50.97
+52.71
+47.25
+50.34
+51.75
+53.81
+(a) VP
+SAM2 DM
+SR
+HM
+SM
+S2L
+0.076
+0.112
+0.065
+0.082
+0.072
+0.081
+0.115
+0.157
+0.098
+0.124
+0.109
+0.121
+0.250
+0.316
+0.182
+0.241
+0.207
+0.238
+9.28
+12.44
+14.10
+13.60
+13.90
+13.10
+65.72
+55.96
+67.70
+62.30
+65.40
+63.10
+15.85
+22.68
+13.72
+17.94
+16.08
+18.62
+9.38
+14.92
+8.94
+10.81
+9.73
+11.44
+31.02
+35.44
+24.56
+28.76
+26.82
+30.35
+21.99
+27.12
+17.86
+21.45
+20.13
+22.15
+19.56
+25.04
+16.27
+19.74
+18.19
+20.64
+(b) OP
+Figure 4. DistractAttack across tracker variants under (a) VP
+and (b) OP. DM, SR, HM, SM, and S2L denote DAM4SAM,
+SAMURAI, HiM2SAM, SAMITE, and SAM2Long. VOS entries
+report J &F.
+
+
+SAM2
+DM
+SR
+SM
+S2L
+SAM2
+DM
+SR
+SM
+S2L
+0.076
+0.121
+0.089
+0.117
+0.084
+0.145
+0.112
+0.125
+0.076
+0.101
+0.105
+0.142
+0.065
+0.082
+0.127
+0.172
+0.125
+0.192
+0.072
+0.105
+0.097
+0.181
+0.128
+0.143
+0.081
+(a) Cross-variant OP
+SAM2
+DM
+SR
+SM
+S2L
+SAM2
+DM
+SR
+SM
+S2L
+0.420
+0.517
+0.479
+0.532
+0.541
+0.490
+0.450
+0.456
+0.461
+0.506
+0.479
+0.572
+0.411
+0.458
+0.479
+0.642
+0.532
+0.557
+0.439
+0.471
+0.453
+0.497
+0.521
+0.447
+0.453
+(b) Cross-variant VP
+T
+S
+B+
+L
+T
+S
+B+
+L
+0.404
+0.518
+0.594
+0.565
+0.347
+0.387
+0.652
+0.514
+0.525
+0.512
+0.415
+0.459
+0.584
+0.594
+0.574
+0.420
+(c) Cross-size
+100
+400
+700
+1000
+Frames
+0
+20
+40
+60
+80
+100
+Q (%)
+DistractAttack
+UAP-SAM2
+(d) Cross-time
+Figure 5. Black-box transferability of DistractAttack. Panels show cross-variant transfer under (a) OP and (b) VP, (c) cross-size transfer
+among SAM2.1 models, and (d) zero-shot temporal transfer. Rows denote source models and columns denote targets. Lower off-diagonal
+Q indicates stronger transfer. In (d), perturbations optimized on frames 0–100 are evaluated on longer windows
+both settings. Under VP, it raises DRE from UAP-SAM2’s
+2.47% to 10.83%. Under OP, N denotes the rollout used to
+construct the target and distractor banks. At N = 1, CDS
+uses only initialization-frame evidence and lowers Q from
+0.172 to 0.131 against VOSPGD. Increasing N to 20 adds
+unannotated frames and lowers the VOS average by a fur-
+ther 2.44 points, showing the benefit of temporal context.
+OP propagates severe initialization errors through memory,
+yielding more empty masks and higher NRE, while VP sus-
+tains misdirection and higher DRE. These complementary
+failure modes are also visible in Fig. 6.
+DistractAttack across tracker variants.
+We evalu-
+ate DistractAttack on SAMURAI [42], DAM4SAM [37],
+HiM2SAM [4],
+SAMITE [41],
+and SAM2Long [9],
+all based on SAM2.1-L. Under VP, SAM2Long and
+DAM4SAM are slightly more resistant, while SAMURAI
+is most affected. OP with N = 20 is stronger across ev-
+ery variant.
+DAM4SAM remains the most resistant but
+still degrades sharply. Specialized distractor and memory
+mechanisms therefore offer only partial protection against
+tracking and segmentation failures. Across SAM2.1 sizes,
+Q falls to 0.387–0.420 with only modest variation across
+scales (Fig. 5).
+Black-box transferability.
+Since DistractAttack uses
+white-box optimization, we assess its applicability in the
+black-box setting. Following standard transfer-based black-
+box evaluation [19, 25, 28], each perturbation is optimized
+on a source model and applied unchanged to a target. Fig. 5
+evaluates four complementary axes.
+Cross-variant trans-
+fer among SAM2.1, DAM4SAM, SAMURAI, SAMITE,
+and SAM2Long yields off-diagonal Q ranges of 0.076–
+0.192 under OP and 0.447–0.642 under VP. All variants
+use SAM2.1-L, with N = 20 for OP. Transfer across the
+T, S, B+, and L sizes also remains effective, showing gen-
+eralization across scales. For long-horizon transfer, pertur-
+bations optimized over frames 0–100 on ten randomly se-
+lected samples are evaluated unchanged at frames 400, 700,
+and 1000. On SAM2.1-L, Q increases by 28.7% for Dis-
+tractAttack versus 46.1% for UAP-SAM2, supporting the
+long-term effect of our trajectory-focused optimization over
+the consecutive-frame optimization of UAP-SAM2. Com-
+plementary VOS transfer is provided in Appendix 9.2.
+6. Ablation Studies
+Unless varied, both settings use 10 optimization passes,
+with ϵ = 8/255 for VP and ϵ = 4/255 for OP. The default
+OP rollout uses N = 20 frames.
+Across the attack objectives, mask suppression weakens
+both tasks but induces little drift.
+Displacement (Ldisp)
+redirects this failure toward spatial misdirection, while clut-
+ter corruption (Lclut) strengthens the attack across both
+tasks.
+Their combination reduces Q to 0.420 under VP
+and 0.076 under OP. Removing mask suppression raises
+OP DRE but is substantially weaker in Q and VOS Avg.
+For iteration length, ten passes substantially outperform
+five in both settings. Fifteen further improves VP but gains
+only 0.005 in OP Q while worsening DRE and VOS per-
+formance. We therefore retain ten passes. With increasing
+perturbation magnitude, a larger budget strengthens the
+attack but permits more visible perturbations. Both Q and
+VOS Avg. decrease with ϵ, while VP DRE peaks at the se-
+lected 8/255. Across sources of distractor evidence, se-
+mantic proposals provide broad coverage, while alternative
+masks and adversarial attention maps add decoder-specific
+cues. Removing any source weakens both tasks, and every
+reduced variant remains behind full CDS. For historical
+banks and the update policy, restricting E to the first or
+current frame weakens the attack. The current-frame vari-
+ant applies only to VP because OP optimizes the initializa-
+tion frame alone. FIFO replaces entries by arrival order,
+whereas uniform updates ignore consistency with existing
+distractors, so neither effectively preserves or prioritizes re-
+curring evidence. Full CDS performs best by maintaining
+a persistent E and prioritizing proposals supported by its
+most effective entries. Supporting ablations are given in
+Appendix 9.4.
+
+
+(a) Video Object Segmentation (VOS)
+VOSPGD OP
+Ours OP
+Ours VP
+(b) Visual Object Tracking (VOT)
+UAD VP
+UAP-SAM2 VP
+Ours VP
+Figure 6. Qualitative comparison of adversarial methods on (a) VOS and (b) VOT tasks. Columns represent propagation from left to
+right, where the first column is the prompted frame. Green denotes the clean SAM2.1-L prediction, while red denotes its prediction under
+the corresponding perturbation and setting. Across both tasks, DistractAttack causes more severe and persistent failures than baselines.
+Table 2. Ablation of DistractAttack on SAM2.1-L under video
+(VP) and one-shot (OP) perturbations.
+(a) Attack objectives and optimization.
+VP
+OP
+Setting
+Lmask Lclut Ldisp
+Q ↓DRE ↑VOS Avg.↓Q ↓DRE ↑VOS Avg.↓
+Attack objectives
+Lmask only
+✓
+0.631
+2.78
+68.42
+0.497
+0.78
+47.83
+w/o Lmask
+✓
+✓
+0.561
+9.89
+62.76
+0.244
+11.96
+34.12
+w/o Ldisp
+✓
+✓
+0.502
+6.99
+58.61
+0.291
+3.89
+37.64
+w/o Lclut
+✓
+✓
+0.491
+7.78
+56.94
+0.202
+4.05
+30.87
+Full
+✓
+✓
+✓
+0.420
+10.83
+50.97
+0.076
+9.28
+19.56
+Iteration length
+5 passes
+✓
+✓
+✓
+0.501
+5.77
+58.87
+0.119
+8.78
+24.83
+10 passes
+✓
+✓
+✓
+0.420
+10.83
+50.97
+0.076
+9.28
+19.56
+15 passes
+✓
+✓
+✓
+0.343
+13.67
+49.84
+0.071
+7.45
+20.41
+Perturbation magnitude
+ϵ = 4/255
+✓
+✓
+✓
+0.562
+10.44
+62.03
+0.076
+9.28
+19.56
+ϵ = 8/255
+✓
+✓
+✓
+0.420
+10.83
+50.97
+0.069
+8.49
+18.74
+ϵ = 16/255
+✓
+✓
+✓
+0.390
+9.51
+49.91
+0.046
+9.95
+17.82
+(b) CDS evidence and temporal design.
+VP
+OP
+Setting
+Psem
+t
+Palt
+t
+Patt
+t
+Q ↓DRE ↑VOS Avg.↓Q ↓DRE ↑VOS Avg.↓
+Distractor evidence
+Psem
+t
+only
+✓
+0.651
+7.42
+69.47
+0.312
+7.34
+39.52
+w/o Psem
+t
+✓
+✓
+0.553
+6.55
+63.38
+0.215
+4.56
+31.74
+w/o Palt
+t
+✓
+✓
+0.591
+8.91
+65.96
+0.290
+7.94
+37.21
+w/o Patt
+t
+✓
+✓
+0.501
+9.34
+58.79
+0.255
+8.12
+34.03
+History and routing
+FIFO E
+✓
+✓
+✓
+0.611
+4.55
+67.14
+0.211
+5.44
+31.02
+Uniform routing
+✓
+✓
+✓
+0.591
+6.55
+64.81
+0.155
+7.43
+26.41
+First-frame banks
+✓
+✓
+✓
+0.742
+1.44
+69.91
+0.131
+8.71
+22.00
+Current-frame banks
+✓
+✓
+✓
+0.581
+7.40
+58.34
+–
+–
+–
+Full CDS
+✓
+✓
+✓
+0.420
+10.83
+50.97
+0.076
+9.28
+19.56
+Defense Case Study. We evaluate complementary feature-
+and memory-level defenses against DistractAttack. Robust-
+SAM [27] adversarially adapts the singular values of
+selected convolutional weights.
+We further repurpose
+SAM2Long’s attention modulation [9] to attenuate low-
+confidence memory keys and limit uncertain time steps and
+initialization errors. Robust-SAM and our memory defense
+raise Q from 0.420 to 0.515 and 0.476, respectively. Com-
+bined, they reach 0.532 Q and reduce DRE from 10.83% to
+8.45%, but remain well below the clean Q of 0.836. Exist-
+ing feature and memory controls therefore offer only partial
+protection. Details are provided in Appendix 10.
+7. Conclusion
+We examined how adversarial perturbations compromise
+target identity in SAM2. Although recurrent memory pro-
+motes temporal consistency, it can propagate perturbation-
+induced local ambiguity into persistent tracking failure. We
+introduced DistractAttack, a distractor-centric attack that
+exploits plausible competing regions rather than relying
+solely on foreground suppression. Its Counterfactual Dis-
+tractor Search jointly follows clean and attacked trajecto-
+ries, identifies model-supported distractors, and accumu-
+lates their evidence over time to sustain failure.
+Across
+VOT and VOS, DistractAttack remains effective under
+both perturbation settings and long temporal horizons,
+while generalizing and transferring across model scales and
+tracker variants. These results identify distractor-induced
+failure and initialization sensitivity as key vulnerabilities
+of SAM2-based trackers, motivating stronger robustness
+mechanisms in video foundation models.
+
+
+Broader Societal Impact
+This work provides new insight into the vulnerabilities of
+SAM2. We hope these findings can inform future efforts
+to better understand and mitigate such failure modes, con-
+tributing to safer and more reliable deployment.
+Acknowledgments
+This research was funded by Khalifa University of Sci-
+ence and Technology through the Faculty Start-Ups under
+Project ID: KU-INT-FSU-2005-8474000775. This research
+was also supported by KU Research Center for Advanced
+Intelligent Systems (AIS), Khalifa University of Science
+and Technology (KU-AIS).
+References
+[1] Naveed Akhtar, Ajmal Mian, Navid Kardan, and Mubarak
+Shah. Advances in adversarial attacks and defenses in com-
+puter vision: A survey.
+IEEE Access, 9:155161–155196,
+2021. 1
+[2] Basit Alawode, Yuhang Guo, Mehnaz Ummar, Naoufel
+Werghi, Jorge Dias, Ajmal Mian, and Sajid Javed. Utb180: A
+high-quality benchmark for underwater tracking. In ACCV,
+2022. 6, 1
+[3] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. Sam 3: Segment anything with concepts. In In-
+ternational Conference on Learning Representations, pages
+138846–138923, 2026. 2
+[4] Ruixiang Chen, Guolei Sun, Yawei Li, Jie Qin, and Luca
+Benini. Him2sam: Enhancing sam2 with hierarchical mo-
+tion estimation and memory optimization towards long-term
+tracking. In Chinese Conference on Pattern Recognition and
+Computer Vision (PRCV), pages 276–291. Springer, 2025. 1,
+2, 7
+[5] Wei Chen and Yunqi Zhang. Csa: Crafting adversarial ex-
+amples via content and style attacks. Journal of Information
+Security and Applications, 89:103974, 2025. 1, 2
+[6] Xuesong Chen, Xiyu Yan, Feng Zheng, Yong Jiang, Shu-
+Tao Xia, Yong Zhao, and Rongrong Ji.
+One-shot adver-
+sarial attacks on visual tracking with dual attention.
+In
+2020 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 10173–10182. IEEE, 2020.
+1, 3, 6
+[7] Zhigang Dai, Bolun Cai, and Junying Chen. Unimoco: un-
+supervised, semi-supervised and fully-supervised visual rep-
+resentation learning. In 2022 IEEE International Conference
+on Systems, Man, and Cybernetics (SMC), pages 3099–3106.
+IEEE, 2022. 5
+[8] Henghui Ding, Kaining Ying, Chang Liu, Shuting He,
+Xudong Jiang, Yu-Gang Jiang, Philip H. S. Torr, and Song
+Bai. Mosev2: A more challenging dataset for video object
+segmentation in complex scenes, 2025. 6, 1
+[9] Shuangrui Ding, Rui Qian, Xiaoyi Dong, Pan Zhang, Yuhang
+Zang, Yuhang Cao, Yuwei Guo, Dahua Lin, and Jiaqi Wang.
+Sam2long: Enhancing sam 2 for long video segmentation
+with a training-free memory tree. In 2025 IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), pages
+13614–13624. IEEE, 2025. 1, 2, 7, 8, 3
+[10] Heng Fan, Hexin Bai, Liting Lin, Fan Yang, Peng Chu,
+Ge Deng, Sijia Yu, Harshit, Mingzhen Huang, Juehuan Liu,
+Yong Xu, Chunyuan Liao, Lin Yuan, and Haibin Ling. Lasot:
+A high-quality large-scale single object tracking benchmark,
+2020. 6, 1
+[11] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy.
+Explaining and harnessing adversarial examples.
+arXiv
+preprint arXiv:1412.6572, 2014. 6
+[12] Jindong Gu, Hengshuang Zhao, Volker Tresp, and Philip HS
+Torr. Segpgd: An effective and efficient adversarial attack
+for evaluating and boosting segmentation robustness.
+In
+European Conference on Computer Vision, pages 308–325.
+Springer, 2022. 6, 2
+[13] Qing Guo, Xiaofei Xie, Felix Juefei-Xu, Lei Ma, Zhong-
+guo Li, Wanli Xue, Wei Feng, and Yang Liu.
+Spark:
+Spatial-aware online incremental attack against visual track-
+ing, 2020. 1, 2
+[14] Qing Guo, Ziyi Cheng, Felix Juefei-Xu, Lei Ma, Xiaofei Xie,
+Yang Liu, and Jianjun Zhao. Learning to adversarially blur
+visual object tracking, 2021. 1, 2
+[15] Dongshen Han, Chaoning Zhang, Sheng Zheng, Chang Lu,
+Yang Yang, and Heng Tao Shen. Sam meets uap: Attacking
+segment anything model with universal adversarial perturba-
+tion, 2024. 1, 2
+[16] Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A
+large high-diversity benchmark for generic object tracking
+in the wild. IEEE Transactions on Pattern Analysis and Ma-
+chine Intelligence, 43(5):1562–1577, 2021. 6, 1
+[17] Yihao Huang, Yue Cao, Tianlin Li, Felix Juefei-Xu, Di Lin,
+Ivor W Tsang, Yang Liu, and Qing Guo. On the robustness of
+segment anything. arXiv preprint arXiv:2305.16220, 2023.
+1, 2
+[18] Shuai Jia, Yibing Song, Chao Ma, and Xiaokang Yang. Iou
+attack: Towards temporally coherent black-box adversarial
+attack for visual object tracking. In 2021 IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+pages 6705–6714. IEEE, 2021. 1, 2
+[19] Kaixun Jiang, Lingyi Hong, Zhaoyu Chen, Pinxue Guo,
+Zeng Tao, Yan Wang, and Wenqiang Zhang. Exploring the
+adversarial robustness of video object segmentation via one-
+shot adversarial attacks.
+In Proceedings of the 31st ACM
+International Conference on Multimedia (MM’23), pages
+8598–8607. ACM, 2023. 1, 2, 3, 6, 7
+[20] Yan Jiang, Guisheng Yin, Ye Yuan, Jingjing Chen, and
+Zhipeng Wei. Cross-point adversarial attack based on feature
+neighborhood disruption against segment anything model.
+In 2024 IEEE International Conference on Multimedia and
+Expo (ICME), pages 1–6. IEEE, 2024. 1, 2
+[21] Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna,
+Yonglong Tian, Phillip Isola, Aaron Maschinot, Ce Liu, and
+Dilip Krishnan. Supervised contrastive learning. Advances
+in neural information processing systems, 33:18661–18673,
+2020. 5
+
+
+[22] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C. Berg, Wan-Yen Lo, Piotr Doll´ar, and
+Ross Girshick. Segment anything, 2023. 1, 2
+[23] Matej Kristan, Jiˇr´ı Matas, Martin Danelljan, Michael Fels-
+berg, Hyung Jin Chang, Luka ˇCehovin Zajc, Alan Lukeˇziˇc,
+Ondrej Drbohlav, Zhongqun Zhang, Khanh-Tung Tran, et al.
+The first visual object tracking segmentation vots2023 chal-
+lenge results. In 2023 IEEE/CVF International Conference
+on Computer Vision Workshops (ICCVW), pages 1788–1810.
+IEEE, 2023. 2, 6, 1
+[24] Ping Li, Yu Zhang, Li Yuan, Jian Zhao, Xianghua Xu, and
+Xiaoqin Zhang. Adversarial attacks on video object segmen-
+tation with hard region discovery. IEEE Transactions on Cir-
+cuits and Systems for Video Technology, 34(6):5049–5062,
+2023. 1, 2, 6
+[25] Siyuan Liang, Xingxing Wei, Siyuan Yao, and Xiaochun
+Cao. Efficient adversarial attacks for visual object tracking.
+In European Conference on Computer Vision, pages 34–50.
+Springer, 2020. 1, 2, 6, 7
+[26] Yuchen Liu and Pengxu Wei. Cross-prompt adversarial at-
+tack on segment anything model.
+In Proceedings of the
+2024 12th international conference on communications and
+broadband networking, pages 34–39, 2024. 1, 2
+[27] Jiahuan Long, Zhengqin Xu, Tingsong Jiang, Wen Yao,
+Shuai Jia, Chao Ma, and Xiaoqian Chen. Robust sam: On the
+adversarial robustness of vision foundation models. In Pro-
+ceedings of the AAAI Conference on Artificial Intelligence,
+pages 5775–5783, 2025. 2, 6, 8, 3
+[28] Jiahao Lu, Xingyi Yang, and Xinchao Wang. Unsegment
+anything by simulating deformation.
+In 2024 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 24294–24304. IEEE, 2024. 1, 2, 6, 7
+[29] Kira Maag and Asja Fischer.
+Uncertainty-weighted loss
+functions for improved adversarial attacks on semantic seg-
+mentation. In 2024 IEEE/CVF Winter Conference on Appli-
+cations of Computer Vision (WACV), page 3894–3902. IEEE,
+2024. 5
+[30] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt,
+Dimitris Tsipras, and Adrian Vladu. Towards deep learn-
+ing models resistant to adversarial attacks. arXiv preprint
+arXiv:1706.06083, 2017. 6
+[31] Jordi Pont-Tuset, Federico Perazzi, Sergi Caelles, Pablo Ar-
+bel´aez, Alex Sorkine-Hornung, and Luc Van Gool. The 2017
+davis challenge on video object segmentation. arXiv preprint
+arXiv:1704.00675, 2017. 6, 1
+[32] Yi Qin, Rui Wang, Tao Huang, Tong Xiao, and Liping Jing.
+Sam encoder breach by adversarial simplicial complex trig-
+gers downstream model failures.
+In 2025 IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), pages
+10624–10634. IEEE, 2025. 1, 2
+[33] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang
+Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman
+R¨adle, Chloe Rolland, Laura Gustafson, et al. Sam 2: Seg-
+ment anything in images and videos. In International Con-
+ference on Learning Representations, pages 28085–28128,
+2025. 1, 2, 6, 3
+[34] Hao Ren, Shoudong Han, Huilin Ding, Ziwen Zhang, Hong-
+wei Wang, and Faquan Wang.
+Focus on details: Online
+multi-object tracking with diverse fine-grained representa-
+tion, 2023. 5
+[35] Yifan Shen, Zhengyuan Li, and Gang Wang.
+Practi-
+cal region-level attack against segment anything models.
+In 2024 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition Workshops (CVPRW), pages 194–203.
+IEEE, 2024. 1, 2
+[36] Ye Sun, Xin Wang, Jiaming Zhang, Yifeng Gao, Yixu Wang,
+Yifan Ding, Qixian Zhang, Henghui Ding, Xingjun Ma, and
+Yu-Gang Jiang. Darkllm: Learning language-driven adver-
+sarial attacks with large language models.
+arXiv preprint
+arXiv:2605.18868, 2026. 2
+[37] Jovana Videnovic, Alan Lukezic, and Matej Kristan.
+A
+distractor-aware memory for visual object tracking with
+sam2.
+In 2025 IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 24255–24264.
+IEEE, 2025. 1, 2, 6, 7
+[38] Song Xia, Wenhan Yang, Yi Yu, Xun Lin, Henghui Ding,
+Ling-Yu Duan, and Xudong Jiang. Transferable adversarial
+attacks on sam and its downstream models, 2025. 1, 2
+[39] Haodong Xiao, Wenbo Yu, Hao Fang, Shuoyang Sun, Bin
+Chen, Xuan Wang, and Shu-Tao Xia.
+Diffusion-based
+natural adversarial perturbations towards segment anything
+model. In ICASSP 2026-2026 IEEE International Confer-
+ence on Acoustics, Speech and Signal Processing (ICASSP),
+pages 13637–13641. IEEE, 2026. 1, 2
+[40] Ning Xu, Linjie Yang, Yuchen Fan, Dingcheng Yue, Yuchen
+Liang, Jianchao Yang, and Thomas Huang.
+Youtube-vos:
+A large-scale video object segmentation benchmark. arXiv
+preprint arXiv:1809.03327, 2018. 6, 1
+[41] Qianxiong Xu, Lanyun Zhu, Chenxi Liu, Guosheng Lin,
+Cheng Long, Ziyue Li, and Rui Zhao.
+Samite: Position
+prompted sam2 with calibrated memory for visual object
+tracking. arXiv preprint arXiv:2507.21732, 2025. 1, 2, 4,
+7
+[42] Cheng-Yen Yang,
+Hsiang-Wei Huang,
+Wenhao Chai,
+Zhongyu Jiang, and Jenq-Neng Hwang. Samurai: Adapting
+segment anything model for zero-shot visual tracking with
+motion-aware memory.
+arXiv preprint arXiv:2411.11922,
+2024. 1, 2, 7
+[43] Chenshuang
+Zhang,
+Chaoning
+Zhang,
+Taegoo
+Kang,
+Donghun Kim, Sung-Ho Bae, and In So Kweon. Attack-sam:
+Towards attacking segment anything model with adversarial
+examples, 2023. 1, 2, 5, 6
+[44] Zongmin Zhang, Zhen Sun, Yifan Liao, Wenhan Dong, Xin-
+lei He, Xingshuo Han, Shengmin Xu, and Xinyi Huang.
+Backdoor attacks on prompt-driven video segmentation
+foundation models. arXiv preprint arXiv:2512.22046, 2025.
+2
+[45] Sheng Zheng, Chaoning Zhang, and Xinhong Hao. Black-
+box targeted adversarial attack on segment anything (sam).
+IEEE Transactions on Multimedia, 27:1901–1913, 2024. 1,
+2
+[46] Ziqi Zhou, Yufei Song, Minghui Li, Shengshan Hu, Xi-
+anlong Wang, Leo Yu Zhang, Dezhong Yao, and Hai Jin.
+
+
+Darksam: Fooling segment anything model to segment noth-
+ing. Advances in Neural Information Processing Systems,
+37:49859–49880, 2024. 1, 2
+[47] Ziqi Zhou, Yifan Hu, Yufei Song, Zijing Li, Shengshan Hu,
+Leo Yu Zhang, Dezhong Yao, Long Zheng, and Hai Jin. Van-
+ish into thin air: Cross-prompt universal adversarial attacks
+for sam2. Advances in Neural Information Processing Sys-
+tems, 38:142839–142861, 2026. 2, 5, 6
+
+
+Distractors are the Real Enemy: Visual Distraction Adversarial Perturbations on
+SAM2-Based Video Tracking and Segmentation
+Supplementary Material
+• 8. Implementation Details
+– 8.1. Attack Optimization
+– 8.2. CDS Configuration
+– 8.3. Datasets and Metrics
+– 8.4. Baseline Adaptations
+• 9. Supplementary Evaluation
+– 9.1. Per-Dataset VOT: Generic vs. Distractor-heavy
+– 9.2. VOS Transferability
+– 9.3. Additional Qualitative Results
+– 9.4. Additional Ablations
+• 10. Defense Study
+– 10.1. Robust-SAM
+– 10.2. Training-Free Attention Modulation
+8. Implementation Details
+This section gives the settings used to reproduce Distrac-
+tAttack. We follow the VP and OP definitions in Sec. 4.
+The victim model and its tracker state remain differentiable,
+while all model parameters are frozen.
+8.1. Attack Optimization
+Shared setup. We use the official pretrained SAM 2.1-L
+checkpoint [33]. Frames follow the official SAM 2 prepro-
+cessing and are resized to 1024 × 1024. The perturbation
+is initialized from δ ∼U(−ϵ, ϵ), with ϵ defaulting to 8/255
+and 4/255, for VP and OP respectively, and updated with
+the projected signed gradient rule in Eq. (18). After every
+update, δ is projected onto the ℓ∞ball of radius ϵ. When
+composing an attacked frame, x + δ is clipped to [0, 1] be-
+fore normalization.
+Video perturbation. VP optimizes one perturbation for
+each video. The same perturbation is applied to every frame
+in its fixed window.
+Clean and attacked trajectories are
+propagated together during each pass. Their detached banks
+provide the temporal context used by the attack losses.
+One-shot perturbation. OP changes only the prompted
+frame.
+Later frames remain clean and provide evidence
+for the target and effective-distractor banks.
+The clutter
+objective acts on the perturbed frame 0 encoder features,
+while later clean frames contribute detached evidence to the
+banks. Neither setting uses ground truth beyond the initial-
+ization prompt during optimization.
+8.2. CDS Configuration
+Banks. The target bank stores at most 20 foreground and
+background prototype pairs. Later entries require predicted-
+IoU and objectness scores above 0.5 and 0, respectively.
+We use a novelty threshold of τnov = 0.98. These checks
+prevent closely repeated observations from filling the bank.
+The effective-distractor bank has capacity K = 10.
+Its
+merge threshold is θmerge = 0.85 and its EMA rate is
+η = 0.1. We set the routing temperature to τw = 0.10
+and the clutter-loss contrastive temperature to τc = 0.07.
+Loss.
+A grid search over {0.25, 0.5, 1.0} for each loss
+weight selected λM = λD = λC = 1.0. The global and
+local clutter weights are ηG = 1.0 and ηL = 1.0.
+8.3. Datasets and Metrics
+Visual object tracking. The VOT set contains 104 ran-
+domly sampled sequences from LaSOT [10], UTB180 [2],
+GOT-10k [16], and LaSOT-ext [10].
+The LaSOT and
+UTB180 subset follows the distractor-distilled DiDi selec-
+tion [37].
+GOT-10k and LaSOT-ext add broader track-
+ing conditions including videos with no distractors. Each
+source dataset contributes 22-31 randomly sampled se-
+quences. Each sequence contributes a long 100-frame win-
+dow, in contrast to 15 frame window used by published
+UAP-SAM2. None of these evaluation splits was used to
+train the original SAM 2 model.
+Video object segmentation. The VOS set contains 100
+videos. We sample 25 videos from each source and se-
+lect one target object. DAVIS 2017 [31] provides accurate
+boundaries. YouTube-VOS 2018 validation [40] adds broad
+appearance and category variation. The MOSEv2 [8] con-
+tains crowded scenes and severe occlusion. SA-V test [33]
+covers motion and disappearance. Similarily, each video is
+100 frame long. None of these evaluation splits was used to
+train the original SAM 2 model.
+VOT metrics.
+Each predicted mask is converted to its
+tight box, with an empty mask denoting target absence.
+Let Is contain the evaluated frames of sequence s, ex-
+cluding initialization and unavailable annotations, and let
+Ns = |Is|.
+We denote the predicted box, ground-truth
+box, and their IoU by bBs,t, Bs,t, and os,t, respectively. We
+follow VOTS2023 [23] for all our VOT metrics. We use
+os,t = 1 when both boxes are empty and os,t = 0 when
+only one is empty. Tracking quality is
+Q = 1
+S
+S
+X
+s=1
+1
+Ns
+X
+t∈Is
+os,t.
+(20)
+Let Vs ⊆Is contain the visible-target frames. Within
+this set, Ts counts predictions with nonzero overlap, Ds
+
+
+counts non-empty predictions with zero overlap, and Ms
+counts empty predictions. The remaining metrics are
+Acc = 1
+S
+S
+X
+s=1
+1
+Ts
+X
+t∈Vs
+os,t>0
+os,t,
+(21)
+Rob = 1
+S
+S
+X
+s=1
+Ts
+Ts + Ds + Ms
+,
+(22)
+DRE = 1
+S
+S
+X
+s=1
+Ds
+Ts + Ds + Ms
+,
+(23)
+NRE = 1
+S
+S
+X
+s=1
+Ms
+Ts + Ds + Ms
+.
+(24)
+Tables report DRE and NRE as percentages. A stronger
+attack lowers Q, accuracy, and robustness while increasing
+DRE and NRE.
+VOS metrics. Following SAM 2 [33], we report the stan-
+dard J &F score, which averages mask IoU and contour
+accuracy over annotated non-initialization frames and then
+over videos. Lower is stronger.
+8.4. Baseline Adaptations
+Common protocol. We retain each baseline’s defining ob-
+jective and apply it under the same VP or OP constraint
+as DistractAttack. VP aggregates each method’s native loss
+over the sequence. OP perturbs only the initialization frame.
+When a method requires a reference after frame 0, we use
+detached clean predictions rather than future annotations.
+All methods share the same preprocessing, prompts, tem-
+poral windows, random seeds, ℓ∞bounds.
+Image-based attacks. We adapt AttackSAM, DarkSAM,
+CPA, SegPGD, and UAD from static image segmenta-
+tion to the recurrent setting. AttackSAM [43] applies its
+ClipMSE objective to the selected SAM 2 mask predic-
+tion. DarkSAM [46] retains its semantic-decoupling and
+wavelet-texture terms. CPA [27] retains its negative-feature
+objective over the top responses shared by point and box
+prompts. SegPGD [12] treats each SAM 2 output as binary
+segmentation, uses the detached clean mask as its pseudo-
+label, and retains its iteration-dependent weighting sched-
+ule.
+UAD [28] preserves its two-stage feature objective
+with deformation fields. VP aggregates this objective across
+the rollout, while OP applies it to the initialization entering
+memory.
+UAP-SAM2. UAP-SAM2 [47] combines target scanning,
+semantic confusion, encoder feature shift, and temporal fea-
+ture misalignment. We retain these terms while changing
+setting to VP and OP.
+One-shot
+VOS
+attacks.
+ARA-Attack
+[24]
+and
+VOSPGD [19] remain in their native one-shot setting.
+ARA-Attack recomputes the initialization gradient map
+Table 3. Per-dataset VOT results extending Table 1
+VP
+OP
+Dataset
+Seq.
+Q ↓
+DRE (%)↑
+NRE (%)↑
+Q ↓
+DRE (%)↑
+NRE (%)↑
+Distractor-heavy
+LaSOT
+22
+0.443
+11.02
+14.44
+0.010
+8.47
+71.95
+UTB180
+22
+0.385
+18.37
+10.01
+0.156
+12.18
+47.84
+Generic
+GOT-10k
+31
+0.470
+4.52
+14.96
+0.049
+9.76
+70.93
+LaSOT-ext
+29
+0.377
+11.70
+22.01
+0.095
+7.18
+69.04
+Total
+104
+0.420
+10.83
+15.77
+0.076
+9.28
+65.73
+and applies its hard-region learner. VOSPGD writes the
+perturbed prompt frame to memory and replays its clean
+counterpart as a memory-conditioned query. For VOT, the
+clean mask obtained from the initialization box provides the
+binary reference, while VOS uses the given initialization
+mask.
+9. Supplementary Evaluation
+9.1. Per-Dataset VOT: Generic vs. Distractor-heavy
+To complement the aggregate VOT evaluation in Tab. 1, we
+report results separately on LaSOT, UTB180, GOT-10k, and
+LaSOT-ext (See Tab. 3). All datasets use the same fixed
+windows, initialization protocol, and attack settings as the
+main evaluation. Results are macro-averaged within each
+dataset with equal weight per sequence, while the combined
+row covers all sequences. This breakdown examines consis-
+tency across datasets with some variation shown. GOT-10k
+and LaSOT-ext cover broader generic tracking conditions
+and are not restricted to scenes with explicit competing ob-
+jects, yet exhibit comparable degradation. Thus, the attack
+does not require a literal distractor in every frame: CDS
+exploits model-supported off-target regions when available,
+while foreground suppression remains effective otherwise.
+9.2. VOS Transferability
+We evaluate VP transfer across SAM2.1, DAM4SAM,
+SAMURAI, SAMITE, and SAM2Long on DAVIS 2017.
+All variants use the SAM2.1-L checkpoint.
+The consis-
+tently low off-diagonal scores in Fig. 7 demonstrate strong
+transfer across tracker variants. DistractAttack remains ef-
+fective despite their different tracking and memory designs,
+revealing a shared vulnerability across SAM 2-based track-
+ers.
+9.3. Additional Qualitative Results
+Tracker variants. As shown in Fig. 8, we compare iden-
+tical frames and prompts across DAM4SAM, SAMURAI,
+HiM2SAM, SAMITE, and SAM2Long on VOT VP. The
+examples complement the aggregate results in the main pa-
+per.
+Additional method comparisons As shown in Fig. 9 and
+Fig. 10, we extend the qualitative comparison with FAN,
+
+
+SAM2
+DM
+SR
+SM
+S2L
+SAM2
+DM
+SR
+SM
+S2L
+59.38
+56.36
+55.88
+57.21
+60.11
+61.33
+55.81
+56.89
+59.96
+61.25
+60.52
+60.23
+49.12
+55.22
+56.98
+59.91
+59.36
+57.21
+54.63
+57.31
+60.85
+59.15
+58.25
+57.99
+56.72
+Figure 7. Cross-variant VOS transferability under VP. Each
+row denotes the source tracker used to optimize the perturbation,
+while each column denotes the evaluated target tracker. Lower
+J &F indicates a stronger attack.
+Table 4.
+Effect of the signed-
+gradient step size. Arrows indi-
+cate a stronger attack.
+Setting Step
+Q ↓DRE%↑VOS Avg.↓
+VP
+1/255 0.453
+6.87
+66.51
+2/255 0.420
+10.83
+50.97
+4/255 0.445
+5.67
+53.09
+OP
+1/255 0.076
+9.28
+19.56
+2/255 0.122
+10.23
+21.67
+Table 5.
+Ablation of uniform
+and distractor-weighted Ldisp.
+Arrows indicate a stronger at-
+tack.
+Setting Displacement
+Q ↓DRE%↑VOS Avg.↓
+VP
+Unweighted
+0.450
+2.51
+54.11
+Bank-weighted 0.420
+10.83
+50.97
+OP
+Unweighted
+0.145
+1.43
+24.13
+Bank-weighted 0.076
+9.28
+19.56
+SegPGD, DarkSAM, UAD and UAP-SAM2 on VOT OP
+and VOS VP.
+Model size variants. As shown in Fig. 11, we next compare
+the Tiny, Small, Base+, and Large sizes of SAM 2.1 on the
+same sequences.
+Additional and more clear qualitative comparisons and
+temporal visualizations are provided in the accompanying
+supplementary video.
+9.4. Additional Ablations
+Step Size. As in Tab. 4, we fix the perturbation bound and
+optimization passes and vary only the signed-gradient step
+size. Under VP, 2/255 gives the strongest overall degra-
+dation (Q = 0.420, DRE= 10.83%, VOS Avg.= 50.97),
+while under OP, 1/255 performs best overall (Q = 0.076,
+VOS Avg.= 19.56). These settings are therefore used as the
+default step sizes.
+Unweighted versus weighted displacement. As in Tab. 5,
+we isolate the weighting in Ldisp while retaining the same
+proposal set, effective-distractor bank, Lmask, and Lclut.
+The unweighted variant assigns 1/|Pt| to every active pro-
+posal as in Eq. (12). The weighted variant uses the bank-
+supported wj
+t in Eqs. (13) and (14). Thus, the comparison
+Table 6. Defense evaluation on SAM 2.1-L under VP and OP Dis-
+tractAttack. The attack is recomputed against each defense.
+VP
+OP
+Method
+Q
+DRE% NRE%
+Q
+DRE% NRE%
+Clean reference
+0.836
+0.68
+0.42
+0.836
+0.68
+0.42
+DistractAttack
+0.420
+10.83
+15.77
+0.076
+9.28
+65.73
+Memory modulation [9] 0.476
+9.52
+10.33
+0.101
+10.55
+60.21
+Robust-SAM [27]
+0.515
+9.01
+10.12
+0.129
+3.45
+54.45
+Both [9, 27]
+0.532
+8.45
+10.42
+0.133
+4.51
+55.45
+changes only how foreground displacement is routed.
+10. Defense Study
+The main paper tests a feature-level defense and a memory-
+level defense. We describe both adaptations here. The at-
+tack remains white box and is recomputed against each de-
+fended model.
+10.1. Robust-SAM
+Robust-SAM [27] adapts the singular values of selected
+convolutional weights. We apply this parameterization to
+the convolutional weights in the final image-encoder block
+of SAM 2.1-L. Each selected weight is decomposed as
+W = UPV ⊤, where U and V remain frozen and only the
+diagonal matrix P is optimized. All other SAM 2 parame-
+ters remain fixed.
+We train a separate defended model for each perturba-
+tion setting using CPA adversarial examples generated from
+5,000 videos in the SA-V training split [33]. The training
+bound matches the corresponding evaluation setting, with
+ϵ = 8/255 for VP and ϵ = 4/255 for OP. Each model is
+adapted for 15 epochs using a batch size of 64 and Adam
+with a learning rate of 10−3. Thus, the VP and OP results
+use independently adapted checkpoints rather than a single
+jointly trained defense.
+10.2. Training-Free Attention Modulation
+SAM2Long [9] improves memory cross-attention by
+weighting historical memories according to their object-
+confidence scores.
+We isolate this mechanism from the
+original memory-tree formulation and apply it directly to
+SAM 2.1-L, without additional training or learnable param-
+eters. For the N + 1 memory entries, we first construct
+linearly spaced weights between wlow and whigh:
+wstd
+i
+= wlow+i −1
+N
+(whigh −wlow) ,
+i = 1, . . . , N+1.
+(25)
+We then sort the associated confidence scores in ascend-
+ing order, oI1 ≤· · · ≤oIN+1, and assign larger weights to
+memories with higher scores. The corresponding memory
+
+
+DAM4SAM
+SAM2Long
+HiM2SAM
+SAMITE
+SAMURAI
+Figure 8. Qualitative comparison of perturbed tracker variants. Columns represent propagation from left to right, where the first column is
+the prompted frame. Green and red denote the clean reference and perturbed predictions, respectively.
+keys are modulated before cross-attention as
+wIi = wstd
+i
+,
+f
+MIi = wIiMIi,
+i = 1, . . . , N + 1.
+(26)
+Unlike SAM2Long, we adopt a wider weighting inter-
+val of [0.75, 1.25] to increase the modulation strength,
+thereby amplifying the distinction between low- and high-
+confidence memories. Thus, reliable high-confidence mem-
+ories contribute more strongly to the memory attention,
+while low-confidence entries are naturally suppressed.
+As shown in Tab. 6, both defenses recover part of the
+lost tracking quality. Robust-SAM gives the larger individ-
+ual gain. Their combination reaches the strongest defended
+result, yet it remains well below clean tracking. Existing
+feature and memory controls therefore reduce the failure
+without removing it. A stronger defense may need to es-
+timate identity reliability before each memory is read.
+FAN
+DarkSAM
+SegPGD
+Ours
+Figure 9. Qualitative comparison of VOT OP methods. Columns represent propagation from left to right, where the first column is the
+prompted frame. Green and red denote the clean reference and perturbed predictions.
+
+
+Clean SAM2
+UAP-SAM2
+UAD
+Ours
+Figure 10. Qualitative comparison of VOS VP methods. Green denotes the Clean SAM2 reference prediction, while red denotes the
+perturbed prediction.
+Tiny
+Small
+Base+
+Large
+Figure 11. Qualitative comparison of perturbed SAM2.1 model-size variants on VOT VP. Columns represent propagation from left to right,
+where the first column is the prompted frame. Green and red denote the clean reference and perturbed predictions.

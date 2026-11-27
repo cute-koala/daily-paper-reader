@@ -1,0 +1,2822 @@
+MoCA4D: Monocular 3D Bounding Box Lifting and Tracking
+with Camera and Object Motion
+Changwoo Jeon
+Jongyoo Kim
+Yonsei University
+(a) Monocular 3D Bounding Box Estimation
+Rotation
+Dimen
+sions
+Position
+Z
+Y
+X
+D
+3D position, dimensions, rotation
+Object Motion
+Camera Motion
+Y
+t0
+Z
+X
+(b) 4D Geometry Predicted by MoCA4D:
+t1
+t2
+Z
+Z
+Y
+X
+Y
+X
+Object Motion
+Camera Motion
+3D position, dimensions, rotation
+Object Motion
+Camera Motion
+Monocular Video
+Figure 1. Object-centric 4D geometry predicted by MoCA4D. MoCA4D predicts camera and object motion alongside 3D bounding box
+tracks from monocular video. The box tracks describe object position, orientation, and dimensions over time.
+Abstract
+Monocular 3D bounding box tracking must account for both
+object motion and changes in camera viewpoint. Framewise
+box lifting with temporal filtering leaves these motion compo-
+nents implicit, while static-scene fusion assumes stationary
+objects. We introduce MoCA4D, a framework for 3D box
+lifting and tracking from monocular video, associated 2D
+box prompts, and camera intrinsics. An observation branch
+estimates per-frame geometry, while a dynamic branch pre-
+dicts a camera transformation shared across objects and a
+separate rigid transformation for each object. We propose
+Star Optimization to refine current depth and orientation us-
+ing the observation and historical boxes propagated through
+these transformations. The refined box then guides subse-
+quent propagation. Across all evaluated objects in Argoverse
+2 and ADT, Star Optimization reduces center motion error
+by 38.1% and 38.7%, respectively, relative to Kalman fil-
+tering of the same observations. On MOVi-F, the dynamic
+branch achieves the lowest corner and rotation errors and
+the highest IoU among the evaluated methods over eight-
+transition motion windows. Real-data camera-only controls
+further link predicted object motion to improved localization
+on dynamic-object tracks.
+1. Introduction
+As illustrated in Fig. 1, MoCA4D estimates object-centric
+4D geometry from monocular video, predicting 3D position,
+orientation, and dimensions over time, alongside object and
+1
+arXiv:2611.34370v1  [cs.CV]  25 Nov 2026
+
+
+camera SE(3) motions. These quantities support robotic
+manipulation [18, 30, 47], dynamic-scene simulation for au-
+tonomous driving [16, 27], and viewpoint and object-motion
+control in video generation [11, 34]. Box trajectories also
+provide compact controls for character animation [3, 44].
+Monocular image 3D detectors [6, 19, 20, 43, 46] esti-
+mate per-frame object geometry without explicitly modeling
+motion across frames. Their tracking extensions, such as
+WildDet3D [19], apply Kalman filtering and rotation smooth-
+ing to framewise boxes without separately estimating camera
+and object motion. Video-based methods [9, 17] integrate
+observations across time to estimate temporally consistent
+3D geometry. However, their temporal formulations are built
+on the assumption that objects remain static in the world
+frame.
+MoCA4D operates in per-frame camera coordinates, esti-
+mating 3D bounding boxes and separate camera and object
+SE(3) motions through two branches sharing a visual back-
+bone. The observation branch uses a box-conditioned Dense
+Prediction Transformer (DPT) [31] and a regression head to
+predict geometry from a 2D prompt. The dynamic branch
+processes consecutive frames with correspondence features
+and object-conditioned spatial tokens. Dedicated camera
+and object queries aggregate information from these features
+through attention. Separate regression heads then map the
+updated camera queries to a shared camera SE(3) transforma-
+tion and the updated object queries to object-specific SE(3)
+transformations.
+We propose Star Optimization to connect the two
+branches through motion-guided temporal refinement. It
+propagates historical boxes into the current camera frame
+and combines them with the current observation through
+closed-form depth and orientation updates. The refined box
+then feeds back into subsequent propagation.
+Our contributions are as follows:
+• We introduce MoCA4D, a monocular 3D box lifting and
+tracking framework that jointly predicts object geometry,
+shared camera motion, and object-specific rigid motion.
+• We propose Star Optimization, a closed-form refinement
+of current depth and orientation using the observation and
+motion-propagated historical boxes, with recursive reuse
+of the refined state.
+• MoCA4D achieves efficient box lifting and accurate rigid-
+motion propagation, while Star Optimization reduces
+tracking motion errors relative to filtering the same ob-
+servations. Controlled ablations examine motion decom-
+position, supervision, and temporal refinement.
+2. Related Work
+3D Geometry Prediction.
+3D bounding box prediction
+estimates an object’s position, orientation, and dimensions,
+providing a compact representation of its geometry. Cube
+R-CNN [6] and OVMono3D [43] recover these parameters
+from object region features, while DetAny3D [46] uses a
+prompt-conditioned transformer. MoCA3D [20] formulates
+box prediction in the image plane, estimating projected cor-
+ners and their depths through dense heatmaps and depth
+maps. Other representations include normalized object coor-
+dinates [38] and meshes [13], which encode canonical sur-
+face coordinates and object shape, respectively. MoCA4D
+adopts 3D bounding boxes in its observation branch, provid-
+ing competitive geometric accuracy and efficient inference
+for subsequent motion estimation and tracking.
+Object Motion Estimation.
+Rigid object motion can be
+recovered from 3D point trajectories or estimated through
+6DoF pose tracking. Point-tracking methods [2, 45] and
+4D reconstruction models [10, 21, 28, 36] recover temporal
+3D correspondences, from which object transformation can
+be obtained through fitting. SM4RT [25] explicitly models
+structured scene motion using rigid motion bases. For 6DoF
+tracking, FoundationPose [40] uses RGB-D observations
+with a CAD model, while BundleSDF [39] jointly tracks and
+reconstructs unknown objects from RGB-D video. MoCA4D
+directly predicts camera and object SE(3) transformations
+from monocular video. This object-level parameterization
+preserves cuboid rigidity during propagation.
+3D Bounding Box Tracking.
+DetAny4D [17] jointly esti-
+mates 3D boxes and camera poses and promotes temporal
+consistency in a shared world coordinate system. Boxer [9]
+lifts 2D prompts to 3D boxes and integrates them through
+tracking and fusion for static scene reconstruction. Wild-
+Det3D [19] filters framewise boxes with Kalman filter-
+ing [23] and quaternion smoothing. MoCA4D explicitly
+predicts object-specific rigid motion separately from the
+camera transformation, using their composition to propagate
+historical boxes before refining the current estimate.
+3. Method
+3.1. Formulation and Overall Pipeline
+Given a monocular RGB sequence {It}T
+t=1, associated
+2D box prompts {bi
+t}, and optional camera calibration,
+MoCA4D estimates 3D box trajectories with separate cam-
+era and object motion. Here, t indexes frames, i identifies
+objects, and Kt denotes the camera intrinsic matrix for frame
+t, obtained from supplied calibration or constructed from the
+field-of-view (FoV) predicted by DA3.
+We represent a 3D bounding box as Bi
+t = (ci
+t, Ri
+t, si
+t),
+where ci
+t ∈R3 is its center, Ri
+t ∈SO(3) is its orientation,
+and si
+t ∈R3
++ contains its dimensions.
+Let Ct ∈SE(3) denote the camera-to-world pose at time
+t, and Oi
+t ∈SE(3) the object-to-world pose of object i. For
+a rigid object, eliminating its fixed local point coordinates
+2
+
+
+Overall Pipeline
+Dynamic 
+Branch
+DA3 
+Backbone
+Cam SE(3)
+Object SE(3)
+Star
+Optimization
+Monocular Video Input
+Observation 
+Branch
+y
+x
+z
+Prev Frame Feature
+Curr Frame Feature
+Cross Frame Transformer
+2D Box Prompt
+CAM FoV (Optional)
+Dynamic Branch
+Cam Query
+Obj Query
+box
+Spatial Token
+Cam Decoder
+Obj Decoder
+3D BBox
+(center, dimension, rotation)
+Obj Head
+Cam Head
+Obj SE(3)
+Cam SE(3)
+Pred 3D Bbox Track
+Star Optimization
+Corrected history
+t-3
+t-2
+t-1
+Dynamic
+Rollout
+Observation Branch
+DA3 L11
+L15
+box
+Camera
+Ray
+Conf Head
+Confidence
+Corrected 
+Box
+Refine
+current
+obs
+L19
+L23
+Box Transformer
+DPT
+Query Decoder
+Learnable
+Query
+Box Head
+3D BBox
+Self Attention
+Cross Attention
+Frozen
+Figure 2. MoCA4D pipeline. A shared frozen backbone supports per-frame 3D box lifting and separate camera and object motion prediction.
+Star Optimization propagates corrected historical boxes into the current frame, refines the observed depth and orientation, and stores the
+refined box for subsequent propagation. The lower panels detail the two branches and this feedback loop.
+gives:
+xi
+t = C−1
+t Oi
+t(Oi
+t−1)−1Ct−1xi
+t−1.
+(1)
+Define the shared camera coordinate change and the object
+motion in the previous camera frame as:
+At = C−1
+t Ct−1,
+Bi
+t = C−1
+t−1Oi
+t(Oi
+t−1)−1Ct−1.
+(2)
+Here, Bi
+t applies object motion within the previous cam-
+era coordinate frame, and At subsequently maps the result
+into the current camera coordinate frame. Eq. (1) therefore
+becomes:
+xi
+t = AtBi
+txi
+t−1.
+(3)
+The camera transformation At is shared across objects.
+MoCA4D implements this formulation through obser-
+vation and dynamic branches built on a shared geometric
+backbone, Depth Anything 3 [24]. The observation branch
+estimates 3D bounding boxes from the current image and 2D
+box prompts, while the dynamic branch predicts ˆAt and ˆBi
+t
+from consecutive frames. These transformations propagate
+historical box estimates into the current camera frame. Star
+Optimization combines the propagated estimates with the
+current observation to produce the refined box ˆBi
+t, whose
+center and orientation are reused for subsequent propagation.
+3
+
+
+3.2. Observation Branch
+The observation branch estimates a 3D bounding box for
+each object in the current frame. As shown in Fig. 2, we ex-
+tract features from four intermediate layers of the DA3 back-
+bone [24] and fuse them using a box-conditioned DPT [31].
+Following the box-conditioning design of MoCA3D [20],
+we inject a spatial prior encoding positions relative to the 2D
+box and apply cross-attention [37] between image features
+and box embeddings.
+We adopt a query decoder inspired by WildDet3D [19].
+For each box prompt, a learnable query attends to the en-
+coded prompt and the fused DPT features. The query is
+further conditioned on camera-ray embeddings computed
+from Kt, together with features from the final DA3 layer.
+The resulting query feeds separate box and confidence
+heads. The box head predicts the projected center as an
+offset from the prompt center, depth, dimensions, and a 6D
+rotation representation. Given the predicted projected center
+(ˆui
+t, ˆvi
+t) and depth ˆzi
+t, the 3D center is recovered as:
+ˆci
+t = ˆzi
+tK−1
+t
+ˆui
+t
+ˆvi
+t
+1⊤.
+(4)
+Together, these predictions define the observation box ˆBi,obs
+t
+in camera coordinates.
+We supervise box parameters with ℓ1 losses and con-
+fidence with quality-target binary cross-entropy at every
+decoder layer. Adaptation accounts for the 24 equivalent
+cuboid parameterizations. Inference uses the final decoder
+output; confidence does not determine the fixed Star fusion
+weights. Appendix A.1 details the observation decoder and
+its losses.
+3.3. Dynamic Branch
+The dynamic branch extracts motion cues from consecutive
+DA3 feature maps through a cross-frame transformer that
+alternates within-frame self-attention and bidirectional cross-
+attention. Soft correspondences following GMFlow [42] pro-
+vide differentiable displacement cues, which are combined
+with appearance features through a residual MLP. Apply-
+ing 7 × 7 RoI Align within the two box prompts yields 98
+spatial tokens Zi
+t, augmented with geometric and temporal
+embeddings.
+Camera queries and auxiliary register tokens attend to
+global features without box conditioning. Object queries
+are conditioned on both box prompts and the previous 3D
+center, and attend to features augmented with a spatial box
+prior. At each decoder layer, an additional cross-attention
+operation reads Zi
+t into the object queries through a learned
+scalar gate. Query attention allows object queries to read
+global context while preventing camera and register queries
+from reading object queries. The camera estimate therefore
+remains independent of the target box and is shared across
+objects.
+Separate prediction heads decode the camera and object
+queries into 6D rotation representations and 3D motion vec-
+tors. The rotations are converted to ˆRA
+t and ˆRB,i
+t
+. The cam-
+era head directly predicts translation ˆtA
+t , while the object
+head predicts displacement ˆdi
+t at the previous center ¯ci
+t−1
+in the previous camera frame. The corresponding object
+translation is:
+ˆtB,i
+t
+= ˆdi
+t +
+
+I −ˆRB,i
+t
+
+¯ci
+t−1.
+(5)
+The resulting transformations ˆAt ˆBi
+t propagate the cuboid
+according to Eq. (3).
+We supervise both heads using the ground-truth transfor-
+mations from Eq. (2). The camera loss LA combines rotation
+geodesic error with a Smooth L1 translation loss. The object
+loss LB applies Smooth L1 penalties to the rotation geodesic
+error and the displacement error. The displacement target is
+evaluated at the same supplied center.
+We additionally supervise cuboid corners propagated
+through successive predicted transformations and apply an
+auxiliary 2D endpoint-error loss to the matching displace-
+ment. The complete objective is:
+Ldyn = LA + LB + 0.1 Lroll + Lflow,
+(6)
+where Lroll is a Smooth L1 corner loss over rollout windows
+of up to eight transitions. The flow loss averages endpoint
+errors over valid matches in normalized image coordinates
+and is applied where ground-truth optical flow is available.
+3.4. Star Optimization
+Star Optimization computes the closed-form minimizers of
+the fixed candidate objectives below, combining the current
+observation with past corrected boxes propagated by the
+dynamic branch. For clarity, we omit the object index i and
+write the current observation as ˆBobs
+t
+= (ˆcobs
+t
+, ˆRobs
+t
+,ˆsobs
+t
+),
+where the three components are the 3D center, orientation,
+and dimensions in the current camera frame.
+Let Ht contain the three preceding observation times. For
+each τ ∈Ht, we propagate the corrected box ˆBτ to the time
+t using Eq. (3). Each candidate supplies its own propagated
+center to the dynamic branch at every step.
+We denote its resulting center and orientation by ˜cτ→t
+and ˜Rτ→t. Before combining orientations, we align equiva-
+lent cuboid axis assignments to the current observation by
+matching dimensions and resolving ties through rotation
+agreement.
+We keep the observed projected center and dimensions
+fixed and optimize the depth and orientation. Let ˆzobs
+t
+be the
+third component of ˆcobs
+t
+. The center is parameterized as:
+ct(z) = zrt,
+rt = ˆcobs
+t
+ˆzobs
+t
+.
+(7)
+4
+
+
+GT
+WildDet3D
+OVMono3D
+MoCA4D
+Obs
+MoCA4D
+Star
+(a) Camera motion + static object
+(b) Object motion + moving camera
+Figure 3. Qualitative comparison of monocular 3D box tracking. Projected 3D boxes for (a) a static object viewed by a moving camera
+and (b) a moving object viewed by a moving camera. Compared with framewise predictions, Star uses motion-propagated history to stabilize
+box orientation while following changes in viewpoint and object pose. Rows show ground truth, WildDet3D, OVMono3D, MoCA4D
+observations, and MoCA4D with Star Optimization.
+rt is the viewing ray through the observed projected cen-
+ter. Varying z therefore changes depth while preserving the
+image projection.
+Each propagated candidate constrains the current box,
+forming a star centered at time t. With these candidates fixed,
+we optimize current depth z and orientation R ∈SO(3) by
+minimizing:
+Ec(z) = wo∥ct(z) −ˆcobs
+t
+∥2
+2
++ λc
+X
+τ∈Ht
+wτ,t∥ct(z) −˜cτ→t∥2
+2,
+ER(R) = wodF (R, ˆRobs
+t
+)2
++ λR
+|Ht|
+X
+τ∈Ht
+dF (R, ˜Rτ→t)2,
+(8)
+where dF (U, V) = ∥U −V∥F /
+√
+2 is the chordal rotation
+distance. The weight wo controls the current observation
+terms, and λc and λR control the historical center and rota-
+tion terms.
+The two objectives are separable and admit closed-form
+solutions. Since P
+τ∈Ht wτ,t = 1, the optimal depth is:
+z⋆
+t = r⊤
+t
+ woˆcobs
+t
++ λc
+P
+τ∈Ht wτ,t˜cτ→t
+
+(wo + λc)∥rt∥2
+2
+.
+(9)
+For rotation, we form the weighted matrix as:
+Mt = wo ˆRobs
+t
++ λR
+|Ht|
+X
+τ∈Ht
+˜Rτ→t.
+(10)
+Given its SVD Mt = UtΣtV⊤
+t , the optimal rotation is:
+R⋆
+t = Ut diag
+ 1, 1, det(UtV⊤
+t )
+
+V⊤
+t .
+(11)
+The final box is:
+ˆBt =
+ ct(z⋆
+t ), R⋆
+t ,ˆsobs
+t
+
+.
+(12)
+Propagation applies rigid transformations to each historical
+cuboid. The output dimensions are re-estimated from the
+current observation and are not constrained to remain con-
+stant over time. We store this corrected box as a new history
+state.
+3.5. Training Datasets and Settings
+We train the two branches independently with a frozen
+DA3-Large [24] backbone. Observation pretraining uses
+Omni3D [6]; dynamic pretraining uses MOVi-F [14]. We
+adapt both on HOT3D [4], HOI4D [26], AV2 [41], and
+Virtual KITTI 2 [7]. Appendix A describes the feature repre-
+sentations, supervision, and training schedules.
+Star Optimization requires no training. We set wo = 0.25,
+λc = 0.5, and λR = 1, with center weights (1/7, 2/7, 4/7)
+from oldest to newest and uniform rotation weights.
+5
+
+
+Table 1. Observation branch accuracy and inference efficiency. All methods use the same tight 2D box prompts, including SAM2-derived
+boxes, and provided camera intrinsics. Bold and underlined values indicate the best and second-best results, respectively, in each ranked
+column.
+ARKitScenes
+SUNRGBD
+Omni3D
+Efficiency
+Method
+PAGuv ↓
+IoU3D ↑
+PAGuv ↓
+IoU3D ↑
+PAGuv ↓
+IoU3D ↑
+Throughput ↑
+VRAM
+(px)
+(%)
+(px)
+(%)
+(px)
+(%)
+(obs/s)
+(GiB)
+DetAny3D
+38.54
+36.57
+29.68
+37.13
+16.51
+21.53
+3.18
+6.62
+OVMono3D-Lift
+30.04
+41.43
+25.54
+37.69
+14.030
+23.195
+6.71
+7.69
+WildDet3D
+30.16
+38.02
+26.63
+33.25
+13.37
+21.29
+4.11
+6.42
+MoCA4D (ours)
+29.23
+37.88
+24.22
+36.57
+13.790
+19.874
+11.52
+1.65
+Table 2. Rigid object motion on MOVi-F with GT reset-8. Cuboids are reinitialized from ground truth every eight frame transitions.
+Offline variants access future frames; causal variants use current and past frames. EPE3D and MTE are in meters, and Object RE is in
+degrees. Bold and underline mark the best and second-best values across both groups.
+Offline
+Causal
+Method
+EPE3D ↓
+MTE ↓
+IoU ↑
+RE ↓
+EPE3D ↓
+MTE ↓
+IoU ↑
+RE ↓
+SM4RT
+0.2327
+0.1954
+0.6877
+3.96
+0.2609
+0.2226
+0.6632
+4.26
+ARROW
+0.3688
+0.2839
+0.6385
+4.43
+0.3091
+0.2449
+0.6705
+4.55
+Point4D
+0.3475
+0.2941
+0.6115
+4.21
+0.3440
+0.2883
+0.6113
+4.52
+4RC
+0.2892
+0.2360
+0.6712
+4.30
+0.2854
+0.2321
+0.6774
+4.42
+V-DPM
+0.2904
+0.2432
+0.6504
+4.24
+0.2732
+0.2288
+0.6680
+4.38
+L4P
+0.3854
+0.3141
+0.5867
+5.55
+0.3846
+0.3135
+0.5856
+6.06
+TAPIP3D + DA3
+1.2372
+1.0291
+0.2651
+—
+0.9195
+0.7074
+0.3632
+—
+MoCA4D
+—
+—
+—
+—
+0.2186
+0.1777
+0.7172
+2.88
+4. Experiments
+4.1. Experimental Setup
+Baselines.
+For box lifting,
+we compare with De-
+tAny3D [46], OVMono3D-Lift [43], and WildDet3D [19].
+For object motion, we use SM4RT [25], ARROW [10],
+Point4D [21], 4RC [28], V-DPM [36], L4P [2], and
+TAPIP3D [45] with Depth Anything 3 [24]. Tracking com-
+pares framewise boxes, causal Kalman filtering [23] with
+rotation smoothing, and Star Optimization. Our filtering
+adaptation of WildDet3D uses actual elapsed time and ex-
+cludes future-track corrections. We also evaluate Boxer’s [9]
+framewise lifting with gravity. Since its tracking and fu-
+sion assume static objects in world coordinates, we use its
+per-frame lifting outputs to evaluate trajectories that include
+moving objects.
+Datasets and inputs.
+Observation accuracy is evaluated on
+Omni3D [6], rigid motion on MOVi-F [14], and tracking on
+150 AV2 validation recordings [41] and 10 ADT Apartment
+recordings [29]. ADT is an external evaluation dataset used
+neither for pretraining nor adaptation of either MoCA4D
+branch. For Omni3D, we follow the MoCA3D [20] pre-
+processing protocol, using tight 2D box annotations supple-
+mented with boxes derived from SAM2 [32] where tight
+boxes are unavailable. AV2 uses SAM 2-derived pseudo
+boxes, while ADT uses ground-truth 2D boxes. For box lift-
+ing and tracking, all methods receive the same associated 2D
+prompts and provided camera intrinsics. These experiments
+evaluate geometry and 3D trajectories conditional on the
+prompts, without object detection or identity association.
+4.2. Monocular 3D Bounding Box Estimation
+We report PAGuv [20], the mean pixel error of projected 3D
+box corners after Hungarian matching at a 512-pixel refer-
+ence resolution, and 3D IoU. In Table 1, MoCA4D achieves
+the lowest PAGuv on ARKitScenes [5] and SUNRGBD [35]
+and the second-lowest overall on Omni3D, with competitive
+IoU on the two indoor datasets. It processes 11.52 obser-
+vations per second, providing 1.7× the throughput of the
+fastest baseline with the lowest GPU memory footprint of
+1.65 GiB.
+4.3. Rigid Object Motion Estimation
+To compare object-level SE(3) prediction from monocu-
+lar video, we convert point-tracking and 4D reconstruc-
+tion outputs into rigid transformations. Up to 64 shared
+points per object are selected from its initial ground-truth
+mask using an 8 × 8 box grid. Equal-weight Kabsch align-
+ment [22] fits a rigid transformation to their predicted 3D
+correspondences, which propagates the initial cuboid. Pre-
+dicted camera poses map world-space trajectories into the
+6
+
+
+Table 3. 3D tracking on dynamic objects. Common scored tracks of 2,692 AV2 and 109 ADT objects, including stationary periods.
+All tracks start from predicted boxes without GT resets. Bold/underline rank common-input rows; Boxer additionally uses gravity.
+CE/CME/RME are center/center-motion/rotation-motion errors.
+AV2
+ADT
+Method
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(%)
+(m)
+(m/s)
+(◦/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+WildDet3D
+20.566
+9.519
+11.251
+61.410
+0.038
+1.216
+1.237
+113.372
+WildDet3D + Kalman
+20.031
+9.429
+6.323
+26.419
+0.024
+1.240
+0.941
+58.500
+OVMono3D-Lift
+8.929
+14.110
+9.139
+52.184
+1.533
+0.820
+0.673
+242.610
+OVMono3D-Lift + Kalman
+9.443
+13.883
+5.577
+21.288
+1.499
+0.816
+0.457
+112.558
+MoCA4D observation
+21.559
+6.317
+14.111
+33.468
+2.643
+0.627
+1.132
+189.651
+MoCA4D observation + Kalman
+20.583
+6.228
+7.654
+32.191
+2.200
+0.621
+0.694
+111.070
+MoCA4D Star, A only
+16.468
+6.768
+4.878
+12.402
+2.653
+0.619
+0.451
+68.229
+MoCA4D Star, A + B
+19.528
+6.381
+4.826
+12.788
+2.784
+0.612
+0.449
+67.531
+Additional input: gravity direction
+Boxer + gravity
+0.798
+43.660
+6.532
+65.140
+7.643
+0.320
+0.644
+152.410
+Table 4. Observation conditioning. 2,000-update ablation on
+10,523 validation objects. Bold marks column best.
+Prior map
+Box attention
+PAGuv ↓
+IoU ↑
+(px)
+(%)
+On
+On
+32.11
+14.54
+Off
+On
+33.45
+14.34
+Off
+Off
+33.15
+14.14
+Table 5. Motion decomposition. 384-update ablation; full rollouts
+on 147 MOVi-F scenes. Bold marks column best.
+Prediction
+Loss
+CE ↓
+IoU ↑
+Box RE ↓
+(m)
+(%)
+(◦)
+A, B
+Separate
+1.1970
+31.72
+26.78
+A, B
+Composed
+1.2481
+30.89
+26.71
+AB
+Direct
+1.2672
+31.06
+26.72
+current camera frame. Each baseline receives a metric scale
+from first-frame ground-truth depth, fixed across objects and
+time. TAPIP3D uses DA3-predicted depth and intrinsics;
+MoCA4D predicts the camera and object transformations
+directly.
+We initialize each cuboid from ground truth and reset it
+every eight frame transitions (GT reset-8), measuring motion
+accuracy within fixed windows while limiting accumulated
+drift. Causal methods use current and past frames; offline
+methods can access future frames. EPE3D [15] averages
+Euclidean errors over the eight corresponding cuboid cor-
+ners, and MTE takes the temporal median for each corner
+before averaging. We also report 3D IoU and Object RE, the
+geodesic error of inter-frame object rotation.
+MoCA4D achieves the best values across all four metrics
+among the causal and offline methods in Table 2. Relative to
+offline SM4RT, IoU rises from 0.6877 to 0.7172 and Object
+RE falls from 3.96◦to 2.88◦. In full rollouts without resets,
+MoCA4D retains higher IoU (0.5683 versus 0.5621) and
+lower Object RE (2.95◦versus 4.20◦), while SM4RT has
+lower corner errors. Table S2 gives the full-rollout results
+for all methods.
+Object motion on real data.
+For each frame pair, we
+propagate the previous ground-truth cuboid to the next frame
+using the same predicted A and either predicted B or B = I.
+On dynamic frame pairs from AV2 and ADT, predicted B re-
+duces displacement and corner propagation errors, although
+AV2 rotation error increases. Predicted A reduces relative
+camera translation and rotation errors compared with A = I.
+Appendix E gives the one-step evaluation protocol, uncer-
+tainty estimates, and results on HOT3D and HOI4D.
+4.4. 3D Bounding Box Tracking
+The complete pipeline starts from predicted boxes and up-
+dates them causally without ground-truth resets. Fig. 3
+presents qualitative comparisons in which Star Optimization
+produces more consistent box orientations across frames than
+framewise predictions, for both static and moving objects un-
+der camera motion. Appendix B shows additional AV2 and
+HOT3D sequences. We measure 3D IoU, Euclidean center
+error (CE), center motion error (CME), and rotation motion
+error (RME). CME measures changes in world-coordinate
+center error per second; RME measures disagreement with
+ground-truth inter-frame cuboid rotation per second after
+equivalent axis alignment. CE and IoU complement these
+motion metrics by capturing absolute localization error, in-
+7
+
+
+Table 6. Star refinement controls. 48-frame windows from 110 recordings. Left: center weights and history strength with recursion. Right:
+seed policies with uniform weights and λc = 0.25. Bold marks each panel’s best value.
+Weights
+λc
+CE (m) ↓
+CME (m/s) ↓
+Uniform
+0.50
+2.0814
+1.8638
+Recent
+0.25
+2.0355
+2.4285
+Recent
+0.50
+2.0654
+1.7185
+History seeds
+CE (m) ↓
+CME (m/s) ↓
+RME (◦/s) ↓
+Raw
+2.0280
+2.5181
+64.6550
+Nonrecursive
+2.0309
+2.5470
+56.0739
+Recursive
+2.0352
+2.5406
+41.2063
+cluding constant position bias.
+Dynamic-object comparison.
+Table 3 compares exter-
+nal baselines and matched controls on 2,692 AV2 and 109
+ADT dynamic objects. We select objects with GT speed
+≥0.05 m/s or reliable rotation speed ≥5◦/s sustained for
+0.5 s. We evaluate all eligible observations, including station-
+ary periods. Appendix G extends this comparison to HOT3D
+and HOI4D.
+On AV2, Star Optimization has lower CE, CME, and
+RME than both external Kalman baselines, but lower IoU
+than WildDet3D + Kalman. On ADT, it achieves the highest
+IoU and lowest CE/CME among common-input methods;
+WildDet3D + Kalman has lower RME. Boxer with additional
+gravity has higher ADT IoU and lower CE.
+Camera and object motion in tracking.
+Table 3 com-
+pares Star Optimization using A+B with camera-only refine-
+ment (B = I) and Kalman filtering of the same MoCA4D
+observations. Checkpoints and observations remain fixed,
+and each variant uses its own predicted states without GT.
+Relative to camera-only refinement, adding B increases IoU
+by 3.060 percentage points on AV2 and 0.131 on ADT and
+lowers CE and CME on both datasets, although AV2 RME
+increases. Compared with Kalman filtering, Star Optimiza-
+tion lowers CME and RME on both datasets. AV2 has lower
+IoU and higher CE, while ADT improves across all four
+metrics.
+All-object tracking and localization.
+Across all evaluated
+objects, including static objects, Star Optimization reduces
+CME by 38.1% on AV2 and 38.7% on ADT and lowers
+RME relative to Kalman filtering of the same MoCA4D
+observations. A separate diagnostic on ADT shows that
+replacing only the predicted center with GT yields a much
+larger IoU increase than replacing size or rotation, indicating
+that center localization remains a major limitation. Table S6
+reports the all-object comparison, and Table S12 breaks
+down the ADT result by box component.
+4.5. Ablation Studies
+Observation conditioning.
+We train all variants for 2,000
+updates on the same 60,000-object subset, with matched ini-
+tialization, frozen backbone, and seed. These ablation check-
+points are separate from the benchmark models in Table 1;
+scores are macro-averaged across the Omni3D datasets on
+10,523 validation objects. Full conditioning gives the lowest
+projected-corner error and highest IoU (Table 4). Removing
+the prior map raises PAGuv by 1.34 pixels; removing both
+the prior and box attention raises it by 1.04 pixels and lowers
+IoU by 0.40 percentage points.
+Motion decomposition and supervision.
+We compare
+three variants: predicting A and B with separate supervision;
+predicting A and B with direct motion supervision applied
+only to their composition AB; and directly predicting and
+supervising AB without separate A and B outputs. All
+variants share the same architecture and training settings
+except for the motion output heads and their supervision.
+We train each variant for 384 updates on the same 1,024
+MOVi-F scenes and evaluate full rollouts on 147 validation
+scenes. In Table 5, separate supervision yields the lowest CE
+and highest IoU while its box RE is slightly higher than that
+of the two alternatives.
+Star refinement.
+Table 6 isolates weighting and feedback.
+At λc = 0.5, recent weights lower CE and CME; increasing
+λc trades higher CE for lower CME. Raw seeds propagate
+uncorrected boxes; nonrecursive seeds apply one correction;
+recursive seeds reuse refined states. With uniform weights
+and λc = 0.25, recursion lowers RME relative to both al-
+ternatives. Appendix I compares history lengths, fusion
+weights, and feedback policies.
+5. Conclusion
+We introduce MoCA4D for monocular 3D bounding box
+lifting and tracking with explicit camera and object motion.
+Star Optimization connects these predictions over time by
+fusing current observations with propagated history, enabling
+causal tracking of moving objects. Experiments demonstrate
+efficient box lifting and more accurate center localization
+than the external Kalman baselines on dynamic-object tracks
+in AV2 and ADT. MoCA4D also yields lower center motion
+errors on both datasets and lower rotation motion errors on
+AV2.
+MoCA4D relies on associated 2D box prompts, leaving
+object detection outside its scope. Its rigid motion formula-
+8
+
+
+tion captures each object’s overall movement but does not
+model internal articulation or deformation.
+LLM Usage Statement
+We used OpenAI Codex, powered by OpenAI Astra, to as-
+sist with assessing research ideas, planning experiments,
+and implementing training and experimental code. It also
+supported manuscript preparation through sentence-level
+revisions and writing assistance. The authors take full re-
+sponsibility for all scientific claims, experimental results,
+and the final manuscript.
+References
+[1] Adel Ahmadyan, Liangkai Zhang, Artsiom Ablavatski, Jian-
+ing Wei, and Matthias Grundmann. Objectron: A large scale
+dataset of object-centric videos in the wild with pose anno-
+tations. In 2021 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 7818–7827. IEEE,
+2021.
+[2] Abhishek Badki, Hang Su, Bowen Wen, and Orazio Gallo.
+L4P: Towards unified low-level 4D vision perception. In
+International Conference on 3D Vision (3DV), 2026.
+[3] Sherwin Bahmani, Xian Liu, Wang Yifan, Ivan Skorokhodov,
+Victor Rong, Ziwei Liu, Xihui Liu, Jeong Joon Park, Sergey
+Tulyakov, Gordon Wetzstein, et al.
+Tc4d:
+Trajectory-
+conditioned text-to-4d generation. In European Conference
+on Computer Vision, pages 53–72. Springer, 2024.
+[4] Prithviraj Banerjee, Sindi Shkodrani, Pierre Moulon, Shreyas
+Hampali, Shangchen Han, Fan Zhang, Linguang Zhang, Jade
+Fountain, Edward Miller, Selen Basol, et al. Hot3d: Hand and
+object tracking in 3d from egocentric multi-view videos. In
+2025 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 7061–7071. IEEE, 2025.
+[5] Gilad Baruch, Zhuoyuan Chen, Afshin Dehghan, Tal Dimry,
+Yuri Feigin, Peter Fu, Thomas Gebauer, Brandon Joffe, Daniel
+Kurz, Arik Schwartz, et al. Arkitscenes: A diverse real-world
+dataset for 3d indoor scene understanding using mobile rgb-d
+data. arXiv preprint arXiv:2111.08897, 2021.
+[6] Garrick Brazil, Abhinav Kumar, Julian Straub, Nikhila Ravi,
+Justin Johnson, and Georgia Gkioxari. Omni3d: A large
+benchmark and model for 3d object detection in the wild. In
+2023 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 13154–13164. IEEE, 2023.
+[7] Yohann Cabon, Naila Murray, and Martin Humenberger. Vir-
+tual kitti 2. arXiv preprint arXiv:2001.10773, 2020.
+[8] Holger Caesar, Varun Bankiti, Alex H. Lang, Sourabh Vora,
+Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan,
+Giancarlo Baldan, and Oscar Beijbom. nuscenes: A mul-
+timodal dataset for autonomous driving.
+arXiv preprint
+arXiv:1903.11027, 2019.
+[9] Daniel DeTone, Tianwei Shen, Fan Zhang, Lingni Ma, Julian
+Straub, Richard Newcombe, and Jakob Engel. Boxer: Robust
+lifting of open-world 2d bounding boxes to 3d. In European
+Conference on Computer Vision (ECCV), 2026.
+[10] Ilya Fradlin, Christian Schmidt, Jens Piekenbrinck, Karim
+Knaebel, Gonzalo Martin Garcia, and Bastian Leibe. Arrow:
+Arbitrary reconstruction and tracking of 4d observations in
+the wild. arXiv preprint arXiv:2610.01314, 2026.
+[11] Xiao Fu, Xian Liu, Xintao Wang, Sida Peng, Menghan Xia,
+Xiaoyu Shi, Ziyang Yuan, Pengfei Wan, Di Zhang, and Dahua
+Lin. 3dtrajmaster: Mastering 3d trajectory for multi-entity
+motion in video generation. In International Conference on
+Learning Representations, pages 6680–6693, 2025.
+[12] Andreas Geiger, Philip Lenz, and Raquel Urtasun. Are we
+ready for autonomous driving? the kitti vision benchmark
+suite. In Conference on Computer Vision and Pattern Recog-
+nition (CVPR), 2012.
+[13] Georgia Gkioxari, Jitendra Malik, and Justin Johnson. Mesh
+r-cnn. In Proceedings of the IEEE/CVF international confer-
+ence on computer vision, pages 9785–9795, 2019.
+[14] Klaus Greff, Francois Belletti, Lucas Beyer, Carl Doersch,
+Yilun Du, Daniel Duckworth, David J. Fleet, Dan Gnanapra-
+gasam, Florian Golemo, Charles Herrmann, Thomas Kipf, Ab-
+hijit Kundu, Dmitry Lagun, Issam Laradji, Hsueh-Ti (Derek)
+Liu, Henning Meyer, Yishu Miao, Derek Nowrouzezahrai,
+Cengiz Oztireli, Etienne Pot, Noha Radwan, Daniel Rebain,
+Sara Sabour, Mehdi S. M. Sajjadi, Matan Sela, Vincent Sitz-
+mann, Austin Stone, Deqing Sun, Suhani Vora, Ziyu Wang,
+Tianhao Wu, Kwang Moo Yi, Fangcheng Zhong, and Andrea
+Tagliasacchi. Kubric: A scalable dataset generator. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 3749–3761, 2022.
+[15] Xiuye Gu, Yijie Wang, Chongruo Wu, Yong Jae Lee, and
+Panqu Wang. Hplflownet: Hierarchical permutohedral lat-
+tice flownet for scene flow estimation on large-scale point
+clouds. In 2019 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 3249–3258. IEEE,
+2019.
+[16] Georg Hess, Carl Lindstr¨om, Maryam Fatemi, Christoffer Pe-
+tersson, and Lennart Svensson. Splatad: Real-time lidar and
+camera rendering with 3d gaussian splatting for autonomous
+driving. In 2025 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 11982–11992. IEEE,
+2025.
+[17] Jiawei Hou, Shenghao Zhang, Can Wang, Zheng Gu, Yonggen
+Ling, Taiping Zeng, Xiangyang Xue, and Jingbo Zhang. De-
+tAny4D: Detect anything 4D temporally in a streaming RGB
+video. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 32798–
+32807, 2026.
+[18] Cheng-Chun Hsu, Bowen Wen, Jie Xu, Yashraj Narang, Xiao-
+long Wang, Yuke Zhu, Joydeep Biswas, and Stan Birchfield.
+Spot: Se (3) pose trajectory diffusion for object-centric manip-
+ulation. In 2025 IEEE International Conference on Robotics
+and Automation (ICRA), pages 4853–4860. IEEE, 2025.
+[19] Weikai Huang, Jieyu Zhang, Sijun Li, Taoyang Jia, Jiafei
+Duan, Yunqian Cheng, Jaemin Cho, Matthew Wallingford,
+Rustin Soraki, Chris Dongjoo Kim, Shuo Liu, Donovan Clay,
+Taira Anderson, Winson Han, Ali Farhadi, Bharath Hariharan,
+Zhongzheng Ren, and Ranjay Krishna. WildDet3D: Scal-
+ing promptable 3D detection in the wild. arXiv preprint
+arXiv:2604.08626, 2026.
+[20] Changwoo Jeon, Rishi Upadhyay, and Achuta Kadambi.
+Moca3d: Monocular 3d bounding box prediction in the image
+plane. In European Conference on Computer Vision, pages
+314–332. Springer, 2026.
+[21] Minsik Jeon, Jay Karhade, Deva Ramanan, and Shubham
+Tulsiani. Point4d: Long-range 4d motion reconstruction.
+arXiv preprint arXiv:2609.09145, 2026.
+[22] Wolfgang Kabsch. A solution for the best rotation to relate
+two sets of vectors. Foundations of Crystallography, 32(5):
+922–923, 1976.
+[23] Rudolph Emil Kalman. A new approach to linear filtering
+9
+
+
+and prediction problems. Journal of Basic Engineering, 82
+(1):35–45, 1960.
+[24] Haotong Lin, Sili Chen, Jun Hao Liew, Donny Y. Chen,
+Zhenyu Li, Guang Shi, Jiashi Feng, and Bingyi Kang. Depth
+anything 3: recovering the visual space from any views. arXiv
+preprint arXiv:2511.10647, 2025.
+[25] Shing Ho J Lin, Wenzhao Zheng, Dong Zhuo, Yuqi Wu,
+Jie Zhou, and Jiwen Lu.
+Sm4rt:
+Learning structured
+motion geometry for 4d reconstruction.
+arXiv preprint
+arXiv:2607.22534, 2026.
+[26] Yunze Liu, Yun Liu, Che Jiang, Kangbo Lyu, Weikang Wan,
+Hao Shen, Boqiang Liang, Zhoujie Fu, He Wang, and Li Yi.
+Hoi4d: A 4d egocentric dataset for category-level human-
+object interaction. In 2022 IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 20981–
+20990. IEEE, 2022.
+[27] William Ljungbergh, Adam Tonderski, Joakim Johnander,
+Holger Caesar, Kalle ˚Astr¨om, Michael Felsberg, and Christof-
+fer Petersson. Neuroncap: Photorealistic closed-loop safety
+testing for autonomous driving. In European Conference on
+Computer Vision, pages 161–177. Springer, 2024.
+[28] Yihang Luo, Shangchen Zhou, Yushi Lan, Xingang Pan, and
+Chen Change Loy. 4rc: 4d reconstruction via conditional
+querying anytime and anywhere. In ICML, 2026.
+[29] Xiaqing Pan, Nicholas Charron, Yongqian Yang, Scott Peters,
+Thomas Whelan, Chen Kong, Omkar Parkhi, Richard New-
+combe, and Yuheng (Carl) Ren. Aria Digital Twin: A new
+benchmark dataset for egocentric 3D machine perception. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision (ICCV), pages 20133–20143, 2023.
+[30] Georgy Ponimatkin, Martin C´ıfka, Tomas Soucek, M´ed´eric
+Fourmy, Yann Labb´e, Vladimir Petrik, and Josef Sivic. 6d ob-
+ject pose tracking in internet videos for robotic manipulation.
+In International Conference on Learning Representations,
+pages 32569–32596, 2025.
+[31] Ren´e Ranftl, Alexey Bochkovskiy, and Vladlen Koltun. Vi-
+sion transformers for dense prediction. In 2021 IEEE/CVF
+International Conference on Computer Vision (ICCV), pages
+12159–12168. IEEE, 2021.
+[32] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang
+Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman
+R¨adle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting
+Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan
+Wu, Ross Girshick, Piotr Doll´ar, and Christoph Feichtenhofer.
+SAM 2: Segment anything in images and videos. In Interna-
+tional Conference on Learning Representations, 2025.
+[33] Mike Roberts, Jason Ramapuram, Anurag Ranjan, Atulit Ku-
+mar, Miguel Angel Bautista, Nathan Paczan, Russ Webb,
+and Joshua M Susskind. Hypersim: A photorealistic syn-
+thetic dataset for holistic indoor scene understanding. In
+2021 IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), pages 10892–10902. IEEE, 2021.
+[34] Xincheng Shuai, Henghui Ding, Zhenyuan Qin, Hao Luo,
+Xingjun Ma, and Dacheng Tao. Free-form motion control:
+Controlling the 6d poses of camera and objects in video gen-
+eration. In 2025 IEEE/CVF International Conference on
+Computer Vision (ICCV), pages 12449–12458. IEEE, 2025.
+[35] Shuran Song, Samuel P Lichtenberg, and Jianxiong Xiao.
+Sun rgb-d: A rgb-d scene understanding benchmark suite. In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, pages 567–576, 2015.
+[36] Edgar Sucar, Eldar Insafutdinov, Zihang Lai, and Andrea
+Vedaldi. V-dpm: 4d video reconstruction with dynamic point
+maps. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 14502–
+14511, 2026.
+[37] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-
+reit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia
+Polosukhin. Attention is all you need. Advances in neural
+information processing systems, 30, 2017.
+[38] He Wang, Srinath Sridhar, Jingwei Huang, Julien Valentin,
+Shuran Song, and Leonidas J Guibas. Normalized object
+coordinate space for category-level 6d object pose and size
+estimation. In 2019 IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), pages 2637–2646.
+IEEE, 2019.
+[39] Bowen Wen, Jonathan Tremblay, Valts Blukis, Stephen Tyree,
+Thomas M¨uller, Alex Evans, Dieter Fox, Jan Kautz, and Stan
+Birchfield. Bundlesdf: Neural 6-dof tracking and 3d recon-
+struction of unknown objects. In 2023 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+606–617. IEEE, 2023.
+[40] Bowen Wen, Wei Yang, Jan Kautz, and Stan Birchfield. Foun-
+dationpose: Unified 6d pose estimation and tracking of novel
+objects. In 2024 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 17868–17879. IEEE,
+2024.
+[41] Benjamin Wilson, William Qi, Tanmay Agarwal, John Lam-
+bert, Jagjeet Singh, Siddhesh Khandelwal, Bowen Pan, Rat-
+nesh Kumar, Andrew Hartnett, Jhony Kaesemodel Pontes,
+Deva Ramanan, Peter Carr, and James Hays. Argoverse 2:
+Next generation datasets for self-driving perception and fore-
+casting. In Proceedings of the Neural Information Processing
+Systems Track on Datasets and Benchmarks, 2021.
+[42] Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, and
+Dacheng Tao. Gmflow: Learning optical flow via global
+matching. In 2022 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 8111–8120. IEEE,
+2022.
+[43] Jin Yao, Hao Gu, Xuweiyi Chen, Jiayun Wang, and Zezhou
+Cheng. Open vocabulary monocular 3d object detection. In
+2026 International Conference on 3D Vision (3DV), pages
+1801–1811. IEEE, 2026.
+[44] Haocheng Yuan, Adrien Bousseau, Hao Pan, Lei Zhong, and
+Changjian Li. Dancingbox: A lightweight mocap system for
+character animation from physical proxies. In Proceedings of
+the 2026 CHI Conference on Human Factors in Computing
+Systems, pages 1–13, 2026.
+[45] Bowei Zhang, Lei Ke, Adam W Harley, and Katerina Fragki-
+adaki. Tapip3d: Tracking any point in persistent 3d geometry.
+arXiv preprint arXiv:2504.14717, 2025.
+[46] Hanxue Zhang, Haoran Jiang, Qingsong Yao, Yanan Sun,
+Renrui Zhang, Hao Zhao, Hongyang Li, Hongzi Zhu, and Ze-
+tong Yang. Detect anything 3d in the wild. In 2025 IEEE/CVF
+International Conference on Computer Vision (ICCV), pages
+1–12. IEEE, 2025.
+[47] Yifeng Zhu, Arisrei Lim, Peter Stone, and Yuke Zhu. Vision-
+based manipulation from single human video with open-world
+object graphs. Autonomous Robots, 50(2):27, 2026.
+10
+
+
+Supplementary Material
+GT
+WildDet3D + Kalman
+OVMono3D-Lift + Kalman
+MoCA4D obs. + Kalman
+MoCA4D (ours)
+GT
+WildDet3D + Kalman
+OVMono3D-Lift + Kalman
+MoCA4D obs. + Kalman
+MoCA4D (ours)
+Figure S1. Qualitative comparisons with baselines. The left sequence follows a minivan (green) and a bus (orange) at an intersection. The
+right sequence follows a pedestrian on the sidewalk. Within each sequence, columns advance in time and the top row shows ground truth.
+Appendices A–C describe training, illustrate tracking on
+AV2 and HOT3D, and specify the evaluation protocols. Ap-
+pendices D and E extend the motion experiments in Sec. 4.3
+to full MOVi-F rollouts and one-step predictions on real
+videos. Appendices F–H expand the tracking results in
+Sec. 4.4 and isolate sources of localization error on ADT.
+Appendix I examines the role of history, weighting, and
+feedback in the Star ablations of Sec. 4.5.
+A. Implementation and training details
+Both branches share a frozen DA3-Large-1.1 image en-
+coder [24] with 24 transformer blocks. The encoder takes
+a 518 × 518 RGB frame as input. It divides the frame into
+non-overlapping 14 × 14-pixel patches, forming a 37 × 37
+grid. For the current frame, the observation branch reads
+1,024-dimensional patch features from blocks 12, 16, 20, and
+24. The dynamic branch reads the block 12 patch features
+from each of two consecutive frames. The shared encoder
+accounts for 304.37M of the 396.35M model parameters.
+We train the observation branch (56.78M) and the dynamic
+branch (35.20M) separately.
+A.1. Observation architecture and supervision
+The observation branch reads 1,024-channel features from
+encoder blocks 12, 16, 20 and 24. We adapt DA3’s multi-
+frame design to MoCA4D by extracting these features from
+each frame independently. A box-conditioned DPT fuses
+these features into a 129×129 spatial grid with 256 channels.
+The prompt encoder has three layers of width 256. For each
+prompted object, one query passes through two decoder lay-
+ers, each with eight attention heads and a feed-forward width
+of 2,048. Each layer has its own geometry and confidence
+heads.
+We supervise the encoded center offset, depth, dimen-
+sions, and rotation with ℓ1 losses, and train the confidence
+head using binary cross-entropy with soft quality targets
+based on depth accuracy and box overlap. Supervision is
+applied to every decoder layer:
+Lobs =
+L
+X
+ℓ=1
+ L(ℓ)
+uv + L(ℓ)
+z
++ L(ℓ)
+s
++ L(ℓ)
+R + 0.5 L(ℓ)
+conf
+
+,
+(S1)
+where L = 2. During adaptation, rotation and dimension
+targets are jointly selected from the 24 equivalent cuboid
+parameterizations to minimize their combined regression
+loss. At inference, we use the final decoder output. The
+confidence head is trained with the observation branch; its
+output does not determine the fixed Star fusion weights.
+A.2. Correspondence features and motion decoder
+Given patch features Ft−1 and Ft, a cross-frame transformer
+alternates within-frame self-attention and bidirectional cross-
+attention. The matcher has two blocks of width 128, each
+with four attention heads and a feed-forward width of 512.
+Following the global matching formulation of GMFlow [42],
+the resulting features Ht−1 and Ht define soft correspon-
+11
+
+
+GT
+Observation
+Observation + Kalman
+Star (camera only)
+Full Star (camera + object)
+GT
+Observation
+Observation + Kalman
+Star (camera only)
+Full Star (camera + object)
+Figure S2. Qualitative comparison of motion modeling in 3D box tracking. On HOT3D, we compare raw and Kalman-filtered box
+observations with two Star variants. One uses camera motion alone (A), and the other uses both camera and object motion (A + B). A
+hand tilts a milk carton in the left sequence. The tracked object on the right is the bamboo plate beneath the bowl. The top row shows the
+ground-truth boxes for each sequence.
+dences:
+Pt = softmaxrow
+
+Ht−1H⊤
+t /
+√
+d
+
+,
+ˆvt(a) =
+X
+b
+Pt(a, b) (gb −ga) .
+(S2)
+where d is the feature dimension and ga denotes a normal-
+ized patch coordinate. The expected displacement ˆvt(a)
+provides a differentiable motion cue. For each patch, we
+construct a descriptor combining appearance features with
+cross-frame matching information. Descriptors are com-
+puted in both temporal directions and projected back into
+the backbone feature space:
+˜Fs = Fs + ϕ(Ds),
+s ∈{t −1, t},
+(S3)
+where ϕ is an MLP. This residual update incorporates cor-
+respondence information into the features used for motion
+prediction. We construct spatial tokens by applying 7×7 RoI
+Align to the enhanced features within each object’s 2D boxes
+in both frames. The pooled features are projected and com-
+bined with geometric and temporal embeddings, yielding
+98 tokens Zi
+t. The motion decoder has six pre-normalized
+blocks of width 512, with eight attention heads and a feed-
+forward width of 2,048. It uses four register tokens, eight
+camera tokens and eight object tokens. In every block, the
+object tokens also attend to the 98 pooled tokens for that
+object.
+A.3. Motion parameterization and targets
+We assemble these predictions into the camera and object
+transformations:
+ˆAt =
+ ˆRA
+t
+ˆtA
+t
+0⊤
+1
+
+,
+ˆBi
+t =
+ ˆRB,i
+t
+ˆtB,i
+t
+0⊤
+1
+
+.
+(S4)
+Their composition ˆAt ˆBi
+t propagates the object’s geometry
+into the current camera frame according to Eq. (3).
+The displacement target is evaluated at the same supplied
+center:
+di,∗
+t
+= (RB,i,∗
+t
+−I)¯ci
+t−1 + tB,i,∗
+t
+.
+(S5)
+A.4. Training settings
+The observation branch is pretrained on Omni3D [6], which
+contains KITTI [12], nuScenes [8], Objectron [1], SUN
+RGBD [35], ARKitScenes [5], and Hypersim [33]. The
+dynamic branch is pretrained on MOVi-F [14] sequences.
+We then adapt both branches on HOT3D [4], HOI4D [26],
+Argoverse 2 [41] and Virtual KITTI 2 [7].
+We use AdamW throughout training, with initial pretrain-
+ing learning rates of 10−4 for the observation branch and
+5 × 10−5 for the dynamic branch. During adaptation, the
+base learning rates are 2 × 10−5 and 3 × 10−5 for the obser-
+vation and dynamic branches, respectively, with 5 × 10−5
+for their prediction heads. For updates 4,501 through 5,000
+12
+
+
+we reduce both dynamic learning rates tenfold and retain the
+optimizer moments. The rollout loss has weight 0.1. During
+adaptation we apply the flow loss (weight 1) on MOVi-F and
+Virtual KITTI 2.
+Training budget for the reported models.
+Per epoch
+Stage and branch
+Epochs
+Updates
+Examples
+Pretrain observation
+8
+7,414
+1,067,612 objects
+Pretrain dynamics
+25
+180
+5,737 scenes
+Adapt observation
+5
+3,707
+533,808 objects
+Adapt dynamics
+10
+500
+16,000 clips
+A pretraining epoch covers the eligible Omni3D anno-
+tations or MOVi-F training scenes once. The final batches
+contain 140 objects and nine scenes, respectively. Adapta-
+tion uses a fixed number of optimizer updates per epoch.
+Its example counts include repeated draws from the train-
+ing mixture. Tracking uses the EMA weights at the end of
+each adaptation schedule. During adaptation, the sampling
+proportions for HOT3D, HOI4D, AV2, and Virtual KITTI
+2 are 20, 12, 20, and 8 percent. The remaining 40 percent
+comes from Omni3D for observation training and MOVi-F
+for dynamic training. Full batches contain 144 objects for
+observation or 32 scenes for dynamic pretraining. Each dy-
+namic adaptation update uses 32 clips of 24 frames, with
+up to four objects per clip. The observation and dynamic
+branches use weight decay of 10−4 and 0.01, gradient norm
+limits of 0.1 and 1.0, and EMA decay of 0.999 and 0.99,
+respectively.
+B. Qualitative tracking results
+Figure S1 compares full MoCA4D with Kalman-filtered
+boxes from WildDet3D, OVMono3D-Lift and our obser-
+vation branch. In the last two frames at right, MoCA4D
+follows the pedestrian’s annotated box width more closely
+than OVMono3D-Lift + Kalman.
+Figure S2 compares raw and Kalman-filtered observa-
+tions with camera-only Star (A) and full Star (A + B). In
+the second frame of each sequence, adding B brings the
+carton’s long axis and the edges of the plate box closer to
+their annotated orientations.
+C. Evaluation data and protocols
+C.1. Datasets and splits
+ADT is an external evaluation dataset used neither for pre-
+training nor adaptation of either MoCA4D branch. AV2
+is included in branch adaptation and is evaluated on its
+validation recordings. Table S1 summarizes the training
+roles of the principal evaluation datasets; the complete
+training configuration is given in Sec. A. AV2 prompts are
+SAM 2 [32]-derived pseudo boxes, while ADT prompts are
+dataset ground-truth 2D boxes.
+For the conditioning ablation (Table 4), all variants share
+the initialization, frozen backbone, seed, 60,000-object train-
+ing subset and 2,000 updates. We average within each of
+the six validation datasets and then across datasets (10,523
+objects total).
+C.2. Inputs for motion estimation and tracking
+MOVi-F motion baselines.
+For MOVi-F, point and recon-
+struction baselines receive a first-frame GT mask for point
+selection and a first-frame GT depth scale held fixed across
+objects and resets. Offline variants access future frames;
+causal variants access current and past frames. TAPIP3D
+uses DA3-predicted depth and intrinsics. These adaptations
+differ from the prompt-conditioned trajectory task.
+Tracking protocol.
+We evaluate 150 AV2 validation
+recordings and 10 ADT Apartment recordings on common
+prepared object–time support. The final scored support con-
+tains 69,434 box events and 60,119 motion pairs on AV2,
+and 431,681 box events and 401,980 motion pairs on ADT.
+Observations are acquired every two raw frames; the dy-
+namic branch also consumes intermediate frames. Scoring
+starts after four observations are available. Tracks are initial-
+ized from predicted boxes and receive no ground-truth resets.
+We average within each object, then across objects within a
+recording, and finally across recordings within each dataset.
+When Star cannot compute a valid refinement, it returns the
+current 3D box predicted by the observation branch. We
+count this as one fallback and include the box in the tracking
+metrics.
+WildDet3D-style filtering.
+For the observation-only
+Kalman rows in Table 3, we apply the same causal filter
+to boxes from WildDet3D, OVMono3D-Lift and MoCA4D.
+We adapt the WildDet3D demo [19] to the measured time
+between observations.
+The state comprises the camera-frame center c, box di-
+mensions s and center velocity v. Between observations,
+the filter advances the center by ∆t v and carries s and v
+forward. Every two raw frames it updates the state from the
+observed center and dimensions. The first box sets c and s,
+with v = 0.
+For I = I3, the initial, process and measurement covari-
+ances are
+P0 = diag(I, I, 10I),
+Q = diag(0.25I, 0.01I, I),
+R = diag(I, 0.25I).
+Q and R are independent of ∆t. For rotation, we average
+the previous filtered and current observed unit quaternions
+13
+
+
+Table S1. Training roles and evaluation sets. ADT is excluded from MoCA4D branch pretraining and adaptation.
+Data
+MoCA4D branch training
+Evaluation
+Omni3D
+Observation pretraining
+Conditioning ablation on 10,523 validation objects across
+six datasets
+MOVi-F
+Dynamic pretraining
+147 validation scenes (1,750 objects)
+AV2
+Branch adaptation
+150 validation recordings
+ADT
+Neither pretraining nor adaptation
+10 Apartment recordings
+Table S2. Rigid object motion on MOVi-F with full rollout. Full rollouts are evaluated on 1,750 objects from 147 validation scenes. Bold
+and underlined values indicate the best and second-best results, respectively, across all rows with reported values.
+Method
+EPE3D (m) ↓
+MTE (m) ↓
+IoU ↑
+Object RE (◦) ↓
+Offline baselines (future frames available)
+SM4RT [25]
+0.4386
+0.4579
+0.5621
+4.20
+ARROW [10]
+0.7295
+0.7530
+0.4548
+4.65
+Point4D [21]
+0.7943
+0.8560
+0.4270
+4.40
+4RC [28]
+0.6251
+0.6666
+0.5164
+4.66
+V-DPM [36]
+0.5906
+0.6219
+0.4902
+4.62
+L4P [2]
+0.7887
+0.8189
+0.4167
+6.16
+TAPIP3D [45] + DA3 [24]
+2.1853
+2.2053
+0.1472
+—
+Causal baselines (current and past frames)
+SM4RT
+0.4650
+0.4710
+0.5407
+4.67
+ARROW
+0.6489
+0.6615
+0.4975
+5.43
+Point4D
+0.7743
+0.8167
+0.4375
+4.96
+4RC
+0.6115
+0.6409
+0.5281
+4.87
+V-DPM
+0.5577
+0.5727
+0.5118
+4.89
+L4P
+0.7801
+0.7761
+0.4195
+7.57
+TAPIP3D + DA3
+1.8963
+1.9300
+0.2357
+—
+Ours (causal)
+MoCA4D
+0.4594
+0.4820
+0.5683
+2.95
+with equal weights and normalize the result, retaining their
+original signs.
+Gravity input.
+Boxer [9] uses its official framewise lifting
+configuration, with gravity extracted from dataset camera
+poses as an additional input. It receives neither camera
+translation nor world heading, depth, semi-dense points, or
+object 3D ground truth. We do not enable Boxer’s optional
+tracking or fusion, and report it in a separate input group.
+D. Full-rollout object motion
+Long-horizon propagation.
+MoCA4D propagates each
+cuboid by composing the predicted camera and object mo-
+tions using only current and past frames. With a ground-truth
+reset every eight transitions, it leads on all four MOVi-F met-
+rics (Table 2). When these updates carry the initial cuboid
+through the full rollout without resets, MoCA4D retains the
+highest 3D IoU (0.5683) and the lowest inter-frame object ro-
+tation error (2.95◦) among the methods in Table S2. Offline
+SM4RT yields lower corner errors on full rollouts.
+E. Real-data one-step motion diagnostics
+Question and protocol.
+On adjacent frames from real
+videos, we compare predicted object motion B with a
+stationary-object baseline (B = I), holding the previous
+GT cuboid and predicted camera motion A fixed for corner
+propagation (Table S3). The object head receives the previ-
+ous GT center. Absolute one-step errors cannot be directly
+compared with MOVi-F GT reset-8 errors. HOT3D and
+HOI4D contribute validation sequences from domains used
+for branch adaptation.
+Motion subsets.
+A pair is dynamic when GT world trans-
+lation speed is at least 0.05 m/s or reliable rotation speed
+is at least 5◦/s. Static pairs have translation speed at most
+0.025 m/s and rotation speed at most 2.5◦/s; the intervening
+band is ambiguous. An annotation-symmetry flag prevents
+rotation alone from labeling an object dynamic. Rotation
+14
+
+
+Table S3. Direct object motion and controlled propagation. Each cell is identity B →predicted B; lower is better. Both arms use the
+previous GT center, and propagation uses the previous GT cuboid with a common predicted A. Values are object–recording–dataset macro
+averages.
+Dataset
+Displacement (mm) ↓
+Corner propagation (mm) ↓
+Rotation (◦) ↓
+Dynamic frame pairs
+AV2
+307.55 →244.09
+365.33 →298.62
+0.217 →0.305
+ADT
+24.83 →22.41
+21.55 →17.57
+2.457 →2.191
+HOT3D
+16.78 →12.66
+19.34 →14.91
+5.302 →4.458
+HOI4D
+7.10 →4.92
+6.62 →4.35
+0.872 →0.807
+Static frame pairs
+AV2
+1.59 →31.67
+85.70 →104.97
+0.069 →0.144
+ADT
+0.00 →3.22
+30.44 →31.21
+0.003 →0.191
+HOT3D
+0.07 →1.64
+4.46 →4.62
+0.045 →0.190
+HOI4D
+1.14 →1.68
+1.62 →1.79
+0.115 →0.152
+Table S4. Dynamic-pair differences: predicted B minus identity. Negative values favor predicted motion. Brackets are individual paired
+95% recording-bootstrap intervals (2,000 resamples, seed 20261115); no multiplicity correction is applied.
+Dataset
+∆Displacement (mm)
+∆Corner (mm)
+∆Rotation (◦)
+AV2
+-63.46 [-78.68, -49.17]
+-66.72 [-81.68, -52.00]
++0.088 [+0.081, +0.096]
+ADT
+-2.41 [-3.04, -1.73]
+-3.98 [-4.45, -3.49]
+-0.266 [-0.351, -0.179]
+HOT3D
+-4.11 [-4.91, -3.38]
+-4.43 [-5.06, -3.83]
+-0.844 [-1.014, -0.664]
+HOI4D
+-2.18 [-2.33, -2.04]
+-2.27 [-2.42, -2.12]
+-0.065 [-0.077, -0.054]
+errors below are raw SO(3) geodesic errors on the selected
+pairs, so translation-selected symmetric objects can still con-
+tribute. Thresholds are operational definitions, not native
+dataset labels. GT-only calibration on ADT annotated-static
+pairs gave a 99th-percentile translation speed of zero and ro-
+tation speed of 3.14 × 10−5 degrees/s. This calibration does
+not validate annotation noise in every dataset. The dynamic-
+pair diagnostic here has no sustained-duration requirement
+and is distinct from the whole-track dynamic-object selection
+in Sec. G.
+The dynamic one-step samples comprise 144,247 AV2,
+10,771 ADT, 26,807 HOT3D, and 95,784 HOI4D object–
+frame pairs; static samples comprise 31,430, 999,093,
+114,000, and 6,382 pairs, respectively. They come from
+150, 10, 30, and 443 original recordings. Camera evalua-
+tion uses 22,543, 14,128, 30,486, and 131,122 frame pairs,
+respectively.
+Effect of predicted object motion.
+On dynamic frame
+pairs, using the predicted object transform B in place of iden-
+tity reduces both displacement error and next-frame corner
+error on all four datasets (Table S3). On AV2, corner error
+falls from 365 to 299 mm even though rotation error rises by
+0.088◦. Rotation error falls on the other three datasets (Ta-
+ble S4). On static pairs, the identity transform gives lower
+errors on all three measures across all four datasets. For
+moving objects, B captures part of the displacement that
+camera motion alone leaves unexplained.
+Frame-to-frame camera motion.
+For each adjacent frame
+pair, we compare the predicted camera transform A with the
+ground-truth relative pose C−1
+t
+Ct−1. We measure the Eu-
+clidean distance between the translation vectors and the an-
+gle between the rotations. Each frame pair counts once. We
+average errors within each recording and give each recording
+equal weight within its dataset. For a stationary-camera pre-
+diction (A = I), the two errors equal the magnitudes of the
+camera’s translation and rotation between frames. MoCA4D
+reduces both errors on all four datasets (Table S5). Trans-
+lation error falls from 559 to 60 mm on AV2, and rotation
+error from 2.13◦to 0.53◦on ADT.
+Table S5. One-step relative camera error. Each cell gives the
+error for the stationary-camera baseline followed by the error for
+MoCA4D’s predicted A.
+Dataset
+Translation (mm) ↓
+Rotation (◦) ↓
+AV2
+558.841 →59.976
+0.262 →0.088
+ADT
+33.203 →22.525
+2.127 →0.530
+HOT3D
+7.460 →4.789
+1.263 →0.234
+HOI4D
+6.074 →4.643
+0.412 →0.254
+F. Tracking on all objects
+Table S6 extends the dynamic-object evaluation in Table 3
+to all scored tracks on AV2 and ADT, including objects that
+remain stationary. At each scored frame, 3D IoU is the in-
+15
+
+
+Table S6. Tracking on all scored AV2 and ADT objects. Tracks start from predicted boxes and receive no ground-truth resets. We score all
+methods on the same objects at the same times. Bold and underlined values mark the best and second-best results among methods with the
+same inputs. Boxer also uses gravity.
+AV2
+ADT
+Method
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(%)
+(m)
+(m/s)
+(◦/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+WildDet3D
+16.591
+10.892
+11.683
+67.261
+0.312
+1.519
+1.942
+153.160
+WildDet3D + Kalman
+16.074
+10.774
+6.632
+29.662
+0.168
+1.580
+1.516
+65.108
+OVMono3D-Lift
+7.204
+15.154
+9.673
+62.706
+0.239
+1.943
+1.200
+249.445
+OVMono3D-Lift + Kalman
+7.667
+14.876
+5.902
+24.161
+0.240
+1.931
+0.759
+106.620
+MoCA4D observation
+17.826
+6.909
+14.861
+36.139
+0.932
+1.274
+2.759
+202.176
+MoCA4D observation + Kalman
+16.867
+6.822
+8.179
+39.493
+0.587
+1.252
+1.640
+112.628
+MoCA4D Star Optimization
+16.610
+6.893
+5.059
+14.480
+0.915
+1.212
+1.004
+74.363
+Additional input: gravity direction
+Boxer + gravity
+0.590
+44.481
+6.430
+65.430
+6.173
+0.469
+1.211
+128.962
+tersection volume of the predicted and ground-truth cuboids
+divided by their union volume. Center error (CE) is the
+Euclidean distance between their centers. Center-motion er-
+ror (CME) and rotation-motion error (RME) measure errors
+in displacement and rotation between consecutive scored
+observations, per second of elapsed time.
+On AV2, Star has the lowest CME (5.059 m/s) and RME
+(14.480◦/s) among methods with the same inputs. Kalman
+filtering of the same MoCA4D observations gives a smaller
+center error (6.822 vs. 6.893 m) and higher IoU (16.867% vs.
+16.610%). On ADT, Star improves all four metrics over this
+Kalman filter and has the lowest center error in the common-
+input group (1.212 m). Mean IoU remains below 1% for
+every method in this group. Section H examines the center
+errors behind the low overlap on ADT.
+Motion-error metrics.
+For scored observations s and t
+separated by ∆t seconds, let et = Qt(ˆct −c∗
+t ) be the center
+error vector in world coordinates, where Qt rotates vectors
+from camera to world coordinates. The change in this vector
+gives the error in center displacement, so
+CMEs,t = ∥et −es∥2
+∆t
+.
+(S6)
+A track with a fixed nonzero position error in world coordi-
+nates has nonzero CE and zero CME. For RME, we apply
+the ground-truth change in orientation ∆R∗
+s→t to the earlier
+predicted orientation ˆRs. We compare this orientation with
+the later prediction ˆRt and divide their angular distance by
+the elapsed time, giving
+RMEs,t = dbox(∆R∗
+s→t ˆRs, ˆRt)
+∆t
+.
+(S7)
+The distance dbox is in degrees. It matches cuboid axes by
+dimension ratio over the 24 proper signed permutations and
+breaks ties by the smallest rotation angle. Equivalent box
+orientations therefore receive the same score regardless of
+how their axes are labeled. Ground-truth motion enters only
+at evaluation.
+G. Object motion in dynamic-object tracking
+We extend the comparison in Table 3 to 150 HOT3D tracks
+and 442 HOI4D tracks (Table S7). We selected tracks from
+ground-truth motion after the initial evaluation and fixed the
+selection before comparing methods. A frame pair counts as
+moving if GT translation speed is at least 0.05 m/s or reliable
+rotation speed is at least 5◦/s (Sec. E). We select tracks with
+at least 0.5 s of consecutive moving pairs. We score all
+eligible observations on these tracks, including those during
+stationary periods. Each recording contributes equally to
+the dataset mean. The 10 ADT recordings come from one
+apartment, and the HOT3D and HOI4D recordings cover
+two participants and one participant, respectively. Adding
+B reduced fallbacks on AV2, ADT and HOT3D. Both Star
+variants completed the HOI4D tracks without a fallback.
+Contribution of object motion.
+On the HOT3D and
+HOI4D validation tracks, A + B Star gives the highest IoU
+and the lowest errors among the four methods (Table S8).
+On HOT3D, rotation-motion error falls from 135.86◦/s with
+observation-only Kalman to 68.08◦/s with camera-only Star
+and 66.20◦/s with A+B Star. Most of the reduction relative
+to Kalman is already present when Star uses camera motion
+alone.
+Table S9 pairs A + B Star with camera-only Star (up-
+per rows) and with constant-velocity Kalman filtering of the
+same observations (lower rows). The two Star variants prop-
+agate their own box estimates and differ only in whether they
+use the predicted object transform or set B = I. Adding B
+lowers rotation-motion error on HOT3D but raises it on AV2.
+16
+
+
+Table S7. Dynamic-object tracks by dataset. We count each object once per original recording and group HOT3D clips by recording.
+Scores include fallback predictions. Bold marks the lower fallback count in each row, including ties.
+Dataset
+Recordings
+Objects
+Box events
+Motion pairs
+A-only fallbacks
+A + B fallbacks
+AV2
+150
+2,692
+56,366
+50,198
+26
+1
+ADT
+10
+109
+32,570
+30,711
+49
+13
+HOT3D
+30
+150
+62,651
+59,908
+11
+3
+HOI4D
+442
+442
+61,872
+60,102
+0
+0
+Table S8. Tracking on HOT3D and HOI4D validation tracks. All methods use the same MoCA4D observations. Both datasets contributed
+training data for branch adaptation. Bold marks the best score in each column.
+HOT3D
+HOI4D
+Method
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(%)
+(m)
+(m/s)
+(◦/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+MoCA4D observation
+23.221
+0.073
+0.263
+168.253
+33.165
+0.062
+0.144
+74.241
+MoCA4D observation + Kalman
+20.385
+0.077
+0.186
+135.858
+33.414
+0.061
+0.077
+42.221
+MoCA4D Star, A only
+23.563
+0.069
+0.112
+68.083
+33.116
+0.061
+0.075
+27.469
+MoCA4D Star, A + B
+23.702
+0.068
+0.109
+66.196
+33.645
+0.060
+0.073
+27.225
+Table S9. Paired differences on dynamic-object tracks. Each entry is the A + B Star score minus the control score. Bold estimates favor
+A + B and underlined estimates favor the control. Brackets give individual 95% intervals from 2,000 paired bootstrap resamples of the
+original recordings.
+Dataset, control
+∆IoU (pp)
+∆CE (mm)
+∆CME (m/s)
+∆RME (◦/s)
+AV2, A only
++3.061
+−387.25
+−0.0519
++0.386
+[+2.514, +3.705]
+[−472.71, −307.03]
+[−0.0882, −0.0186]
+[+0.020, +0.746]
+ADT, A only
++0.131
+−6.82
+−0.0018
+−0.698
+[+0.046, +0.210]
+[−7.49, −6.14]
+[−0.0028, −0.0010]
+[−1.357, −0.061]
+HOT3D, A only
++0.139
+−0.61
+−0.0021
+−1.887
+[−0.078, +0.332]
+[−1.10, −0.14]
+[−0.0032, −0.0012]
+[−2.634, −1.148]
+HOI4D, A only
++0.529
+−1.08
+−0.0015
+−0.244
+[+0.337, +0.709]
+[−1.42, −0.72]
+[−0.0018, −0.0013]
+[−0.508, +0.033]
+AV2, Kalman
+−1.055
++152.97
+−2.8277
+−19.402
+[−1.556, −0.558]
+[+64.64, +243.01]
+[−2.9687, −2.6910]
+[−22.464, −16.282]
+ADT, Kalman
++0.584
+−8.90
+−0.2447
+−43.540
+[+0.423, +0.739]
+[−14.27, −2.45]
+[−0.2802, −0.2109]
+[−48.254, −39.169]
+HOT3D, Kalman
++3.317
+−8.85
+−0.0762
+−69.662
+[+2.448, +4.218]
+[−10.41, −7.32]
+[−0.0818, −0.0709]
+[−77.464, −61.751]
+HOI4D, Kalman
++0.232
+−1.30
+−0.0041
+−14.995
+[+0.055, +0.415]
+[−1.59, −1.02]
+[−0.0053, −0.0029]
+[−16.933, −13.100]
+For the box center, adding B reduces both position error and
+frame-to-frame motion error on all four datasets.
+Track selection.
+Table S10 uses the same predictions for
+five definitions of a dynamic track. We vary the minimum
+motion duration from 0.5 s to 0.25 or 1.0 s, or keep it at 0.5 s
+and halve or double both speed thresholds. The mean IoU
+favors A + B under every definition, although the HOT3D
+intervals also admit zero gain.
+Table S11 scores Star over different portions of the data.
+On ADT, IoU is 8.127% for moving events and 2.784% for
+whole tracks of dynamic objects. ADT’s own dynamic labels
+select 546 tracks with 135,973 box observations and give an
+IoU of 1.694%. Scoring only the moments of motion gives a
+substantially higher estimate of ADT overlap than scoring
+the same tracker through stationary periods as well.
+H. ADT localization diagnosis
+We preserve the full ADT support of 10 recordings and
+431,681 box events and replace one predicted box com-
+ponent at a time with GT. Table S12 reports the resulting
+IoU. These oracle interventions diagnose sensitivity to a
+component; they are not new model results, additive causal
+contributions, or a guaranteed upper bound. The same center-
+dominated pattern occurs for raw observations, Kalman, and
+Star.
+17
+
+
+Table S10. Motion thresholds for selecting dynamic objects. Entries give the IoU difference (A + B minus A only) in percentage points.
+Bold marks the largest observed difference in each dataset. Intervals are computed as in Table S9.
+Selection
+AV2
+ADT
+HOT3D
+HOI4D
+0.25 s, default speeds
++2.827
++0.132
++0.144
++0.528
+[+2.256, +3.386]
+[+0.056, +0.216]
+[−0.082, +0.342]
+[+0.346, +0.725]
+0.5 s, default speeds
++3.061
++0.131
++0.139
++0.529
+[+2.514, +3.705]
+[+0.046, +0.210]
+[−0.078, +0.332]
+[+0.337, +0.709]
+1.0 s, default speeds
++3.672
++0.145
++0.113
++0.558
+[+3.001, +4.391]
+[+0.057, +0.232]
+[−0.155, +0.329]
+[+0.356, +0.753]
+0.5 s, half speeds
++2.807
++0.133
++0.154
++0.528
+[+2.241, +3.382]
+[+0.053, +0.218]
+[−0.068, +0.353]
+[+0.340, +0.715]
+0.5 s, double speeds
++3.671
++0.134
++0.107
++0.593
+[+2.965, +4.386]
+[+0.050, +0.214]
+[−0.167, +0.329]
+[+0.386, +0.803]
+Table S11. Star IoU (%) under three scoring rules. All columns
+use the same predictions. Whole tracks include stationary periods.
+Bold marks the highest observed IoU in each row.
+Dataset
+All
+Moving
+Dynamic objects
+objects
+events only
+whole tracks
+AV2
+16.610
+18.156
+19.528
+ADT
+0.915
+8.127
+2.784
+HOT3D
+22.116
+21.960
+23.702
+HOI4D
+33.569
+33.977
+33.645
+Table S12. One-component GT replacement on full ADT. IoU
+(%). Each replacement keeps the other two predicted components
+fixed.
+Method
+Original
+GT
+center
+GT size
+GT
+rotation
+Observation
+0.932
+24.445
+1.476
+0.947
+Obs. + Kalman
+0.587
+25.255
+1.052
+0.600
+Star
+0.915
+24.247
+1.462
+0.941
+A box can track frame-to-frame displacement accurately even
+when a persistent offset in its center leaves little overlap with the
+ground truth.
+For Star, center replacement improves IoU by 23.332
+percentage points, versus 0.547 for size and 0.025 for rota-
+tion. Mean absolute error parallel to the GT viewing ray is
+1.208 m, versus 0.041 m transverse error. This supports cen-
+ter/range error as a major restriction on overlap. It does not
+identify whether training, depth estimation, preprocessing,
+or another upstream factor causes that error.
+I. Star Optimization analyses
+I.1. History and filtering in box refinement
+One or three history edges.
+We use three history edges
+to stabilize the depth estimate along the observed viewing
+ray. Each edge propagates a different past box to the current
+frame. With one edge, the most recent box carries all the
+historical weight. On AV2 and ADT, three edges lower
+center-motion error by about 3% relative to one (Table S13).
+One edge, in turn, gives 34–37% lower rotation-motion error
+than three. When rotation is the priority, the same trained
+model can use one edge at inference.
+Dynamics-aware Kalman update.
+Star treats a box prop-
+agated by learned motion as a second estimate of the pose
+seen in the current frame. Our Kalman variant uses the same
+idea in a recursive filter. It propagates the last corrected box
+and updates its depth and orientation with the current obser-
+vation. On the observed ray, z+ = z−+ K(zobs −z−). We
+normalize the measurement variance to R = 1. At regular
+intervals, a process variance of Q = 1/6 gives a steady-state
+gain of 1/3, matching Star’s observation weight for depth.
+Lowering Q to 1/24 reduces the gain to 0.184. This gives
+the lowest center-motion error on both datasets, although
+AV2 absolute center error rises from 6.265 to 6.512 m (Ta-
+ble S13).
+Response during maneuvers.
+Table S14 covers 11
+nonoverlapping episodes selected from ground-truth velocity
+changes. We compare the times when predicted and ground-
+truth velocity first reach half the annotated change along its
+direction, capping missing responses at 0.6 s. Three-edge
+Star has a smaller mean timing error than one-edge Star in
+the two AV2 decelerations (130 vs. 180 ms). In the two ADT
+decelerations, all four estimators average 80 ms.
+I.2. Weighting and feedback controls
+Fusion alternatives.
+Table S15 reports absolute accuracy
+together with motion errors for simple averaging, filtering,
+and motion-based fusion. Recent Star yields the lowest CME
+among these MoCA4D variants, while other configurations
+attain lower AV2 center error or higher IoU. We interpret
+this as a trade-off between localization and motion accuracy.
+Parameter sweep and rollout controls.
+We analyze 48-
+frame windows from 110 recordings (9,180 scored box
+18
+
+
+Table S13. Star and Kalman updates on dynamic-object tracks. All four estimators use the same observations and learned camera and
+object motion on the tracks from Table 3. Bold marks the best mean in each column.
+AV2 (2,692 objects)
+ADT (109 objects)
+Estimator
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(%)
+(m)
+(m/s)
+(◦/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+Star, one history edge
+20.376
+6.289
+4.954
+8.079
+2.695
+0.611
+0.464
+44.833
+Star, three history edges
+19.528
+6.381
+4.826
+12.788
+2.784
+0.612
+0.449
+67.531
+Kalman
+20.293
+6.265
+4.891
+13.420
+2.721
+0.614
+0.469
+72.940
+Kalman, low Q
+18.655
+6.512
+3.586
+9.444
+2.820
+0.614
+0.357
+48.306
+Table S14. Response to changes in object motion. Each method is scored on the same episodes. CE is absolute center error (m), Disp. is
+displacement error after aligning centers at onset (m), and Time is absolute timing error (ms). Bold marks the lowest mean for each metric
+within a row, including ties.
+Star, one edge
+Star, three edges
+Kalman
+Kalman, low Q
+Dataset
+Maneuver
+Episodes
+CE
+Disp.
+Time
+CE
+Disp.
+Time
+CE
+Disp.
+Time
+CE
+Disp.
+Time
+AV2
+Acceleration
+1
+1.131
+0.212
+120
+1.251
+0.166
+120
+1.131
+0.212
+120
+1.448
+0.129
+120
+Deceleration
+2
+7.116
+0.917
+180
+6.991
+0.399
+130
+7.113
+0.918
+180
+6.810
+0.612
+230
+ADT
+Acceleration
+4
+0.155
+0.041
+75
+0.151
+0.038
+80
+0.155
+0.041
+75
+0.147
+0.039
+85
+Deceleration
+2
+0.137
+0.066
+80
+0.132
+0.055
+80
+0.137
+0.066
+80
+0.119
+0.047
+80
+Turn
+2
+0.132
+0.037
+80
+0.141
+0.044
+70
+0.132
+0.037
+80
+0.152
+0.047
+70
+Table S15. Fusion alternatives on the full AV2 and ADT evaluation. The rows share observation predictions and scored support. Uniform
+Star and recent Star differ in both recency weights and λc; their difference does not isolate recency weighting. Bold marks the best value per
+column.
+AV2
+ADT
+Method
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(%)
+(m)
+(m/s)
+(◦/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+Observation
+17.826
+6.909
+14.861
+36.139
+0.932
+1.274
+2.759
+202.176
+Observation + Kalman
+16.867
+6.822
+8.179
+39.493
+0.587
+1.252
+1.640
+112.628
+Observation / dynamic 1:1
+17.876
+6.800
+8.684
+24.839
+0.897
+1.247
+1.699
+140.484
+Uniform Star, λc = 0.25
+17.212
+6.797
+7.462
+14.486
+0.912
+1.222
+1.437
+74.356
+Chain Huber
+17.626
+6.833
+5.980
+16.644
+0.864
+1.295
+1.309
+106.035
+Recent Star, λc = 0.5
+16.610
+6.893
+5.059
+14.480
+0.915
+1.212
+1.004
+74.363
+events and 8,313 motion pairs) to compare weighting and
+feedback policies. Absolute results use equal-weight dataset
+macro averaging after object and recording aggregation. The
+nine settings combine λc ∈{0.125, 0.25, 0.5} with uniform
+(1, 1, 1)/3, recent (1, 2, 4)/7, or latest-only (0, 0, 1) center
+weights, ordered from oldest to newest. We keep wo = 0.25
+and λR = 1 fixed. Table S16 separates two computations:
+fixed-candidate recombination uses the reference uniform-
+λc = 0.25 candidates and rotations, whereas each recursive
+rollout reuses its own corrected outputs.
+At λc = 0.5, recent weights give lower recursive CME
+than uniform or latest-only weights. With recent weights,
+raising λc from 0.25 to 0.5 lowers CME by 0.7100 m/s but
+increases CE by 0.0299 m. The IoU change is −0.0393
+percentage points. These are differences of the reported
+absolute macro averages. The fixed-candidate diagnostic
+preserves the reference state path and cannot substitute for a
+recursive rollout when reporting configuration performance.
+Feedback policy.
+Table S17 holds uniform center weights,
+λc = 0.25, λR = 1, and wo = 0.25 fixed on the same 110
+recordings. A seed is the box pose that Star propagates to
+later frames. The raw-observation baseline uses the center
+and orientation predicted by the observation branch as its
+seed. The nonrecursive control uses the pose refined by that
+baseline at the same frame. With recursive feedback, the
+tracker uses its own refined pose. This comparison tests the
+history update policy at a fixed fusion setting.
+Recursive feedback lowers RME by 23.4487◦/s relative
+to raw-observation seeds and by 14.8676◦/s relative to nonre-
+cursive correction. Its CE is 0.0072 m higher than that of the
+raw-observation baseline, and its IoU is 0.0590 percentage
+19
+
+
+Table S16. Star center-weight sweep: all nine settings. Fixed-candidate columns diagnose center recombination; recursive columns report
+actual inference trajectories. Bold marks the best displayed value among the three policies at each fixed λc. Rotation changes are small and
+should not be interpreted as substantial gains.
+Fixed candidates
+Recursive rollout
+Policy
+λc
+CE ↓
+CME ↓
+IoU ↑
+CE ↓
+CME ↓
+RME ↓
+(m)
+(m/s)
+(%)
+(m)
+(m/s)
+(◦/s)
+Uniform
+0.125
+2.0459
+3.3470
+26.9751
+2.0445
+3.3158
+41.1698
+Recent
+0.125
+2.0492
+3.2860
+26.9652
+2.0500
+3.2328
+41.1974
+Latest only
+0.125
+2.0610
+3.3054
+26.8770
+2.0691
+3.2051
+41.1975
+Uniform
+0.25
+2.0352
+2.5406
+27.0980
+2.0352
+2.5406
+41.2063
+Recent
+0.25
+2.0357
+2.4269
+27.1068
+2.0355
+2.4285
+41.2064
+Latest only
+0.25
+2.0494
+2.6329
+26.9957
+2.0562
+2.4531
+41.1883
+Uniform
+0.5
+2.0549
+1.8615
+26.9324
+2.0814
+1.8638
+41.2061
+Recent
+0.5
+2.0466
+1.7155
+27.0675
+2.0654
+1.7185
+41.2059
+Latest only
+0.5
+2.0589
+2.2814
+27.0929
+2.0724
+1.7886
+41.2062
+Table S17. History feedback at fixed Star parameters. Bold marks the best displayed value per column. Recursive feedback has the lowest
+RME, while absolute center accuracy and IoU favor other policies. All outputs, including fallbacks, enter the aggregation; the observed
+fallback rate is zero for these paths.
+History policy
+IoU (%) ↑
+CE (m) ↓
+CME (m/s) ↓
+Box RE (◦) ↓
+RME (◦/s) ↓
+Raw-observation seeds
+27.1237
+2.0280
+2.5181
+32.8529
+64.6550
+Nonrecursive correction
+27.1570
+2.0309
+2.5470
+32.6426
+56.0739
+Recursive feedback
+27.0980
+2.0352
+2.5406
+32.6123
+41.2063
+points lower than that of the nonrecursive control. These
+matched-window comparisons support a rotation-motion
+benefit, with small changes in absolute box accuracy.
+20

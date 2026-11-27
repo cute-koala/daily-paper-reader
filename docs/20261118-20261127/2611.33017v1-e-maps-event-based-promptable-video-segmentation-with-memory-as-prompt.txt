@@ -1,0 +1,1663 @@
+E-MAPS: Event-Based Promptable Video Segmentation with
+Memory-as-Prompt
+Adonay Demewez Gebremedhin1
+Mohamad Alansari2
+Wessam Shehieb1
+Muzammal Naseer2,3
+Hasan AlMarzouqi2
+Sajid Javed2
+Naoufel Werghi2
+1Ajman University, UAE
+2Khalifa University, UAE
+3University of Western Australia, Australia
+202311465@ajmanuni.ac.ae
+100061914@ku.ac.ae
+w.shehieb@ajman.ac.ae
+muhammadmuzammal.naseer@ku.ac.ae
+{hasan.almarzouqi,sajid.javed,Naoufel.Werghi}@ku.ac.ae
+Abstract
+RGB-based video object segmentation (VOS) remains brit-
+tle under fast motion and adverse illumination.
+Event
+cameras preserve signal under blur and challenging expo-
+sure, but provide little evidence when motion slows. In-
+teraction can restore object state for subsequent propa-
+gation, yet promptable event methods merely address sin-
+gle windows. We formalize event-based Promptable Video
+Segmentation (ePVS), where prompts at arbitrary win-
+dows initialize, correct, or introduce objects and predic-
+tions. We present Event Memory-As-Prompt Segmentation
+(E-MAPS), which transfers a pretrained promptable seg-
+menter to event streams and learns propagation and correc-
+tion. Event-to-Token (E2T) aligns recurrent event features
+with pretrained representations while preserving prompt-
+conditioning priors. Memory-Aware Prompting (MAP) con-
+verts object-conditioned history into sparse prompts, allow-
+ing memory and user inputs to share one decoder path-
+way efficiently. We construct Event-View Masklets (EViM)
+from 206K aligned RGB–event pairs and ∼620K masks
+for two-stage representation transfer and native event-video
+learning, and establish three training-disjoint benchmarks.
+E-MAPS leads prompt-once and interactive ePVS across
+all three benchmarks while being more efficient.
+It fur-
+ther demonstrates strong performance on zero-shot object
+tracking benchmarks. Project page: https://github.
+com/adonaydem/emaps-wacv.
+1. Introduction
+Video Object Segmentation (VOS) aims to segment target
+objects across video frames while maintaining their iden-
+tities [5, 10–12, 31, 33, 52, 61]. Despite strong progress,
+RGB-based methods can struggle with fast motion and dif-
+ficult lighting, where blur and poor exposure weaken visual
+cues [8, 14, 17, 24, 25, 28, 43, 53, 62, 64]. Event cam-
+eras address some of these challenges by recording bright-
+ness changes with microsecond latency and high dynamic
+range [7, 16]. Yet their continuous, change-driven streams
+require efficient processing and may contain limited shape
+or identity cues during slow motion or low illumination
+[27, 60]. Tracking objects from events therefore requires
+maintaining identity through sparse activity, occlusion, and
+disappearance. Promptable segmentation offers a flexible
+way to specify and correct objects using points, boxes, or
+masks [6, 22, 29, 37, 41]. For event streams, we find that
+these prompts can also recover object state and guide sub-
+sequent propagation when observations are weak. Existing
+Event-SAM adaptations mostly focus on individual win-
+dows or RGB–event fusion [8, 14, 24, 53], while event-
+only VOS has mainly supported initial-mask propagation
+without subsequent interaction [64]. We therefore study an
+event-only setting that combines prompt-conditioned seg-
+mentation with temporal propagation in a single model.
+We
+formalize
+event-based
+Promptable
+Video
+Segmentation (ePVS), a continuous event-stream task
+where point,
+box,
+or mask prompts may initialize,
+correct, or introduce objects at arbitrary windows, pro-
+ducing prompt-aligned masklets over time. ePVS covers
+prompt-once propagation from first-window prompts and
+interactive segmentation, where later prompts correct exist-
+ing objects. Both settings require temporal propagation and
+the integration of later prompts into subsequent predictions.
+We address this task with Event Memory-As-Prompt
+Segmentation (E-MAPS), an event-only framework com-
+bining TinySAM’s compact promptable backbone with
+recurrent event encoding and a temporal memory [41].
+Its Event-to-Token (E2T) adapter maps recurrent event
+features onto the pretrained token grid.
+We train E-MAPS progressively, first adapting pre-
+arXiv:2611.33017v1  [cs.CV]  24 Nov 2026
+
+
+trained representations to event inputs and then learning to
+track objects over time. In Stage I, aligned RGB observa-
+tions guide E2T, while point, box, and mask prompts pre-
+serve the pretrained model’s segmentation behavior. Stage
+II then learns mask propagation. To maintain object identity
+across windows, Memory-Aware Prompting (MAP) con-
+denses past scene and object information into a fixed set
+of sparse prompts for each target. These enter the same
+decoder as user prompts, enabling initialization, propaga-
+tion, correction, and new-object insertion without repeat-
+edly processing full spatial memories.
+To support both
+stages, we introduce Event-View Masklets (EViM), com-
+prising 206,811 aligned RGB–event pairs and approxi-
+mately 620K masks from DSEC-Detection [18, 19] and N-
+ImageNet [21], constructed through cross-modal proposal
+transfer, geometric mapping, and human quality control.
+Our contributions are:
+• Task. We formalize ePVS, where prompt-once propaga-
+tion and arbitrary-window interaction produce identity-
+consistent masklets despite intermittent event observa-
+tions (Sec. 3).
+• Model. We propose E-MAPS, an efficient promptable
+event-based VOS framework that uses E2T for trans-
+fer into a SAM-style feature space, learns propagation
+and interaction from event masklets, and injects tem-
+poral memory as sparse prompt tokens through MAP
+(Secs. 4.2–4.4).
+• Data.
+We introduce EViM, with over 206K aligned
+RGB–event pairs and 620K masks supporting large-scale
+and diverse pretraining across both stages(Secs. 5 and 6).
+Experiments on EViM, FE108 [55], and VisEvent [47] show
+that E-MAPS achieves leading prompt-once and interactive
+ePVS results. It outperforms SAM2.1 B+ while operating at
+a much faster frame rate. On the zero-shot VisEvent testbed,
+E-MAPS also achieves the strongest prompted result and
+the largest relative gain from additional prompts over SAM2
+and SAM-I2V.
+2. Related Work
+2.1. Promptable Segmentation Foundation Models
+Promptable segmentation allows users to specify and refine
+target objects through points, boxes, or masks [22]. SAM
+established a flexible encoder–prompt–decoder architec-
+ture [22], which TinySAM later made more efficient [41].
+Building on this foundation, SAM2 introduced stream-
+ing memory for video segmentation [37], while SAM-I2V
+adapted image-based SAM models to promptable video
+tasks [29].
+Alongside these developments, VOS meth-
+ods have relied on dense space–time memories to asso-
+ciate objects across frames and propagate their masks [10–
+12, 31, 52, 61]. E-MAPS builds on TinySAM’s compact se-
+mantic and prompt priors while learning temporal dynamics
+step 1
+step 2
+frame 1
+frame 2
+frame 3
+frame 4
+Figure 1. Interactive promptable segmentation with E-MAPS
+on an event sequence. Step 1: E-MAPS is prompted on frame 1
+to segment two targets: a car (green) with point prompts (or-
+ange/red for positive/negative clicks) and a truck (yellow) with a
+box (light blue), then propagates masks to later windows (blue ar-
+rows). Step 2: when the car drifts after event frame 2, a corrective
+prompt on frame 3 (red arrow) recovers its masklet, while the truck
+continues without refinement.
+directly from event streams.
+2.2. Event Representation Transfer and SAM
+Adaptation
+Event segmentation spans event-native encoders, RGB-to-
+event transfer, and cross-modal fusion [1, 44, 49, 56, 57].
+EventSAM enables SAM-like event prompting through
+weighted distillation [8], while SAM-Event-Adapter and
+EVSAM inject event cues into image models [14, 53].
+MemorySAM applies SAM2-style memory to multimodal
+semantic segmentation, and other work studies language
+guidance and event-domain representation learning [9, 23,
+24, 28, 34].
+These methods establish promptable event
+segmentation and cross-modal adaptation, mainly for per-
+window or multimodal prediction, while we seek to learn
+temporal dynamics under intermittent event streams.
+2.3. Event-based Video Segmentation and Tracking
+ECOS is the closest event-only VOS predecessor, propagat-
+ing an initial mask through recurrent event representations
+and cross-time matching [64].
+Event-assisted low-light
+VOS [25] and EVOLVE [2] instead combine frames and
+events through memory matching or dual-memory refine-
+ment. Related work also studies event-guided video seg-
+mentation, frame–event instance segmentation, and high-
+rate tracking through frame–event fusion or RGB-to-event
+transfer [20, 48, 54, 58].
+E-MAPS targets event-only
+mask propagation from point, box, or mask prompts, with
+arbitrary-window correction and object insertion.
+3. Task: ePVS
+Event stream and temporal windows.
+An event cam-
+era produces an asynchronous stream E = {ei}N
+i=1, where
+each event ei = (xi, yi, ti, pi) records a brightness change
+at pixel location (xi, yi), timestamp ti, and polarity pi ∈
+{−1, +1}. We standardize a stream as a group of ordered,
+
+
+E2T Adapter
+Event Encoder
+Image Encoder
+Mask Decoder
+Mask
+Prompt Encoder
+Points
+Box
+Reference 
+Event Encoder
+Memory
+MAP
+Conv
+E2T Adapter
+Event Encoder
+Image Encoder
+Mask Decoder
+Mask
+Prompt Encoder
+Points
+Box
+Conv
+Reference 
+Event Encoder
+Memory
+MAP
+E2T Adapter
+Event Encoder
+Image Encoder
+Mask Decoder
+Mask
+Prompt Encoder
+Points
+Box
+Conv
+2 × Conv
+Upsample
+Conv
+Upsample
+Stage 1:
+Channel Compression
+Stage 2:
+Upsample and refine
+2 × Conv
+Norm + Cross-Attn
+Norm + Cross-Attn
+Norm + MLP
+Norm + Self-Attn
+Stage 1:
+Initial 
+Context
+Stage 2:
+Memory Fusion
+Norm + MLP
+Linear + Norm
+Stage 4:
+Projection
+Queries (Q)
+Stage 3:
+Self-Refinement
+Bank
+Sparse-Motion 
+Alignment
+Memory  
+Attention
+Sample KV Pairs
+Segmentation Path
+Memory Path
+Recurrent Path
+𝜀1
+𝜀𝑡−1
+𝜀𝑡
+…
+𝑋𝑡
+𝐹𝑡
+(1)
+𝑆𝑡−1
+𝐵𝑡
+𝐾
+𝑆𝑠
+𝑂𝑠
+(𝑘)
+𝑆𝑡
+𝑂𝑡
+(𝑘)
+𝑆𝑡
+𝑆𝑡
+𝑌𝑡
+(𝑘)
+𝐹𝑡
+(3)
+𝑍𝑡
+(𝑘)
+𝑇𝑡
+(𝑘)
+𝑂𝑡−1
+(𝑘)
+𝐹𝑡
+(2)
+𝐹𝑡
+(1)
+𝐹𝑡
+(3)
+ε₁ 
+εₜ₋₁ 
+εₜ₋₁ 
+εₜ
+Figure 2. E-MAPS overview. We encode event windows and adapt them into SAM-style tokens for promptable mask decoding. A temporal
+memory is converted into a small set of memory prompt tokens (MAP) and injected into the sparse-prompt pathway to support prompt-once
+propagation and interactive correction.
+non-intermittent and non-overlapping temporal windows:
+Et = {ei ∈E | τt ≤ti < τt+1},
+t = 0, . . . , T −1.
+For a general task, a model can use any arbitrary event rep-
+resentation technique such as voxelization or event frames.
+Promptable event VOS. Given the event history and the
+prompts observed so far, the goal is to predict one mask for
+each active object identity at every window:
+{ ˆM(k)
+t
+}k∈Kt = fθ(E0:t, P0:t).
+Here, Kt is the set of object identities currently being
+tracked, and P0:t contains all user prompts issued up to time
+t. A prompt can initialize a new object, correct an existing
+object, or disambiguate the target when multiple objects are
+present. Fig. 1 illustrates this protocol where objects are ini-
+tialized with prompts, propagated over time, and selectively
+corrected when drift or missed detections occur.
+4. Methodology
+4.1. Event Window Representation and Encoding
+Event Representation. We partition the stream E into tem-
+poral windows {Et}T −1
+t=0 of duration ∆T and convert each
+window into a signed voxel volume Vt ∈RB×H×W [63].
+Events are assigned to B temporal bins using the normal-
+ized timestamp
+τi = B −1
+∆T (ti −tstart
+t
+),
+and accumulated with linear temporal interpolation:
+Vt[b, yi, xi] += pi max(0, 1 −|b −τi|) .
+Here, b indexes a temporal bin of the voxel grid, pi ∈
+{−1, +1} is the event polarity, and (xi, yi) denotes the inte-
+ger pixel location of the event. Unless stated otherwise, we
+use ∆T=50ms and B=5, and apply no voxel normalization
+since event-density variation is handled by our encoder.
+Recurrent Temporal Embedding Extraction (RTEE).
+RTEE is our temporal feature extractor inspired by ECOS-
+Net [64], a recurrent ConvLSTM encoder (ResLSTM) that
+maps voxels to pyramid features. We use two RTEE blocks:
+an event encoder for the current window and a reference
+event encoder that converts each window and its predicted
+mask into an object-conditioned memory feature:
+Fevt
+t
+= RTEEevt
+ Vt, stateevt
+t−1
+
+,
+(1)
+Fref,(k)
+t
+= RTEEref
+
+Vt, ˆM(k)
+t
+, stateref
+t−1
+
+,
+(2)
+where Vt denotes the event voxel, state(·)
+t−1 the hidden
+states across recurrent temporal stages, and ˆM(k)
+t
+the cur-
+rent mask prediction. Fevt
+t
+is a multi-scale pyramid con-
+taining F(1)
+t , F(2)
+t , F(3)
+t . The reference feature is stored for
+subsequent windows.
+4.2. Token Alignment and Promptable Decoding
+Event-to-Token (E2T) adapter.
+To reuse a pretrained
+backbone’s rich semantic representation without retraining
+
+
+the full token encoder and decoder from scratch, we intro-
+duce an E2T adapter that maps the shallow event feature
+F(1)
+t
+to the image encoder feature space and replaces the
+SAM patch embedding. E2T, shown as the blue block in
+Fig. 2, maps this feature to the token-grid input used by the
+promptable backbone
+Xt = E2T
+
+F(1)
+t
+
+.
+(3)
+Here, Xt serves as the patch embedding. E2T first com-
+presses the feature channels. It then applies two upsampling
+stages with convolutional refinement to match the spatial
+resolution and channel width of the pretrained token grid.
+Image encoder, prompt encoder, and mask decoder. We
+use TinySAM [41] for its efficient pretrained point-, box-,
+and mask-prompt interface. Temporal association is learned
+from scratch through the event memory described below.
+The image encoder processes Xt directly to produce shared
+feature embeddings. For object k, the prompt encoder maps
+the prompt set P(k)
+t
+into sparse and dense prompt embed-
+dings. The TinySAM mask decoder combines the shared
+feature embeddings and the object prompt embeddings to
+predict a mask. To handle object absence and heavy occlu-
+sion, we add an occlusion token and a lightweight occlusion
+head following SAM2 [37]. The head is trained with focal
+loss using empty masks as absent-object labels.
+4.3. Temporal Memory as Prompts
+Memory bank.
+For temporal propagation, we maintain
+a memory bank of past scene and object features.
+Let
+St = F(3)
+t
+∈RC×Hm×Wm denote the deepest scene fea-
+ture extracted by the event encoder at window t. For object
+k, let O(k)
+t
+∈RC×Hm×Wm denote the deepest feature pro-
+duced by the reference event encoder in Sec. 4.1. It carries
+object-specific information from the preceding event win-
+dow and predicted mask. Let It contain the retained mem-
+ory indices. These include the first prompted window and
+the s−1 most recent windows. At time t, the memory bank
+for object k is
+B(k)
+t
+= {(Sj, O(k)
+j )}j∈It,
+|It| ≤s.
+(4)
+Each entry pairs scene context with the object-conditioned
+feature stored at the same memory index.
+Memory attention. Given the current scene feature St, we
+retrieve object-specific and global temporal evidence from
+B(k)
+t
+using standard attention [45]. The sequences from the
+retained feature entries are stacked along the memory di-
+mension. The current scene feature provides the query. The
+stored scene features provide the keys, and the stored object
+features provide the values
+qt = fq(St),
+Kt = {fk(Sj)}j∈It,
+V(k)
+t
+= {fv(O(k)
+j )}j∈It,
+(5)
+where fq, fk, and fv are learned projections. The memory
+readout is
+R(k)
+t
+= softmax
+qtK⊤
+t
+√
+d
+
+V(k)
+t
+.
+(6)
+Sparse-Motion Adjustment. To improve robustness un-
+der extreme sparsity and abrupt motion, we align the most
+recent stored object feature with the current window us-
+ing an offset-conditioned deformable convolution following
+ECOS [13, 64]:
+R(k)
+t,sparse = DeformConv
+
+O(k)
+t−1, fδ([St, St−1])
+
+,
+(7)
+where [·, ·] denotes channel-wise concatenation and fδ pre-
+dicts the offsets. This produces an aligned object feature
+that better matches the current window under sparse obser-
+vations or abrupt motion. The final memory output is
+Y(k)
+t
+= St + R(k)
+t
++ R(k)
+t,sparse.
+(8)
+If the memory bank is empty, we set Y(k)
+t
+= St. MAP
+converts Y(k)
+t
+into sparse memory prompt tokens for the
+mask decoder.
+Memory-Aware Prompting (MAP). A key design choice
+is how to use retrieved object history to guide segmenta-
+tion. We explore three approaches: past-object feature fu-
+sion, dense memory cross-attention [37], and prompt-based
+memory injection. Past-object fusion uses only the latest
+stored object feature, removing temporal attention. Dense
+cross-attention instead incorporates the event-derived mem-
+ory readout through a randomly initialized SAM2-style de-
+coder, without relying on RGB features or pretrained SAM2
+memory weights. As shown in Sec. 6.1, prompt-based in-
+jection offers the best balance between segmentation ac-
+curacy and computational cost. This design also fits nat-
+urally with the promptable decoder.
+While the retrieved
+memory Y(k)
+t
+contains dense object-conditioned informa-
+tion, the decoder receives object guidance through sparse
+prompts. MAP bridges these representations by summa-
+rizing the retrieved history into K memory prompt tokens
+T(k)
+t
+∈RK×C, where C denotes the token width. Follow-
+ing compact conditioning approaches for spatial and spatio-
+temporal segmentation [3, 30, 36], MAP uses K learnable
+queries Pmap ∈RK×C and spatial tokens Z(k)
+t
+formed by
+
+
+channel-wise fusion of Y(k)
+t
+and F(3)
+t . MAP computes
+bPmap = Pmap + Attn
+
+Pmap, F(3)
+t , F(3)
+t
+
+,
+(9)
+eT(k)
+t
+= bPmap + Attn
+
+bPmap, Z(k)
+t
+, Z(k)
+t
+
+,
+(10)
+T(k)
+t
+= eT(k)
+t
++ FFN
+
+eT(k)
+t
+
+.
+(11)
+Here, Attn(q, k, v) denotes multi-head attention with
+learned query, key, and value projections.
+The attention
+and FFN blocks use pre-normalization and residual connec-
+tions. For K > 1, self-attention and an FFN further refine
+T(k)
+t
+. We use K = 2 by default.
+At a prompted window, T(k)
+t
+is concatenated with the
+sparse user-prompt embeddings before mask decoding. At
+an unprompted window, T(k)
+t
+is the only input to the sparse-
+prompt pathway.
+4.4. Training
+We train E-MAPS in two stages: (I) token-space alignment
+and (II) video training with memory prompting. Stage I:
+Token-space alignment. Stage I aligns event tokens to a
+pretrained image encoder using only single frame/window
+images.
+Sub-stage I-a (embedding-space bootstrapping).
+We
+freeze the pretrained SAM modules and train only
+RTEE+E2T. Let Φ be the pretrained image encoder exclud-
+ing patch embedding, and let Φ(ℓ) denote its output after
+block ℓ.
+Given E2T event tokens Xt and aligned RGB
+teacher tokens Zt, we compute
+ˆE(ℓ)
+t
+= Φ(ℓ)(Xt),
+E(ℓ)
+t
+= Φ(ℓ)(Zt),
+(12)
+where ˆE(ℓ)
+t
+and E(ℓ)
+t
+are event and RGB teacher features,
+respectively.
+We apply L1 feature distillation at an intermediate block
+(ℓ=2) and the final block (ℓ=3):
+Lemb = ∥ˆE(2)
+t
+−E(2)
+t ∥1 + λ∥ˆE(3)
+t
+−E(3)
+t ∥1.
+(13)
+We also use InfoNCE [32, 35] between final-block event
+and RGB teacher features:
+LNCE = InfoNCE
+
+ˆE(3)
+t , E(3)
+t
+
+,
+(14)
+We further use CORAL, inspired by Deep CORAL [42], in-
+order to align second-order statistics between E2T features
+and RGB teacher patch embeddings Zt:
+Lcov = CORAL(Xt, Zt) .
+(15)
+To preserve TinySAM prompt behavior, we decode
+masks from sampled prompts and apply LDice. The Sub-
+stage I-a objective is:
+LDA = Lemb + γLcov + δLNCE + ηLDice,
+(16)
+where γ, δ, η denote weights for the corresponding objec-
+tives.
+Table 1. Comparison of event-camera datasets and EViM.
+Dataset / Source
+Frames
+Masks
+Task
+Image/Video
+DDD17-Seg [1]
+19,840
+–
+Semantic Image
+DSEC-Semantic [44]
+10,891
+–
+Semantic Image
+M3ED-Semantic [26]
+7,275
+–
+Semantic Image
+RGBE-SEG [8]
+65,957
+–
+Instance Image
+MouseSIS [20]
+–
+75,532
+Instance Video
+EViM (ours)
+DSEC-Detection [18, 19]
+70,379
+338,000 Instance Video
+N-ImageNet [21]
+136,432 281,869 Instance Image
+Total
+206,811 ∼620K Instance Image & Video
+Sub-stage I-b (full adaptation).
+Following similar con-
+figuration of Sub-stage I-a, we unfreeze the encoder and
+mask decoder and continue training.
+Stage II: Video training with memory prompting. We
+train on clips (T
+> 1) with our MAP-based memory
+(Sec. 4.3), with all parameters unfrozen.
+We supervise
+masks with Dice and focal losses, occlusion with focal BCE
+using ot=1 when the ground-truth mask is empty, and mask
+confidence with an L1 IoU loss following TinySAM:
+Lvideo = LDice + νLfocal + ξLocc + βLiou,
+(17)
+where ν, ξ, β denote weights for the corresponding objec-
+tives. Here, Lfocal is the mask focal loss, Locc is the occlu-
+sion focal BCE loss, and Liou regresses predicted mask IoU
+to learn confidence.
+Interactive training and scheduled teacher forcing.
+During Stage II, we simulate interactive corrections by
+injecting foreground and background clicks whenever
+Dice( ˆMt, Mt) falls below a threshold. Since early noisy
+predictions can contaminate memory and amplify errors, we
+use scheduled teacher forcing, where memory writes ini-
+tially use ground-truth masks, then gradually transition to
+predicted masks ˆM(k)
+t
+under a decaying schedule.
+5. Data Construction
+5.1. Datasets and EViM construction.
+We build supervision from three complementary event
+sources. EOS [64] provides DAVIS-style sequences with
+native event-view instance masks.
+DSEC-Detection [18,
+19] provides real driving videos with dense boxes, class la-
+bels, and persistent track IDs. N-ImageNet [21] contributes
+broad semantic diversity through RGB–event pairs. Since
+DSEC-Detection and N-ImageNet lack instance masks,
+we construct and release Event-View Masklets (EViM)
+using a semi-automated cross-modal annotation pipeline.
+EViM contains 206,811 RGB–event pairs and approxi-
+mately 620K event-view instance masks. Table 1 compares
+EViM with prior datasets, which mainly provide semantic
+labels, image-level instances, or smaller video collections.
+
+
+EViM construction. For each RGB–event pair, an RGB
+teacher model generates candidate masks with confidence
+scores. Accepted masks are then transferred into the event-
+camera image plane. For teacher model, we consider large
+variants of SAM2.1 [37] and SAM3 [6]. SAM3 produces
+higher-quality masks, while cross-teacher agreement shows
+limited dependence on the selected teacher.
+For DSEC-Detection, we prompt SAM3 on the synchro-
+nized RGB image using the ground-truth box and class text.
+We project each mask to the left event-camera view using
+the provided calibration. Masks are retained based on con-
+fidence and box–mask agreement, then grouped by track ID
+to form masklets.
+For N-ImageNet [21], we prompt SAM3 using Ima-
+geNet [40] synset labels and co-occurring concepts to im-
+prove multi-object coverage.
+Since the RGB and event
+views are not aligned, we estimate an RGB→event homog-
+raphy.
+RoMa-MINIMA [15, 39] provides tentative cor-
+respondences C = {(xi, ui)}N
+i=1, where xi and ui are
+matched points in the RGB and event images, respectively,
+and N is the number of matches. We estimate the homog-
+raphy ˆH = RANSAC(C) and evaluate its geometric con-
+sistency using the inlier ratio
+ρ =
+
+n
+i
+ ∥ui −π( ˆH˜xi)∥2 < τgeo
+o
+N
+,
+(18)
+where ˜xi denotes homogeneous RGB coordinates, π(·)
+maps them back to 2D coordinates, and τgeo = 5 pixels
+is the reprojection-error threshold. The ratio ρ measures the
+fraction of correspondences consistent with the estimated
+alignment. Masks whose teacher score and ρ exceed fixed
+thresholds are warped into the event view by inverse map-
+ping
+M E(u) = M I
+π
+
+ˆH−1˜u
+
+.
+(19)
+Here, M I and M E denote the RGB and event-view masks.
+This planar model is suitable because N-ImageNet displays
+source images on a monitor while the event camera moves
+approximately parallel to the screen.
+EViM benchmarks.
+We construct three fixed, training-
+disjoint benchmarks from the DSEC-Detection test split.
+EViM500 and EViM1000 respectively contain approxi-
+mately 4.7K/3K clips and 47K/52K object instances, span-
+ning 350–500 ms and up to 1 s. Their masks pass automatic
+QC and stricter human verification. EViM-HM provides
+fully verified long-horizon evaluation.
+5.2. Quality control (QC)
+EViM combines automatic filtering with human verifica-
+tion.
+DSEC proposals are filtered using confidence and
+box–mask agreement, while N-ImageNet proposals are fil-
+tered using confidence and homography support. Review-
+ers then audit RGB–event–mask triplets for object iden-
+tity, event-view alignment and geometric validity. In a fi-
+nal 2,000-triplet audit, 92.2% of post-QC masks are judged
+correct, while the hard failure rate decreases from 25.7%
+before QC to 4.8%.
+6. Experiments
+Training setup.
+We initialize the TinySAM image en-
+coder, prompt encoder, and mask decoder from the public
+TinySAM checkpoint [41], whereas RTEE, E2T, the mem-
+ory module, MAP, and the occlusion head are randomly
+initialized and trained from scratch. Training follows the
+two-stage procedure in Sec. 4.4: Stage I performs token-
+space alignment for 20 epochs with batch size 16, and Stage
+II trains clip-level propagation with memory prompting for
+20 epochs using clips of 10 windows and memory window
+(s) is 3. We take 384x384 event voxels and optimize with
+AdamW on two A100 80GB GPUs, using cosine learning-
+rate decay with a 5% linear warmup, weight decay 0.01, and
+betas 0.9, 0.999. Newly introduced modules use an initial
+learning rate of 3×10−4, while TinySAM-initialized mod-
+ules start from 1×10−5.
+Evaluation protocols. We evaluate four complementary
+settings on EViM and external benchmarks.
+EViM500,
+EViM1000, and EViM-HM are fixed, training-disjoint
+benchmarks using non-overlapping 50 ms event windows
+and reporting J , F, and J &F (Sec. 5). Quantitative ta-
+bles mark the top three entries per column in red, green,
+and blue. In prompt-once VOS, a box initializes each object
+in its first annotated window for propagation without further
+interaction. In interactive ePVS, each corrected window re-
+ceives three clicks. Online evaluation corrects predictions
+below 0.75 predicted IoU in a single pass, whereas offline
+evaluation first processes the sequence and then corrects the
+lowest-IoU windows under the same budget. FE108 [55]
+and VisEvent evaluate zero-shot event-based box tracking
+using success rate (SR). Zero-shot interactive tracking on
+VisEvent allows up to 3 corrections. Released checkpoints
+are used unless marked ft, indicating full-parameter fine-
+tuning on the same EViM split and event-window schedule.
+Recon. denotes E2VID [38] reconstructions.
+Table 2. Prompt-once VOS on EViM500, EViM1000, and EViM-
+HM, reported using J &F.
+Parentheses denote gains over the
+second-best result. ft indicates models fine-tuned on our dataset.
+Method
+Rep.
+Params (M) ↓EViM500 EViM1000 EViM-HM FPS ↑GFLOPs/frame ↓
+SAM-I2V [29]
+Recon.
+18.90
+79.90
+73.81
+69.92
+9.00
+211.43
+SAM2.1 B+ [37]
+Recon.
+80.85
+80.01
+74.45
+70.48
+2.65
+390.00
+XMem++ [4]
+Recon.
+63.30
+80.84
+72.46
+68.55
+8.40
+229.57
+SwinB-AOT-L [52]
+Recon.
+65.40
+77.96
+70.32
+66.41
+14.38
+82.29
+SwinB-DeAOT-L [51]
+Recon.
+70.30
+82.84
+76.38
+72.44
+18.45
+87.00
+EventSAM+SAM2.1 B+ [8, 37]
+Event voxels+Recon. 174.55
+82.16
+76.91
+72.96
+2.60
+602.57
+EventSAM+SwinB-DeAOT-L [8, 51] Event voxels+Recon. 164.00
+83.17
+77.42
+73.49
+8.01
+100.57
+ECOS [64]
+Event voxels
+31.47
+69.22
+60.13
+56.08
+38.15
+106.43
+ECOS ft [64]
+Event voxels
+31.47
+79.09
+76.67
+75.71
+38.15
+106.43
+SAM-I2V ft
+Recon.
+18.90
+81.96
+75.31
+72.35
+9.00
+211.43
+SAM2.1 B+ ft
+Recon.
+80.85
+82.82
+77.06
+72.08
+2.65
+390.00
+E-MAPS (Ours)
+Event voxels
+36.25
+84.38 (1.2↑)
+80.37 (3.0↑)
+76.41 (0.7↑)
+27.41
+150.43
+
+
+3
+5
+7
+10
+Nf
+55
+60
+65
+70
+75
+80
+85
+&
+EViM500
+3
+5
+7
+10
+Nf
+EViM1000
+3
+5
+7
+10
+Nf
+EViM-HM
+2
+4
+6
+10
+Nf
+EViM500
+2
+4
+6
+10
+Nf
+EViM1000
+2
+4
+6
+10
+Nf
+EViM-HM
+(a) Online ePVS
+(b) Offline ePVS
+E-MAPS (Ours)
+SAM2.1 B+ ft
+SAM-I2V ft
+EventSAM+ECOS ft
+SAM2.1 t
+EventSAM+SAM2.1 B+
+SAM2.1 B+
+SAM2.1 l
+SAM-I2V
+EventSAM+SwinB-DeAOT-L
+EventSAM+ECOS
+Figure 3. Interactive ePVS performance on EViM500, EViM1000, and EViM-HM under online and offline evaluation. Results are reported
+using J &F as the number of interaction frames Nf increases.
+Table 3. Zero-shot VOT evaluation on FE108 and VisEvent using
+Success Rate (SR). EV denotes Event representation compatible
+with the corresponding method.
+Method
+Mod.
+VisEvent
+FE108
+LI
+FOC+POC
+FM+MB
+BOM+BC
+SAM+XMem++ [4, 22]
+Frame
+60.87
+31.8
+33.9
+37.6
+34.5
+SAM+SwinB-DeAOT-L [22, 51]
+Frame
+62.61
+33.7
+35.1
+39.5
+35.6
+SAM+SwinB-AOT-L [22, 52]
+Frame
+62.41
+32.9
+34.4
+38.8
+35.1
+SAM-I2V [29]
+Frame
+61.23
+30.7
+32.7
+36.2
+33.2
+SAM2.1 B+ [37]
+Frame
+72.88
+32.6
+30.3
+31.6
+30.6
+EventSAM+ECOS [8, 64]
+EV
+65.25
+27.4
+28.6
+34.3
+28.9
+E-MAPS (Ours)
+EV
+70.15
+36.1
+36.5
+43.2
+37.2
+LLE-VOS
+Frame+EV
+69.74
+32.6
+36.1
+42.1
+35.9
+EVOLVE
+Frame+EV
+71.46
+30.9
+35.8
+43.9
+36.6
+E-MAPS
+Frame+EV
+71.32
+35.7
+37.2
+42.7
+37.7
+Prompt-once VOS and efficiency. E-MAPS consistently
+achieves the highest J &F across EViM500, EViM1000,
+and EViM-HM, with scores ranging from 76.41 to 84.38.
+Even after fine-tuning competing methods such as ECOS,
+SAM-I2V, and SAM2.1 B+, E-MAPS retains its advan-
+tage across all three benchmarks.
+Beyond segmentation
+accuracy, E-MAPS offers substantial computational ben-
+efits.
+E-MAPS runs at 27.41 FPS, over ten times faster
+than SAM2.1 B+, while requiring considerably fewer op-
+erations per frame. Together, these results demonstrate that
+E-MAPS achieves accurate and efficient event-based track-
+ing, with qualitative examples in Fig. 4 further illustrating
+its robustness under low-light conditions.
+Interactive ePVS. E-MAPS consistently outperforms com-
+peting methods across all correction budgets in both online
+and offline protocols. Performance improves steadily as ad-
+ditional corrections are introduced, with online J &F gains
+of approximately 2 points across all three benchmarks.
+Offline interaction yields further improvements, reaching
+87.08 on EViM500, 83.74 on EViM1000, and 79.89 on
+EViM-HM. These results demonstrate that E-MAPS effec-
+tively incorporates new user prompts into its memory, al-
+lowing corrections to improve not only the current segmen-
+tation but also subsequent propagation.
+Zero-shot visual object tracking.
+To assess general-
+ization beyond EViM, we evaluate E-MAPS without ad-
+Table 4. Zero-shot interactive tracking on VisEvent. ∆rel denotes
+relative gain after corrections. NMO denotes no motion
+Method
+Overall
+NMO
+SR0/3
+∆rel
+SR0/3
+∆rel
+SAM-I2V ft [29]
+33.2/36.0
+8.4%
+26.7/29.4 10.1%
+SAM2.1 B+ ft [37] 31.3/34.4 10.0% 24.8/27.6 11.3%
+E-MAPS (Ours)
+38.3/44.1 15.3% 28.9/37.8 30.8%
+ditional training on FE108 [55] and VisEvent.
+Follow-
+ing [46, 50], tracking is initialized with a bounding box, and
+predicted masks are converted into tight bounding boxes.
+On FE108, event-only E-MAPS achieves 70.15 SR, outper-
+forming EventSAM+ECOS by 4.90 points while remaining
+competitive with RGB and RGB–event methods. On Vi-
+sEvent, it performs particularly well under challenging con-
+ditions, ranking first in low illumination (LI) and surpass-
+ing all RGB-only methods under fast motion and motion
+blur (FM+MB). We further explore RGB–event fusion by
+averaging aligned TinySAM RGB and adapted event fea-
+tures [59]. Despite its simplicity, this variant outperforms
+dedicated RGB–event methods under low illumination, oc-
+clusion (FOC+POC), and background motion and clutter
+(BOM+BC), while remaining competitive on FE108 and
+FM+MB. These findings demonstrate that representations
+learned for ePVS transfer effectively to conventional visual
+object tracking.
+Zero-shot interactive tracking on VisEvent. We further
+evaluate how E-MAPS responds to user corrections with-
+out additional training. The protocol allows up to three on-
+line box corrections whenever the predicted IoU falls be-
+low 0.5. While SAM2 and SAM-I2V operate on E2VID-
+reconstructed frames, E-MAPS processes events directly.
+We measure the Success Rate before and after correc-
+tion (SR0 and SR3), with relative improvement defined as
+∆rel = (SR3−SR0)/SR0. E-MAPS achieves relative gains
+of 15.3% overall and 30.8% under NMO conditions, sub-
+stantially exceeding the improvements of both baselines.
+These results highlight its ability to make effective use of
+sparse user corrections, particularly in challenging tracking
+scenarios.
+
+
+(a)
+(b)
+(c)
+(d)
+(e)
+(f)
+Figure 4. Qualitative comparison of promptable VOS under low-light conditions. Rows depict temporal progression. Columns: (a) RGB
+frames; (b) event-frame visualization rendered from the event voxel grid; (c) SAM2 on RGB; (d) SAM2 on E2VID-reconstructed frames;
+(e) E-MAPS on the event voxel grid; (f) ground-truth.
+Table 5.
+Controlled memory-interface ablation.
+Latency is
+measured on an RTX 3080.
+Injection path
+EViM500
+EViM1000
+EViM-HM
+Latency (ms)
+Past object feature fusion
+63.25
+61.18
+56.47
+26.04
+Decoder memory cross-attn.
+82.61
+79.51
+74.86
+152.00
+MAP w/o Sparse-Motion Adj.
+83.10
+78.51
+74.31
+33.46
+MAP + dense memory cross-attn.
+83.02
+79.54
+75.68
+158.91
+MAP (Ours)
+84.38
+80.37
+76.41
+36.55
+6.1. Ablation Study
+Table 5 evaluates memory retrieval and decoder injection
+while keeping the event-derived scene and object memory
+fixed. Dense memory cross-attention, following SAM2.1
+Tiny, achieves decent results at 152.00 ms.
+In contrast,
+MAP improves performance while reducing latency to
+36.55 ms (4.16× faster).
+Combining MAP with dense
+cross-attention yields no further improvement. Removing
+Sparse-Motion Adjustment reduces performance, with the
+largest drop on EViM-HM. Tables 6 and 7 assess the train-
+ing objectives. In Stage I, the full objective improves J &F
+from 53.17 to 57.07 over Dice+L1 alone, translating to
+a downstream Stage-II improvement from 76.34 to 81.37.
+Removing Dice or L1 reduces the final score to 75.96 and
+79.45, respectively, highlighting their complementary con-
+tributions. In Stage II, ablating Dice, focal, occlusion, or
+IoU supervision lowers performance. Finally, Table 8 ex-
+amines memory token capacity and current-window condi-
+tioning early in the training stage. Increasing K from 1 to 2
+improves performance, while conditioning on current event
+evidence benefits both token budgets. Combining the two
+yields the best results, emphasizing the value of grounding
+compact memory representations in current observations.
+Table 6. Stage-I loss abla-
+tion and downstream effect.
+Setting
+S-I
+S-II
+w/o CORAL+InfoNCE 53.17 76.34
+w/o InfoNCE
+53.81 75.89
+w/o CORAL
+52.99 69.78
+w/o Dice
+55.02 75.96
+w/o L1
+55.81 79.45
+Full
+57.07 81.37
+Table 7.
+Stage-II
+objective ablation.
+Setting
+J&F
+w/o Dice
+56.78
+w/o Focal 67.98
+w/o Occ.
+77.87
+w/o IoU
+76.09
+Full
+81.37
+Table 8. MAP
+ablation.
+K Cur. J&F
+1
+×
+52.1
+1
+✓
+53.4
+2
+×
+52.8
+2
+✓
+54.6
+7. Conclusion
+We introduced ePVS, where arbitrary-window prompts ini-
+tialize, correct, or introduce objects and predictions form
+identity-consistent masklets.
+We presented E-MAPS, an
+event-only framework that retains pretrained semantic and
+prompting priors while learning propagation and correc-
+tion directly from event masklets.
+E2T aligns recurrent
+event features with the pretrained representation space,
+while MAP converts object-conditioned history into sparse
+prompts, allowing memory and user inputs to share one effi-
+cient decoder pathway. We also introduced EViM for scal-
+able representation transfer and event-video learning. We
+extensively evaluate E-MAPS across prompt-once and in-
+teractive ePVS, and zero-shot tracking on FE108 and Vi-
+sEvent. These evaluations show that E-MAPS provides ac-
+curate and efficient segmentation from sparse event streams.
+Acknowledgments
+This research was funded by Khalifa University of Sci-
+ence and Technology through the Faculty Start-Ups under
+Project ID: KU-INT-FSU-2005-8474000775. This research
+was also supported by KU Research Center for Advanced
+Intelligent Systems (AIS), Khalifa University of Science
+and Technology (KU-AIS).
+
+
+References
+[1] Inigo Alonso and Ana C. Murillo.
+Ev-segnet: Semantic
+segmentation for event-based cameras.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR) Workshops, 2019. 2, 5
+[2] Jong-Hyeon Baek, Jiwon Oh, and Yeong Jun Koh. Evolve:
+Event-guided deformable feature transfer and dual-memory
+refinement for low-light video object segmentation. In 2025
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 11273–11282. IEEE, 2025. 2
+[3] Zechen Bai, Tong He, Haiyang Mei, Pichao Wang, Ziteng
+Gao, Joya Chen, Lei Liu, Zheng Zhang, and Mike Zheng
+Shou. One token to seg them all: Language instructed rea-
+soning segmentation in videos, 2024. 4
+[4] Maksym Bekuzarov, Ariana Bermudez, Joon-Young Lee,
+and Hao Li. Xmem++: Production-level video segmentation
+from few annotated frames. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV), pages
+635–644, 2023. 6, 7
+[5] Sergi Caelles, Kevis-Kokitsi Maninis, Jordi Pont-Tuset,
+Laura Leal-Taixe, Daniel Cremers, and Luc Van Gool. One-
+shot video object segmentation. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2017. 1
+[6] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoub-
+hik Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chai-
+tanya Ryali, Kalyan Vasudev Alwala, Haitham Khedr, An-
+drew Huang, Jie Lei, Tengyu Ma, Baishan Guo, Arpit
+Kalla, Markus Marks, Joseph Greer, Meng Wang, Peize Sun,
+Roman R¨adle, Triantafyllos Afouras, Effrosyni Mavroudi,
+Katherine Xu, Tsung-Han Wu, Yu Zhou, Liliane Momeni,
+RISHI HAZRA, Shuangrui Ding, Sagar Vaze, Francois
+Porcher, Feng Li, Siyuan Li, Aishwarya Kamath, Ho Kei
+Cheng, Piotr Dollar, Nikhila Ravi, Kate Saenko, Pengchuan
+Zhang, and Christoph Feichtenhofer. SAM 3: Segment any-
+thing with concepts. In The Fourteenth International Con-
+ference on Learning Representations, 2026. 1, 6
+[7] Bharatesh Chakravarthi, Aayush Atul Verma, Kostas Dani-
+ilidis, Cornelia Fermuller, and Yezhou Yang. Recent event
+camera innovations: A survey. In Computer Vision – ECCV
+2024 Workshops, pages 342–376, Cham, 2025. Springer Na-
+ture Switzerland. 1
+[8] Zhiwen Chen, Zhiyu Zhu, Yifan Zhang, Junhui Hou, Guang-
+ming Shi, and Jinjian Wu. Segment any event streams via
+weighted adaptation of pivotal tokens.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 3890–3900, 2024. 1, 2, 5, 6, 7
+[9] Zhiwen Chen,
+Junhui Hou,
+Zhiyu Zhu,
+Jinjian Wu,
+and Guangming Shi.
+Scaling dense event-stream pre-
+training from visual foundation models.
+arXiv preprint
+arXiv:2603.03969, 2026. 2
+[10] Ho Kei Cheng and Alexander G. Schwing. Xmem: Long-
+term video object segmentation with an atkinson-shiffrin
+memory model. In Computer Vision – ECCV 2022, pages
+640–658, Cham, 2022. Springer Nature Switzerland. 1, 2
+[11] Ho Kei Cheng, Yu-Wing Tai, and Chi-Keung Tang. Rethink-
+ing space-time networks with improved memory coverage
+for efficient video object segmentation. In Advances in Neu-
+ral Information Processing Systems, pages 11781–11794.
+Curran Associates, Inc., 2021.
+[12] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young
+Lee, and Alexander Schwing. Putting the object back into
+video object segmentation. In 2024 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+3151–3161, 2024. 1, 2
+[13] Jifeng Dai, Haozhi Qi, Yuwen Xiong, Yi Li, Guodong
+Zhang, Han Hu, and Yichen Wei. Deformable convolutional
+networks, 2017. 4
+[14] Yi Ding, Bowen Yao, Yuhan Liu, Hao Chen, Ding Ding,
+Zhen Yang, Youfu Li, and Yongjian Deng. Evsam: Segment
+anything model with event-based assistance.
+ACM Trans.
+Multimedia Comput. Commun. Appl., 2026. Just Accepted.
+1, 2
+[15] Johan
+Edstedt,
+Qiyu
+Sun,
+Georg
+B¨okman,
+M˚arten
+Wadenb¨ack, and Michael Felsberg.
+Roma: Robust dense
+feature matching. In Proceedings of the IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+pages 19790–19800, 2024. 6
+[16] Guillermo Gallego, Tobi Delbr¨uck, Garrick Orchard, Chiara
+Bartolozzi, Brian Taba, Andrea Censi, Stefan Leutenegger,
+Andrew J. Davison, J¨org Conradt, Kostas Daniilidis, and
+Davide Scaramuzza. Event-based vision: A survey. IEEE
+Transactions on Pattern Analysis and Machine Intelligence,
+44(1):154–180, 2022. 1
+[17] Mingqi Gao, Feng Zheng, James JQ Yu, Caifeng Shan,
+Guiguang Ding, and Jungong Han. Deep learning for video
+object segmentation: a review. Artificial Intelligence Review,
+56(1):457–531, 2023. 1
+[18] Daniel Gehrig and Davide Scaramuzza. Low-latency auto-
+motive vision with event cameras. Nature, 629(8014):1034–
+1040, 2024. 2, 5
+[19] Mathias Gehrig, Willem Aarents, Daniel Gehrig, and Davide
+Scaramuzza. Dsec: A stereo event camera dataset for driv-
+ing scenarios. IEEE Robotics and Automation Letters, 6(3):
+4947–4954, 2021. 2, 5
+[20] Friedhelm Hamann, Hanxiong Li, Paul Mieske, Lars Lewe-
+johann, and Guillermo Gallego.
+MouseSIS: A Frames-
+and-Events Dataset for Space-Time Instance Segmentation
+of Mice, page 156–173. Springer Nature Switzerland, 2025.
+2, 5
+[21] Junho Kim, Jaehyeok Bae, Gangin Park, Dongsu Zhang, and
+Young Min Kim. N-imagenet: Towards robust, fine-grained
+object recognition with event cameras.
+In Proceedings of
+the IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 2146–2156, 2021. 2, 5, 6
+[22] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C. Berg, Wan-Yen Lo, Piotr Dollar, and
+Ross Girshick. Segment anything. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 4015–4026, 2023. 1, 2, 7
+[23] Lingdong Kong, Youquan Liu, Lai Xing Ng, Benoit R. Cot-
+tereau, and Wei Tsang Ooi. Openess: Event-based semantic
+scene understanding with open vocabularies. In Proceedings
+
+
+of the IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 15686–15698, 2024. 2
+[24] Seungjun Lee and Gim Hee Lee. Segment any events with
+language.
+In The Fourteenth International Conference on
+Learning Representations, 2026. 1, 2
+[25] Hebei Li, Jin Wang, Jiahui Yuan, Yue Li, Wenming Weng,
+Yansong Peng, Yueyi Zhang, Zhiwei Xiong, and Xiaoyan
+Sun.
+Event-assisted low-light video object segmentation.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), pages 3250–3259,
+2024. 1, 2
+[26] Hebei Li, Yansong Peng, Jiahui Yuan, Peixi Wu, Jin Wang,
+Yueyi Zhang, and Xiaoyan Sun. Efficient event-based se-
+mantic segmentation via exploiting frame-event fusion: A
+hybrid neural network approach, 2025. 5
+[27] Jianing Li, Jia Li, Lin Zhu, Xijie Xiang, Tiejun Huang, and
+Yonghong Tian. Asynchronous spatio-temporal memory net-
+work for continuous event-based object detection.
+IEEE
+Transactions on Image Processing, 31:2975–2987, 2022. 1
+[28] Chenfei Liao, Xu Zheng, Yuanhuiyi Lyu, Haiwei Xue, Yi-
+hong Cao, Jiawen Wang, Kailun Yang, and Xuming Hu.
+Memorysam: Memorize modalities and semantics with seg-
+ment anything model 2 for multi-modal semantic segmenta-
+tion. CoRR, abs/2503.06700, 2025. 1, 2
+[29] Haiyang Mei, Pengyu Zhang, and Mike Zheng Shou. Sam-
+i2v: Upgrading sam to support promptable video segmen-
+tation with less than 0.2% training cost. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 3417–3426, 2025. 1, 2, 6, 7
+[30] Shehan Munasinghe, Hanan Gani, Wenqi Zhu, Jiale Cao,
+Eric Xing,
+Fahad Shahbaz Khan,
+and Salman Khan.
+Videoglamm: A large multimodal model for pixel-level vi-
+sual grounding in videos, 2025. 4
+[31] Seoung Wug Oh, Joon-Young Lee, Ning Xu, and Seon Joo
+Kim. Video object segmentation using space-time memory
+networks.
+In Proceedings of the IEEE/CVF International
+Conference on Computer Vision (ICCV), 2019. 1, 2
+[32] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Repre-
+sentation learning with contrastive predictive coding. arXiv
+preprint arXiv:1807.03748, 2018. 5
+[33] Federico Perazzi, Anna Khoreva, Rodrigo Benenson, Bernt
+Schiele, and Alexander Sorkine-Hornung. Learning video
+object segmentation from static images.
+In 2017 IEEE
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 3491–3500, 2017. 1
+[34] Vincenzo Polizzi, David B Lindell, and Jonathan Kelly.
+Realm: An rgb and event aligned latent manifold for cross-
+modal perception. arXiv preprint arXiv:2605.00271, 2026.
+2
+[35] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen
+Krueger, and Ilya Sutskever.
+Learning transferable visual
+models from natural language supervision, 2021. 5
+[36] Hanoona Rasheed, Muhammad Maaz, Sahal Shaji Mul-
+lappilly,
+Abdelrahman Shaker,
+Salman Khan,
+Hisham
+Cholakkal, Rao M. Anwer, Erix Xing, Ming-Hsuan Yang,
+and Fahad S. Khan. Glamm: Pixel grounding large multi-
+modal model, 2024. 4
+[37] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang
+Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman
+R¨adle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junt-
+ing Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-
+Yuan Wu, Ross Girshick, Piotr Dollar, and Christoph Feicht-
+enhofer. SAM 2: Segment anything in images and videos. In
+The Thirteenth International Conference on Learning Rep-
+resentations, 2025. 1, 2, 4, 6, 7
+[38] Henri Rebecq, Ren´e Ranftl, Vladlen Koltun, and Davide
+Scaramuzza. High speed and high dynamic range video with
+an event camera. IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 43(6):1964–1980, 2021. 6
+[39] Jiangwei Ren, Xingyu Jiang, Zizhuo Li, Dingkang Liang,
+Xin Zhou, and Xiang Bai. Minima: Modality invariant im-
+age matching. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+23059–23068, 2025. 6
+[40] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, San-
+jeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy,
+Aditya Khosla, Michael Bernstein, et al.
+Imagenet large
+scale visual recognition challenge. International journal of
+computer vision, 115(3):211–252, 2015. 6
+[41] Han Shu, Wenshuo Li, Yehui Tang, Yiman Zhang, Yi-
+hao Chen, Houqiang Li, Yunhe Wang, and Xinghao Chen.
+Tinysam: Pushing the envelope for efficient segment any-
+thing model. Proceedings of the AAAI Conference on Artifi-
+cial Intelligence, 39(19):20470–20478, 2025. 1, 2, 4, 6
+[42] Baochen Sun and Kate Saenko.
+Deep coral: Correlation
+alignment for deep domain adaptation.
+In Computer Vi-
+sion – ECCV 2016 Workshops, pages 443–450, Cham, 2016.
+Springer International Publishing. 5
+[43] Mingjie Sun, Jimin Xiao, Eng Gee Lim, Cairong Zhao, and
+Yao Zhao. Unified multi-modality video object segmentation
+using reinforcement learning. IEEE Transactions on Circuits
+and Systems for Video Technology, 34(8):6722–6734, 2024.
+1
+[44] Zhaoning Sun, Nico Messikommer, Daniel Gehrig, and Da-
+vide Scaramuzza. Ess: Learning event-based semantic seg-
+mentation from still images. In Computer Vision – ECCV
+2022, pages 341–357, Cham, 2022. Springer Nature Switzer-
+land. 2, 5
+[45] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-
+reit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, and Il-
+lia Polosukhin. Attention is all you need. In Proceedings
+of the 31st International Conference on Neural Information
+Processing Systems, page 6000–6010, Red Hook, NY, USA,
+2017. Curran Associates Inc. 4
+[46] Jovana Videnovic, Alan Lukezic, and Matej Kristan.
+A
+distractor-aware memory for visual object tracking with
+SAM2. In Comp. Vis. Patt. Recognition, 2025. 7
+[47] Xiao Wang, Jianing Li, Lin Zhu, Zhipeng Zhang, Zhe Chen,
+Xin Li, Yaowei Wang, Yonghong Tian, and Feng Wu. Vi-
+sevent: Reliable object tracking via collaboration of frame
+and event flows. IEEE Transactions on Cybernetics, 54(3):
+1997–2010, 2024. 2
+
+
+[48] Xiao Wang, Shiao Wang, Chuanming Tang, Lin Zhu, Bo
+Jiang, Yonghong Tian, and Jin Tang. Event stream-based
+visual object tracking: A high-resolution benchmark dataset
+and a novel baseline.
+In 2024 IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+19248–19257. IEEE, 2024. 2
+[49] Bochen Xie, Yongjian Deng, Zhanpeng Shao, and Youfu Li.
+Eisnet: A multi-modal fusion network for semantic segmen-
+tation with events and images. IEEE Transactions on Multi-
+media, 26:8639–8650, 2024. 2
+[50] Cheng-Yen Yang,
+Hsiang-Wei Huang,
+Wenhao Chai,
+Zhongyu Jiang, and Jenq-Neng Hwang. Samurai: Adapting
+segment anything model for zero-shot visual tracking with
+motion-aware memory, 2024. 7
+[51] Zongxin Yang and Yi Yang. Decoupling features in hierar-
+chical propagation for video object segmentation. Advances
+in Neural Information Processing Systems, 35:36324–36336,
+2022. 6, 7
+[52] Zongxin Yang, Yunchao Wei, and Yi Yang. Associating ob-
+jects with transformers for video object segmentation.
+In
+Advances in Neural Information Processing Systems, pages
+2491–2502. Curran Associates, Inc., 2021. 1, 2, 6, 7
+[53] Bowen Yao, Yongjian Deng, Yuhan Liu, Hao Chen, Youfu
+Li, and Zhen Yang. Sam-event-adapter: Adapting segment
+anything model for event-rgb semantic segmentation.
+In
+2024 IEEE International Conference on Robotics and Au-
+tomation (ICRA), pages 9093–9100, 2024. 1, 2
+[54] Zhen Yao and Mooi Choo Chuah. Event-guided low-light
+video semantic segmentation.
+In 2025 IEEE/CVF Winter
+Conference on Applications of Computer Vision (WACV),
+page 3330–3341. IEEE, 2025. 2
+[55] Jiqing Zhang, Xin Yang, Yingkai Fu, Xiaopeng Wei, Bao-
+cai Yin, and Bo Dong. Object tracking by jointly exploiting
+frame and event domain. In Proceedings of the IEEE/CVF
+international conference on computer vision, pages 13043–
+13052, 2021. 2, 6, 7
+[56] Jiaming Zhang, Huayao Liu, Kailun Yang, Xinxin Hu, Ruip-
+ing Liu, and Rainer Stiefelhagen. Cmx: Cross-modal fusion
+for rgb-x semantic segmentation with transformers. IEEE
+Transactions on Intelligent Transportation Systems, 24(12):
+14679–14694, 2023. 2
+[57] Jiaming Zhang, Ruiping Liu, Hao Shi, Kailun Yang, Simon
+Reiß, Kunyu Peng, Haodong Fu, Kaiwei Wang, and Rainer
+Stiefelhagen. Delivering arbitrary-modal semantic segmen-
+tation. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 1136–
+1147, 2023. 2
+[58] Jiqing Zhang, Yuanchen Wang, Wenxi Liu, Meng Li, Jin-
+peng Bai, Baocai Yin, and Xin Yang. Frame-event align-
+ment and fusion network for high frame rate tracking. In
+2023 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 9781–9790. IEEE, 2023. 2
+[59] Zhixiong Zhang, Shuangrui Ding, Xiaoyi Dong, Songxin
+He, Jianfan Lin, Junsong Tang, Yuhang Zang, Yuhang Cao,
+Dahua Lin, and Jiaqi Wang.
+Advancing complex video
+object segmentation via progressive concept construction,
+2026. 7
+[60] Xu Zheng, Yexin Liu, Yunfan Lu, Tongyan Hua, Tianbo Pan,
+Weiming Zhang, Dacheng Tao, and Lin Wang. Deep learning
+for event-based vision: A comprehensive survey and bench-
+marks. arXiv preprint arXiv:2302.08890, 2023. 1
+[61] Junbao Zhou, Ziqi Pang, and Yu-Xiong Wang.
+Rmem:
+Restricted memory banks improve video object segmenta-
+tion. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 18602–
+18611, 2024. 1, 2
+[62] Tianfei Zhou, Fatih Porikli, David J. Crandall, Luc Van Gool,
+and Wenguan Wang. A survey on deep learning technique for
+video segmentation. IEEE Transactions on Pattern Analysis
+and Machine Intelligence, 45(6):7099–7122, 2023. 1
+[63] Alex Zihao Zhu, Liangzhe Yuan, Kenneth Chaney, and
+Kostas Daniilidis.
+Unsupervised event-based learning of
+optical flow, depth, and egomotion.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2019. 3
+[64] Lin Zhu, Xianzhang Chen, Lizhi Wang, Xiao Wang,
+Yonghong Tian, and Hua Huang.
+Continuous-time object
+segmentation using high temporal resolution event camera.
+IEEE Transactions on Pattern Analysis and Machine Intelli-
+gence, 47(2):807–824, 2025. 1, 2, 3, 4, 5, 6, 7

@@ -1,0 +1,3461 @@
+Taking Apart and Putting Together:
+Tracking Objects Through Physical Transformations
+Davide Gardenal1
+Mingxuan Liu1
+Flavio Vella1
+Quentin Guimard2
+Elisa Ricci1,3
+1University of Trento
+2AMIAD, Pôle Recherche, Palaiseau
+3Fondazione Bruno Kessler
+detected
+missed
+TIPO (Ours)
+input video + our masks
+4/4 events · 1.8 FPS
+9× faster
+TubeletGraph [29] 
+1/4 events · 0.2 FPS 
+no assembly support
+SAM 2.1 [26] 
+0/4 events · 3.7 FPS
+Initial frame
+Disassembly
+Assembly
+Unscrew
+Remove
+Insert
+Screw
+Moka collector
+Unscrew
+Remove
+Insert
+Screw
+Moka pot
+Moka tank + filter
+Moka tank
+Moka tank + filter
+Moka pot
+Moka filter
+Moka pot
+misses
+initial split
+Remove
+Moka filter
+Moka pot
+ignores
+state changes
+t1
+t2
+t3
+t4
+t5
+cannot detect assemblies
+Figure 1. Transformation Tracking and Understanding. Given a video and initial object prompts, TTU requires tracking objects through
+assemblies and disassemblies while maintaining a part–whole state graph. Each row shows the masks and state graph across keyframes
+(t1–t5) for each method using the same SAM 2.1 backbone [26]. Foundation trackers (e.g., SAM 2/3 [6, 26]) maintain pixel-level tracklets
+but ignore state changes. TubeletGraph [29] relies on reactive search after track loss, missing early splits (t2) and failing on assemblies
+(t4, t5) at 0.2 FPS. TIPO proactively detects both events (t2–t5), tracking all parts and generating complete state graphs up to 9× faster.
+Abstract
+We introduce Transformation Tracking and Understanding
+(TTU), extending video object tracking to environments
+where objects undergo physical assemblies and disassem-
+blies. TTU requires continuously tracking objects through
+transformations, identifying new entities, maintaining a state
+graph of their relationships, and assigning semantic labels
+to transformations. While foundation models (e.g., SAM 2/3)
+maintain tracklets through appearance changes, they can-
+not update semantic identities as objects physically evolve.
+Prior work addresses only disassemblies, relying on ex-
+pensive searches triggered only when tracking fails. We
+propose Tracking Instances via Proposals and Overlaps
+(TIPO), a training-free framework that continuously in-
+fers transformations via a generate–evaluate–judge pipeline.
+TIPO generates split and merge proposals from disjoint
+mask components, scores them against mask-decoder priors
+using inner and external overlap, and queries an MLLM
+on the top proposal for visual verification and semantic
+labeling. To benchmark TTU, we curate Video Instances,
+States, and Transformation Annotations (VISTA), a dataset
+including state graphs with 124 assembly and 132 disas-
+sembly events across 50 sequences and over 26,000 frames.
+TIPO achieves state-of-the-art tracking and state-graph ac-
+curacy on VISTA, while operating 6× to 15× faster than
+prior methods.
+Project page: davidegardenal.github.io/tipo-tracking
+arXiv:2611.27398v1  [cs.CV]  20 Nov 2026
+
+
+1. Introduction
+Imagine someone preparing a Moka pot (Fig. 1, t1): they
+unscrew the collector (t2), pull out the funnel filter (t3), and
+set the components aside. In a matter of seconds, a single
+object splits into three distinct parts. Modern visual founda-
+tion trackers (e.g., SAM 2 [26], SAM 3 [6]) are built around
+entity persistence: they follow objects through complex mo-
+tion, but have no mechanism to revise identities when objects
+physically divide or merge. As shown in the last row of Fig. 1
+(SAM 2.1), the tracker either stubbornly preserves a single
+ID across a split (t2) or arbitrarily drops fragmented parts
+(t3, t4). Reassembling the pot (t4, t5) reverses the ambiguity:
+should the tracker follow separate components or recognize
+a unified Moka pot again? Yet the physical world is inher-
+ently dynamic [30, 32], with objects routinely assembled,
+disassembled, sliced, and folded [11, 15]. Maintaining pixel
+tracklets is only half the challenge; dynamic environments
+require a system that tracks objects through transformations,
+describes the physical process, and updates identities and
+part–whole relationships over time [19, 40].
+To address this dynamic scenario, we formalize the task of
+Transformation Tracking and Understanding (TTU). Given a
+video and initial object prompts, a TTU system must (i) track
+objects through assemblies and disassemblies, (ii) describe
+the physical transformations, (iii) update tracklet IDs and se-
+mantic labels, and (iv) keep track of how every object relates
+to its parts over time. The output is a single, unified state
+graph paired with object masks (Fig. 1, TIPO row). This
+structured representation naturally enables several down-
+stream applications: robots can verify step completion be-
+fore planning actions [23], and AR assistants can monitor
+current assembly states to guide users [24].
+Prior work only partially addresses this task. Tubelet-
+Graph [29] handles isolated split events but has three major
+limitations for TTU (Fig. 1, second row). First, its search for
+parts triggers only after track loss, missing the initial split
+(t2) and detecting only later fragmentation (t3). Second, it
+is restricted to disassemblies and cannot model assemblies,
+causing identity switches (t4) and failing to resolve assem-
+blies (t5). Lastly, tracking dense candidate regions across
+the whole scene incurs severe overhead (0.2 FPS).
+We take a fundamentally different approach. Our key
+observation is simple: split and merge events are observable
+in the current frame’s geometry. In Fig. 1, the collector’s
+separation is instantly evident at t2 because the tracked mask
+fragments into disconnected components. There is no need
+to scan through the video to recover lost parts; the visual evi-
+dence is already in the frame. Building on this, we introduce
+Tracking Instances via Proposals and Overlaps (TIPO), a
+training-free framework for TTU that explicitly models both
+assemblies and disassemblies on top of foundation trackers.
+At each frame, TIPO executes a generate–evaluate–judge
+pipeline. It first generates split and merge state proposals by
+Table 1. Comparison between VISTA and VOST-TAS datasets.
+VISTA adds complex assembly events, doubles the number of
+transformations, and includes longer video sequences.
+Dataset
+Videos
+Frames
+Len. (s)
+FPS
+Transformations
+Asm.
+Dis.
+Total
+VOST-TAS [29]
+57
+7,820
+22.3
+5
+0
+108
+108
+VISTA (Ours)
+50
+26,470
+45.0
+10–20
+124
+132
+256
+partitioning the disjoint components of the tracked masks.
+Next, it evaluates each state proposal against promptable
+mask-decoder priors using complementary inner and exter-
+nal overlap metrics, distinguishing genuine transformations
+from visual occlusions without expensive search. Finally,
+a Multimodal Large Language Model (MLLM) [14, 25]
+judges whether the top-scoring proposal matches the visual
+evidence in the frame and, if so, assigns semantic labels to
+the action and the newly formed objects (e.g., “Remove” and
+“Moka filter”). By querying the MLLM only on structurally
+validated proposals, TIPO continuously updates the state
+graph without compromising tracking speed.
+To evaluate TTU, we introduce Video Instances, States,
+and Transformation Annotations (VISTA), a challenging
+benchmark of 50 multi-object videos (26K+ frames) featur-
+ing dense state-graph annotations across 256 distinct trans-
+formations. Unlike VOST-TAS [29], which covers only
+disassemblies, VISTA includes 124 assemblies and more
+than doubles the annotated transformations (Tab. 1). Cru-
+cially, the state graphs enable a rigorous structural evaluation
+of each transformation, whereas VOST-TAS annotates only
+resulting parts,ignoring which object transformed and re-
+warding methods that over-predict transformations (Tab. 3).
+Contributions. Our core contributions are: i) We formalize
+the TTU task, extending prior tracking paradigms [29] to
+model both object assemblies and disassemblies. ii) We pro-
+pose TIPO, a training-free framework that replaces dense
+spatiotemporal search [29] with per-frame geometric evalua-
+tion of state proposals using mask-decoder priors, backed by
+sparse MLLM validation and semantic labeling. iii) We cu-
+rate VISTA, the first benchmark to provide comprehensive
+state-graph annotations for both assembly and disassembly.
+iv) We show through extensive experiments that TIPO es-
+tablishes a new state-of-the-art for tracking and state-graph
+accuracy, while running 6× to 15× faster than competitors.
+2. Related Work
+Object Tracking and Foundation Models. Traditional
+multi-object tracking and video object segmentation primar-
+ily rely on tracking-by-detection [3, 5, 38] and tracking-by-
+query [21, 28, 37] paradigms. While accurate, these methods
+often struggle with target deformation and scale variation,
+and require extensive annotated training data [9, 34]. To ad-
+dress these issues, recent work leverages foundation models
+
+
+Pen tip
+Unscrew
+Remove
+Pen
+Pen barrel + refill
+Pen barrel
+Pen refill
+Tracker
+Frame t
+Per-object masks
+Components
+TIPO at frame t
+Visual Backbone
+TIPO modules (ours)
+Multimodal validation & labeling
+Proposals
+Screw
+action
+Sampled points
+0.93
+0.15
+Scores
+t
+name
+Pen
+Sampled masks
+Top proposal
+Trackert
+update
+tracks
+keep
+tracks &
+graph
+update
+tracks &
+graph
+Tip & barrel
+assembled?
+Frame t
+t−3
+t−2
+t−1
+t+1
+4
+MLLM
+Labeler
+1
+Component
+Extractor
+1
+Point
+Sampler
+1
+Mask
+Decoder
+4
+State
+Selector
+4
+MLLM
+Judge
+3
+State
+Evaluator
+2
+State
+Generator
+Figure 2. Overview of TIPO. At each frame It, the tracker provides the set of per-object masks. The pipeline operates in four stages (1–4):
+(1) extraction of the disjoint components and mask sampling, (2) generation of all possible assembly and disassembly states, (3) evaluation
+of the state proposals based on mask overlap metrics, (4) validation of the highest-scoring proposal by the MLLM Judge and semantic
+labeling. Lastly, the state graph and the tracker are updated with the validated state.
+such as SAM [16] for zero-shot instance association [18], in-
+teractive tracking [9, 34], and unified real-time tracking with
+streaming memory in SAM 2 [26]. SAM 3 further extends
+this line to Promptable Concept Segmentation by decoupling
+recognition and localization [6]. However, these models still
+assume structural integrity: identity tracking breaks down
+when objects fragment or merge. While recent human-in-
+the-loop systems mitigate this via online correction [35],
+they remain annotation tools rather than autonomous mod-
+els. In contrast, we explicitly model structural transforma-
+tions. By repurposing SAM’s zero-shot segmentation pri-
+ors, i.e. sampling internal mask representations, we isolate
+the structural cues needed to autonomously track split and
+merge events, eliminating the need for human intervention
+or domain-specific fine-tuning.
+Understanding Object Transformations. Recent literature
+explores physical state changes in videos. Early work tar-
+geted human-driven events in egocentric datasets [11, 15],
+introducing benchmarks like VOST [30] and VSCOS [36].
+Subsequent work pursued fine-grained understanding: Vi-
+dOSC temporally localizes open-world transformations [32],
+while SPOC spatially segments progressive changes [20]
+for robotic manipulation [19]. Most recently, Sun et al. [29]
+bridged state recognition and tracking via the Track Any State
+task and VOST-TAS benchmark. Their TubeletGraph frame-
+work tracks all candidate regions of the scene as tubelets
+and, after a transformation, filters them with semantic and
+spatial priors to decide which belong to the target. How-
+ever, tracking the whole scene is computationally heavy, and
+the framework is strictly limited to disassembly events. In
+contrast, TIPO natively models both assemblies and disas-
+semblies. By evaluating state proposals via per-frame spatial
+overlap, we achieve accurate transformation tracking at a
+fraction of the computational cost.
+MLLMs for Understanding Object Transformations. Re-
+cent MLLMs, including both closed-source models [1, 13,
+22] and open-weight architectures [14, 25], have shown
+strong capabilities in parsing long-context video, enabling
+the grounding of dynamic physical properties, causality, and
+structural changes [17, 39]. For tracking transformations,
+prior work primarily used MLLMs as offline pseudo-label
+generators for training [32] or as post-hoc captioners to ex-
+tract textual descriptions from mask-contoured keyframes
+[29]. In contrast, our pipeline integrates an MLLM to vali-
+date state changes directly within the tracking loop, effec-
+tively filtering out implausible false positives.
+3. Methodology
+3.1. Problem Formulation
+We formalize the task of Transformation Tracking and Un-
+derstanding. Given a video V = {It}T
+t=0 and a set of initial
+objects of interest O0 defined by their initial masks pro-
+vided by the user M0 = {mi
+0}i∈O0, the goal is to con-
+tinuously track and segment the objects, detect physical
+transformations, and output a directed acyclic state graph
+G = (V, E) modeling their spatiotemporal and semantic
+evolution. Unlike single-object tracking formulations that
+assume all resulting entities derive from a single progenitor,
+TTU naturally models arbitrary multi-object interactions,
+where distinct entities can independently persist, split into
+parts, or merge to form new objects.
+
+
+A node vi
+t = (t, i, mi
+t, n) ∈V represents the complete
+state of object i at frame t, comprising its binary mask
+mi
+t and a free-form text name n (e.g., “Pen”). An edge
+e = (vj
+t−1, vi
+t, d) ∈E captures the temporal transition from
+frame t−1 to t. Each edge is annotated with a textual descrip-
+tion d of the transformation (e.g., “Unscrew”), or defaults
+to NONE when the object undergoes purely spatial motion
+without a state change. Edges strictly connect temporally
+adjacent frames. Detailed structural constraints governing
+the state graph are provided in Appendix A.
+We characterize the two primary types of transformations
+by the connectivity of G. An assembly occurs when multiple
+components merge to form a new unified entity. Formally,
+a node va
+t ∈V represents a newly assembled object if its
+in-degree from the previous frame is at least two:
+|{e = (vi
+t−1, va
+t , d) ∈E | vi
+t−1 ∈V }| ≥2
+(1)
+Conversely, a disassembly occurs when a single entity splits
+into constituent parts. A node vb
+t−1 ∈V undergoes disas-
+sembly if its out-degree to the next frame is at least two:
+|{e = (vb
+t−1, vi
+t, d) ∈E | vi
+t ∈V }| ≥2
+(2)
+3.2. Our Approach: Tracking Instances via Propos-
+als and Overlaps
+Overview.
+We introduce Tracking Instances via Proposals
+and Overlaps. As shown in Fig. 2, TIPO is a modular
+framework built on top of pre-trained segmentation trackers
+and MLLMs, requiring no additional training.
+We initialize the tracker and state graph G using the ini-
+tial objects O0. At each frame It, the tracker extracts the
+per-object masks Mt = {mi
+t}i∈Ot. TIPO processes these
+masks through four interconnected stages: (1) Component
+Extraction & Object Mask Sampling decomposes the per-
+object masks into spatially disjoint components and prompts
+a mask decoder to extract per-component sampled masks.
+(2) State Generation enumerates plausible combinations
+of the spatially disjoint components (for disassemblies) and
+sampled masks (for assemblies) to output a set of state pro-
+posals. (3) State Evaluation scores the state proposals
+using spatial overlap metrics applied to the sampled masks,
+yielding evaluated state scores. Finally, (4) State Selection,
+MLLM Validation & Graph Update filters the evaluated
+state scores to query an MLLM, visually verifying the top-
+scoring state proposal. If validated, the framework assigns
+semantic labels and outputs the updated state graph G.
+(1) Component Extraction & Object Mask Sampling.
+At frame It, the raw masks Mt may be structurally am-
+biguous: a mask might fragment due to true disassembly
+or temporary occlusion, while multiple masks might fail to
+encompass a new assembly. To resolve this, the Compo-
+nent Extractor first decomposes each tracked mask mi
+t into
+spatially disjoint components Ci = {ci
+0, . . . , ci
+j} via Parallel
+Union-Find [4]. Hereafter, we omit the temporal index t.
+Next, we leverage promptable mask decoders (e.g.,
+SAM [16]). For each component ci
+j ∈Ci, the Point Sampler
+outputs random points to prompt the Mask Decoder. To
+mitigate sampling variance, we ensemble multiple queries
+to extract a robust, zero-shot sampled mask si
+j (see Ap-
+pendix B). This distinguishes genuine transformations from
+visual artifacts: for disassemblies, the decoded mask of a
+merely occluded part still reconstructs the entire object; for
+assemblies, merged objects yield heavily overlapping sam-
+pled masks. We define the set of sampled masks for an
+arbitrary group of components C as SC = {sj | cj ∈C},
+the full sampled mask of object i as si = S
+sj∈SCi sj, and the
+sampled masks for an object group O as SO = {si | i ∈O}.
+(2) State Generation.
+Using the spatially disjoint compo-
+nents Ci and the sampled masks extracted in the previous
+stage, we enumerate all plausible physical transformations.
+We define the set of all possible disassembly state proposals
+for object i as the partition set of its components Ci:
+Di = Π(Ci) = {hi
+0, . . . , hi
+p},
+with hi
+j = {C0, . . . , Ck}
+(3)
+where each group C ⊆Ci contains components proposed
+to form a single part. Similarly, the set of assembly state
+proposals is the partition set of tracked objects Ot:
+A = Π(Ot) = {g0, . . . , gq},
+with gj = {O0, . . . , Om}
+(4)
+These comprehensive sets of state proposals (Di and A) are
+outputted to the evaluator. In Appendix B we formulate
+computational bounds that limit the cardinality of these sets.
+(3) State Evaluation.
+To rank the generated disassembly
+(h ∈Di) and assembly (g ∈A) state proposals, we define
+the spatial overlap scores
+D(h) =
+Y
+Cn∈h
+Φin(Cn) · (1 −Φex(Cn))
+A(g) =
+Y
+On∈g
+Ψin(On) · (1 −Ψex(On))
+(5)
+where Φ and Ψ denote the recall-based scoring functions for
+disassemblies and assemblies, respectively (formally defined
+below). Intuitively, in the disassembly case, a high inner
+recall Φin indicates that all components in Cn belong to a
+single physical object and are thus correctly grouped, so
+D(h) rewards it. Conversely, a high external recall Φex
+indicates that some components in Cn overlap with those
+of other groups, signaling an incorrect grouping, so D(h)
+penalizes it. The same reasoning applies to the assembly
+case, with Ψin and Ψex evaluated on object groups On instead
+of component groups Cn.
+
+
+We define inner and external recall in terms of the mask re-
+call R(a, b) = |a ∩b|/|a|, measuring the proportion of mask
+a’s area overlapped by mask b.
+Inner Recall measures whether the sampled mask of each
+element in a group (SCn, SOn) overlaps all other elements
+of the same group:
+Φin(Cn) =
+1
+|Cn|
+X
+si∈SCn
+R(∪cj∈Cncj, si)
+Ψin(On) =
+1
+|On|
+X
+si∈SOn
+Y
+sj∈SOn
+R(si, sj)
+(6)
+For disassembly, Φin computes, for each sampled mask
+si ∈SCn, the proportion of the group mask (∪cj∈Cncj)
+covered by si. Comparing against the union, rather than
+against each component individually, prevents small out-
+lier components from biasing the score. For assembly, Ψin
+instead computes, for each sampled mask si ∈SOn, the
+product of its recalls with every sampled mask sj in the
+group. This requires the mask decoder to agree on the physi-
+cal object regardless of which object is prompted, since the
+contribution of si drops to zero as soon as it fails to overlap
+even a single sj. In both cases, the per-mask values are
+averaged over the group, so a high inner recall indicates that
+each sampled mask reconstructs the entire group, suggesting
+that all grouped elements belong to the same physical object.
+External Recall measures how much the sampled masks
+of a group (SCn, SOn) leak into elements outside the group:
+Φex(Cn) = R(∪ck∈Ci\Cnck, ∪si∈SCnsi)
+Ψex(On) = R(∪se∈S ¯
+Onse, ∪si∈SOnsi)
+(7)
+where Ci \ Cn is the set of components of object i exclud-
+ing Cn, and ¯On = Ot \ On denotes the set of all tracked
+objects at frame t not included in On. For disassembly, Φex
+computes the proportion of the area of all external compo-
+nents (∪ck∈Ci\Cnck) overlapped by all the sampled masks
+of the group (∪si∈SCnsi). For assembly, Ψex analogously
+computes the proportion of the area of all external sampled
+masks (∪se∈S ¯
+Onse) covered by all the sampled masks of
+the group (∪si∈SOnsi). In both cases, a high external recall
+indicates that the sampled masks of the group extend over
+elements assigned to other groups, signaling a leakage and
+thus an incorrect grouping.
+Notably, in both inner and external recall, disassembly
+compares against the actual tracks, whereas assembly com-
+pares against the sampled masks. When objects assemble,
+the tracker may propagate each track to only a portion of
+the newly merged object, and comparing against such partial
+tracks would make both metrics unreliable. The sampled
+masks, obtained by prompting the mask decoder, instead
+recover the full extent of each object. Finally, the proposals
+and their scores D(h) and A(g) are passed to the selection
+and validation stage.
+(4) State Selection, MLLM Validation & Graph Up-
+date.
+We filter evaluated state proposals by a thresh-
+old τ,
+extracting the top-scoring disassembly state
+ˆhi
+=
+arg maxh∈Di D(h) and assembly state ˆg
+=
+arg maxg∈A A(g). If no proposal exceeds τ, a default no-
+assembly and no-disassembly state is selected.
+Because random mask sampling can yield high-scoring
+false positives, an MLLM Judge independently validates the
+selected proposals. The MLLM receives sparsely sampled
+historical frames (e.g., 5s, 3s, and 1s prior) alongside the
+current frame It annotated with the proposed regions to visu-
+ally verify if the proposed transformation actually occurred.
+Positioning the MLLM downstream of our overlap metrics
+limits the number of expensive queries.
+Upon validation, we update the tracker and the state graph
+G, instantiating new nodes and edges with unique tracking
+IDs. To assign semantic labels, an MLLM Labeler processes
+a historical frame, the annotated frame It, and a list of in-
+volved components. We parse its structured JSON response
+to populate node names n (e.g., “Pen”) and edge descriptions
+d (e.g., “Screw”). These masks then condition the tracker
+for the next frame. Appendix B details all MLLM prompts.
+3.3. The VISTA Benchmark
+Overview.
+While prior benchmarks like VOST-TAS [29]
+consider state changes, they annotate only the resulting parts
+rather than modeling the transformation process itself. To
+address this gap and rigorously evaluate TTU, we introduce
+Video Instances, States, and Transformation Annotations
+(VISTA). As summarized in Tab. 1, VISTA comprises 50
+diverse sequences sourced from Assembly101 [27], IKEA
+ASM [2], and custom recordings. It provides continuous,
+dense segmentation masks paired with comprehensive state
+graphs that explicitly link parts as they separate and merge
+over time. By modeling multi-stage assemblies and disas-
+semblies and more than doubling the annotated transforma-
+tions of prior work [29], VISTA provides a highly realistic
+testbed for dynamic environments (see Appendix C.1 for
+the detailed dataset composition and Appendix C.2 for the
+complete annotation protocol).
+Evaluation Metrics. We perform evaluations across two
+primary dimensions: mask tracking and state-graph gener-
+ation. We describe the metrics below (details and formal
+definitions in Appendix C.3).
+TRACKING QUALITY.
+Following established stan-
+dards [30], we report the average mask Intersection-over-
+Union (IoU) J across the full sequence. To measure track
+survival after transformations, we report Jtr, computed ex-
+clusively on the last 25% of frames.
+TRANSFORMATION TRACKING. Leveraging our dense
+annotations, we propose TF1 to comprehensively assess the
+structural state graph via bipartite matching. A match is
+considered valid only if it achieves: (1) identical input and
+
+
+Table 2. State-of-the-art comparison on VISTA. We evaluate pure tracking and state-graph generation using two different foundational
+trackers. Best results per tracker are in bold, and second-best are underlined.
+Tracker
+Method
+TRACKING
+STATE GRAPH
+FPS ↑
+J ↑
+Jtr ↑
+S ↑
+Tr ↑
+Tp ↑
+TF1 ↑
+HF1 ↑
+SAM 2.1
+Vanilla SAM [26]
+83.1
+78.5
+–
+–
+–
+–
+–
+3.7
+AlwaysPredict
+90.3
+87.2
+–
+25.3
+6.6
+9.1
+–
+2.5
+Agentic
+77.5
+68.7
+76.7
+7.6
+15.8
+9.9
+5.7
+0.9
+TubeletGraph [29]
+88.1
+83.4
+36.3
+9.1
+23.2
+12.5
+2.6
+0.2
+TIPO w/o Judge
+90.4
+87.2
+76.8
+43.8
+35.6
+36.7
+19.7
+3.0
+TIPO (Ours)
+90.7
+88.6
+78.9
+48.4
+46.7
+44.7
+27.1
+1.8
+SAM 3
+Vanilla SAM [6]
+87.9
+83.0
+–
+–
+–
+–
+–
+6.1
+AlwaysPredict
+88.4
+83.4
+–
+17.9
+8.2
+8.5
+–
+3.8
+Agentic
+83.0
+75.5
+67.5
+7.5
+19.7
+10.3
+4.9
+1.0
+TubeletGraph [29]
+89.4
+84.9
+20.0
+2.1
+8.0
+3.3
+0.0
+0.4
+TIPO w/o Judge
+91.5
+88.0
+77.4
+37.3
+37.5
+33.4
+16.8
+3.9
+TIPO (Ours)
+91.4
+87.8
+80.2
+44.7
+49.0
+42.5
+28.3
+2.4
+Table 3. Over-predicting transformations on VOST-TAS. The
+AlwaysPredict baseline predicts a disassembly at every mask split
+and an assembly at every mask overlap, resulting in 14× to 15×
+more transformations (#Pred.) than TubeletGraph [29], against
+108 ground-truth transformations. The recall-based T TAS
+R
+and HST
+reward this behavior, while the temporal precision T TAS
+P
+verifies
+only the timing of each transformation, not the involved objects.
+Tracker
+Method
+#Pred.
+T TAS
+P
+↑
+T TAS
+R
+↑
+HST ↑
+SAM 2.1
+AlwaysPredict
+900
+6.2
+51.9
+13.9
+TubeletGraph
+65
+38.4
+23.1
+13.0
+SAM 3
+AlwaysPredict
+569
+9.0
+47.2
+15.7
+TubeletGraph
+38
+29.0
+10.2
+6.5
+output object counts, (2) correct temporal boundaries, and (3)
+object-level IoU > 0.5 across pre- and post-transformation
+masks. We report the macro-averaged F1 score, whose pre-
+cision Tp and recall Tr count only the matches satisfying all
+three conditions, unlike prior metrics (see discussion below).
+TRANSFORMATION SEMANTICS.
+Following prior
+work [29], we use an LLM-based evaluator to measure the
+open-vocabulary semantic similarity between predicted and
+ground-truth object names (SO) and action descriptions (SA).
+The overall semantic score S is their per-sequence harmonic
+mean, macro-averaged across all sequences.
+OVERALL SCORE. As our primary metric for overall
+pipeline performance, HF1 extends the structural bipartite
+matching of TF1 to enforce semantic correctness, yielding a
+holistic F1 score for the fully labeled state graph.
+Discussion. Prior metrics [29] evaluate transformations
+through their temporal boundaries, using precision (T TAS
+P
+)
+and recall (T TAS
+R
+), and through the spatial overlap of the re-
+sulting objects, using HST . These measures capture whether
+a transformation is detected at the correct time and whether
+its outputs are accurately localized. However, they do not
+directly assess whether those outputs are correctly associated
+Table 4. Disassembly-only comparison on VISTA. We evaluate
+the methods on the disassembly-only split of VISTA to match the
+capabilities of TubeletGraph. We report results using two different
+foundational trackers. Best results per tracker are in bold, and
+second-best are underlined.
+Tracker
+Method
+Tr ↑
+Tp ↑
+TF1 ↑
+SAM 2.1
+TubeletGraph [29]
+22.7
+33.7
+25.6
+TIPO w/o Judge
+42.4
+36.7
+37.5
+TIPO (Ours)
+42.1
+42.6
+39.8
+SAM 3
+TubeletGraph [29]
+3.5
+9.5
+4.9
+TIPO w/o Judge
+51.2
+51.5
+46.8
+TIPO (Ours)
+48.4
+60.4
+50.2
+with the input objects from which they originate. A predic-
+tion may therefore achieve accurate temporal boundaries and
+high output overlap while still linking the resulting objects
+to the wrong inputs, leaving the input-to-output transition
+itself unevaluated (see Appendix C.3). This is a serious
+weakness of previous evaluation frameworks, as even a sim-
+ple baseline (AlwaysPredict) that predicts a disassembly at
+every mask split and an assembly at every mask overlap
+(with IoU > 0.5) outperforms state-of-the-art methods such
+as TubeletGraph in HST on VOST-TAS by predicting 14×
+to 15× more transformations (Tab. 3). In contrast, our met-
+rics leverage the dense annotations of VISTA to verify the
+full predicted state graph, including the link between each
+transformation’s input and output objects.
+4. Experiments
+In this section, we compare TIPO with state-of-the-art meth-
+ods on VISTA, present qualitative results, and ablate its
+main components.
+Experimental Setup. To demonstrate that our framework
+is agnostic to the underlying foundation model, we evaluate
+TIPO using both SAM 2.1 [26] and SAM 3 [6] as base track-
+
+
+t0
+t1
+t2
+t3
+Foam cylinder
+Wooden board
+Foam cylinder
+Foam cylinder
+Foam cylinder
+Insert
+Board with
+foam cylinder
+Insert
+Board with
+2 foam cylinders
+Insert
+Board with
+3 foam cylinders
+Insert
+Board with
+4 foam cylinders
+t0
+t1
+t2
+t3
+AAA battery
+Remote control
+AAA battery
+Battery cover
+Insert
+Battery-loaded
+remote control
+Snap on
+Remote control
+Detach
+Insert
+Remote control
+body
+Remote control
+with AAA battery
+Battery cover
+t4
+t4
+Figure 3. Qualitative results on VISTA. Visualizing the TIPO pipeline on cascaded transformations. The state graphs map part-whole
+interactions and semantic actions, while the masks show robust spatial continuity across multi-step assembly and disassembly sequences.
+ers. By default, we instantiate the MLLM Judge with Qwen
+3.5 35B [25] and the MLLM Labeler with GPT-5.4 [22].
+We evaluate two configurations: the full pipeline (TIPO),
+prioritizing accuracy, and a judge-free pipeline (TIPO w/o
+Judge), prioritizing inference speed. Appendix B provides
+additional implementation details.
+4.1. Comparisons with State-of-the-art Methods
+We benchmark TIPO against TubeletGraph [29] on our pro-
+posed TTU task on VISTA. Since VOST-TAS annotates
+only the resulting parts of each transformation, TF1 cannot be
+computed on it, and its TAS metrics reward over-predicting
+(Tab. 3). We therefore report the full VOST-TAS [29] com-
+parison in Appendix E.2. We further compare against vanilla
+SAM and two baselines built on the same trackers. Al-
+waysPredict predicts transformations directly from tracker
+cues, without state generation and evaluation. The Agentic
+baseline gives the MLLM (Qwen 3.5 35B) direct control
+over the tracker through a tool-based harness with offline
+access to the full video (implem. details in Appendix E.1).
+On VISTA, TIPO achieves state-of-the-art transforma-
+tion tracking while operating up to an order of magni-
+tude faster. As shown in Tab. 2, both TIPO configurations
+significantly outperform TubeletGraph across all metrics. By
+natively handling assemblies and avoiding heavy temporal
+search, TIPO improves tracking retention (Jtr) by +5.2
+points using SAM 2.1. This gap widens drastically in state-
+graph generation, with absolute gains of +32.2 TF1 points
+with SAM 2.1 (44.7 vs 12.5) and +39.2 points with SAM 3
+(42.5 vs 3.3). TIPO also leads in both precision (Tp) and re-
+call (Tr), showing that these gains do not come from trading
+one for the other. AlwaysPredict preserves strong tracking
+but reaches only 9.1 and 8.5 TF1, −27.6 and −24.9 points
+below TIPO w/o Judge, which likewise uses no MLLM to
+validate transformations. This demonstrates that tracker cues
+alone are insufficient to detect transformations. Notably,
+the Agentic baseline falls −34.8 and −32.2 TF1 points be-
+hind TIPO with the same MLLM, degrades tracking below
+vanilla SAM, and runs 2.0× and 2.4× slower, despite its
+access to the full video. Crucially, our framework delivers
+these state-of-the-art results while processing videos 6× to
+15× faster than TubeletGraph, confirming that per-frame
+mask evaluation is vastly more efficient than dense tubelet
+search (see Appendix D.3 for a scalability analysis).
+On disassemblies alone, TIPO still outperforms Tubelet-
+Graph. Since TubeletGraph cannot handle assemblies, we
+also evaluate on a split of VISTA that removes them while
+keeping all 132 disassemblies (41 clips). As shown in Tab. 4,
+TubeletGraph doubles its TF1 with SAM 2.1, from 12.5 on
+the full VISTA to 25.6. Nevertheless, TIPO still outper-
+forms it by +14.2 points, and by +45.3 points with SAM 3.
+Notably, even TIPO w/o Judge retains gains of +11.9 and
++41.9 points. This demonstrates that the advantage of TIPO
+stems from its per-frame proposal evaluation, and not only
+from its ability to handle assemblies.
+Continuous structural evaluation is robust to the choice
+of the foundation tracker. On VISTA, upgrading Tubelet-
+Graph from SAM 2.1 to SAM 3 drops its TF1 from 12.5
+
+
+Table 5. Validating the design of TIPO. Experiments are con-
+ducted on VISTA using SAM 3 as the tracker and Qwen 3.5 35B
+as the MLLM Judge. Minimal point sampling prevents spatial
+over-conditioning on local sub-parts, and external mask recall for
+both assembly (Ψ) and disassembly (Φ) state evaluation is essential
+to penalize incorrect grouping.
+MLLM
+Judge
+Pts
+Ext. recall
+Tr ↑
+Tp ↑
+TF1 ↑
+Ψ
+Φ
+✓
+1
+✓
+✓
+44.7
+49.0
+42.5
+4
+✓
+✓
+31.4
+38.3
+30.8
+✗
+1
+✓
+✓
+37.3
+37.5
+33.4
+4
+✓
+✓
+23.1
+26.8
+22.1
+1
+✗
+✓
+12.5
+28.0
+15.7
+1
+✓
+✗
+15.7
+23.4
+18.1
+Table 6. Semantic graph labeling. Advanced reasoning models
+(e.g., GPT-5.4) are more precise at action naming (SA), but not at
+object naming (SO). Experiments are conducted on VISTA using
+SAM 3 as the tracker.
+MLLM Labeler
+Local
+SA ↑
+SO ↑
+S ↑
+Qwen 3.5 35B
+✓
+80.2
+80.0
+73.4
+Gemma 4 31B
+78.3
+82.2
+72.8
+GPT-5.4
+✗
+90.0
+82.0
+80.2
+GPT-5.4 mini
+92.6
+73.8
+76.7
+to 3.3, as its search is triggered only by track loss, which
+a stronger tracker makes rarer (Appendix E.3). In contrast,
+TIPO evaluates structural changes at every frame, rather
+than upon track loss, and achieves 44.7 and 42.5 TF1 with
+SAM 2.1 and SAM 3, respectively. We further analyze the
+robustness of TIPO to tracker noise and its scaling with the
+tracker size in Appendix D.4 and Appendix D.1, respectively.
+TIPO unifies assemblies and disassemblies in complex,
+multi-step videos. In Fig. 3, the top row demonstrates a
+clean assembly sequence, while the bottom row showcases
+cascaded merges and splits natively unified into a consistent
+state graph. Additional qualitative results and limitations are
+discussed in Appendix F.
+4.2. Ablation Study
+Single-point prompts let SAM resolve ambiguity through
+its own prior. A single point is inherently ambiguous: it
+may belong to a sub-part, a part, or the whole object. SAM
+resolves this by selecting the most plausible mask, revealing
+which object it believes the point belongs to. Ensembling
+these single-point decodings probes SAM’s zero-shot ob-
+jectness prior without biasing the decoding. Adding points
+removes this ambiguity: the decoder must cover all prompts,
+and the mask collapses onto the sampled component. For
+an occluded object, the decoded mask no longer extends
+to other fragments, producing spurious disassemblies; for
+assemblies, merged parts no longer yield overlapping masks.
+As shown in Tab. 5, sampling K = 4 points drops TF1 by
+11.7 with the MLLM Judge and 11.3 without it.
+Both inner and external mask overlaps are strictly re-
+quired to evaluate state proposals. In Eqs. (6) and (7), we
+formulated Φin, Ψin and Φex, Ψex as the foundational metrics
+for assessing assemblies and disassemblies. Tab. 5 demon-
+strates the critical necessity of external recall (Φex, Ψex). Ex-
+cluding these terms mathematically blinds the evaluation to
+whether a sub-state incorrectly bleeds into external compo-
+nents, causing performance to collapse by −17.7 TF1 points
+for assemblies and −15.3 TF1 points for disassemblies. For
+instance, a hand holding a pen splits its mask into two compo-
+nents c1, c2 whose sampled masks both cover the whole pen.
+Inner recall alone then scores the spurious split {{c1}, {c2}}
+as high as the intact pen {{c1, c2}}, whereas Φex penalizes
+the leakage of each part into the other.
+Advanced reasoning models provide precise transforma-
+tion classification. We evaluate the impact of the MLLM
+Labeler in populating the final state-graph labels. As shown
+in Tab. 6, while object naming accuracy (SO) remains rel-
+atively stable across most models, action naming (SA) re-
+quires deeper temporal understanding. GPT-5.4 and GPT-5.4
+mini outperform the best local model by at least +9.8 SA
+points, while GPT-5.4 delivers the highest overall semantic
+accuracy S and is our default MLLM Labeler.
+The MLLM Judge substantially improves spatial rea-
+soning, though the Judge-free pipeline remains highly
+competitive. The MLLM Judge acts as a final filter to verify
+whether the highest-scoring state proposal actually occurred.
+As shown in Tab. 2, integrating the judge yields a definitive
+improvement of +8.0 to +9.1 TF1 points across trackers.
+However, achieving over 33.0 TF1 relying solely on mask
+overlap scoring shows that the Judge-free configuration suits
+deployments with strict computational constraints.
+5. Conclusion
+We introduced Transformation Tracking and Understanding
+to generalize video tracking to environments where objects
+undergo structural changes, unifying assembly and disassem-
+bly into continuous state graphs. To benchmark this task, we
+curated VISTA, featuring 256 densely annotated, multi-step
+transformations. We also proposed TIPO, a training-free
+framework that replaces reactive spatiotemporal search with
+continuous, per-frame structural evaluation and MLLM vali-
+dation. By leveraging the zero-shot priors of modern foun-
+dation models, TIPO achieves state-of-the-art tracking and
+state-graph accuracy, operating up to an order of magnitude
+faster than prior work. Our results demonstrate the effective-
+ness of continuous structural modeling for tracking objects
+in complex, real-world environments.
+
+
+Acknowledgments
+We acknowledge the CINECA award under the ISCRA ini-
+tiative for the availability of high-performance computing
+resources and support. We also thank the OpenAI Researcher
+Access Program for providing API credits.
+LLM Usage Statement
+We disclose the use of LLMs to assist the authors in proof-
+reading the manuscript, drafting minor parts of the text,
+refining visualizations and drafting parts of the experiment
+code. LLMs were not used for research ideation. The au-
+thors reviewed, tested, and verified all LLM-assisted content
+and take full responsibility for the contents of this paper. The
+MLLMs used for the Judge and Labeler in Sec. 3 are part of
+the proposed method.
+References
+[1] Anthropic. Introducing Claude Opus 4.7. https://www.
+anthropic.com/news/claude-opus-4-7, 2026. 3
+[2] Yizhak Ben-Shabat, Xin Yu, Fatemeh Saleh, Dylan Campbell,
+Cristian Rodriguez-Opazo, Hongdong Li, and Stephen Gould.
+The IKEA ASM dataset: Understanding people assembling
+furniture through actions, objects and pose. In WACV, 2021.
+5
+[3] Alex Bewley, Zongyuan Ge, Lionel Ott, Fabio Ramos, and
+Ben Upcroft. Simple online and realtime tracking. In ICIP,
+2016. 2
+[4] Federico Bolelli, Stefano Allegretti, Luca Lumetti, and
+Costantino Grana. A state-of-the-art review with code about
+connected components labeling on GPUs. IEEE Transactions
+on Parallel and Distributed Systems, 2024. 4
+[5] Jinkun Cao, Jiangmiao Pang, Xinshuo Weng, Rawal Khirod-
+kar, and Kris Kitani. Observation-centric SORT: Rethinking
+SORT for robust multi-object tracking. In CVPR, 2023. 2
+[6] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. SAM 3: Segment anything with concepts. In
+ICLR, 2026. 1, 2, 3, 6, 5, 16, 20
+[7] Zixuan Chen, Jiaxin Li, Junxuan Liang, Liming Tan, Yejie
+Guo, Cewu Lu, and Yong-Lu Li. M3-VOS: Multi-phase,
+multi-transition, and multi-scenery video object segmentation.
+In CVPR, 2025. 20
+[8] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young
+Lee, and Alexander Schwing. Putting the object back into
+video object segmentation. In CVPR, 2024. 20
+[9] Yangming Cheng, Liulei Li, Yuanyou Xu, Xiaodi Li, Zongxin
+Yang, Wenguan Wang, and Yi Yang. Segment and track
+anything. arXiv preprint arXiv:2305.06558, 2023. 2, 3
+[10] David F Crouse. On implementing 2D rectangular assignment
+algorithms. IEEE Transactions on Aerospace and Electronic
+Systems, 2016. 7
+[11] Dima Damen, Hazel Doughty, Giovanni Maria Farinella, An-
+tonino Furnari, Evangelos Kazakos, Jian Ma, Davide Molti-
+santi, Jonathan Munro, Toby Perrett, Will Price, et al. Rescal-
+ing egocentric vision: Collection, pipeline and challenges for
+EPIC-KITCHENS-100. International Journal of Computer
+Vision, 2022. 2, 3
+[12] Shuangrui Ding, Rui Qian, Xiaoyi Dong, Pan Zhang, Yuhang
+Zang, Yuhang Cao, Yuwei Guo, Dahua Lin, and Jiaqi Wang.
+SAM2Long: Enhancing SAM 2 for long video segmentation
+with a training-free memory tree. In ICCV, 2025. 20
+[13] Google. Gemini 3.1 Pro: A smarter model for your most
+complex tasks. https://blog.google/innovation-and-
+ai/models-and-research/gemini-models/gemini-3-1-
+pro/, 2026. 3
+[14] Google. Gemma 4: Byte for byte, the most capable open
+models.
+https://blog.google/innovation-and-ai/
+technology/developers-tools/gemma-4/, 2026. 2, 3,
+9
+[15] Kristen Grauman, Andrew Westbury, Eugene Byrne, Zachary
+Chavis, Antonino Furnari, Rohit Girdhar, Jackson Hamburger,
+Hao Jiang, Miao Liu, Xingyu Liu, et al. Ego4D: Around the
+world in 3,000 hours of egocentric video. In CVPR, 2022. 2,
+3
+[16] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-
+thing. In ICCV, 2023. 3, 4
+[17] Benno Krojer, Mojtaba Komeili, Candace Ross, Quentin Gar-
+rido, Koustuv Sinha, Nicolas Ballas, and Mido Assran. A
+shortcut-aware video-QA benchmark for physical understand-
+ing via minimal video pairs. Transactions on Machine Learn-
+ing Research, 2025. 3
+[18] Siyuan Li, Lei Ke, Martin Danelljan, Luigi Piccinelli, Mattia
+Segu, Luc Van Gool, and Fisher Yu. Matching anything by
+segmenting anything. In CVPR, 2024. 3
+[19] Priyanka Mandikal, Jiaheng Hu, Shivin Dass, Sagnik Ma-
+jumder, Roberto Martín-Martín, and Kristen Grauman. Mash,
+spread, slice! Learning to manipulate object states via visual
+spatial progress. In ICRA, 2026. 2, 3
+[20] Priyanka Mandikal, Tushar Nagarajan, Alex Stoken, Zihui
+Xue, and Kristen Grauman. SPOC: Spatially-progressing
+object state change segmentation in video. In WACV, 2026. 3
+[21] Tim Meinhardt, Alexander Kirillov, Laura Leal-Taixe, and
+Christoph Feichtenhofer. TrackFormer: Multi-object tracking
+with transformers. In CVPR, 2022. 2
+[22] OpenAI.
+Introducing GPT-5.4.
+https://openai.com/
+index/introducing-gpt-5-4/, 2026. 3, 7, 9
+[23] Physical Intelligence, Bo Ai, Ali Amin, Raichelle Aniceto,
+Ashwin Balakrishna, Greg Balke, Kevin Black, George Bokin-
+sky, Shihao Cao, Thomas Charbonnier, et al. π0.7: A steerable
+generalist robotic foundation model with emergent capabili-
+ties. arXiv preprint arXiv:2604.15483, 2026. 2
+[24] Chiara Plizzari, Gabriele Goletto, Antonino Furnari, Siddhant
+Bansal, Francesco Ragusa, Giovanni Maria Farinella, Dima
+Damen, and Tatiana Tommasi. An outlook into the future of
+egocentric vision. International Journal of Computer Vision,
+2024. 2
+[25] Qwen Team. Qwen3.5: Towards native multimodal agents.
+https://qwen.ai/blog?id=qwen3.5, 2026. 2, 3, 7
+
+
+[26] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu,
+Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle,
+Chloe Rolland, Laura Gustafson, et al. SAM 2: Segment
+anything in images and videos. In ICLR, 2025. 1, 2, 3, 6, 16,
+20
+[27] Fadime Sener, Dibyadip Chatterjee, Daniel Shelepov, Kun
+He, Dipika Singhania, Robert Wang, and Angela Yao. As-
+sembly101: A large-scale multi-view video dataset for un-
+derstanding procedural activities. In CVPR, 2022. 5, 19,
+20
+[28] Peize Sun, Jinkun Cao, Yi Jiang, Rufeng Zhang, Enze Xie,
+Zehuan Yuan, Changhu Wang, and Ping Luo. TransTrack:
+Multiple object tracking with transformer. arXiv preprint
+arXiv:2012.15460, 2020. 2
+[29] Yihong Sun, Xinyu Yang, Jennifer Sun, and Bharath Hariha-
+ran. Tracking and understanding object transformations. In
+NeurIPS, 2026. 1, 2, 3, 5, 6, 7, 8, 9, 12, 13, 16, 20, 21
+[30] Pavel Tokmakov, Jie Li, and Adrien Gaidon. Breaking the
+“object” in video object segmentation. In CVPR, 2023. 2, 3,
+5, 7, 13, 16, 20
+[31] Jovana Videnovic, Alan Lukezic, and Matej Kristan.
+A
+distractor-aware memory for visual object tracking with
+SAM2. In CVPR, 2025. 20
+[32] Zihui Xue, Kumar Ashutosh, and Kristen Grauman. Learning
+object state changes in videos: An open-world perspective.
+In CVPR, 2024. 2, 3
+[33] Cheng-Yen Yang,
+Hsiang-Wei Huang,
+Wenhao Chai,
+Zhongyu Jiang, and Jenq-Neng Hwang. SAMURAI: Adapt-
+ing segment anything model for zero-shot visual tracking with
+motion-aware memory. arXiv preprint arXiv:2411.11922,
+2024. 20
+[34] Jinyu Yang, Mingqi Gao, Zhe Li, Shang Gao, Fangjing Wang,
+and Feng Zheng. Track anything: Segment anything meets
+videos. arXiv preprint arXiv:2304.11968, 2023. 2, 3
+[35] Xinyu Yang, Haozheng Yu, Yihong Sun, Bharath Hariha-
+ran, and Jennifer J. Sun. Live interactive training for video
+segmentation. In CVPR, 2026. 3
+[36] Jiangwei Yu, Xiang Li, Xinran Zhao, Hongming Zhang, and
+Yu-Xiong Wang. Video state-changing object segmentation.
+In ICCV, 2023. 3
+[37] Fangao Zeng, Bin Dong, Yuang Zhang, Tiancai Wang, Xi-
+angyu Zhang, and Yichen Wei. MOTR: End-to-end multiple-
+object tracking with transformer. In ECCV, 2022. 2
+[38] Yifu Zhang, Peize Sun, Yi Jiang, Dongdong Yu, Fucheng
+Weng, Zehuan Yuan, Ping Luo, Wenyu Liu, and Xinggang
+Wang. ByteTrack: Multi-object tracking by associating every
+detection box. In ECCV, 2022. 2
+[39] Fengzhe Zhou, Jiannan Huang, Jialuo Li, Deva Ramanan, and
+Humphrey Shi. PAI-Bench: A comprehensive benchmark for
+physical AI. In CVPR, 2026. 3
+[40] Brianna Zitkovich, Tianhe Yu, Sichun Xu, Peng Xu, Ted
+Xiao, Fei Xia, Jialin Wu, Paul Wohlhart, Stefan Welker,
+Ayzaan Wahid, Quan Vuong, Vincent Vanhoucke, Huong
+Tran, Radu Soricut, Anikait Singh, Jaspiar Singh, Pierre
+Sermanet, Pannag R. Sanketi, Grecia Salazar, Michael S.
+Ryoo, Krista Reymann, Kanishka Rao, Karl Pertsch, Igor
+Mordatch, Henryk Michalewski, Yao Lu, Sergey Levine, Lisa
+Lee, Tsang-Wei Edward Lee, Isabel Leal, Yuheng Kuang,
+Dmitry Kalashnikov, Ryan Julian, Nikhil J. Joshi, Alex Ir-
+pan, Brian Ichter, Jasmine Hsu, Alexander Herzog, Karol
+Hausman, Keerthana Gopalakrishnan, Chuyuan Fu, Pete Flo-
+rence, Chelsea Finn, Kumar Avinava Dubey, Danny Driess,
+Tianli Ding, Krzysztof Marcin Choromanski, Xi Chen, Yev-
+gen Chebotar, Justice Carbajal, Noah Brown, Anthony Bro-
+han, Montserrat Gonzalez Arenas, and Kehang Han. RT-2:
+Vision-language-action models transfer web knowledge to
+robotic control. In CoRL, 2023. 2
+
+
+Taking Apart and Putting Together:
+Tracking Objects Through Physical Transformations
+Supplementary Material
+Appendix Overview
+This supplementary material provides technical details, ex-
+tended evaluations, and qualitative results to support the
+main manuscript. The contents are organized as follows:
+Appendix A: Extended Problem Formulation. Details the
+formal graph constraints and formulations for the TTU task.
+Appendix B: Extended Methodology and Implementa-
+tion. Provides the ensembled mask sampling protocol, algo-
+rithmic bounds for state generation, exact MLLM prompts,
+hyperparameters, and software and hardware specifications
+required to reproduce TIPO.
+Appendix C: The VISTA Benchmark. Contains expanded
+details on the dataset composition, the annotation protocol,
+the custom annotation interface, the formal mathematical
+evaluation metrics, and a discussion of identity switches.
+Appendix D: Additional Quantitative Analysis. Provides
+expanded ablations on hyperparameter sensitivity, MLLM
+model selection, tracker size, a multi-seed variability analy-
+sis on VISTA, a runtime scalability analysis, a robustness
+analysis on tracker noise, and an error propagation analysis.
+Appendix E: Extended Comparisons. Provides two addi-
+tional baselines for TTU, one using only the tracker and one
+with an MLLM agent controlling the tracker through tools,
+results with a fully open-weight pipeline, the full compar-
+ison on VOST-TAS, and a tracking-only comparison with
+state-of-the-art VOS models on VOST.
+Appendix F: Qualitative Results and Failure Analysis.
+Provides a non-rigid transformation example, extensive vi-
+sual sequences of complex assemblies and failure cases, and
+a transparent discussion of current limitations.
+A. Extended Problem Formulation
+Expanding upon the task definition of Transformation Track-
+ing and Understanding presented in Sec. 3.1, we formally
+detail the structural constraints that ensure the state graph
+G = (V, E) maintains structural and temporal consistency.
+Temporal Adjacency and Directionality. To strictly en-
+force natural temporal flow, every edge must connect states
+across exactly one forward time step, rendering the graph
+a Directed Acyclic Graph (DAG). For any edge connecting
+two nodes, the temporal indices must be consecutive:
+∀e = (vj
+ta, vi
+tb, d) ∈E =⇒tb = ta + 1
+(8)
+Identity Preservation (Spatial Motion). If an object un-
+dergoes pure spatial motion or occlusion without a physical
+state change, its transformation description defaults to NONE.
+In this scenario, the object’s unique tracking identifier must
+be strictly preserved across the edge:
+∀e = (vj
+t , vi
+t+1, NONE) ∈E =⇒j = i
+(9)
+Identity Assignment after Transformations. After any
+assembly or disassembly, the nature of the affected entities
+is fundamentally altered. Consequently, the resulting pre-
+and post-transformation nodes must possess entirely distinct
+identifiers. Let d be any action description:
+∀e = (vj
+t , vi
+t+1, d) ∈E
+where
+d̸ = NONE
+=⇒j̸ = i
+(10)
+Furthermore, to prevent duplicate identities coexisting in the
+physical space, no two distinct nodes within the same frame
+can share an object identifier:
+∀vj
+t , vi
+t ∈V
+where
+vj
+t̸ = vi
+t =⇒j̸ = i
+(11)
+Semantic Consistency. All the descriptions d in the set of
+edges ET ⊆E representing a transformation must be equal
+to preserve semantic consistency:
+∀e1 = (vj1
+t , vi1
+t+1, d1), e2 = (vj2
+t , vi2
+t+1, d2) ∈ET
+=⇒
+d1 = d2
+(12)
+B. Extended Methodology and Implementation
+This section expands upon the TIPO framework presented
+in Sec. 3.2. We first provide additional details on the method
+and report the exact prompts of the MLLM Judge and La-
+beler. Then, we describe the selection of the hyperparame-
+ters and the software and hardware specifications required
+to reproduce our results.
+B.1. Additional Method Details
+Ensembled Mask Sampling Protocol.
+As detailed in
+Sec. 3.2, the framework extracts the sampled masks si
+j by
+prompting the visual decoder with a single point (K = 1)
+drawn from within the spatial boundaries of each disjoint
+
+
+component. Relying on a single random point coordinate can
+introduce sampling variance. To ensure structural stability,
+we perform this single-point query N = 32 times per compo-
+nent and ensemble the outputs to form a single, highly robust
+union mask si
+j. During this ensembling process, we discard
+any individual mask proposal whose predicted quality score
+from the SAM decoder falls below τIoU = 0.8.
+Tracker and Mask Decoder Modularity.
+While Sec. 3.2
+conceptually separates the Tracker and the Mask Decoder,
+our experiments instantiate both using the same foundation
+model (e.g., SAM 2.1 or SAM 3) to maximize inference
+efficiency via feature caching. However, the framework
+architecture is strictly modular, decoupling temporal tracking
+from single-frame zero-shot segmentation. This flexibility
+allows future deployments to pair a lightweight, tracking-
+only model with an independent promptable mask decoder,
+naturally accommodating advancements in either domain.
+Algorithmic Bounds for State Generation.
+As formu-
+lated in Sec. 3.2, the State Generator enumerates all possible
+physical configurations by computing the partition set Π(X)
+of the tracked objects or disjoint components. Because the
+cardinality of a partition set scales according to the n-th Bell
+number Bn, an unconstrained search could lead to combina-
+torial explosion. To ensure computational tractability in our
+experiments, we set a configurable parameter that limits the
+number of locally interacting items to |X| ≤7, which limits
+the search space at B7 = 877 unique state proposals. To
+further optimize assembly generation, we strictly pre-filter
+the input space by excluding any objects whose sampled
+masks do not spatially overlap. Additionally, to avoid very
+small noisy components in the mask to interfere, we filter
+each component with area smaller than 0.02% of the image
+resolution, analogous to TubeletGraph [29]. The measured
+runtime of state generation and evaluation up to this bound
+is reported in Appendix D.3.
+Crucially, this threshold only defines the maximum
+degree of the state graph for a single transformation
+event—meaning a maximum of seven parts can assemble
+into one entity, or one entity can disassemble into at most
+seven parts simultaneously. It does not limit the total num-
+ber of independent objects the framework can continuously
+track in the background, which can be arbitrarily high. The
+value of 7 was simply chosen for our experimental setup
+(in VISTA, the maximum in-degree for an assembly is 2,
+and the maximum out-degree for a disassembly is 3) and
+can easily be increased depending on available hardware and
+application requirements.
+B.2. MLLM Prompts
+MLLM Judge Prompts.
+The MLLM Judge serves as a
+visual validator to confirm whether the proposed transforma-
+tion reflects actual physical changes in the scene. To provide
+the necessary temporal context, the model receives sparsely
+sampled historical frames alongside the current frame over-
+laid with proposed regions. A transformation is accepted into
+the state graph only if the model explicitly outputs “YES”.
+The exact prompts for assembly and disassembly validation
+are detailed in Figs. 4 and 5, respectively.
+MLLM Labeler Prompts.
+Once a structural change is
+validated, the MLLM Labeler is queried to populate the state
+graph with explicit semantic labels. It assigns concise nouns
+to the newly formed object states and a descriptive verb
+phrase to the transformation edges. The exact prompts used
+for assembly and disassembly labeling are detailed in Figs. 6
+and 7, respectively.
+B.3. Hyperparameter Selection
+With the exception of the state selection threshold τ of TIPO
+w/o Judge, which is selected by cross-validation (Fig. 8), no
+hyperparameter was tuned on VISTA; we selected them
+following standard or conservative values.
+• τ: threshold used in the state selection (Sec. 3.2). In the
+default configuration of TIPO (with MLLM Judge) we
+use τ = 0.5. This comes from the interpretation of the
+overlap scores as proxy measure for confidence in the
+proposed state. A state that has overlap score below 0.5 is
+considered spurious, therefore not considered in the final
+selection. When removing the MLLM Judge (TIPO w/o
+Judge configuration), the threshold is increased to τ = 0.8
+to compensate for the lack of reasoning from the Judge, as
+selected by the cross-validation protocol described below.
+• K: number of points sampled to decode object masks
+(Sec. 3.2). In Tab. 5 we ablated the choice of use K =
+1. This is required to avoid a change in behavior from
+SAM’s mask decoder. When using K ≥2 we remove
+all the ambiguity in the mask decoding process. This
+is a fundamental flaw because SAM will start decoding
+mostly the specific component we prompt. In contrast,
+when K = 1, SAM is forced to decode multiple masks
+and score and select the most likely, solving occlusions,
+and providing the informative signal needed to evaluate
+quickly the proposed states.
+• N:
+number of masks sampled for component (Ap-
+pendix B.1). This is set by default to N = 32, a fairly
+large value to reduce the variance of the sampling process.
+We observed that reducing N to 8, 4 and 1 has little ef-
+fect on the results but for correctness we want to provide
+a more robust sampled mask, specifically to avoid very
+unlucky cases due to the random sampling of the decoding
+points.
+• τIoU: threshold used to ensemble decoded masks (Ap-
+pendix B.1). This is set by default to τIoU = 0.8 reflecting
+the convention of SAM to filter high quality masks.
+
+
+USER
+You are analyzing a video sequence to track objects. You are provided five images:
+- [Image 1] Context frame (5s before).
+- [Image 2] Context frame (3s before).
+- [Image 3] Context frame (1s before).
+- [Image 4] Current frame.
+- [Image 5] Current frame with colored outlines and labels highlighting regions belonging to different
+tracked objects.
+The outlined and labeled regions in Image 5 are: labeled_regions Task: Determine if these objects have
+been assembled (e.g they are physically attached/joined together) OR if they remain distinct, independent
+objects (e.g they are not physically attached).
+You must respond ONLY with a valid JSON object using the following schema:
+{
+"analysis": "Provide exactly ONE short sentence comparing the context frame to the current frame to verify
+if physical attachment or merging occurred.",
+"all_assembled": "YES or NO. Answer YES only if confident ALL the objects have assembled into one. Answer
+NO if they are still separate objects or if uncertain."
+}
+Figure 4. MLLM Judge prompt for assembly validation.
+USER
+You are analyzing a video sequence to track objects. You are provided five images:
+- [Image 1] Context frame (5s before).
+- [Image 2] Context frame (3s before).
+- [Image 3] Context frame (1s before).
+- [Image 4] Current frame.
+- [Image 5] Current frame with colored outlines and labels highlighting proposed object regions.
+The outlined and labeled regions in Image 5 are: labeled_regions All the proposed object regions in Image
+5 currently tracked together.
+Task: Determine if these outlined regions have separated into physically
+distinct objects (e.g they are no more physically attached or touching) OR if they are still a single object
+(e.g they are still physically attached).
+You must respond ONLY with a valid JSON object using the following schema:
+{
+"analysis":
+"Provide exactly ONE short sentence comparing the context frame to the current frame to
+identify occlusion or breakage.",
+"all_distinct": "YES or NO. Answer YES only if confident they are distinct objects. Answer NO if they are
+parts of the same object."
+}
+Figure 5. MLLM Judge prompt for disassembly validation.
+
+
+USER
+You are analyzing a video sequence where multiple physical objects have been ASSEMBLED into a single object.
+You are provided with two images:
+- [Image 1] Context frame (5 seconds before the assembly).
+- [Image 2] Current frame right after the assembly, with a colored contour outline and letter label
+highlighting the assembled result.
+The individual parts that were assembled together: before_objects
+The assembled result (labeled in Image 2): labeled_regions
+Task:
+1. Name the assembled result (labeled region) based on what you see in Image 2 and knowing it was formed
+from the parts listed above.
+2. Describe the specific assembly action (e.g. "snap together", "screw on lid", "insert battery").
+You must respond ONLY with a valid JSON object using the following schema:
+{
+"summary": "One sentence describing what happened.",
+"objects": [{"label": "A", "name": "concise name for the assembled object"}],
+"action_name": "concise verb phrase for the assembly action"
+}
+Figure 6. MLLM Labeler prompt for assembly events.
+USER
+You are analyzing a video sequence where a physical object has been DISASSEMBLED into multiple parts.
+You are provided with two images:
+- [Image 1] Context frame (5 seconds before the disassembly).
+- [Image 2] Current frame right after the disassembly, with colored contour outlines and letter labels
+highlighting the resulting parts.
+The object that was disassembled: before_objects
+The resulting parts after disassembly (labeled in Image 2): labeled_regions
+Task:
+1. Name each resulting part (labeled region) based on what you see in Image 2 and the context from Image 1.
+2. Describe the specific disassembly action (e.g. "unscrew lid", "pull apart halves", "detach battery
+cover").
+You must respond ONLY with a valid JSON object using the following schema:
+{
+"summary": "One sentence describing what happened.",
+"objects": [{"label": "A", "name": "concise part name"},{"label": "B", "name": "concise part name"}],
+"action_name": "concise verb phrase for the disassembly action"
+}
+Figure 7. MLLM Labeler prompt for disassembly events.
+
+
+0.5
+0.6
+0.7
+0.8
+0.9
+20
+25
+30
+35
+40
+τ
+TF1 (%)
+Sensitivity
+SAM 2.1
+SAM 3
+0.5
+0.6
+0.7
+0.8
+0.9
+0
+25
+50
+75
+100
+0
+0
+0
+97
+3
+τ
+Frequency (%)
+Cross-validation selection
+Figure 8. State selection threshold of TIPO w/o Judge. (left) Transformation tracking quality TF1 on VISTA as a function of the
+state selection threshold τ for SAM 2.1 and SAM 3. (right) Frequency with which each threshold is selected across the 100 folds of a
+10 × 10-fold cross-validation, using a single threshold shared by both trackers. The selected value τ = 0.8 is highlighted.
+Threshold Selection without MLLM Judge.
+VISTA
+does not provide a separate labelled validation split. There-
+fore, to select τ for TIPO w/o Judge without fitting the
+evaluation sequences, we adopt a repeated k-fold cross-
+validation over the 50 sequences of VISTA. We sweep
+τ ∈{0.5, 0.6, 0.7, 0.8, 0.9} (seed 0) and, for each of 10
+repetitions with a different random split, we partition the
+sequences into 10 folds. In each fold, we select the threshold
+that maximizes the mean TF1 on the 45 training sequences
+and evaluate it on the 5 held-out ones, for a total of 100
+selections. Crucially, we do not tune τ for a specific tracker:
+the selection criterion is the TF1 averaged over SAM 2.1 and
+SAM 3, yielding a single threshold shared by both trackers.
+As shown in Fig. 8 (right), τ = 0.8 is selected in 97 out
+of 100 folds, and τ = 0.9 in the remaining 3. The sensitivity
+analysis in Fig. 8 (left) explains this choice: increasing τ
+from 0.5 to 0.8 improves TF1 by +13.8 and +9.9 points for
+SAM 2.1 and SAM 3 respectively. Beyond τ = 0.8, SAM
+2.1 saturates (+0.8 TF1 points) while SAM 3 drops by −4.0
+points, since valid transformations start to be rejected. The
+selected τ = 0.8 is then frozen and used in all the TIPO
+w/o Judge experiments. This confirms that a single threshold
+transfers across trackers without any tracker-specific tuning.
+B.4. Software and Hardware Specifications
+All experiments, including pure tracking and MLLM infer-
+ence, were conducted using two NVIDIA A100 64GB GPUs.
+All methods are implemented and evaluated using Python
+3.12.13 and PyTorch 2.7.0 (CUDA 12.6). All open-weight
+MLLMs and LLMs are self-hosted using vLLM 0.23.0. To
+improve reproducibility, we set the decoding temperature to
+0 for all LLMs and MLLMs whenever the model provider
+allows it. The default seed is 0 for Python, PyTorch and
+Numpy random number generators. Multi-seed experiments
+use seeds {0, 1, 2}.
+C. The VISTA Benchmark
+This section expands upon the VISTA benchmark intro-
+duced in Sec. 3.3. First, we describe the composition of the
+dataset. Then, we detail the custom annotation pipeline and
+expert protocol utilized to guarantee high-fidelity ground-
+truth state graphs for the Transformation Tracking and Un-
+derstanding (TTU) task. Finally, we formalize the mathe-
+matical definitions for our proposed tracking and state-graph
+evaluation metrics.
+C.1. Dataset Composition
+VISTA comprises 50 video sequences collected from three
+sources: 17 videos from Assembly101 [27], 8 videos from
+IKEA ASM [2], and 25 custom recordings. The sequences
+cover a diverse set of object categories, including generic
+household objects (e.g., USB sticks, perfume boxes, moka
+pots, mixers, remote controls, and digital cameras), IKEA
+furniture (e.g., tables and drawers), and toy vehicles from
+Assembly101 (e.g., bulldozers, garbage trucks, and excava-
+tors), for a total of 218 unique object and part names. The
+annotated transformations are described by 43 distinct ac-
+tion descriptions, such as “disconnect”, “insert”, “mount”,
+“pop”, “pull out”, “put”, “remove”, “screw”, “separate”, and
+“unscrew”. All annotations have been manually checked and
+validated by an expert annotator to ensure the temporal and
+spatial validity of each transformation.
+C.2. Annotation Protocol and Interface
+To construct the VISTA dataset, we designed a custom an-
+notation interface (Fig. 9) that couples automated object
+tracking with expert human verification. The ground-truth
+annotations require two modalities: dense spatial masks and
+discrete state transformations. Masks are generated by an an-
+notator assisted by a Promptable Visual Segmentation tracker
+(SAM 3 [6]), while the transformations are manually logged
+to construct the ground-truth state graph. Each sequence was
+annotated by one annotator and independently reviewed by
+
+
+Landing Page
+Tracker Controls
+Interactive Video player
+Object and Transformation 
+Controls
+Add Object
+New object 
+added to the 
+State Graph
+Click add
+Log Transformation
+Transformation Logging Dialog
+Segment and Track Selected Object
+Track selected object
+Click to Segment
+Transformation Logged
+New 
+Transformation 
+added to the 
+State Graph
+Click to log
+Figure 9. Overview of the VISTA Annotation Tool. Our custom interface couples automated object tracking with expert human verification
+to construct high-fidelity state graphs. (Top) The landing page features an interactive video player, central tracker controls, and lateral panels
+for object and graph management. (1) Add Object: The annotator registers a new distinct entity ID in the system. (2) Segment and Track:
+By clicking on the object within the video frame, the annotator prompts the segmentation model to extract the spatial mask and initiates
+temporal tracking. (3) Log Transformation: At the exact frame of a physical state change, the expert opens a dialog box to explicitly link
+the pre- and post-transformation object tracks and assign a semantic action label (e.g., “Unscrew”). (4) Transformation Logged: The
+validated event is immediately committed to the state graph and displayed in the right-hand panel for continuous review.
+
+
+a second; disagreements on transformation timing, structure,
+or labels were discussed and resolved until both agreed.
+Registering and Tracking Entities.
+The annotator initi-
+ates the process by defining a new object identity and click-
+ing the target within the interactive video player. They then
+trigger the visual tracker for that specific item (Fig. 9.1,
+Fig. 9.2). To ensure rigorous structural definitions, the hu-
+man expert is explicitly tasked with identifying the precise
+moment a transformation is visually completed. Annotators
+are instructed to log a state change only when the physical
+action is entirely finalized in the visual record. Upon this
+exact frame of completion, the expert terminates the prior
+tracks and registers the resulting post-transformation item(s)
+under entirely new identities.
+Logging Transformations.
+Once the pre- and post-
+transformation tracks are securely registered, the expert ex-
+plicitly links them. By opening the dialog interface (Fig. 9.3),
+the annotator connects the corresponding identities and pro-
+vides a concise textual description of the transformation
+action. This registers new edges in the state graph. The
+recorded transformations remain continuously editable in
+the side panel (Fig. 9.4), allowing the expert to refine seman-
+tic labels until the entire video sequence is exhaustively and
+accurately modeled.
+C.3. Evaluation Metrics
+Mathematical Preliminaries.
+To formalize the evaluation
+metrics, we first define the ground-truth structures. The set
+of all masks at frame t is denoted as Mt = {mi
+t | ∃i, n :
+(t, i, mi
+t, n) ∈V }, and the complete set of valid frame-
+wise masks across the video is M = {Mt | Mt̸ = ∅}.
+The unique objects present in the state graph are O = {i |
+∃t, mi
+t, n : (t, i, mi
+t, n) ∈V }.
+A transformation k within the state graph is defined by
+its timestamp tk, its textual description dk (excluding trivial
+spatial motion where d = NONE), and the identities of the
+objects involved before and after the event. We denote the
+set of input object IDs as T (pre)
+k
+and the set of resulting output
+object IDs as T (post)
+k
+. We define the chronologically ordered
+set of all transformations in the ground-truth graph as:
+T = {(k, tk, T (pre)
+k
+, T (post)
+k
+, dk) |
+T (pre)
+k̸
+= ∅∧T (post)
+k̸
+= ∅}
+(13)
+The temporal ordering is foundational for the transformation
+matching protocol we will discuss below.
+Tracking Quality.
+Following VOST [30], we compute
+tracking quality J as the frame-wise Intersection-over-
+Union (IoU) between the ground-truth mask set M and
+the predicted mask set ˆ
+M:
+J (M, ˆ
+M) =
+1
+|M|
+X
+Mt∈M
+IoU
+
+
+[
+mi
+t∈Mt
+mi
+t,
+[
+ˆmi
+t∈ˆ
+Mt
+ˆmi
+t
+
+
+(14)
+To measure tracking persistence, Jtr computes this same
+metric exclusively over the final 25% of the video frames.
+Unlike VOST, we intentionally compute J globally per
+frame rather than on a strictly per-object basis. Enforcing
+a per-object mapping would entangle J with the quality
+of transformation detection, defeating its primary purpose.
+By evaluating spatial overlap globally, we fully decouple
+pure vision tracking capabilities from state-graph generation
+accuracy. For instance, if a baseline method (e.g., Vanilla
+SAM) fails to detect any transformations but perfectly tracks
+the spatial footprints of all disjoint parts, its J and Jtr scores
+remain unpenalized, isolating its tracking performance.
+Transformation Tracking (TF1).
+To evaluate the pre-
+dicted state graph, we establish a bipartite matching between
+the predicted transformations ˆT and the ground-truth trans-
+formations T. This mapping allows us to compute precision
+(Tp), recall (Tr), and the macro-averaged F1-score (TF1):
+Tp =
+TP
+TP + FP
+Tr =
+TP
+TP + FN
+TF1 =
+2 · TP
+2 · TP + FN + FP
+(15)
+where True Positives (TP) represent correctly matched trans-
+formations, False Positives (FP) are hallucinated transfor-
+mations in the prediction, and False Negatives (FN) are
+undetected ground-truth transformations. All metrics are
+computed at the sequence level and macro-averaged.
+The bipartite matching is resolved using a modified
+Jonker-Volgenant algorithm [10], governed by a strict cost
+matrix Cp,g between a predicted transformation p and a
+ground-truth transformation g:
+Cp,g =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
++∞
+if | ˆT (pre)
+p
+|̸ = |T (pre)
+g
+| ∨
+| ˆT (post)
+p
+|̸ = |T (post)
+g
+|
++∞
+if ˆtp ≤tg−1 ∨ˆtp ≥tg+1
++∞
+if Tcheck(p, g) = 0
+|ˆtp −tg|
+otherwise
+(16)
+This cost matrix enforces three physical realities:
+1. Object Degree Matching: The first condition assigns
+infinite cost if the transformations have a different number
+of input or output objects, ensuring assemblies are never
+matched to disassemblies.
+
+
+SYSTEM
+You are a highly intelligent assistant that can analyze actions and resulting objects in text.
+USER
+Given the object description ’[GT_OBJECT]’, is ’[PRED_OBJECT]’ similar to it? Please rate from -1 to 1,
+where -1 means completely unrelated, 0 means ambiguous, and 1 means ’[PRED_OBJECT]’ is similar. Over- or
+under-specified descriptions should still be considered as +1. Please answer with a single integer.
+Figure 10. LLM evaluator prompt for assessing object naming semantic accuracy (SO).
+SYSTEM
+You are a highly intelligent assistant that can analyze actions in text.
+USER
+Given a particular action description of ’[GT_ACTION]’, is ’[PRED_ACTION]’ similar to the verbs in this
+action?
+Please rate from -1 to 1, where -1 means completely unrelated, 0 means ambiguous, and 1 means
+’[PRED_ACTION]’ captures the meaning of ’[GT_ACTION]’ or is directly in it.
+Brief/general descriptions
+should still be considered as +1. Please answer with a single integer.
+Figure 11. LLM evaluator prompt for assessing action description semantic accuracy (SA).
+2. Temporal Boundaries: The second condition prevents
+a prediction from matching a ground-truth event g if it
+occurs outside the temporal window defined by the pre-
+ceding (tg−1) and succeeding (tg+1) ground-truth trans-
+formations.
+In case g is the first or the last ground-
+truth transformation, we manually define tg−1 = 0 and
+tg+1 = +∞, respectively. Moreover, in the edge case
+that tg = tg−1 or tg = tg+1, we recursively take the pre-
+vious (g−2) or next (g+2) transformation until the frame
+time is different to avoid assigning a wrong +∞penalty.
+This is the widest admissible window since (tg−1, tg+1)
+is the largest interval around tg that contains no other
+ground-truth transformation. Hence, within this window
+the ground-truth state graph changes only through g itself.
+Extending it past either bound would compare p against
+objects that do not exist yet (e.g., inputs of g produced by
+g −1) or no longer exist (e.g., outputs of g consumed by
+g + 1), leaving Tcheck ill-defined.
+3. Spatial Consistency: The third condition uses a boolean
+function Tcheck(p, g) which returns 1 only if every object
+in the pre- and post-transformation sets achieves an IoU
+> 0.5 between prediction and ground truth.
+Crucially, the spatial consistency check Tcheck is non-
+trivial and must account for two complex tracking dynamics.
+First, to handle arbitrary tracking ID assignments, an in-
+ternal bipartite matching is performed on the object IDs to
+optimally align the prediction with the ground truth. Sec-
+ond, a predicted transformation p and ground-truth g may be
+temporally shifted, during which a prediction might be hallu-
+cinated, generating false-positive intermediate states. To mit-
+igate this alignment problem, the IoU matching is evaluated
+at frame max(ˆtp, tg), and we verify that the matched objects
+correctly trace their structural ancestry back to the original
+ˆT (pre)
+p
+or ˆT (post)
+p
+sets, depending on the selected frame.
+Comparison with TAS Metrics.
+Existing TAS met-
+rics [29] are constrained by the VOST-TAS annotations,
+which contain only the resulting parts of each transformation,
+annotated at a single frame at the end of its window, and no
+state graph. Consequently, TAS metrics match transforma-
+tions on their outputs alone and cannot verify which objects
+take part in them, making them insufficient to evaluate TTU.
+For disassemblies, the matching is incomplete: if the pre-
+diction splits an object A into {B, C, D} while the ground
+truth is A →{B, C}, the transformation is still matched
+and D is left unaccounted for. For assemblies, the issue
+is more severe: since only the resulting object is checked,
+a prediction {A, C} →E is matched to the ground-truth
+{A, B} →E even though the wrong parts were assembled.
+Moreover, the spatial check of HST is performed on the
+
+
+Table 7. Identity swaps on VISTA. Number of identity swaps
+between tracked objects.
+Tracker
+Method
+Swaps ↓
+SAM 2.1
+TIPO w/o Judge
+0
+TIPO
+0
+SAM 3
+TIPO w/o Judge
+0
+TIPO
+0
+tracked objects at the last frame of the ground-truth transfor-
+mation, rather than on the objects produced by the matched
+prediction. Hence, a prediction with the wrong number of
+parts is credited whenever later, unmatched transformations
+repair the tracks before that frame. In contrast, TF1 leverages
+the full state graphs of VISTA: the object degree condition
+rejects the first case, and Tcheck rejects the second, requiring
+every pre- and post-transformation object to match.
+Identity Switches.
+Since J is computed on union-level
+masks, identity switches must be handled by the state-graph
+metrics. We distinguish two types of identity switches. First,
+a tracked object may drift to an untracked object. In this case,
+the predicted mask no longer overlaps with its ground-truth
+object, which is directly penalized by J and Jtr, and by TF1
+whenever the object is involved in a subsequent transforma-
+tion, since Tcheck requires an IoU > 0.5 for every involved
+object. Second, two tracked objects may swap their identi-
+ties. Since the union of their masks is unchanged, this event
+is not captured by J . It is penalized by TF1 only if one of the
+two objects is subsequently involved in a transformation and
+the objects do not swap back before it occurs. Conversely,
+if both objects are involved in the same transformation, the
+internal bipartite matching of Tcheck absorbs the permutation
+and the swap is not penalized.
+This second type is a very specific event, as it requires
+two tracked objects to exchange their entire spatial footprints,
+which is rare for trackers with per-object memory such as
+SAM 2.1 and SAM 3. To verify that its impact on our
+evaluation is negligible, we explicitly count this type of
+identity swaps between tracked objects. At every frame,
+we match the predicted tracks to the ground-truth objects
+through a bipartite matching on mask IoU, retaining only
+pairs with IoU > 0.5, as in Tcheck. Each track i stores its
+current match ci, i.e., the ground-truth object it was last
+matched to, and its previous match pi, i.e., the ground-truth
+object it held before ci. A swap between tracks i and j
+is counted whenever one of them changes its match such
+that pi = cj and pj = ci, with both tracks matched at that
+frame. Since the two tracks need neither to change their
+match at the same frame nor to be matched at every frame,
+this also captures swaps that occur progressively or while the
+tracks are temporarily unmatched. Transformations assign
+new identities to their output objects, both in the predictions
+Table 8. Human agreement of the LLM evaluator. Agreement
+between human judgments and LLM evaluator on the semantic
+similarity of object names and action descriptions. Values are mean
+± standard deviation across subjects. Best result is in bold.
+LLM Evaluator
+Human Agreement (%) ↑
+GPT-5.4 mini [22]
+81.1 ± 4.2
+Gemma 4 31B [14]
+88.3 ± 3.3
+and in the ground truth, so the identity changes they cause
+are never counted as swaps. Each exchange is counted as a
+separate event, including a subsequent swap back, and we
+report the total over all sequences. As shown in Tab. 7, no
+identity swap occurs for any TIPO configuration.
+Transformation
+Semantics.
+Following
+Tubelet-
+Graph [29], we utilize an LLM evaluator (Gemma 4
+31B [14] in our case) to assess the semantic similarity
+between predicted and ground-truth text labels for all
+correctly matched transformations (TP).
+To evaluate
+object naming accuracy (SO), the model is prompted with
+the instructions detailed in Fig. 10.
+To evaluate action
+description accuracy (SA), the model is prompted with the
+instructions detailed in Fig. 11. A label is deemed correct
+only if the model returns 1. The overall semantic quality S
+per sequence is calculated as the harmonic mean of SO and
+SA and then macro-averaged across sequences.
+To select the LLM evaluator, we measure its agreement
+with human judgments. Six human subjects each evaluate 92
+unique (ground-truth, predicted) label pairs, randomly sam-
+pled from the correctly matched transformations of VISTA
+and covering both object names and action descriptions. For
+each pair, subjects provide a binary judgment on whether the
+predicted label is semantically similar to the ground-truth
+one, consistently with the binarized decision of the LLM
+evaluator. The agreement is computed as the percentage of
+pairs for which the human and the LLM decisions coincide,
+using fixed prompts for all models. As shown in Tab. 8,
+Gemma 4 31B achieves the highest agreement with human
+judgments (88.3% vs 81.1% for GPT-5.4 mini), while also
+being an open-weight model. We therefore adopt it as the
+LLM evaluator for all experiments.
+Overall Score (HF1).
+The overall TTU quality is mea-
+sured by computing the F1-score as in TF1, but strictly filter-
+ing the True Positives (TP) to only include transformations
+that achieve perfect semantic accuracy (score of 1 for both
+object and action naming).
+D. Additional Quantitative Analysis
+This section provides expanded ablation studies and a vari-
+ability analysis to characterize the robustness of TIPO.
+
+
+Table 9. Impact of State Selection Filtering. Experiments are
+conducted on the VISTA dataset without MLLM Judge averaged
+across three seeds. Increasing the State Selection Filtering thresh-
+old τ substantially improves state-graph transformation tracking
+accuracy. Values are reported as mean ± standard deviation.
+Tracker
+τ
+Tr ↑
+Tp ↑
+TF1 ↑
+SAM 2.1
+0.5
+50.4 ± 1.5
+16.8 ± 1.0
+21.5 ± 1.1
+0.8
+43.8 ± 3.6
+35.6 ± 2.3
+36.7 ± 3.3
+SAM 3
+0.5
+43.4 ± 0.7
+21.7 ± 1.0
+23.7 ± 1.1
+0.8
+37.3 ± 2.5
+37.5 ± 2.1
+33.4 ± 1.8
+Table 10. MLLM Judge Ablations. Experiments are conducted
+on VISTA and averaged across three seeds. Qwen 3.5 35B is
+selected as the best all-around MLLM Judge considering state-
+graph transformation tracking accuracy and FPS. Best results per
+tracker are in bold, and second-best are underlined.
+Tracker
+MLLM
+Tr ↑
+Tp ↑
+TF1 ↑
+FPS ↑
+SAM 2.1
+Qwen 3.5 35B
+48.4
+46.7
+44.7
+1.8
+Gemma 4 31B
+48.5
+43.3
+41.8
+1.4
+Qwen 3.5 9B
+43.0
+40.8
+39.2
+1.4
+Gemma 4 E4B
+26.2
+30.9
+26.1
+1.7
+SAM 3
+Qwen 3.5 35B
+44.7
+49.0
+42.5
+2.4
+Gemma 4 31B
+43.8
+44.7
+39.6
+1.9
+Qwen 3.5 9B
+43.8
+51.3
+43.4
+2.1
+Gemma 4 E4B
+27.5
+40.8
+30.5
+2.5
+D.1. Additional Ablations
+State Selection Thresholds.
+In the TIPO framework, the
+MLLM Judge provides the high-level reasoning required to
+validate states at lower confidence intervals. As shown in
+Tab. 9, TIPO remains highly effective even in its standalone
+configuration (w/o Judge). However, to compensate for the
+absence of the MLLM’s spatial reasoning, we increase the
+state selection threshold from τ = 0.5 to τ = 0.8, selected
+by cross-validation as detailed in Appendix B.3. This ad-
+justment yields significant improvements in transformation
+tracking quality, specifically +15.2 and +9.7 TF1 points for
+SAM 2.1 and SAM 3 respectively. This demonstrates that
+while the MLLM Judge is the optimal configuration, the
+mask overlap scoring component is sufficiently robust to
+maintain accuracy through stricter filtering.
+MLLM Judge Selection.
+The choice of MLLM Judge is a
+primary factor in the system’s inference speed and state vali-
+dation accuracy. In Tab. 10, we compare four open-weight
+MLLMs. To prioritize reproducibility and minimize latency,
+we exclude closed-source models (e.g., GPT, Claude). Qwen
+3.5 35B delivers the best all-around performance. Its Mix-
+ture of Experts (MoE) architecture allows it to achieve the
+highest TF1 scores while maintaining superior frame rates
+compared to dense models like Gemma 4 31B.
+Table 11. Impact of Tracker Size. Experiments are conducted on
+VISTA using SAM 2.1 at different model sizes, with and without
+the MLLM Judge, using a single seed. Large is the default configu-
+ration used in all other experiments. Best results per MLLM Judge
+setting are in bold, and second-best are underlined.
+SAM 2.1 Size
+Judge
+J ↑
+Jtr ↑
+Tr ↑
+Tp ↑
+TF1 ↑
+Tiny
+✗
+88.4
+84.3
+35.6
+30.7
+28.7
+Base Plus
+89.2
+85.9
+39.2
+35.3
+33.8
+Large
+90.7
+87.8
+47.1
+37.2
+39.5
+Tiny
+✓
+89.8
+86.5
+42.9
+38.2
+36.7
+Base Plus
+89.5
+86.0
+44.0
+45.3
+41.1
+Large
+90.5
+88.4
+47.0
+44.6
+43.0
+Tracker Size.
+Since TIPO evaluates structural changes
+directly from the tracker outputs, we analyze how trans-
+formation quality scales with the size of the base tracker.
+In Tab. 11, we evaluate SAM 2.1 in its Tiny, Base Plus,
+and Large (default) configurations. Transformation tracking
+quality consistently improves with larger trackers, especially
+without the MLLM Judge: TF1 increases from 28.7 (Tiny)
+to 39.5 (Large), yielding +10.8 points. When the MLLM
+Judge is active, this gap reduces to +6.3 TF1 points, as visual
+verification compensates for the noisier state proposals pro-
+duced by smaller trackers. This confirms that TIPO scales
+with stronger foundation models, while the MLLM Judge
+provides robustness in computationally constrained settings.
+D.2. Variability Analysis
+To assess the stability of TIPO, we report the mean and
+standard deviation across three independent experiments
+using different random seeds {0, 1, 2} on VISTA in Tab. 12.
+We observe minimal variability in pure tracking and trans-
+formation tracking scores. The highest observed variation is
+±4.9 points in the semantic score S, which is expected given
+the inherent stochasticity in MLLM generative labeling. No-
+tably, this variability is confined to the descriptive naming
+of objects and actions and does not impact the framework’s
+ability to detect and track physical transformations.
+D.3. Scalability Analysis
+We profile the runtime of each TIPO module using SAM
+3 as the number of components and objects in the scene
+grows. We omit the MLLM Judge, since it is not queried
+at every frame thanks to the state evaluation filtering, and
+its processing time is independent of the number of objects
+and parts. Component Extraction requires 2.5 ms per tracked
+object, and the Point Sampler scales linearly with the total
+number of extracted components, requiring approximately
+18 ms per sampled component (22 ms for a single component
+and 128 ms for seven).
+As shown in Fig. 12, the cost of state generation and
+evaluation follows the cardinality of the partition set Π(X)
+(Appendix B). Disassembly runtime increases from below
+
+
+Table 12. TIPO variability on VISTA. We evaluate pure tracking and state-graph generation using three different seeds. Values are
+reported as mean ± standard deviation. Best results per tracker are in bold.
+Tracker
+Method
+TRACKING
+STATE GRAPH
+FPS ↑
+J ↑
+Jtr ↑
+S ↑
+TF1 ↑
+HF1 ↑
+SAM 2.1
+TIPO w/o Judge
+90.4 ± 0.6
+87.2 ± 0.9
+76.8 ± 4.9
+36.7 ± 3.3
+19.7 ± 4.7
+3.0 ± 0.1
+TIPO
+90.7 ± 0.3
+88.6 ± 0.2
+78.9 ± 2.1
+44.7 ± 1.6
+27.1 ± 2.2
+1.8 ± 0.0
+SAM 3
+TIPO w/o Judge
+91.5 ± 1.0
+88.0 ± 1.4
+77.4 ± 3.4
+33.4 ± 1.8
+16.8 ± 0.0
+3.9 ± 0.1
+TIPO
+91.4 ± 0.2
+87.8 ± 0.5
+80.2 ± 2.8
+42.5 ± 1.5
+28.3 ± 1.5
+2.4 ± 0.1
+0
+25
+50
+75
+100
+95.1
+4.6
+0.3
+<0.1
+0
+0
+<0.1
+Frequency (%)
+1
+2
+3
+4
+5
+6
+7
+0
+50
+100
+150
+200
+# components
+Time (ms)
+Disassembly
+Frequency
+Runtime
+0
+25
+50
+75
+100
+46.4
+29.9
+11.7
+4.8
+6.4
+0.8
+<0.1
+Frequency (%)
+1
+2
+3
+4
+5
+6
+7
+0
+50
+100
+150
+200
+# overlapping objects
+Time (ms)
+Assembly
+Frequency
+Runtime
+Figure 12. State generation and evaluation runtime. Runtime per frame using SAM 3 (lines, left axis) for (left) disassembly state
+generation and evaluation for a single object fragmented into an increasing number of components, and (right) assembly state generation
+and evaluation for an increasing number of overlapping objects. Non-overlapping objects are pre-filtered and do not contribute. Bars (right
+axis) report the frequency of each case among all disassembly and assembly evaluations on VISTA.
+Table 13. Robustness to tracker noise on VISTA. CLEAN denotes
+the standard setting, while NOISY denotes tracker output masks
+corrupted with random cutouts. All experiments use SAM 3 as the
+tracker, using a single seed. Best results per setting are in bold.
+Setting
+Method
+J ↑
+Jtr ↑
+Tr ↑
+Tp ↑
+TF1 ↑
+CLEAN
+TIPO w/o Judge
+92.1
+88.6
+39.3
+37.7
+34.6
+TIPO
+91.7
+88.2
+43.6
+46.5
+41.6
+NOISY
+TIPO w/o Judge
+79.7
+74.1
+25.2
+25.5
+22.3
+TIPO
+79.5
+75.2
+36.0
+41.0
+35.6
+0.1 ms for a single component to 170 ms for seven compo-
+nents, the maximum allowed in our experiments. Assem-
+bly remains cheaper, increasing from 0.2 ms to 105 ms for
+seven overlapping objects, since non-overlapping objects
+are pre-filtered and do not contribute to the search space.
+However, the worst case is almost never reached in practice.
+On VISTA, 95.1% of the disassembly evaluations involve
+a single component and only 0.3% involve three or more,
+while 76.3% of the assembly evaluations involve at most two
+overlapping objects and fewer than 0.1% reach the bound of
+seven (bars in Fig. 12).
+Our implementation is built purely in Python and PyTorch,
+and a native C++ or multi-threaded implementation would
+further reduce the runtime. Even in this unoptimized form,
+TIPO processes videos significantly faster than Tubelet-
+Graph (Tab. 2). This confirms that, when multiple objects are
+present, TIPO scales comparably to the underlying tracker.
+D.4. Robustness to Tracker Noise
+Since TIPO evaluates structural changes directly from the
+tracker outputs, we assess its sensitivity to a degraded base
+tracker by corrupting the output masks of the tracker on
+VISTA with random cutouts. Each frame is selected for per-
+turbation with probability 0.2, and three rectangular cutouts
+are applied at random positions, with sides uniformly sam-
+pled between 5% and 10% of the frame sides. The same
+cutouts are applied to the masks of all the tracked objects
+in the frame. The corruption is applied only to the tracker
+outputs and is not propagated to the tracker memory, while
+the original frames are provided to all components of the
+pipeline, i.e. the tracker, the mask decoder, the MLLM Judge,
+and the MLLM Labeler. The evaluation is performed against
+the original ground-truth annotations. All experiments use
+SAM 3 as the tracker.
+As shown in Tab. 13, the corrupted masks substantially
+degrade pure tracking quality (−12.2 J points). As ex-
+pected, the transformation quality of TIPO also decreases,
+with a drop of −7.6 Tr, −5.5 Tp, and −6.0 TF1 points, but it
+does not collapse: TIPO still achieves 35.6 TF1, well above
+TubeletGraph with clean SAM 3 masks (3.3, Tab. 2). No-
+tably, the MLLM Judge is critical in this setting: without
+
+
+Table 14. Last-frame object identity on VISTA. Predicted tracks and ground-truth objects are matched one-to-one on the last frame of
+each video with Hungarian matching on mask IoU if greater than θ. Precision (P), recall (R) and F1 are micro-averaged over all objects.
+We report results using two different foundational trackers. Best results per tracker are in bold, and second-best are underlined.
+Tracker
+Method
+θ = 0.5
+θ = 0.75
+P↑
+R↑
+F1 ↑
+P↑
+R↑
+F1 ↑
+SAM 2.1
+Tracker only
+47.8
+35.3
+40.6
+40.5
+30.0
+34.5
+TubeletGraph [29]
+43.3
+45.3
+44.3
+38.9
+40.7
+39.7
+TIPO w/o Judge
+83.5
+57.3
+68.0
+80.6
+55.3
+65.6
+TIPO (Ours)
+87.1
+58.7
+70.1
+86.1
+58.0
+69.3
+SAM 3
+Tracker only
+43.6
+34.0
+38.2
+35.9
+28.0
+31.5
+TubeletGraph [29]
+45.1
+36.7
+40.4
+37.7
+30.7
+33.8
+TIPO w/o Judge
+87.5
+56.0
+68.3
+86.5
+55.3
+67.5
+TIPO (Ours)
+93.4
+56.7
+70.5
+93.4
+56.7
+70.5
+it, the drop increases to −12.3 TF1 points, suggesting that
+visual verification on the clean frames effectively filters the
+spurious state proposals induced by corrupted masks. This
+demonstrates that the structural reasoning of TIPO remains
+reliable despite significant tracker noise.
+D.5. Error Propagation Analysis
+Due to TIPO’s online and streaming architecture it can be
+subject to some irrecoverable errors in the state graph. We
+want to assess whether the objects in the last frame of each
+video sequence are correctly identified and segmented. This
+proxy metric will indicate how well each method can recover
+to a state consistent with the observed reality. On the last
+frame of each video, predicted tracks and ground-truth ob-
+jects are matched one-to-one with Hungarian matching on
+mask IoU, and a match is counted as correct if its IoU is at
+least θ. We report micro-averaged precision, recall, and F1
+for θ = 0.5 and θ = 0.75. We compare against the base
+tracker alone, which keeps the initial identities throughout
+the video, and TubeletGraph [29].
+As shown in Tab. 14, TIPO substantially outperforms
+both baselines with either base tracker, improving over
+TubeletGraph by +25.8 and +30.1 F1 points at θ = 0.5
+with SAM 2.1 and SAM 3, respectively (70.1 vs 44.3 and
+70.5 vs 40.4). The gain is mostly driven by precision (87.1
+vs 43.3 and 93.4 vs 45.1). Since the baselines do not model
+assemblies, they keep separate tracks for parts that have been
+merged, which results in spurious objects on the last frame.
+Moreover, the results of TIPO are almost unchanged un-
+der the stricter threshold (−0.8 F1 with SAM 2.1, and 70.5
+F1 at both θ = 0.5 and θ = 0.75 with SAM 3), whereas
+TubeletGraph drops by −4.6 and −6.6 points, indicating
+that the identities predicted by TIPO are also accurately seg-
+mented. Notably, replacing SAM 2.1 with SAM 3 slightly
+improves TIPO (70.1 to 70.5 F1 at θ = 0.5), while it de-
+grades TubeletGraph (44.3 to 40.4) due to a drop in recall
+(45.3 to 36.7). As discussed in Appendix E.3, SAM 3 loses
+track of the parts after a transformation less frequently than
+SAM 2.1, so TubeletGraph triggers fewer tubelet searches
+and misses the newly formed objects. Conversely, recall (R)
+is the critical aspect for all the methods, indicating a funda-
+mental difficulty in tracking all the objects. We believe this
+is mainly driven by small objects not picked up during the
+transformations. We observe an example of this in Fig. 17.
+To provide the most fair comparison with TubeletGraph
+on the transformations it is designed to handle, we repeat
+the evaluation on the disassembly only events of VISTA. As
+shown in Tab. 15, TubeletGraph achieves a high precision
+in this setting (95.1 and 89.8 with SAM 2.1 and SAM 3,
+respectively), but recovers only 42.5% and 24.3% of the
+objects on the last frame, as most of the parts produced
+by the disassemblies are not detected. In contrast, TIPO
+raises the recall to 56.4 and 55.8, more than doubling it with
+SAM 3. With SAM 2.1, this comes at a lower precision
+than TubeletGraph (90.3 vs 95.1), still resulting in a gain
+of +10.6 F1 points (69.4 vs 58.8) at θ = 0.5. With SAM
+3, TIPO also improves the precision (96.2), resulting in a
+gain of +32.3 F1 points (70.6 vs 38.3). As in Tab. 14, the
+results of TIPO are almost unchanged at θ = 0.75, whereas
+TubeletGraph drops by −5.4 and −7.9 F1 points. Replacing
+SAM 2.1 with SAM 3 reduces the recall of TubeletGraph
+from 42.5 to 24.3, while the recall of TIPO is stable (56.4
+vs 55.8).
+E. Extended Comparisons
+This section complements the state-of-the-art comparison
+of Sec. 4.1 with additional experiments that detail the two
+additional baselines, provide fully open and reproducible
+results on VISTA, report the full comparison on VOST-TAS,
+and compare with other trackers on VOST.
+E.1. Additional Baselines
+This subsection provides further details on the alternative
+fair baselines compared in Sec. 4.1.
+
+
+Table 15. Last-frame object identity on the disassembly sequences of VISTA. Predicted tracks and ground-truth objects are matched
+one-to-one on the last frame of each video with Hungarian matching on mask IoU if greater than θ. Precision (P), recall (R) and F1
+are micro-averaged over all objects. We report results using two different foundational trackers. Best results per tracker are in bold, and
+second-best are underlined.
+Tracker
+Method
+θ = 0.5
+θ = 0.75
+P↑
+R↑
+F1 ↑
+P↑
+R↑
+F1 ↑
+SAM 2.1
+Tracker only
+95.6
+23.8
+38.1
+84.4
+21.0
+33.6
+TubeletGraph [29]
+95.1
+42.5
+58.8
+86.4
+38.7
+53.4
+TIPO w/o Judge
+91.8
+55.8
+69.4
+89.1
+54.1
+67.4
+TIPO (Ours)
+90.3
+56.4
+69.4
+89.4
+55.8
+68.7
+SAM 3
+Tracker only
+84.4
+21.0
+33.6
+66.7
+16.6
+26.5
+TubeletGraph [29]
+89.8
+24.3
+38.3
+71.4
+19.3
+30.4
+TIPO w/o Judge
+95.3
+55.8
+70.4
+95.3
+55.8
+70.4
+TIPO (Ours)
+96.2
+55.8
+70.6
+96.2
+55.8
+70.6
+AlwaysPredict Baseline.
+This baseline assesses the feasi-
+bility of detecting object transformations without the TIPO
+specific modules. This pipeline keeps the tracking and com-
+ponent extraction and removes the point sampling, state
+generation, evaluation, selection, and MLLM Judge. When
+the number of components is greater than 1 a disassembly
+is predicted, and when two objects’ masks overlap with
+an IoU above 0.5 an assembly is predicted. Tab. 2 shows
+that the AlwaysPredict baseline performs poorly, with gaps
+of −27.6 and −24.9 TF1 points compared with TIPO w/o
+Judge, which likewise uses no MLLM. Its precision drops
+to 6.6 and 8.2 Tp against 25.3 and 17.9 Tr, indicating that
+most of the predicted transformations are spurious, mirroring
+the over-prediction observed on VOST-TAS (Tab. 3). This
+demonstrates that tracker cues alone are insufficient to detect
+transformations, and that state generation and evaluation are
+required.
+Agentic Baseline.
+This baseline tests the MLLM Judge
+(Qwen 3.5 35B) under a different paradigm. Differently
+from the TIPO setting, we provide a full agentic harness
+with the following tools:
+• video and image analysis: this includes tools like view of
+multiple frames, zooming and segmentation mask toggle.
+• SAM 3 prompting: this includes all the modalities to
+prompt SAM 3 (point, box, text) and the use of the tracker.
+• transformations recording: this includes tools to record
+transformations by providing object IDs with the corre-
+sponding semantic labels.
+Notably, the harness operates offline: unlike TIPO, which
+processes the video in a streaming fashion, the agent can ac-
+cess any frame at any time, which gives it an advantage. The
+number of steps and tool calls is unlimited, so the agent runs
+until it decides to stop. Fig. 13 presents the initial prompt
+provided to the agent. Despite this advantage, Tab. 2 shows
+large gaps of −34.8 and −32.2 TF1 points compared with
+TIPO, which uses the same MLLM, while requiring 2.0×
+and 2.4× the runtime of TIPO on the whole benchmark.
+Unlike the AlwaysPredict baseline, the agent records only a
+few transformations, reaching 15.8 and 19.7 Tp but only 7.6
+and 7.5 Tr. This demonstrates that giving the MLLM direct
+control over the tracker does not replace the structured state
+proposals of TIPO, even with access to the full video.
+E.2. Full Comparison on VOST-TAS
+Tab. 16 extends Tab. 3 with TIPO, vanilla SAM, and the
+Agentic baseline on VOST-TAS [29]. Interpreting perfor-
+mance on VOST-TAS requires understanding the critical
+structural flaws of its evaluation protocol: first, VOST-TAS
+annotates only the resulting parts at the end frame of each
+transformation without modeling the state graph; second,
+its primary metric HST is strictly recall-based and verifies
+spatial overlap only at the final frame of the ground-truth win-
+dow, completely blind to which input objects participated in
+the event. As demonstrated in Tab. 3, this flawed formulation
+heavily rewards blind over-prediction: the AlwaysPredict
+baseline achieves the highest HST (13.9 and 15.7) simply
+by firing spurious disassemblies at every mask split, despite
+a disastrous temporal precision of 6.2–9.0 T TAS
+P
+.
+This metric distortion explains the apparent disparity be-
+tween TubeletGraph and TIPO under SAM 2.1. VOST was
+specifically collected to induce catastrophic tracker failures
+through extreme blur and heavy object deformation [30]. Be-
+cause TubeletGraph detects transformations by interpreting
+track loss as a structural split, it is artificially rewarded on
+VOST when a weaker tracker (SAM 2.1) frequently drops
+tracks, allowing its reactive tubelet search to trigger and
+accumulate unpenalized recall credit on HST . In contrast,
+TIPO evaluates geometry proactively and refuses to predict
+transformations unless coherent disjoint components and
+mask priors support them. On severe visual artifacts where
+SAM 2.1 collapses, TIPO conservatively suppresses false
+positives, yielding a low HST (2.2) solely because the metric
+fails to penalize TubeletGraph’s hallucinated proposals.
+
+
+USER
+You are a video analysis agent. You control a video object tracker (SAM 3) through tools, and you can watch
+the video through tools. Your job is to produce a complete, accurate record of the physical objects in a
+video and of the transformations they undergo.
+The task
+The video shows physical objects being taken apart or put together. Think of an object as anything
+that would move as a single unit if left alone: if you picked it up, everything that is part of it would
+come along.
+A transformation happens when this changes:
+• DISASSEMBLY: one object becomes two or more objects.
+• ASSEMBLY: two or more objects become one object.
+Any change in what forms a unit counts, however small the part involved. Contact that does not outlast the
+hand (holding, touching, occlusion) does not change what forms a unit.
+You must produce:
+1. A track for every object relevant to the task. A track is a segmentation mask on every frame where the
+object exists. A track is an empty mask when the object is fully occluded, and has no mask at all outside
+the object’s lifetime.
+2. Every transformation, recorded at the frame where it happens (the first frame where the new state is
+visible). Each transformation lists:
+• the objects before it (the “before” objects);
+• the resulting objects;
+• the action.
+The “before” tracks end at that frame, and each resulting object starts a NEW track at that frame, even
+one that looks almost unchanged. Assembly/disassembly results are never continuations of an old track.
+Together, the tracks and transformations form a graph of how objects change over time. Results of a
+transformation are objects like any other: they can take part in later transformations (be split again,
+or assembled with other objects), so keep following every object until the end of the video.
+3. Concise names for every object (e.g. “pen cap”, “pen body”, “assembled pen”).
+4. The action of each transformation, described with VERBS only. You may use several verbs (e.g. “unscrew,
+pull apart” or “snap, press”).
+Figure 13. MLLM Agent initial prompt (part 1 of 2).
+
+
+USER
+What you are given
+• Some objects are provided by the task as initial masks:
+those visible at the start, and any object
+that later enters the scene and is not the result of a transformation. They are added to the tracker
+automatically when tracking reaches their first frame, and you are notified. Give each of them a concise
+name with rename_object.
+• Do
+NOT
+create
+tracks
+for
+objects
+that
+are
+not
+involved
+in
+the
+task
+(hands,
+tools
+that
+are
+not
+transformed, background, etc.).
+Only add new tracks yourself for the results of transformations (via
+apply_transformation). Use add_object only for an object you are sure is a task object that is missing.
+How you are evaluated
+• Mask quality of all tracks over time, especially at the end of the video.
+• Correct detection of transformations: right type, right frame (timing matters), and right before/after
+objects. The result masks must match the real parts right after the event.
+• Semantic accuracy of object names and action verbs.
+• Missed and spurious transformations are penalised equally.
+How the tools work
+• The tracker has a frontier: the last frame that has been tracked. propagate moves it forward, and every
+edit happens at a frame ≤frontier.
+Editing a frame behind the frontier automatically re-tracks the
+affected objects up to the frontier. Other tracks are not touched.
+• Masks are created in two steps:
+1. segment proposes candidates (cand:<k>) from points, a box or a text phrase. Nothing is committed yet.
+2. You commit a candidate with add_object, refine_object, reactivate_object or apply_transformation.
+Always check the preview before committing.
+You can also reference an existing track’s mask with
+obj:<id>@<frame>, and combine masks with combine_masks.
+• Coordinates are relative to the FULL frame, normalised to 0–1000 on both axes ((0, 0) = top-left, (1000, 1000)
+= bottom-right).
+• Video access mode: offline. You may look at any frame of the video at any time.
+• Images are expensive. Use view_frames with layout="sheet" to skim many frames at once, then look at single
+frames (layout="separate") or zoom only where you need detail. Old images are removed from your context
+automatically, so write down important observations with write_notes.
+• Each tool result ends with a [STATE] block.
+It is the authoritative summary of frontier, tracks and
+transformations.
+Act autonomously. Do not ask the user questions. Always respond with tool calls until you call finish.
+Figure 13. MLLM Agent initial prompt (part 2 of 2). Each episode then receives the video metadata and the provided masks at frame 0.
+
+
+Table 16. State-of-the-art comparison on VOST-TAS. We evaluate pure tracking and transformation recall using two foundational trackers.
+Best results per tracker are in bold, and second-best are underlined.
+Tracker
+Method
+TRACKING
+SEM. SIM.
+TEMP. LOC.
+OVERALL
+FPS ↑
+J ↑
+Jtr ↑
+SA ↑
+SO ↑
+T TAS
+P
+↑
+T TAS
+R
+↑
+HST ↑
+H ↑
+SAM 2.1
+Vanilla SAM [26]
+48.4
+32.5
+–
+–
+–
+–
+–
+–
+4.0
+AlwaysPredict
+48.8
+31.8
+–
+–
+6.2
+51.9
+13.9
+–
+2.0
+Agentic
+41.2
+25.9
+100.0
+66.7
+45.0
+8.3
+0.0
+0.0
+0.3
+TubeletGraph [29]
+49.2
+36.0
+63.6
+88.2
+38.4
+23.1
+13.0
+7.4
+0.2
+TIPO w/o Judge
+49.0
+33.6
+71.9
+88.5
+14.1
+13.3
+2.5
+2.5
+3.1
+TIPO (Ours)
+49.3
+34.1
+87.1
+94.4
+23.7
+9.9
+2.2
+1.9
+1.6
+SAM 3
+Vanilla SAM [6]
+53.3
+37.3
+–
+–
+–
+–
+–
+–
+4.8
+AlwaysPredict
+52.5
+38.0
+–
+–
+9.0
+47.2
+15.7
+–
+2.8
+Agentic
+50.1
+31.6
+100.0
+83.3
+29.6
+7.4
+0.9
+0.9
+0.4
+TubeletGraph [29]
+52.3
+36.7
+64.0
+89.8
+29.0
+10.2
+6.5
+1.9
+0.3
+TIPO w/o Judge
+53.6
+38.2
+61.9
+89.1
+15.1
+21.0
+8.3
+4.9
+3.6
+TIPO (Ours)
+54.8
+40.7
+83.4
+88.5
+27.4
+24.1
+12.3
+9.6
+1.6
+Once the base tracker provides reliable segmentation
+masks (SAM 3), TubeletGraph’s failure-triggered assump-
+tion collapses: its performance drops by half (13.0 to 6.5
+HST ), whereas TIPO directly translates the improved track-
+ing quality into balanced precision and recall. With SAM 3,
+TIPO is the only method exceeding 20 in both T TAS
+P
+and
+T TAS
+R
+, while achieving the best tracking quality with a +4.0
+Jtr improvement over TubeletGraph (40.7 vs 36.7). This
+confirms that the lower HST of TIPO on SAM 2.1 is an
+artifact of a metric that rewards tracking failures, whereas
+VISTA provides the rigorous, object-grounded evaluation
+necessary to assess physical transformation tracking.
+E.3. TubeletGraph Failure Mode with SAM 3
+Upgrading TubeletGraph’s tracker from SAM 2.1 to
+SAM 3 reduces the TF1 from 12.5 to 3.3 on VISTA
+(Tab. 2) and HST from 13.0 to 6.5 on VOST-TAS
+(Tab. 16).
+Fig. 14 illustrates the cause of this drop on
+two sequences: wii_remote_disassembly from VISTA and
+3161_peel_banana_1 from VOST-TAS. With SAM 2.1, the
+tracked mask of the Wii remote rubber case is lost after the
+user extracts it, which triggers the tubelet search and leads
+TubeletGraph to detect the transformation. With SAM 3,
+the rubber case is tracked robustly throughout the video, the
+track loss occurs later on in the video and no transforma-
+tion is ever triggered due to the proximity constraint not
+being satisfied. Similarly, when the battery cover is removed,
+SAM 3 keeps tracking it, so TubeletGraph cannot trigger any
+transformation event by design. As a result, the state graph
+collapses to a single node, producing a graph with no trans-
+formations. The banana example exhibits the same behavior,
+with all three peeling actions missed when using SAM 3.
+This explains why TubeletGraph cannot benefit from the
+stronger SAM 3, whereas TIPO translates the improved
+tracking quality into more accurate state graphs.
+E.4. Fully Open-weight Pipeline
+In our default configuration, TIPO already employs an open-
+weight MLLM Judge (Qwen 3.5 35B), while the MLLM
+Labeler relies on the closed-source GPT-5.4. To provide a
+fully accessible and reproducible pipeline, we replace the
+MLLM Labeler with Qwen 3.5 35B, such that all the com-
+ponents of TIPO, as well as the LLM evaluator (Gemma 4
+31B), are open-weight models.
+As shown in Tab. 17, the fully open-weight configuration
+remains highly competitive. Compared to the default con-
+figuration in Tab. 2, replacing GPT-5.4 with Qwen 3.5 35B
+mainly affects action naming (SA), leading to a moderate
+decrease of the overall score (25.5 vs 27.1 HF1 with SAM
+2.1, and 23.2 vs 28.3 with SAM 3). Nevertheless, TIPO
+still outperforms TubeletGraph by a wide margin, achieving
++22.9 and +23.2 HF1 points with SAM 2.1 and SAM 3,
+respectively.
+E.5. Tracking-only Comparison on VOST
+To the best of our knowledge, no existing method natively
+addresses the TTU task, and TubeletGraph is the only base-
+line able to detect and track transformations, albeit limited
+to disassemblies. While modern VOS models excel at propa-
+gating pixel-level masks, they cannot generate state graphs
+(TF1 = 0). To nonetheless benchmark pure tracking capabil-
+ities, we compare TIPO against state-of-the-art VOS models
+on the VOST [30] validation set in Tab. 18. SAM 3 remains
+a highly competitive base tracker, and TIPO with SAM 3
+achieves the best tracking quality overall, improving over
+vanilla SAM 3 by +1.5 J and +3.4 Jtr points.
+F. Additional Qualitative Results, Failure Cases
+and Limitations
+This section complements the qualitative results of Sec. 4.1.
+First, we show that TIPO is not limited to rigid objects with
+
+
+SAM 2.1
+Remote
+SAM 3
+Remote
+t0
+t0
+t1
+t2
+Extract
+Remote body
+Rubber case
+t1
+t2
+Extract
+Rubber case
+t3
+t4
+Open
+Open remote body
+Battery cover
+t3
+t4
+Open
+Remote
+Battery cover
+SAM 2.1
+Banana
+SAM 3
+Banana
+t0
+t1
+t2
+t3
+t4
+Peel
+Peel
+Banana
+Peel
+Peel
+Peel
+Peel
+Peel
+Peeled banana
+t0
+t1
+t2
+t3
+t4
+Peel
+Peel
+Peel
+Peel
+Peel
+Peel
+Banana
+Figure 14. TubeletGraph failure mode with SAM 3. State graphs predicted by TubeletGraph with SAM 2.1 and SAM 3 as tracker on two
+sequences: (top) wii_remote_disassembly from VISTA, (bottom) 3161_peel_banana_1 from VOST-TAS. Dashed red circles and boxes
+denote missed objects and transformations. With SAM 3, the tracks are lost later in the video, invalidating TubeletGraph’s assumptions on
+proximity and on lost tracking. This directly translates to missed transformation detection.
+
+
+t0
+t1
+t2
+t3
+bottle cap
+Unscrew bottle cap
+bottle
+opening/top
+bottle cap
+3 spurious events
+Remove cap and
+squeeze out sauce
+sauce blob
+open bottle
+bottle cap
+bottle lid
+Screw cap
+onto lid
+assembled bottle
+lid with cap
+t4
+Figure 15. Non-rigid transformation on VOST-TAS. TIPO detects the sauce squeezed onto the pasta as a new, highly deformable entity
+and integrates it into the state graph. Node colors match the predicted masks in the frames, and bold nodes denote the objects present at the
+end of the video. Dashed red boxes denote spurious transformations.
+t0
+t1
+t2
+t3
+Square board
+Rectangular
+block
+Narrow
+rectangular block
+Upright
+rectangular block
+Flat
+rectangular block
+Insert
+L-shaped bracket
+assembly
+Insert
+L-shaped stand
+Insert
+Display stand
+Insert
+Frame assembly
+t0
+t1
+t2
+t3
+Camera pouch
+Digital camera
+Memory card
+Camera battery
+Insert
+Digital camera
+with memory card
+Insert
+Digital camera
+with battery
+Insert
+Digital camera
+inside pouch
+t4
+t4
+Figure 16. Additional qualitative results of TIPO on the VISTA benchmark. We present two assembly sequences with their
+corresponding state-graph predictions. Five chronological video frames for each sequence are displayed above their respective state graph,
+illustrating how composite objects evolve over time. The top row details the multi-step construction of a drawer assembly from flat boards,
+while the bottom row shows a digital camera that receives its memory card and battery before being inserted into its pouch. These examples
+demonstrate the capability of the framework to model multi-step assemblies and part-whole interactions.
+
+
+t0
+t1
+t2
+t3
+Toy dump truck
+body
+Pull off
+Unscrew
+Main truck chassis
+Yellow cab
+Unscrew
+Main truck chassis
+without screw
+Screw
+Main truck chassis
+without screw
+Screw
+Detach
+Main truck body
+Front scoop
+bucket
+t0
+t1
+t2
+t3
+Toy garbage
+truck
+Remove
+Toy garbage truck
+without wheels
+Wheels
+Detach
+Boom base
+Upper crane
+boom piece
+Pull apart
+Inner hinge
+connector
+Top cap
+Detach
+Hinge connector
+housing
+Truck body
+mounting section
+t4
+t4
+Figure 17. Failure cases of TIPO on the VISTA benchmark. We present two disassembly sequences from the Assembly101 [27] subset
+with their corresponding state-graph predictions. The top row shows the disassembly of a toy dump truck, while the bottom row features the
+complex disassembly of a toy garbage truck. Dashed red circles and boxes denote false negatives, i.e., objects and transformations present in
+the ground truth but undetected, such as the missed screws and wheels. A red action in a dashed red box denotes a false positive, i.e., a
+transformation incorrectly predicted by the pipeline, such as the hallucinated separation of the top cap.
+
+
+Table 17. Fully open-weight pipeline on VISTA. TIPO uses Qwen 3.5 35B instead of GPT-5.4 as MLLM Labeler. Tracking (J , Jtr) and
+transformation tracking (TF1) do not depend on the labeler and are identical to Tab. 2. Values are reported as mean ± standard deviation
+across three seeds. Best results per tracker are in bold.
+Tracker
+Method
+TRACKING
+STATE GRAPH
+J ↑
+Jtr ↑
+S ↑
+TF1 ↑
+HF1 ↑
+SAM 2.1
+TIPO w/o Judge
+90.4 ± 0.6
+87.2 ± 0.9
+73.8 ± 3.1
+36.7 ± 3.3
+19.2 ± 4.6
+TIPO (Ours)
+90.7 ± 0.3
+88.6 ± 0.2
+74.8 ± 1.5
+44.7 ± 1.6
+25.5 ± 2.2
+SAM 3
+TIPO w/o Judge
+91.5 ± 1.0
+88.0 ± 1.4
+71.8 ± 2.8
+33.4 ± 1.8
+17.6 ± 0.8
+TIPO (Ours)
+91.4 ± 0.2
+87.8 ± 0.5
+74.0 ± 1.2
+42.5 ± 1.5
+23.2 ± 0.6
+Table 18. Tracking-only comparison on VOST. We compare
+TIPO against state-of-the-art VOS models on the VOST [30] vali-
+dation set. Only TIPO is able to detect both assembly and disassem-
+bly transformations, while TubeletGraph detects only disassemblies.
+Best results are in bold.
+Method
+J ↑
+Jtr ↑
+Cutie [8]
+41.1
+25.5
+ReVOS [7]
+41.0
+25.3
+SAM 2 [26]
+46.1
+29.4
+SAM 2.1 [26]
+48.4
+32.5
+SAM2Long [12]
+46.4
+29.1
+DAM4SAM [31]
+48.8
+33.6
+SAMURAI [33]
+49.8
+34.0
+TubeletGraph (SAM 2.1) [29]
+49.2
+36.0
+SAM 3 [6]
+53.3
+37.3
+TubeletGraph (SAM 3) [29]
+52.3
+36.7
+TIPO w/o Judge (SAM 2.1)
+49.0
+33.6
+TIPO (SAM 2.1)
+49.3
+34.1
+TIPO w/o Judge (SAM 3)
+53.6
+38.2
+TIPO (SAM 3)
+54.8
+40.7
+an example of a non-rigid transformation from VOST-TAS.
+Then, we present additional qualitative results on VISTA
+and analyze the failure cases of TIPO. Finally, we discuss
+the current limitations of our approach.
+Non-rigid Transformations.
+While VISTA is designed
+around assemblies and disassemblies of rigid objects and
+does not specifically target non-rigid ones, neither the TTU
+formulation nor TIPO is limited to rigid transformations.
+Since state proposals are generated and evaluated directly
+from the tracked masks, no assumption is made on the shape
+of the involved objects. Fig. 15 shows an example from
+VOST-TAS (sequence 3511_unscrew_jar_1) with SAM 3
+as base tracker. TIPO correctly detects the cap being un-
+screwed from the jar and, crucially, the sauce squeezed onto
+the pasta as a new, highly deformable entity, whose mask
+matches the ground truth with an IoU of 0.92 at the end of
+the transformation. Notably, the masks of the cap and of
+the sauce are temporarily lost during the video (e.g., while
+the pasta is being stirred), yet both objects retain their iden-
+tity once they reappear and no spurious transformation is
+introduced. This confirms that TIPO does not require un-
+interrupted tracks, since structural changes are evaluated
+directly from the available masks rather than triggered by
+track loss. The example also exhibits the failure modes dis-
+cussed below. While the sauce is still flowing out of the jar,
+the tracker repeatedly splits and re-merges the two masks,
+producing four spurious transformations, and the MLLM
+Labeler assigns generic names to some states (e.g., the jar is
+initially labeled as a bottle cap).
+Additional Qualitative Results and Failure Cases.
+Fig. 16 presents additional qualitative results on VISTA,
+illustrating successful multi-step assemblies, while Fig. 17
+shows two disassemblies from the Assembly101 [27] subset.
+While TIPO handles these sequences robustly, these exam-
+ples also highlight specific failure modes stemming from our
+direct reliance on upstream foundation models.
+First, the MLLM Labeler occasionally struggles with
+fine-grained semantics. Without external context (e.g., an
+instruction manual), visually ambiguous components are
+often assigned generic labels, such as identifying isolated
+IKEA drawer parts simply as “blocks” (Fig. 16, top row).
+Second, segmentation and tracking errors propagate di-
+rectly into the state graph. As seen in Fig. 17, the base tracker
+occasionally drops small parts (e.g., screws or wheels) im-
+mediately following a disassembly. Furthermore, the bot-
+tom row of Fig. 17 illustrates a hallucinated transformation
+caused by a segmentation artifact: the tracker merges a screw-
+driver into the toy truck mask. Because TIPO relies on these
+masks to generate state proposals, this forces an unnecessary
+structural update in the graph, even though the MLLM Judge
+correctly recognizes them as separate entities.
+Limitations.
+As illustrated by the failure cases above, the
+accuracy of TIPO is bounded by the quality of the base
+tracker, the promptable mask decoder, and the reasoning
+capabilities of the MLLMs. A part dropped by the tracker
+or a segmentation artifact can lead to a missed or spurious
+transformation, and visually ambiguous parts can receive
+generic labels. Moreover, since TIPO operates in an on-
+line, streaming fashion, the state graph is built causally, and
+
+
+a transformation cannot be revised retroactively once later
+frames are observed. This property is shared by prior work,
+in fact, TubeletGraph [29] also processes videos in a stream-
+ing fashion. Rather than recovering lost tracks, it tracks
+all candidate regions of the scene as tubelets and decides
+whether to include them in the state graph after a transfor-
+mation, without ever correcting the transformations already
+added to the predicted state graph. Crucially, in TIPO an
+error in the state graph does not propagate to the rest of
+the video. Although a wrong transformation remains in the
+graph, subsequent state proposals are evaluated directly from
+the available masks, allowing TIPO to return to a state con-
+sistent with the observed scene. As shown in Fig. 15, objects
+whose masks are temporarily lost retain their identity once
+they reappear and, despite the four spurious transformations
+caused by the flowing sauce, the objects present at the end
+of the video are correctly identified. As shown in Tab. 14,
+TIPO identifies the objects present on the last frame with
+a precision of 93.4, outperforming TubeletGraph by +30.1
+F1 points (Appendix D.5). The remaining gap lies in recall
+(56.7), mostly due to small parts that are not picked up by
+the tracker during a transformation. Promising directions to
+address these limitations include an offline variant of TIPO
+that exploits future frames to revise past transformations,
+and the re-detection of parts missed during a transformation
+to close the recall gap.
+Finally, as discussed in Sec. 4.1, the direct dependence
+on foundation models is also a fundamental strength. By
+continuously evaluating structural proposals directly from
+the raw tracker outputs, rather than relying on reactive and
+failure-triggered search heuristics, TIPO is uniquely posi-
+tioned to scale synergistically. As future vision and language
+foundation models improve in robustness, our framework
+will naturally and automatically inherit those gains without
+requiring architectural changes.

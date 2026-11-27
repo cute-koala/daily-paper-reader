@@ -1,0 +1,938 @@
+Towards Deep Learning-Based Linear Assignment
+Problem Solvers for Multi-Object Tracking
+Chu Tam Vu†, Tran Thi Thuy Quynh†, and Do Hai Son‡∗.
+† VNU University of Engineering and Technology, Hanoi, Vietnam.
+‡ School of Electrical Engineering, Computing and Mathematical Sciences, Curtin University, Australia.
+Abstract—This paper proposes and evaluates deep learning
+(DL)-based linear assignment problem (LAP) solvers as a re-
+placement for the classical Hungarian algorithm in multi-object
+tracking (MOT) systems. Three representative neural models
+are studied, namely a convolutional network (CNN), a graph
+neural network (GNN), and the graph-based linear assignment
+network (GLAN). A cost-matrix embedding is introduced so
+that a single model operates on cost matrices of any size, as
+required in MOT where the number of objects varies over
+time, without training a separate model for each input shape.
+Extensive simulations show that the embedding improves the
+accuracy of the neural solvers (i.e., CNN and GNN), while GLAN
+attains the best accuracy among them. These solvers are then
+integrated into a generalized labeled multi-Bernoulli (GLMB)
+tracker and evaluated on the WILDTRACK dataset, where
+GLAN yields tracking accuracy close to the Hungarian reference
+and comparable to recent DL-based trackers.
+Index Terms—Linear assignment problem, deep learning,
+multi-object tracking.
+I. INTRODUCTION
+Multi-object tracking (MOT) estimates the trajectories of a
+time-varying number of objects, and it underpins applications
+such as intelligent surveillance, autonomous driving, and mo-
+bile robotics [1], [2]. At each time step, an MOT system de-
+tects the objects and maintains their identities. The latter relies
+on data association, which assigns the measurements from a
+sensor to the objects being tracked [3]. Tracking frameworks
+such as the generalized labeled multi-Bernoulli (GLMB) filters
+perform this association through multiple hypotheses to esti-
+mate object trajectories over time [4]. Each such association is
+commonly formulated as a linear assignment problem (LAP)
+that seeks a one-to-one (1-1) mapping between the two sets at
+minimum total cost.
+Classical LAP solvers obtain the exact solution through
+combinatorial optimization, including the Hungarian algo-
+rithm [5], [6], the auction algorithm [7], and shortest
+augmenting-path methods [8]. The Hungarian and shortest
+augmenting-path methods return a globally optimal mapping
+with a computational complexity of O(N 3), and their opti-
+mized implementations run fast at moderate problem sizes.
+This cubic cost nevertheless grows quickly with the numbers
+of objects and measurements and becomes a bottleneck in
+large-scale or high-density tracking scenarios. Faster subop-
+timal alternatives, such as greedy assignment [9], lower the
+Corresponding author: Do Hai Son (haison.do@postgrad.curtin.edu.au).
+cost by committing to locally favorable matches at the expense
+of the global optimality guarantee. However, both exact and
+greedy solvers are also discrete and non-differentiable, which
+limits their use in gradient-based learning and has motivated
+differentiable relaxations of the assignment. The Sinkhorn
+procedure alternately normalizes the rows and columns of
+a positive matrix to approximate a permutation by a dou-
+bly stochastic matrix [10], and entropy-regularized optimal
+transport and Gumbel-Sinkhorn extend this idea to differen-
+tiable optimization and latent permutation learning [11], [12].
+These methods produce soft assignments that still require a
+discretization step to yield a valid mapping.
+Recently, deep learning (DL) networks have been used
+to solve the LAP [13], replacing the iterative combinatorial
+search with a single forward pass. Additionally, their contin-
+uous output is differentiable with respect to the costs. Hence,
+the DL-based Hungarian has been exploited to train end-to-
+end (E2E) DL-based trackers [14]. Lee et al. [15] first cast the
+assignment of a measurement to each object as a classification
+problem solved by a convolutional network (CNN) that takes
+the cost matrix as a two-dimensional input. In 2024, Aironi
+et al. [16] represent the LAP as a bipartite graph and apply
+a graph neural network (GNN), and Liu et al. [17] propose
+the graph-based linear assignment network (GLAN), which
+learns assignment decisions from edge representations. An
+MOT system requires a solver that operates on cost matrices of
+varying size, since the numbers of objects and measurements
+change over time. However, the CNN [15] and GNN [16]
+assume a pre-defined cost-matrix shape and cannot accept such
+variable-size inputs. GLAN, in contrast, operates on the graph
+of the current matrix and already accommodates any size.
+To address the limitation of CNN and GNN methods, this
+paper introduces a cost-matrix embedding that maps any cost
+matrix whose dimensions do not exceed a target size N into
+a common N × N representation. Thus, networks with a pre-
+defined input shape (i.e., CNN and GNN) are trained once
+and then applied to the variable-size problems that arise in
+tracking. The embedding pads a rectangular cost matrix to a
+common dimension before inference and projects the predic-
+tion back to the original size, leaving the network architecture
+unchanged. The three DL-based solvers, with the embedding
+applied to CNN and GNN, are studied under variable-size LAP
+settings and compared against the Hungarian algorithm on a
+large synthetic dataset in terms of assignment accuracy and
+arXiv:2611.24107v1  [eess.SP]  18 Nov 2026
+
+
+inference time. All three solvers are then integrated into a
+GLMB tracker [18] on the real-world WILDTRACK dataset,
+where they replace the Hungarian assignment solver. The main
+contributions are as follows:
+• A cost-matrix embedding that enables neural LAP solvers
+restricted to a single input size to process cost matrices
+of varying size.
+• Extensive simulations on synthetic LAP instances, to-
+gether with an evaluation within a GLMB tracker on the
+WILDTRACK dataset.
+The remainder of this paper is organized as follows. Sec-
+tion II reviews the LAP and the Hungarian algorithm. Sec-
+tion III presents the embedding scheme and the DL models.
+Section IV reports the synthetic and tracking results, and
+Section V concludes the paper.
+II. BACKGROUND
+This section reviews the LAP formulation and the Hungar-
+ian algorithm used to generate the ground-truth assignments.
+A. Linear assignment problem
+In MOT systems, data association is an LAP between the
+set of objects and the set of measurements. Each candidate
+measurement-to-object pair carries a cost, and a solution is a
+1-1 mapping θ in which every object and every measurement
+appear in at most one pair. With m objects and n mea-
+surements, such a mapping is feasible if it contains exactly
+min(m, n) pairs, and we denote by Θ the set of all feasible
+mappings.
+For the square case m = n = N, consider a cost matrix
+C ∈RN×N, where cij denotes the cost of assigning the i-th
+object (in the existing set of objects) to the j-th measurement
+(in the set of measurements). A mapping θ is represented by
+a binary assignment matrix X ∈{0, 1}N×N, where
+xij =
+(
+1,
+if the pair (i, j) is selected,
+0,
+otherwise.
+(1)
+The LAP is formulated as
+min
+X
+N
+X
+i=1
+N
+X
+j=1
+cijxij,
+(2)
+subject to, for all i, j = 1, . . . , N,
+N
+X
+j=1
+xij = 1,
+N
+X
+i=1
+xij = 1,
+xij ∈{0, 1}.
+The objective in Eq. (2) minimizes the total cost of the selected
+pairs, and the constraints force each element of one set to
+match exactly one element of the other. Every feasible solution
+is therefore a permutation matrix, which represents a feasible
+mapping θ ∈Θ.
+B. Hungarian algorithm
+The Hungarian algorithm is one of the most widely used
+exact solvers for the LAP [5], [6]. Rather than searching over
+all permutations, it exploits the primal-dual structure of the
+assignment problem. Let ui and vj denote the dual variables
+associated with the row and column constraints, respectively.
+The dual problem corresponding to Eq. (2) is
+max
+u,v
+
+
+N
+X
+i=1
+ui +
+N
+X
+j=1
+vj
+
+,
+(3)
+subject to
+ui + vj ≤cij,
+i, j = 1, . . . , N.
+(4)
+For a dual-feasible pair (u, v), the reduced cost associated
+with pair (i, j) is
+¯cij = cij −ui −vj,
+(5)
+where ¯cij ≥0 follows from Eq. (4). Candidate assignments
+are selected from the zero reduced-cost entries. Iteratively
+updating the row and column potentials and constructing aug-
+menting paths over these entries yields a complete assignment
+that satisfies the optimality conditions of the primal and dual
+problems. The resulting assignment is globally optimal, at a
+computational complexity of O(N 3).
+In this work, the Hungarian algorithm generates the ground-
+truth Y for each cost matrix C, and the neural networks are
+trained to approximate the mapping from C to Y.
+III. PROPOSED METHOD
+This section presents the cost-matrix embedding and the
+CNN, GNN, and GLAN architectures for variable-size LAPs,
+summarized in Fig. 1.
+A. Cost-matrix embedding
+Given an original cost matrix C ∈Rm×n, a padded matrix
+eC ∈RN×N is constructed, where the target size N satisfies
+N ≥max(m, n). The original cost values are preserved, and
+the remaining entries take a padding constant α:
+ecij =
+(
+cij,
+i ≤m, j ≤n,
+α,
+otherwise.
+(6)
+In the experiments, the original cost values are normalized
+to [0, 1], and the padding value is set to α = 10.0. An
+assignment of eC with fewer than min(m, n) original pairs
+matches some original row i to a padded column j′ > n and
+some original column j to a padded row i′ > m. Replacing
+(i, j′) and (i′, j) by (i, j) and (i′, j′) changes the cost of these
+two pairs from 2α to cij + α, which is lower since α is larger
+than every original cost. Hence, every optimal assignment of
+eC contains exactly min(m, n) original pairs, and its remaining
+pairs add the constant (N −min(m, n))α, so its restriction to
+the m × n block is also optimal for the original problem. The
+ground-truth is therefore generated by applying the Hungarian
+algorithm to the padded matrix, giving Y ∈{0, 1}N×N, which
+supplies a one-hot target for every one of the N rows.
+
+
+Embed-
+ding
+Hungarian
+Update Weights
+Project
+0
+0
+0
+1
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+Neural
+Networks
+Trained 
+Models
+Post-
+processing
+Offline Training
+Online Inference
+Fig. 1: Cost-matrix embedding, training, and inference pipeline of the DL-based LAP solvers, illustrated with the discretization
+and post-processing rules of the CNN [15].
+Let
+eY
+∈
+RN×N denote the continuous score matrix
+returned for the padded input. It is discretized into bYR ∈
+{0, 1}N×N and then turned into a feasible mapping θ ∈Θ by
+the post-processing of Section III-C, giving bYP ∈{0, 1}N×N.
+This feasible assignment is projected back to the original m×n
+dimensions by
+Πm,n
+  bYP 
+=
+
+byP
+ij
+
+1≤i≤m, 1≤j≤n ,
+(7)
+which keeps its first m rows and first n columns. The ground-
+truth Y is cropped in the same manner, and the argument
+above guarantees that the result is optimal for C. This guar-
+antee does not extend to a network prediction. Cropping its
+post-processed assignment only removes pairs, so the result
+still satisfies the 1-1 constraints, but an original row may
+remain matched to a padded column while an original column
+is free, which leaves fewer than min(m, n) pairs in the cropped
+block. The embedding changes only the input representation
+and leaves the model architectures unchanged. A model with
+a single input dimension N can therefore be trained on and
+applied to any cost matrix whose dimensions do not exceed N,
+and the padding in Eq. (6) applies unchanged for any choice
+of N and any shape m × n.
+B. Deep learning models
+This paper investigates CNN, GNN, and GLAN as matrix-
+based, node-based, and edge-based neural LAP solvers, re-
+spectively.
+CNN: The CNN treats an N × N cost matrix as a two-
+dimensional input and decomposes the LAP into N row-wise
+classification tasks [15]. For row i, the network predicts an
+assignment-score vector
+eyi = [eyi1, . . . , eyiN]⊤,
+i = 1, . . . , N.
+(8)
+Each classifier is trained against the corresponding row of
+the ground-truth Y, which is one-hot by construction. The
+two-dimensional input shape is prescribed by the architecture,
+so the embedding is required whenever the original matrix is
+smaller than the target size N.
+GNN: The GNN represents an LAP as a complete bipartite
+graph whose two node sets correspond to the rows and
+columns of the cost matrix [16]. The initial feature of each
+node is constructed from an entire row or column:
+x(0)
+i
+= [eci1, . . . , eciN]⊤,
+i = 1, . . . , N,
+x(0)
+N+j = [ec1j, . . . , ecNj]⊤,
+j = 1, . . . , N.
+(9)
+The node representations are then updated through message
+passing:
+x(k)
+v
+=
+1
+|N(v)|
+X
+w∈N (v)
+MLP
+
+x(k−1)
+v
+∥x(k−1)
+w
+
+,
+(10)
+where N(v) is the neighborhood of node v and ∥denotes
+feature concatenation. Although the graph topology varies with
+the problem size, the initial node-feature dimension equals
+N, so the embedding is again required to provide a common
+feature dimension.
+GLAN: GLAN converts the LAP into an edge-labeling
+problem on a bipartite graph [17]. Each candidate assignment
+(i, j) is represented by an edge whose initial attribute is the
+corresponding cost value, i.e., e(0)
+ij
+= cij. GLAN alternates
+node and edge updates to propagate information over the
+graph. At each layer, an edge representation is updated from
+its two endpoint nodes and its previous state:
+e(k)
+ij = ϕe
+
+h(k−1)
+i
+, h(k−1)
+j
+, e(k−1)
+ij
+
+,
+(11)
+where h(k−1)
+i
+and h(k−1)
+j
+denote the endpoint-node represen-
+tations and ϕe denotes the learnable edge-update function.
+A decoder then predicts whether each edge belongs to the
+assignment, trained with a balanced edge-classification loss
+with soft penalties on the 1-1 constraints. Since each initial
+edge attribute is a single cost entry, the same network operates
+on graphs built from cost matrices of any size, and no
+embedding is required.
+The three models expose different representations, but each
+returns a continuous score matrix eY, of size N × N for CNN
+
+
+and GNN and m × n for GLAN. The CNN discretizes the
+scores row-wise, consistent with its row-wise classifiers, as
+byR
+ij =
+(
+1,
+if eyij = maxk eyik,
+0,
+otherwise,
+(12)
+whereas the GNN takes the maximum over each column
+instead, and GLAN thresholds each edge score independently.
+Note that none of these rules enforces the 1-1 constraints. A
+column may be selected by several rows under the CNN rule,
+a row may be selected by several columns under the GNN
+rule, and, under thresholding, a row or column may receive
+no selection at all. The raw prediction bYR is therefore not a
+feasible mapping in general, and the greedy step is applied to
+obtain one, as described below.
+C. Post-processing: Greedy collision-avoidance rules
+Each model resolves the conflicts in bYR with its own greedy
+rule, yielding a feasible mapping θ ∈Θ represented by bYP ,
+which has the same size as eY.
+• CNN: For a column selected by several rows, the pair
+with the lowest original cost cij is retained, and the con-
+flicting rows are greedily reassigned to unused columns
+in order of increasing cost [15].
+• GNN: For a row selected by several columns, the pair
+with the highest score eyij is retained, and the conflicting
+columns are greedily reassigned to unused rows in order
+of decreasing score [16].
+• GLAN:
+High-confidence
+non-conflicting
+edges
+are
+locked first, and the unmatched rows and columns are
+then paired by increasing original cost [17].
+IV. EXPERIMENTAL RESULTS
+This section evaluates the three DL-based LAP solvers, first
+on synthetic LAP instances and then within a GLMB tracker.
+A. Synthetic linear assignment problems
+1) Experimental setup: We evaluate the three solvers on a
+synthetic dataset of 500,000 randomly generated cost matri-
+ces, divided into training, validation, and test subsets with a
+ratio of 0.7:0.2:0.1. The data-generation and input-processing
+procedures are shared by CNN, GNN, and GLAN, for which
+we keep the default settings. All experiments run on an AMD
+Ryzen 9970X CPU with 64 GB of RAM and an NVIDIA
+RTX PRO 6000 Blackwell GPU with 96 GB of VRAM, using
+Python and PyTorch. The reported inference time of each
+neural solver covers its full pipeline, namely the embedding
+(for CNN and GNN), the forward pass, the discretization, and
+the post-processing.
+Accuracy is measured over T testing samples, where sample
+t has a cost matrix of dimensions mt × nt. Let Yt and
+bYR,t denote the ground-truth and raw predicted assignments
+of sample t, and let Πt = Πmt,nt denote the projection in
+Eq. (7). The i-th rows of Πt(Yt) and Πt( bYR,t), denoted by
+yt
+i and byR,t
+i
+, indicate the measurement selected for object i.
+The per-object accuracy and the full-assignment accuracy of
+the raw prediction are
+AR
+o = 1
+T
+T
+X
+t=1
+1
+mt
+mt
+X
+i=1
+1
+h
+byR,t
+i
+= yt
+i
+i
+,
+AR
+f = 1
+T
+T
+X
+t=1
+1
+h
+Πt
+  bYR,t
+= Πt
+ Yti
+,
+(13)
+where 1[·] is the indicator function. Their counterparts after
+post-processing, AP
+o and AP
+f , follow the same expressions with
+bYP,t in place of bYR,t. In both, a cropped prediction with
+fewer than min(mt, nt) original pairs counts as incorrect. The
+valid-assignment ratio measures how often the raw prediction
+is already feasible. Unlike the accuracies, it is evaluated before
+cropping, so for CNN and GNN it covers the full N×N matrix
+including the padded rows and columns. It is defined as
+V R = 1
+T
+T
+X
+t=1
+1
+h
+bYR,t ∈Θ
+i
+.
+(14)
+A raw prediction can therefore agree with the ground-truth
+on the original block while its padded part violates the 1-1
+constraints, so V R may fall below AR
+f . The post-processing
+of Section III-C returns a feasible mapping for every instance,
+so the corresponding ratio V P equals 100% for all solvers and
+is not reported in the tables.
+Two scenarios are considered. The first compares CNN and
+GNN with the embedding (proposed) and without it (baseline)
+at input sizes 2, 4, 16, and 64. Without the embedding, a
+separate model is trained at each fixed input size. With the
+embedding, a single model is trained on rectangular instances
+whose row and column dimensions vary independently. Both
+are evaluated on rectangular test instances at each input size.
+This setting examines whether a model trained on variable-
+size instances retains assignment quality while supporting non-
+uniform input dimensions. The second scenario compares the
+three solvers under a common LAP setting, with CNN and
+GNN using the embedding at N = 64 and GLAN processing
+each matrix at its original size. The largest target size trained
+in this study is N = 64, which covers the cost matrices of our
+real-world tracking experiment in Section IV-B, and a larger
+N requires retraining but no change to the embedding.
+2) Results: Tab. I reports CNN and GNN without and with
+the embedding. For both models, the embedding generally
+improves assignment accuracy at small and medium input
+sizes, with the clearest gains at 4 × 4 and 16 × 16 across
+AR
+o , AP
+o , AR
+f , and AP
+f . However, at 64 × 64, the CNN with
+the embedding falls below the one without it for most metrics.
+Both GNN settings also degrade sharply at this size, with AR
+o
+near 3.5 and AP
+f approaching zero. These results indicate that
+the current CNN and GNN architectures and training settings
+do not scale reliably to larger LAP instances.
+Tab. II summarizes the assignment accuracy and inference
+time. GLAN achieves the highest per-object accuracy among
+the three networks, with AR
+o = 74.0 and AP
+o = 71.8, whereas
+CNN obtains the highest AR
+f and GNN again performs poorly
+
+
+TABLE I: Assignment accuracy of CNN and GNN with (w/) and without (w/o) the embedding across input sizes.
+(a) CNN
+Metric
+Method
+2 × 2
+4 × 4
+16 × 16
+64 × 64
+AR
+o ↑
+w/o embedding
+99.7
+74.1
+51.4
+56.3
+w/ embedding
+100.0
+93.7
+75.8
+41.3
+AP
+o ↑
+w/o embedding
+90.0
+61.3
+33.4
+32.4
+w/ embedding
+90.4
+77.3
+50.9
+26.1
+AR
+f ↑
+w/o embedding
+99.6
+61.4
+23.9
+12.4
+w/ embedding
+100.0
+90.2
+41.1
+9.0
+AP
+f ↑
+w/o embedding
+87.6
+47.2
+10.5
+4.8
+w/ embedding
+88.0
+67.6
+21.6
+4.3
+V R ↑
+w/o embedding
+75.2
+51.6
+22.4
+11.5
+w/ embedding
+75.6
+56.6
+25.0
+11.5
+(b) GNN
+Metric
+Method
+2 × 2
+4 × 4
+16 × 16
+64 × 64
+AR
+o ↑
+w/o embedding
+99.0
+89.9
+63.9
+3.5
+w/ embedding
+100.0
+94.6
+74.3
+3.5
+AP
+o ↑
+w/o embedding
+97.7
+78.9
+48.7
+2.3
+w/ embedding
+99.9
+93.7
+72.0
+2.3
+AR
+f ↑
+w/o embedding
+98.7
+82.5
+29.1
+2.3
+w/ embedding
+100.0
+91.4
+38.4
+2.1
+AP
+f ↑
+w/o embedding
+97.1
+69.3
+16.2
+0.3
+w/ embedding
+99.9
+91.9
+40.2
+0.2
+V R ↑
+w/o embedding
+75.2
+57.6
+25.0
+2.9
+w/ embedding
+75.6
+58.2
+24.9
+2.1
+TABLE II: Assignment accuracy and inference time of the LAP solvers on randomized cost-matrix shapes.
+Solver
+AR
+o ↑
+AP
+o ↑
+AR
+f ↑
+AP
+f ↑
+V R ↑
+Inference time (µs)↓
+CNN
+41.3
+26.1
+9.0
+4.3
+11.5
+968.7
+GNN
+3.5
+2.3
+2.1
+0.2
+2.1
+105.9
+GLAN
+74.0
+71.8
+5.1
+6.5
+10.4
+139.8
+Hungarian Python
+100.0
+100.0
+100.0
+100.0
+100.0
+42549.4
+Hungarian C++
+100.0
+100.0
+100.0
+100.0
+100.0
+32.9
+at N =64. The embedding lets a single CNN or GNN model
+process every size up to N, but the edge-based input of
+GLAN, which needs no embedding, retains more accuracy
+at this size. In inference time, the optimized Hungarian C++
+implementation is the fastest at 32.9 µs, GNN is the fastest
+network at 105.9 µs, followed by GLAN at 139.8 µs and
+CNN at 968.7 µs. All three networks are therefore faster
+than the pure Hungarian Python implementation but slower
+than the optimized C++ solver at this size. These times
+include the post-processing, and the current greedy rules of all
+three networks become increasingly expensive as the matrix
+size grows, so further acceleration, in particular of the post-
+processing, is required to reach the speed of the C++ solver.
+B. A real-world tracking problem
+1) Experimental setup: The three solvers are integrated into
+a GLMB tracker [18] and evaluated on the WILDTRACK
+dataset [19], which contains 7 synchronized cameras observing
+the same crowded outdoor area. The 3DROM detector [20]
+fuses the per-camera detections into ground-plane (x, y) coor-
+dinates. We use the standard linear Gaussian constant-velocity
+model in [21], with a kinematic state of planar position and
+velocity and measurements that are noisy observations of
+the position. The process and measurement noise standard
+deviations are set to 0.15 m/s2 and 0.1 m, respectively. Since
+3DROM is trained on the first 90% of the sequence, every
+tracker in Tab. III is evaluated on the final 40 frames, which
+form the remaining 10%. The GLMB filter produces the likeli-
+hood scores that define the measurement-to-object assignment
+cost, and all four GLMB trackers share the same detections
+and filter configuration, so they differ only in the solver applied
+to these costs. The costs vary in size across frames. For
+TABLE III: Tracking performance with the 3DROM [20]
+detector on the WILDTRACK dataset.
+Tracker
+FP↓
+FN↓
+IDs↓
+IDF1↑
+MOTA↑
+GLMB CNN
+23
+751
+92
+14.6
+9.0
+GLMB GNN
+45
+689
+152
+13.7
+6.9
+GLMB GLAN
+48
+82
+23
+88.4
+83.9
+GLMB Hungarian [18]
+30
+65
+4
+94.4
+89.6
+ReST [23]
+75
+54
+29
+85.9
+83.4
+EarlyBird [24]
+42
+63
+6
+92.8
+88.3
+TrackTacular [25]
+31
+57
+7
+94.5
+90.0
+CNN and GNN, they are embedded with a target size of
+N = 64, which covers the largest numbers of objects and
+measurements observed per frame, whereas GLAN processes
+them at their original size. Tracking performance is evaluated
+via py-motmetrics toolbox [22] with a 1 meter threshold
+on the ground-plane for all trackers, reporting the numbers of
+false positives (FP), false negatives (FN), and identity switches
+(IDs), the identity F1 score (IDF1), and the multiple-object
+tracking accuracy (MOTA).
+2) Results: Tab. III reports the tracking performance of
+the four solvers within the same GLMB tracker, together
+with three state-of-the-art DL-based trackers re-run from their
+official implementations. ReST [23], EarlyBird [24], and
+TrackTacular [25] consume the raw per-camera frames and
+fuse them within an E2E model to output trajectories directly,
+whereas the LAP solvers studied here operate inside a modular
+pipeline and replace only the assignment step. Among the
+three networks, GLAN transfers best to the tracking task,
+reaching an IDF1 of 88.4 and a MOTA of 83.9, close to the
+Hungarian reference at 94.4 and 89.6. CNN and GNN produce
+
+
+many missed detections and identity switches, and their IDF1
+and MOTA remain low. Overall, these results demonstrate
+the feasibility and potential of DL-based LAP solvers within
+a tracker, with GLAN already approaching the Hungarian
+reference, although a gap remains.
+V. CONCLUSIONS
+This paper studied DL-based LAP solvers as a replacement
+for the Hungarian algorithm in MOT. A cost-matrix embedding
+was introduced so that a single model handles cost matrices
+of any size up to its target dimension, and CNN, GNN,
+and GLAN were evaluated on synthetic LAP instances and
+within a GLMB tracker on WILDTRACK. The embedding
+improved the accuracy of CNN and GNN at small and medium
+sizes, GLAN attained the best accuracy among the three, and,
+within the tracker, GLAN approached the Hungarian reference
+while the neural solvers ran faster than the pure Python
+implementation. These results demonstrate the feasibility and
+potential of DL-based LAP solvers for tracking. Future work
+will explore other neural models to improve the assignment
+accuracy, accelerate the post-processing to reach the speed of
+optimized exact solvers, and exploit the differentiable score
+matrix to train end-to-end trackers.
+REFERENCES
+[1] W. Luo, J. Xing, A. Milan, X. Zhang, W. Liu, and T.-K. Kim, “Multiple
+object tracking: A literature review,” Artificial Intelligence, vol. 293, p.
+103448, 2021.
+[2] G. Zhao, F. Meng, C. Yang, H. Wei, D. Zhang, and Z. Zheng, “A review
+of object tracking based on deep learning,” Neurocomputing, vol. 651,
+p. 130988, 2025.
+[3] L. Rakai, H. Song, S. Sun, W. Zhang, and Y. Yang, “Data association in
+multiple object tracking: A survey of recent techniques,” Expert Systems
+with Applications, vol. 192, p. 116300, 2022.
+[4] B.-N. Vo, B.-T. Vo, T. T. D. Nguyen, and C. Shim, “An overview of
+multi-object estimation via labeled random finite set,” IEEE Transactions
+on Signal Processing, vol. 72, pp. 4888–4917, 2024.
+[5] H. W. Kuhn, “The hungarian method for the assignment problem,” Naval
+Research Logistics Quarterly, vol. 2, no. 1–2, pp. 83–97, 1955.
+[6] J. Munkres, “Algorithms for the assignment and transportation prob-
+lems,” Journal of the Society for Industrial and Applied Mathematics,
+vol. 5, no. 1, pp. 32–38, 1957.
+[7] D. P. Bertsekas, “The auction algorithm: A distributed relaxation method
+for the assignment problem,” Annals of Operations Research, vol. 14,
+no. 1, pp. 105–123, 1988.
+[8] R. Jonker and A. Volgenant, “A shortest augmenting path algorithm for
+dense and sparse linear assignment problems,” Computing, vol. 38, no. 4,
+pp. 325–340, 1987.
+[9] A. Naiem and M. El-Beltagy, “On the optimality and speed of the
+deep greedy switching algorithm for linear assignment problems,” in
+IEEE International Symposium on Parallel & Distributed Processing,
+Workshops and Phd Forum (IPDPSW), 2013, pp. 1828–1837.
+[10] R. Sinkhorn, “A relationship between arbitrary positive matrices and
+doubly stochastic matrices,” The Annals of Mathematical Statistics,
+vol. 35, no. 2, pp. 876–879, 1964.
+[11] M. Cuturi, “Sinkhorn distances: Lightspeed computation of optimal
+transport,” in Advances in Neural Information Processing Systems
+(NIPS), vol. 26, 2013.
+[12] G. Mena, D. Belanger, S. Linderman, and J. Snoek, “Learning latent
+permutations with Gumbel–Sinkhorn networks,” in International Con-
+ference on Learning Representations (ICLR), 2018, pp. 1–22.
+[13] P. Emami, P. M. Pardalos, L. Elefteriadou, and S. Ranka, “Machine
+learning methods for data association in multi-object tracking,” ACM
+Computing Surveys, vol. 53, no. 4, pp. 1–34, 2020.
+[14] Y. Xu, A. Oˇsep, Y. Ban, R. Horaud, L. Leal-Taix´e, and X. Alameda-
+Pineda, “How to train your deep multi-object tracker,” in IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), 2020,
+pp. 6786–6795.
+[15] M. Lee, Y. Xiong, G. Yu, and G. Y. Li, “Deep neural networks for linear
+sum assignment problems,” IEEE Wireless Communications Letters,
+vol. 7, no. 6, pp. 962–965, 2018.
+[16] C. Aironi, S. Cornell, and S. Squartini, “A graph-based neural approach
+to linear sum assignment problems,” International Journal of Neural
+Systems, vol. 34, no. 3, p. 2450011, 2024.
+[17] H. Liu, T. Wang, C. Lang, S. Feng, Y. Jin, and Y. Li, “Glan: A graph-
+based linear assignment network,” Pattern Recognition, vol. 155, p.
+110694, 2024.
+[18] B.-N. Vo, B.-T. Vo, and H. G. Hoang, “An efficient implementation
+of the generalized labeled multi-bernoulli filter,” IEEE Transactions on
+Signal Processing, vol. 65, no. 8, pp. 1975–1987, 2017.
+[19] T. Chavdarova, P. Baqu´e, S. Bouquet, A. Maksai, C. Jose, T. Bagaut-
+dinov, L. Lettry, P. Fua, L. Van Gool, and F. Fleuret, “Wildtrack: A
+multi-camera hd dataset for dense unscripted pedestrian detection,” in
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2018, pp. 5030–5039.
+[20] R. Qiu, M. Xu, Y. Yan, J. S. Smith, and X. Yang, “3d random
+occlusion and multi-layer projection for deep multi-camera pedestrian
+localization,” in European Conference on Computer Vision (ECCV).
+Springer, 2022, pp. 695–710.
+[21] B.-N. Vo, B.-T. Vo, and D. Phung, “Labeled random finite sets and
+the bayes multi-target tracking filter,” IEEE Transactions on Signal
+Processing, vol. 62, no. 24, pp. 6554–6567, 2014.
+[22] C. Heindl et al., “py-motmetrics: Benchmark multiple object trackers
+(mot) in python,” https://github.com/cheind/py-motmetrics, 2017, ac-
+cessed: 2026-07-27.
+[23] C.-C. Cheng, M.-X. Qiu, C.-K. Chiang, and S.-H. Lai, “Rest: A
+reconfigurable spatial-temporal graph model for multi-camera multi-
+object tracking,” in IEEE/CVF International Conference on Computer
+Vision (ICCV), 2023, pp. 10 017–10 026.
+[24] T. Teepe, P. Wolters, J. Gilg, F. Herzog, and G. Rigoll, “Earlybird: Early-
+fusion for multi-view tracking in the bird’s eye view,” in IEEE/CVF
+Winter Conference on Applications of Computer Vision (WACV), 2024,
+pp. 102–111.
+[25] ——, “Lifting multi-view detection and tracking to the bird’s eye view,”
+in IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2024, pp. 667–676.

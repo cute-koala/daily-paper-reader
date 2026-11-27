@@ -1,0 +1,1716 @@
+Tracking Objects Through Assembly and Decomposition
+Cheryl Lam
+Yihong Sun
+Bharath Hariharan
+Cornell University
+Abstract
+Tracking objects through transformations is essential for un-
+derstanding real-world dynamics. Recent work has extended
+traditional object tracking to detect state changes. However,
+existing methods require an initial object prompt and de-
+tect only its decompositions, missing assembly events, which
+begin with multiple objects rather than one. We therefore
+introduce a prompt-free formulation of this task, where the
+goal is to recover all object tracks and detect both decom-
+position and assembly events given only a video. Our key
+insight is that assembly is decomposition in reverse. Build-
+ing on this insight, we present ATLAS, a zero-shot system
+that constructs and jointly reasons over forward and reverse
+spatiotemporal partitions to recover object tracks and their
+transformations. We further introduce OMNIST, a bench-
+mark with dense annotations of objects and both transforma-
+tion types. On OMNIST, ATLAS recovers more than twice as
+many state changes as prior methods while remaining com-
+petitive on existing benchmarks that only evaluate decompo-
+sition. Code, data, and additional results are available at
+https://atlas-track-objects.github.io/.
+1. Introduction
+Object transformations are everywhere: a chef slices a
+tomato; a child assembles a toy; a caterpillar becomes a
+chrysalis and later emerges as a butterfly. Understanding
+these changes is crucial, whether for reasoning about pre-
+and post-conditions of actions by embodied agents [20, 28],
+monitoring wildlife across developmental stages, or creating
+policy sub-goals from recorded demonstrations [15].
+One approach is to ask a multimodal language model
+(MLLM) to identify transformations in a video [1, 33]. Un-
+fortunately, MLLMs provide only coarse descriptions of
+what occurred. Mounting evidence suggests that current
+MLLMs struggle to spatiotemporally ground temporal events
+in videos [9, 43]. This lack of grounding is problematic: e.g.,
+it prevents embodied agents from tying transformations (“a
+boy building a toy”) to the specific objects and context (the
+particular pieces and how they go together).
+To ground transformations in the video, one must also
+track the objects involved. Recently, Sun et al. [31] extended
+traditional object tracking to detect state transformations as
+well. Their approach, TubeletGraph, takes a video and an ini-
+tial target object mask as input, tracks the object through its
+transformations, and produces a state graph that records each
+transformation along with its timing, participating objects,
+and natural-language description.
+However, this formulation has a critical flaw. Like tradi-
+tional object tracking, the problem is formulated as tracking
+a single object annotated in the first frame. This limits
+TubeletGraph [31] and other current systems [30] to de-
+composition events, where the tracked object fragments
+into independently trackable parts. When the reverse oc-
+curs—multiple objects merging during assembly—these sys-
+tems simply fail to detect the event, either silently ending the
+track or continuing it through the assembled object, result-
+ing in incomplete and misleading output. Beyond assembly,
+current systems also miss any further decompositions of the
+fragments from an earlier decomposition since they only
+reason about the transformations of the original prompted
+object. For example, in Figure 1, TubeletGraph detects the
+removal of the bag from the box, but misses the subsequent
+decomposition (removing crackers from the bag) and assem-
+bly (inserting the bag back into the box).
+To truly track any transformation, we must relax the tra-
+ditional tracking assumption of a single “prompt” object and
+instead account for all objects in the scene. Concretely, given
+only a video, the goal is to produce a spatiotemporal state
+graph recording every decomposition and assembly along
+with its timing, participating objects, and natural-language
+description. This increases task difficulty, as one must now
+search for all objects that may undergo a state change without
+any prompt to anchor the search.
+To solve this, we present ATLAS (All-object Tracking
+and Localization Across State changes), a zero-shot frame-
+work for prompt-free tracking and understanding of object
+transformations. Our key insight is that assembly is de-
+composition in reverse: a video of objects merging is, up
+to temporal direction, indistinguishable from one in which
+an object splits. Based on this insight, ATLAS constructs
+forward and reverse spatiotemporal partitions and jointly
+1
+arXiv:2611.26269v1  [cs.CV]  19 Nov 2026
+
+
+Triscuit box
+single cracker
+plastic bag
+insert
+t=26s
+Detected Transformations
+Ours: Predicted Object Tracks
+separate
+t=4s
+pour
+t=12s
+(a)
+(b)
+Requires prompt  
+object as input
+ Detects 
+decomposition
+Prior Work
+Misses further  
+decomposition
+ Cannot detect 
+assembly
+Figure 1. Top: Prior methods [30, 31] require an initial object prompt and only detect its decomposition, but miss when objects resulting
+from that decomposition split further and cannot detect assembly events. Bottom: Without a prompt, ATLAS recovers all object tracks and
+detects both decomposition and assembly. Object tracks are shown as overlaid colored masks, while detected transformations are visualized
+as a state graph linking the participating objects. For readability, only a subset of tracks is shown corresponding to objects participating in
+transformations and the bowl.
+reasons across them using spatial relationships to recover
+state changes. ATLAS then uses a VLM to verify each can-
+didate transformation, refine its timing, and describe the
+transformation. The name ATLAS also describes the output:
+a temporal atlas in which, for any object at any time, one
+can retrieve its segmentation mask and the transformation
+subgraph leading to and following from its current state.
+For evaluation, existing benchmarks such as VOST [34]
+are also limited to decomposition events: assembly events,
+which start from multiple objects instead of one prompt
+object, are not even annotated in the data. We therefore
+create a new benchmark OMNIST with annotated object
+tracks and both decomposition and assembly events. On
+OMNIST, we find that ATLAS recovers more than twice as
+many state changes as prior methods. At the same time, we
+maintain competitive performance on previous benchmarks
+that only evaluate decomposition [34].
+In sum, the contributions of our work are:
+1. We introduce the task of tracking all objects and detecting
+their transformations given only a video.
+2. We propose ATLAS, a zero-shot framework that requires
+no initial prompt, constructs bidirectional spatiotemporal
+partitions, and models assembly as the temporal reverse
+of decomposition.
+3. We introduce OMNIST, a benchmark with decomposition
+and assembly events, and demonstrate state-of-the-art
+performance on OMNIST while matching prior art on
+existing benchmarks.
+2. Related Work
+Object Tracking and Transformation Understanding. Ob-
+ject tracking methods [16] typically segment a target object
+specified by an initial mask and propagate it forward via
+appearance features [2, 3, 6, 8, 14, 25]. SAM2 [27] sub-
+stantially advances this paradigm with a streaming memory-
+attention mechanism. Extensions such as SAM2Long [11],
+SAMURAI [39], and DAM4SAM [35] address error ac-
+cumulation, crowded scenes, and visual distractors. How-
+ever, under dramatic visual changes, these trackers lose the
+target object. Datasets such as VOST [34], VSCOS [41],
+DTTO [37], and M3-VOS [5] benchmark this challenge. Re-
+VOS [5] proposes combining forward and backward memory
+to improve robustness through transformations, while recent
+approaches improve SAM2 during state transformations, but
+require training [10]. However, these methods do not recover
+the transformations themselves. TubeletGraph [31] extends
+object tracking by introducing Track Any State: given an
+initial mask, it recovers objects missed after decomposition
+via a spatiotemporal partition and constructs a state graph
+through VLM reasoning. Our work directly builds on Track
+Any State, but removes the initial prompt requirement and
+extends the framework to handle assembly transformations.
+Beyond prompt-based tracking, prompt-free and panoptic
+video segmentation methods [7, 18, 40] track all objects in
+a scene simultaneously without a per-object prompt. How-
+ever, these methods do not model transformations: splits
+2
+
+
+and merges are treated as the appearance of new objects
+rather than state change events. Our method is the first to
+combine prompt-free all-object tracking with transformation
+understanding.
+Object State Change Recognition. A complementary line
+of work studies object state changes without maintaining
+persistent object tracks. HowToChange [38] and Where-
+ToChange [24] train models to temporally and spatially
+localize three stages of a state change (initial, transition-
+ing, and end) in instructional videos, using pseudo-labels
+from off-the-shelf vision-language systems. SPARTA [23]
+demonstrates robotic manipulation capabilities built upon
+spatially-progressing state change segmentation. While these
+methods produce spatially grounded outputs at the progress
+level, they do not maintain consistent object identities across
+transformation boundaries. In contrast, our method produces
+persistent spatiotemporal tracks that can be queried after the
+fact for any object at any time.
+Vision and Language. MLLMs such as GPT-4 [1] and Gem-
+ini [33] can reason about visual and textual queries [12, 13,
+22, 32, 36], but lack pixel-level grounding and produce only
+coarse event-level descriptions. In our work, we use VLMs
+to verify, refine, and describe the state changes identified
+through spatiotemporal reasoning over tubelets.
+3. Method
+3.1. Task Formulation
+We introduce a prompt-free formulation of Track Any
+State [31] that aims to recover all object tracks and iden-
+tify their transformations (see Appendix A.1 for an opera-
+tive definition of transformations). Formally, given a video
+V = {It}T
+t=1, the desired output consists of:
+1. A collection of object tracks T = {T 1, . . . , T N} where
+each track T i is a sequence of masks {Mi
+t}; and
+2. A collection of transformations / state changes S = {s}
+where s = (t, Tpre, Tpost, D) with t denoting the frame
+where the change happened, Tpre, Tpost ⊆T the sets of
+tracks involved before and after the change, and D a
+natural language description.
+Figure 1 (bottom) shows an example output with tracks vi-
+sualized as overlaid colored masks and state changes shown
+as a graph. The original formulation of TubeletGraph [31]
+is a special case where an initial object mask is an added
+input, and the set of output object tracks and state changes
+are restricted to the subset involving the prompt object.
+3.2. Preliminaries
+We build on the observation in TubeletGraph [31] that the
+decomposition of an object results in the appearance of new
+tracks. For example, in Figure 1 (top), when the bag is
+removed from the box (the prompt object), the tracker [27]
+follows the box, leaving the bag untracked. TubeletGraph
+initializes a new track for this untracked region and reasons
+about its relation to the prompt object to identify the trans-
+formation. However, TubeletGraph cannot detect assembly,
+as assembly does not trigger the appearance of new tracks
+during forward tracking.
+Since assembly is decomposition in reverse, tracking
+backward allows assembly to be detected through the emer-
+gence of new tracks in the reverse direction. We therefore
+build spatiotemporal partitions [31] in both the forward and
+the backward directions. We then consider tracks that newly
+emerge in the middle of the video in either direction, and use
+both forward and reverse partitions to reason about whether
+these tracks are the signatures of decomposition or assembly
+events.
+We now describe each step of this pipeline in detail.
+3.3. Building Bidirectional Spatiotemporal Parti-
+tions
+We construct the forward spatiotemporal partition of the
+video following TubeletGraph [31]: we segment every frame
+with CropFormer [26], propagate every entity in the first
+frame forward with SAM2 [27], and at each subsequent
+frame, initialize a new track for any entity whose area is cov-
+ered by less than τcoverage of existing tracks. During propaga-
+tion, multiple tracks may collapse onto the same object (e.g.,
+during assembly). To maintain a set of spatially distinct enti-
+ties, if two tracks that have each been tracked for more than 5
+frames share an IoU greater than τdup, we terminate the track
+with lower confidence. We repeat this process in reverse to
+obtain the reverse partition (see the supplementary for video
+visualizations of both partitions). We represent the forward
+and reverse partitions as pools of tubelets, PF = {PF,i} and
+PR = {PR,i}, where each tubelet Pi = {ei
+t} consists of
+masks ei
+t for entity i at frame t.
+3.4. Detecting State Changes
+Having obtained forward and reverse partitions of the video,
+we now focus on detecting any transformations that occur. A
+tubelet that newly emerges in either temporal direction may
+correspond either to an object produced through a transfor-
+mation (decomposition in forward or assembly in reverse)
+or to a newly introduced object entering the field of view.
+To distinguish these cases, we assume that tubelets aris-
+ing from transformations spatially originate from previously
+tracked objects while newly introduced objects do not. We
+use this assumption to define two predicates for detecting
+state changes. Throughout, we say that a tubelet PA = {eA
+t }
+matches PB = {eB
+t } at frame t when eA
+t is contained within
+eB
+t and the two masks have sufficient IoU:
+|eA
+t ∩eB
+t |
+|eA
+t |
+> τcontain,
+|eA
+t ∩eB
+t |
+|eA
+t ∪eB
+t | > τIoU.
+3
+
+
+PF,i
+PF,k
+PR,j
+PF,k
+PF,k
+PR,j
+New Track@Frame=t
+Decomposition via 
+Forward Emergence
+PF,k
+PF,j
+PR,i
+PR,k
+New Track@Frame=t
+Forward Tubelets
+Forward Tubelets
+Reverse Tubelets
+Reverse Tubelets
+Assembly via  
+Reverse Emergence
+Frame=t −δ
+Frame=t + δ
+PR,k
+PF,j
+Figure 2. Left: Tubelet PF,i emerges during forward tracking, matches PR,j, and is identified as a decomposition product of PF,k. Right:
+Tubelet PR,i emerges during reverse tracking, matches PF,j, and is identified as an object assembling into PR,k. Solid blue arrows indicate
+matches across temporal partitions, while dotted black arrows trace the same tubelet through time.
+Decomposition via Forward Emergence. Suppose a
+tubelet PF,i newly emerges at frame t > 1 in the forward
+tracking direction, as shown in Figure 2 (left). To determine
+whether this tubelet corresponds to a transformation product
+or a newly introduced object, we look at all reverse tubelets
+at frame t. If PF,i matches a reverse tubelet PR,j, we search
+backward in time for up to ω seconds. If, at an earlier frame
+t −δ within this window, PR,j matches a previously tracked
+tubelet PF,k, we identify a candidate decomposition in which
+PF,i originated from PF,k. We mark PF,i and PR,j as dupli-
+cates since they correspond to the same post-transformation
+object and merge them during final tubelet construction. We
+record the state change as (t, {PF,k}, {PF,k, PF,i}).
+Assembly via Reverse Emergence. Similarly, suppose
+a tubelet PR,i newly emerges at frame t < T in the reverse
+tracking direction, as shown in Figure 2 (right). We compare
+it with all forward tubelets at frame t. If PR,i matches PF,j,
+we search forward in time for up to ω seconds. If, at a
+later frame t + δ within this window, PF,j matches PR,k,
+we identify a candidate assembly in which PR,i merges
+into PR,k. We mark PR,i and PF,j as duplicates since they
+correspond to the same pre-transformation object and merge
+them during final tubelet construction. We record the state
+change as (t, {PR,i, PR,k}, {PR,k}). This yields a set of
+candidate transformations.
+3.5. Transformation Verification and Realignment
+At this point, the candidate transformations have two po-
+tential issues. First, our detected state changes may not
+represent actual state changes due to coincidental spatial
+overlap. Second, the detected frame t may differ from the
+frame ttrue at which the transformation actually occurs. In a
+decomposition, SAM2 [27] often keeps a single mask over
+the separating objects for several frames, so PF,i emerges
+at some t > ttrue. In reverse tracking, SAM2 keeps a single
+mask over the merged objects past the point where they sepa-
+rate in reverse time, so PR,i emerges at some t < ttrue. Thus,
+decompositions are often detected late and assemblies early.
+We address both issues simultaneously with a VLM. Al-
+though a VLM cannot spatially ground transformations, we
+leverage it for semantic and temporal reasoning about candi-
+date events. For each candidate transformation, we prompt
+the VLM with full frames sampled uniformly from the video.
+We then provide frames sampled around the predicted event,
+each cropped to the union of the participating objects’ bound-
+ing boxes with their contours overlaid. The full frames give
+context for the whole video, and the crops show the ob-
+jects closely enough to verify the transformation and locate
+it in time. Based on this observation that decompositions
+are predicted late and assembly events are predicted early,
+we sample frames asymmetrically. For a suspected decom-
+position at t, we sample frames from [t −ωlong, t + ωshort]
+where ωshort < ωlong. For a suspected assembly at t, we
+sample frames from [t −ωshort, t + ωlong]. We ask the VLM
+to determine whether a transformation actually occurred. If
+the VLM confirms a transformation, it outputs the frame
+at which separation first becomes visually apparent for de-
+compositions or merging becomes visually complete for
+assembly events. The returned frame index is used as the
+final event time (Figure 3). The VLM also names the action
+and the objects involved in the pre- and post-transformation
+states, completing our state changes S.
+3.6. Producing a Unified Spatiotemporal Partition
+Once we have detected the state transformations, we pro-
+ceed to produce a final, unified set of tubelets that form our
+spatiotemporal partition.
+We begin by identifying duplicate tubelets across the
+forward and reverse partitions PF and PR. For every pair
+(PF,i, PR,j) ∈PF × PR, we compute the video-level mean
+IoU over their temporal overlap. We then perform Hungarian
+matching [17] between forward and reverse tubelets, retain-
+ing matched pairs exceeding τmerge, along with the matches
+identified during transformation detection. For each matched
+pair, we take the union of their timestamps and masks, pro-
+ducing a single tubelet. We initialize our final set of tracks
+T with these unified tubelets and update the pre- and post-
+tracks of each detected transformation to point to this set.
+We also add tracks involved in a transformation without a
+duplicate in the other direction to T .
+4
+
+
+cabbage leaf
+whole cabbage
+separate
+t=6s
+separate
+t=8s
+VLM temporal realignment
+leg piece
+seat base
+attach
+t=2s
+attach
+t=0s
+VLM temporal realignment
+Figure 3. A VLM temporally realigns a decomposition event detected late (top) and an assembly event detected early (bottom).
+Finally, we clean up the tracks T both spatially and tempo-
+rally. For each state change, guided by the VLM’s temporal
+alignment, we trim the tracks accordingly: for a decompo-
+sition predicted at frame t, we enforce that the emergent
+object’s track begins at t; for an assembly predicted at frame
+t, we enforce that the emergent track ends at t. To prevent
+mask overlap, we subtract the emergent object’s mask from
+the source tubelet’s mask at each frame. To ensure complete
+spatiotemporal coverage, we add to the final pool any tubelet
+from either tracking direction that has neither been matched
+as a duplicate nor associated with a state change if less than
+τarea of its area is already covered by tubelets in the pool.
+The final pool is a full spatiotemporal partition of the video.
+4. Dataset
+Previous datasets such as VOST-TAS [31], curated from
+the VOST validation set [34], only contain annotations for
+decomposition events and do not capture assembly. We
+therefore introduce a more comprehensive dataset with both
+decomposition and assembly events. We source our videos
+from (1) recordings by the authors, (2) YouTube tutorials
+retrieved via action-object queries (e.g., “how to replace
+Swiffer mop pad”, “how to mount a car tire”), and (3) ex-
+isting benchmarks including VOST [34], VSCOS [41], M3-
+VOS [5], and IKEA Video Manuals [21].
+In each video, we annotate decomposition and assembly
+events when all participating objects can be clearly identified
+before and after the transformation. Each transformation
+is a 4-tuple τi = (Ti, vi, Opre
+i , Opost
+i
+), where Ti = [ts
+i, te
+i]
+is the temporal span and vi is a free-text description. The
+sets Oq
+i = {(o, dq
+i,o) | o ∈P q
+i }, for q ∈{pre, post}, specify
+the participating objects P q
+i and their names dq
+i,o before and
+after the transformation. Each object o is annotated with
+segmentation masks {mt
+o}t∈To over all frames To where it
+VOST-TAS
+OMNIST (Ours)
+Videos
+57
+97
+Ann fps.
+5
+15
+Objects
+174
+352
+Object masks
+350
+54,369
+Transformations
+108
+302
+Assembly
+–
+144
+Decomposition
+108
+158
+Table 1. Comparison of VOST-TAS [31] and OMNIST. VOST-TAS
+annotates only decomposition events with object masks at select
+frames, while OMNIST annotates both decomposition and assembly
+events with dense per-frame masks of participating objects.
+is visible.
+Table 1 compares OMNIST with VOST-TAS. More de-
+tails about the dataset collection and qualitative examples
+are presented in Appendix A.2.
+5. Experiments
+5.1. Experimental Setup
+Datasets. We evaluate object tracking and transformation
+detection on OMNIST. Following TubeletGraph [31], we
+additionally evaluate object tracking on VOST [34], VS-
+COS [41], and M3-VOS [5], and transformation detection on
+VOST-TAS [31]. These benchmarks provide object masks in
+the first frame as prompts, which we incorporate into ATLAS
+for comparison with prompt-based methods. For M3-VOS,
+we exclude 20 videos with annotations that differ from our
+treatment of assembly, and evaluate all methods on the same
+remaining videos. Further details on evaluation on existing
+benchmarks are provided in Appendix A.3.
+5
+
+
+Transformation Detection
+Method
+Tracking
+Temp. Loc.
+Sem. Acc.
+Spatiotemp.
+Overall
+Jtubelet
+TP
+TR
+SV
+SO
+HST,P
+HST
+HP
+H
+GPT-4.1 + GDINO
+52.5
+80.1
+65.2
+90.4
+95.8
+9.8
+7.9
+7.7
+6.3
+GPT-4.1 + SAM3
+53.6
+80.1
+65.2
+90.4
+96.5
+19.1
+15.6
+13.8
+11.3
+TubeletGraph
+57.3
+37.7
+26.5
+80.0
+91.0
+22.6
+15.9
+16.5
+11.6
+FluxGraph
+48.0
+39.4
+16.6
+82.0
+88.9
+23.6
+9.9
+16.5
+7.0
+TubeletGraph-R
+52.7
+30.2
+18.9
+52.6
+64.0
+13.2
+8.3
+5.8
+3.6
+TubeletGraph-Bidir
+56.0
+34.2
+45.4
+67.9
+83.3
+18.5
+24.5
+12.2
+16.2
++ Verif. & Realign.
+55.9
+64.0
+50.7
+87.6
+95.6
+35.1
+27.8
+29.3
+23.2
+ATLAS
+68.7
+77.4
+57.9
+90.3
+96.9
+57.1
+42.7
+48.2
+36.1
+Table 2. Comparison of ATLAS with baselines on object tracking and transformation detection on OMNIST. “+ Verif. & Realign.” applies our
+VLM verification and temporal realignment stage to TubeletGraph-Bidir. ATLAS significantly outperforms all baselines on Jtubelet, HST,P ,
+HST , HP , and H. Best performance is bolded and second bests are underlined. We report 95% confidence intervals in Appendix A.4.
+Metrics. For object tracking on existing benchmarks,
+which contain only decomposition transformations, we fol-
+low VOST [34] and report Jaccard J over the entire video
+and Jtr over the last 25% of frames, computed on the union
+of the masks of the prompt object and its resulting frag-
+ments. However, distinct objects combine during assembly,
+requiring tubelets to be evaluated individually. For object
+tracking on OMNIST, we therefore construct a new track-
+ing metric analogous to J that evaluates individual tubelets.
+Since object identities may be ambiguous during transfor-
+mations, we exclude frames within annotated transformation
+intervals and split ground-truth tracks into temporally stable
+tubelets at transformation boundaries. We similarly split
+predicted tracks at their predicted transformation boundaries.
+We then apply Hungarian matching [17] between predicted
+and ground-truth tubelets using mean IoU over all frames
+of the ground-truth tubelet. We report Jtubelet, the average
+matched tubelet IoU over objects participating in transforma-
+tions, with unmatched ground-truth tubelets assigned zero.
+To evaluate transformation detection on VOST-TAS and
+OMNIST, we follow the evaluation protocol of Tubelet-
+Graph [31], additionally reporting spatiotemporal and overall
+precision for OMNIST:
+1. Temporal localization precision and recall (TP , TR)
+measure whether predicted transformations fall within
+ground-truth intervals, extended by 0.5 s on each side. TP
+is the fraction of detections correctly localized, while TR
+is the fraction of ground-truth transformations correctly
+localized.
+2. For temporally localized transformations, we report se-
+mantic accuracy for predicted action verbs (SV ) and
+predicted object descriptions (SO) for objects that are
+matched with IoU > 0.5. Verb and object correctness are
+judged by GPT-4.1 [1].
+3. Spatiotemporal precision and recall (HST,P , HST ) re-
+quire both successful temporal localization and participat-
+ing objects to be matched with IoU > 0.5 at the extended
+annotated boundaries.
+4. Overall precision and recall (HP , H) require successful
+spatiotemporal localization and correct verb and object
+descriptions.
+Implementation Details. ATLAS uses the same back-
+bone models as TubeletGraph: CropFormer-Hornet3X [26]
+for entity segmentation, SAM2.1-L [27] for tracking, and
+GPT-4.1 [1] (temperature 0) for state graph construction.
+Thresholds are selected once on a separate set of videos; see
+Appendix A.5 for analysis of robustness to these choices.
+5.2. Baselines
+On OMNIST, we compare ATLAS with VLM-based base-
+lines and prompt-free adaptations of TubeletGraph [31]:
+• GPT-4.1 + GDINO uses GPT-4.1 [1] to predict transfor-
+mation events directly from sampled video frames, then
+grounds the referenced objects with Grounding DINO [19]
+and tracks them with SAM2 [27].
+• GPT-4.1 + SAM3 uses the same GPT-4.1 predictions, but
+grounds and tracks the referenced objects with SAM3 [4].
+• TubeletGraph [31] runs the original TubeletGraph
+pipeline initialized with all CropFormer entities [26] in the
+first frame.
+• FluxGraph [30] is an efficient variant of TubeletGraph.
+• TubeletGraph-R runs TubeletGraph on the reversed
+video, so that assemblies appear as decompositions and
+can be detected.
+• TubeletGraph-Bidir runs TubeletGraph independently in
+both directions to detect decompositions and assemblies,
+unlike ATLAS, which jointly reasons over both partitions
+(Figure 2). It then matches forward and reverse tracks via
+Hungarian matching [17] and merges matched pairs when
+their average per-frame IoU exceeds 0.75. We also apply
+6
+
+
+Tracking
+Transformation Detection
+Method
+Detects
+VOST
+VSCOS
+M3-VOS
+Sem. Acc.
+Temp. Loc.
+Overall
+Decomp. Assem.
+J
+Jtr
+J
+Jtr
+J
+Jtr
+SV
+SO
+TP
+TR
+HST
+H
+Cutie [8]
+-
+-
+41.1 25.5 70.9 67.1 76.0 66.6
+-
+-
+-
+-
+-
+-
+ReVOS [5]
+-
+-
+41.0 25.3
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+SAM2 [27]
+-
+-
+46.1 29.4 72.5 67.1 72.4 61.3
+-
+-
+-
+-
+-
+-
+SAM2Long [11]
+-
+-
+46.4 29.1 73.0 68.6 70.8 59.0
+-
+-
+-
+-
+-
+-
+SAM2.1 [27]
+-
+-
+48.4 32.4 72.0 66.9 72.8 61.1
+-
+-
+-
+-
+-
+-
+DAM4SAM [35]
+-
+-
+48.8 33.6 71.3 66.0 72.0 61.2
+-
+-
+-
+-
+-
+-
+SAMURAI [39]
+-
+-
+49.8 34.0 71.8 66.9 73.5 62.7
+-
+-
+-
+-
+-
+-
+TubeletGraph [31]
+✓
+-
+50.9 36.7 75.9 72.2 75.8 66.4
+81.8 72.3 43.1
+20.4
+12.0
+6.5
+FluxGraph [30]
+✓
+-
+52.8 36.8 75.3 70.7 75.3 65.9
+77.3 82.9 36.7
+20.4
+12.0
+9.3
+ATLAS
+✓
+✓
+50.2 34.6 74.7 70.7 73.5 62.9
+89.5 97.3 51.4
+17.6
+11.1 10.2
+Table 3. Quantitative results for object tracking on VOST [34], VSCOS [41] and M3-VOS [5] and transformation detection on VOST-
+TAS [31].
+our verification and realignment stage to it (+ Verif. &
+Realign.), which serves as an ablation of ATLAS without
+joint reasoning.
+5.3. Results on OMNIST
+Table 2 compares ATLAS with all baselines on OMNIST. AT-
+LAS achieves the highest object tracking score of Jtubelet =
+68.7, outperforming TubeletGraph [31] by 11.4 points.
+For transformation detection, ATLAS achieves the highest
+spatiotemporal and overall metrics. In particular, ATLAS
+achieves over 2× the overall recall (H) of TubeletGraph-
+Bidir, improving from 16.2 to 36.1, while achieving 4× the
+overall precision (HP ), improving from 12.2 to 48.2. A
+breakdown by transformation type in Appendix A.4 shows
+that ATLAS improves overall recall over TubeletGraph-Bidir
+from 9.0 to 34.7 on assembly events and from 22.8 to 37.3
+on decomposition events. Even applying our VLM stage to
+TubeletGraph-Bidir (+ Verif. & Realign.) closes only part of
+this gap, reaching H = 23.2 and HP = 29.3. The remain-
+ing gap reflects the contribution of jointly reasoning over
+the two partitions, suggesting that running TubeletGraph
+independently in both directions is not enough.
+To understand where these gains come from, we analyze
+the transformations that ATLAS recovers but TubeletGraph-
+Bidir misses. First, as discussed, TubeletGraph misses de-
+compositions of fragments produced earlier in the video (e.g.,
+crackers removed from a bag that was first taken out of its
+box). ATLAS recovers 8 such decompositions in OMNIST.
+Second, TubeletGraph accepts a new tubelet as a transfor-
+mation product only if it satisfies both a spatial proximity
+prior and a semantic prior which requires high FC-CLIP [42]
+feature similarity between the new tubelet and the prompt
+object and often fails for assembly. In 13 transformations
+recovered by ATLAS, TubeletGraph’s spatial proximity prior
+was satisfied but not its semantic prior (e.g., an SD card
+inserted into a camera, a pair of sunglasses inserted into an
+eyeglass case, a cleaning cloth removed from an eyeglass
+case).
+On the other hand, VLM-based baselines achieve the
+highest temporal localization and high semantic accuracy,
+demonstrating that a VLM can reliably identify what is hap-
+pening and when. For temporal localization, VLM-based
+baselines outperform ATLAS, which misses some transfor-
+mations that do not result in new tubelets. However, GPT-4.1
++ SAM3 yields only about a third of ATLAS’s spatiotem-
+poral recall and overall recall (HST = 15.6, H = 11.3),
+indicating that it struggles to localize the objects involved in
+transformations.
+5.4. Results on Benchmarks Without Assembly
+Even though VOST [34], VSCOS [41], and M3-VOS [5]
+do not capture assembly transformations, Table 3 shows
+that ATLAS maintains tracking performance comparable to
+prompt-based methods on these benchmarks while being the
+only method that recovers both decomposition and assembly
+events.
+For transformation detection on VOST-TAS [31], ATLAS
+has the highest semantic verb and object accuracy, improv-
+ing over TubeletGraph from SV = 81.8 to 89.5 and from
+SO = 72.3 to 97.3. Since both methods use GPT-4.1 [1], we
+attribute these gains to providing the VLM with additional
+temporal and spatial information through frames sampled
+throughout the video and around each emergence, unlike
+TubeletGraph, which reasons from only the initial frame
+and the emergence frame. ATLAS also improves temporal
+precision from 43.1 to 51.4, as it uses GPT-4.1 to reject false
+7
+
+
+photo frame front
+Detected Transformations
+Predicted Object Tracks
+photo paper
+insert
+t=11s
+separate
+t=7s
+frame insert
+Detected Transformations
+Predicted Object Tracks
+yellow container
+separate
+t=1s
+Play-Doh ball
+separate
+t=3s
+separate
+t=7s
+separate
+t=2s
+photo frame back
+insert
+t=14s
+Play-Doh piece
+combine
+t=12s
+insert
+t=19s
+close
+t=20s
+Play-Doh piece
+container lid
+Figure 4. Qualitative results on OMNIST. While ATLAS recovers tracks for all objects in a video, only the tracks of objects involved in the
+detected transformations are shown for readability. See the supplementary for additional qualitative results and comparisons with baselines.
+positives, while temporal recall decreases slightly from 20.4
+to 17.6, as verification may also filter valid transformations.
+5.5. Ablations
+We ablate the two uses of the VLM in ATLAS (Table 4).
+Without verification, precision decreases substantially: TP
+falls from 77.4 to 64.6 and HP from 48.2 to 34.7, while TR
+rises slightly from 57.9 to 62.9. Verification trades a small
+amount of recall for the ability to filter out false positive
+transformations. Without realignment, both temporal preci-
+sion and recall drop, reducing H from 36.1 to 25.2. Finally,
+disabling verification and realignment produces the largest
+degradation, reducing H to 22.8, demonstrating that VLM
+reasoning is essential for accurate transformation detection.
+5.6. Qualitative Results
+Figure 4 shows qualitative results on two sequences with
+both decomposition and assembly events. The top example,
+replacing a photograph in a picture frame, illustrates accurate
+recovery of all objects and their transformations. The bottom
+example, manipulating Play-Doh, shows ATLAS on a longer
+sequence with more transformations.
+6. Conclusion
+In this work, we introduce a prompt-free formulation of
+Track Any State, where the goal is to track all objects and de-
+Variant
+TP
+TR HST,P HST HP
+H
+Full Model
+77.4 57.9
+57.1
+42.7 48.2 36.1
+w/o Verification
+64.6 62.9
+44.9
+43.7 34.7 33.8
+w/o Realignment
+63.1 41.4
+48.5
+31.8 38.4 25.2
+w/o Verification & Realignment 48.5 47.4
+31.9
+31.1 23.4 22.8
+Table 4. Ablation of VLM-based verification and realignment.
+tect their transformations. Since assembly is decomposition
+in reverse, we present ATLAS, a zero-shot system that jointly
+reasons over forward and reverse spatiotemporal partitions
+to recover object tracks and construct a state graph. We also
+introduce OMNIST, a benchmark with dense annotations of
+objects and both transformation types. On OMNIST, ATLAS
+more than doubles the overall recall of prior methods, while
+remaining competitive on benchmarks that annotate only
+decomposition.
+LLM Usage Statement
+We used generative AI tools (Claude Code and Codex) to
+assist with code implementation, improve the clarity and
+readability of the manuscript, and obtain reviewer-style feed-
+back. These tools were not used for research ideas, dataset
+creation, experimental design, or evaluation and interpreta-
+tion of the results. The authors take full responsibility for
+8
+
+
+the final work.
+References
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad,
+Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko
+Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4
+technical report. arXiv preprint arXiv:2303.08774, 2023. 1,
+3, 6, 7
+[2] Goutam Bhat, Felix J¨aremo Lawin, Martin Danelljan, An-
+dreas Robinson, Michael Felsberg, Luc Van Gool, and Radu
+Timofte. Learning what to learn for video object segmen-
+tation. In Computer Vision–ECCV 2020: 16th European
+Conference, Glasgow, UK, August 23–28, 2020, Proceedings,
+Part II, pages 777–794. Springer, 2020. 2
+[3] Sergi Caelles, Kevis-Kokitsi Maninis, Jordi Pont-Tuset, Laura
+Leal-Taix´e, Daniel Cremers, and Luc Van Gool. One-shot
+video object segmentation. In Proceedings of the IEEE con-
+ference on computer vision and pattern recognition, pages
+221–230, 2017. 2
+[4] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. Sam 3: Segment anything with concepts. In
+International Conference on Learning Representations, pages
+138846–138923, 2026. 6
+[5] Zixuan Chen, Jiaxin Li, Junxuan Liang, Liming Tan, Yejie
+Guo, Cewu Lu, and Yong-Lu Li. M3-vos: Multi-phase, multi-
+transition, and multi-scenery video object segmentation. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 29193–29202,
+2025. 2, 5, 7, 1
+[6] Ho Kei Cheng and Alexander G Schwing. Xmem: Long-term
+video object segmentation with an atkinson-shiffrin memory
+model. In European Conference on Computer Vision, pages
+640–658. Springer, 2022. 2
+[7] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Alexander
+Schwing, and Joon-Young Lee. Tracking anything with de-
+coupled video segmentation. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV), pages
+1316–1326, 2023. 2
+[8] Ho Kei Cheng, Seoung Wug Oh, Brian Price, Joon-Young
+Lee, and Alexander Schwing. Putting the object back into
+video object segmentation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+pages 3151–3161, 2024. 2, 7
+[9] Aditya Chetan, Eric Cai, Peeyush Kushwaha, Bharath Raj Na-
+goor Kani, Utkarsh Mall, Qianqian Wang, Noah Snavely,
+and Bharath Hariharan. Flat-pack bench: Evaluating spatio-
+temporal understanding in large vision-language models
+through furniture assembly. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 16624–16634, 2026. 1
+[10] Marco Cocco, Matteo Dunnhofer, and Christian Micheloni.
+Representation compensation of sam2 for segmenting objects
+under transformation in videos. In ICIP, pages 1–6, 2026. 2
+[11] Shuangrui Ding, Rui Qian, Xiaoyi Dong, Pan Zhang, Yuhang
+Zang, Yuhang Cao, Yuwei Guo, Dahua Lin, and Jiaqi Wang.
+Sam2long: Enhancing sam 2 for long video segmentation
+with a training-free memory tree.
+In Proceedings of the
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 13614–13624, 2025. 2, 7
+[12] Danny Driess, Fei Xia, Mehdi S. M. Sajjadi, Corey Lynch,
+Aakanksha Chowdhery, Brian Ichter, Ayzaan Wahid, Jonathan
+Tompson, Quan Vuong, Tianhe Yu, Wenlong Huang, et al.
+PaLM-e: An embodied multimodal language model. In Pro-
+ceedings of the 40th International Conference on Machine
+Learning, pages 8469–8488, 2023. 3
+[13] Tanmay Gupta and Aniruddha Kembhavi. Visual program-
+ming: Compositional visual reasoning without training. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 14953–14962,
+2023. 3
+[14] Yuan-Ting Hu, Jia-Bin Huang, and Alexander G Schwing.
+Videomatch: Matching based video object segmentation. In
+Proceedings of the European conference on computer vision
+(ECCV), pages 54–70, 2018. 2
+[15] Physical Intelligence, Bo Ai, Ali Amin, Raichelle Aniceto,
+Ashwin Balakrishna, Greg Balke, Kevin Black, George Bokin-
+sky, Shihao Cao, Thomas Charbonnier, et al. π0.7: a steerable
+generalist robotic foundation model with emergent capabili-
+ties. arXiv preprint arXiv:2604.15483, 2026. 1
+[16] Matej Kristan, Aleˇs Leonardis, Jiˇri Matas, Michael Fels-
+berg, Roman Pflugfelder, Luka ˇCehovin, Tom´aˇs Voj´ıˇr, Gustav
+H¨ager, Alan Lukeˇziˇc, Gustavo Fern´andez, et al. The visual
+object tracking vot2016 challenge results. In Computer Vision
+– ECCV 2016 Workshops, pages 777–823. Springer Interna-
+tional Publishing, 2016. 2
+[17] Harold W Kuhn. The hungarian method for the assignment
+problem. Naval research logistics quarterly, 2(1-2):83–97,
+1955. 4, 6
+[18] Xiangtai Li, Wenwei Zhang, Jiangmiao Pang, Kai Chen,
+Guangliang Cheng, Yunhai Tong, and Chen Change Loy.
+Video k-net: A simple, strong, and unified baseline for video
+segmentation. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+18847–18857, 2022. 2
+[19] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao
+Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun
+Zhu, et al. Grounding dino: Marrying dino with grounded
+pre-training for open-set object detection. arXiv preprint
+arXiv:2303.05499, 2023. 6
+[20] Weiyu Liu, Neil Nie, Ruohan Zhang, Jiayuan Mao, and Jiajun
+Wu. Blade: Learning compositional behaviors from demon-
+stration and language. In Conference on Robot Learning
+(CoRL), 2024. 1
+[21] Yunong Liu, Cristobal Eyzaguirre, Manling Li, Shubh
+Khanna, Juan Carlos Niebles, Vineeth Ravi, Saumitra Mishra,
+Weiyu Liu, and Jiajun Wu. Ikea manuals at work: 4d ground-
+ing of assembly instructions on internet videos. In Advances
+in Neural Information Processing Systems, pages 80536–
+80566, 2024. 5, 1
+[22] Pan Lu, Baolin Peng, Hao Cheng, Michel Galley, Kai-Wei
+Chang, Ying Nian Wu, Song-Chun Zhu, and Jianfeng Gao.
+Chameleon: Plug-and-play compositional reasoning with
+9
+
+
+large language models.
+Advances in Neural Information
+Processing Systems, 36:43447–43478, 2023. 3
+[23] Priyanka Mandikal, Jiaheng Hu, Shivin Dass, Sagnik Ma-
+jumder, Roberto Mart´ın-Mart´ın, and Kristen Grauman. Mash,
+spread, slice! learning to manipulate object states via visual
+spatial progress. arXiv preprint arXiv:2509.24129, 2025. 3
+[24] Priyanka Mandikal, Tushar Nagarajan, Alex Stoken, Zihui
+Xue, and Kristen Grauman. Spoc: Spatially-progressing ob-
+ject state change segmentation in video. In Proceedings of the
+IEEE/CVF Winter Conference on Applications of Computer
+Vision (WACV), pages 3504–3513, 2026. 3
+[25] Seoung Wug Oh, Joon-Young Lee, Ning Xu, and Seon Joo
+Kim. Video object segmentation using space-time memory
+networks. In Proceedings of the IEEE/CVF international
+conference on computer vision, pages 9226–9235, 2019. 2
+[26] Lu Qi, Jason Kuen, Tiancheng Shen, Jiuxiang Gu, Wenbo Li,
+Weidong Guo, Jiaya Jia, Zhe Lin, and Ming-Hsuan Yang.
+High quality entity segmentation.
+In Proceedings of the
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 4047–4056, 2023. 3, 6, 1
+[27] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu,
+Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman R¨adle,
+Chloe Rolland, Laura Gustafson, et al. Sam 2: Segment
+anything in images and videos. In International Conference
+on Learning Representations, pages 28085–28128, 2025. 2,
+3, 4, 6, 7, 1
+[28] Michaela Regneri, Marcus Rohrbach, Dominikus Wetzel, Ste-
+fan Thater, Bernt Schiele, and Manfred Pinkal. Grounding
+action descriptions in videos. Transactions of the Association
+for Computational Linguistics, 1:25–36, 2013. 1
+[29] Elizabeth S. Spelke. Principles of object perception. Cognitive
+Science, 14(1):29–56, 1990. 1
+[30] Yihong Sun and Bharath Hariharan.
+Efficient tracking
+and understanding object transformations. arXiv preprint
+arXiv:2607.19743, 2026. 1, 2, 6, 7, 3
+[31] Yihong Sun, Xinyu Yang, Jennifer J Sun, and Bharath Har-
+iharan. Tracking and understanding object transformations.
+Advances in Neural Information Processing Systems, 2025. 1,
+2, 3, 5, 6, 7
+[32] D´ıdac Sur´ıs, Sachit Menon, and Carl Vondrick. Vipergpt: Vi-
+sual inference via python execution for reasoning. In Proceed-
+ings of the IEEE/CVF international conference on computer
+vision, pages 11888–11898, 2023. 3
+[33] Gemini Team, Petko Georgiev, Ving Ian Lei, Ryan Burnell,
+Libin Bai, Anmol Gulati, Garrett Tanzer, Damien Vincent,
+Zhufeng Pan, Shibo Wang, et al. Gemini 1.5: Unlocking mul-
+timodal understanding across millions of tokens of context.
+arXiv preprint arXiv:2403.05530, 2024. 1, 3
+[34] Pavel Tokmakov, Jie Li, and Adrien Gaidon. Breaking the
+“object” in video object segmentation. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 22836–22845, 2023. 2, 5, 6, 7, 1
+[35] Jovana Videnovic, Alan Lukezic, and Matej Kristan.
+A
+distractor-aware memory for visual object tracking with sam2.
+In Proceedings of the Computer Vision and Pattern Recogni-
+tion Conference, pages 24255–24264, 2025. 2, 7
+[36] Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar,
+Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar.
+Voyager: An open-ended embodied agent with large language
+models. arXiv preprint arXiv:2305.16291, 2023. 3
+[37] You Wu, Yuelong Wang, Yaxin Liao, Fuliang Wu, Hengzhou
+Ye, and Shuiwang Li. Tracking transforming objects: A
+benchmark. In Chinese Conference on Pattern Recognition
+and Computer Vision (PRCV), pages 222–236. Springer, 2024.
+2
+[38] Zihui Xue, Kumar Ashutosh, and Kristen Grauman. Learning
+object state changes in videos: An open-world perspective.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), pages 18493–18503,
+2024. 3
+[39] Cheng-Yen Yang,
+Hsiang-Wei Huang,
+Wenhao Chai,
+Zhongyu Jiang, and Jenq-Neng Hwang. Samurai: Adapting
+segment anything model for zero-shot visual tracking with
+motion-aware memory. arXiv preprint arXiv:2411.11922,
+2024. 2, 7
+[40] Mingqiao Ye, Seoung Wug Oh, Lei Ke, and Joon-Young Lee.
+Entitysam: Segment everything in video. In CVPR, 2025. 2
+[41] Jiangwei Yu, Xiang Li, Xinran Zhao, Hongming Zhang, and
+Yu-Xiong Wang. Video state-changing object segmentation.
+In Proceedings of the IEEE/CVF International Conference
+on Computer Vision, pages 20439–20448, 2023. 2, 5, 7, 1
+[42] Qihang Yu, Ju He, Xueqing Deng, Xiaohui Shen, and Liang-
+Chieh Chen. Convolutions die hard: Open-vocabulary seg-
+mentation with single frozen convolutional clip. Advances
+in Neural Information Processing Systems, 36:32215–32234,
+2023. 7
+[43] Sihyun Yu, Nanye Ma, Pinzhi Huang, Hyunseok Lee,
+Shusheng Yang, June Suk Choi, Ellis Brown, Oscar Michel,
+Boyang Zheng, Jinwoo Shin, et al. Benchmarking visual state
+tracking in multimodal video understanding. arXiv preprint
+arXiv:2606.03920, 2026. 1
+10
+
+
+Tracking Objects Through Assembly and Decomposition
+Supplementary Material
+A. Appendix
+Code, visualizations of the forward and reverse partitions, ad-
+ditional qualitative results, comparisons with baselines, and
+failure cases are available at https://atlas-track-
+objects.github.io/.
+A.1. Defining transformations
+A relevant question that readers might have is what we define
+as transformations. We frame this definition by looking to
+cognitive science. Classical models of object perception in
+cognitive science [29] identify objects as being cohesive; i.e.,
+the points on them form a connected surface at all times. We
+therefore consider transformations as events that break this
+property: either by causing sets of points to not be cohesive
+anymore (decomposition events) or by causing new sets of
+points to begin to move cohesively (assembly events).
+A.2. Dataset Details
+Data Collection. We collect videos spanning household
+activities, cooking, and assembly tasks captured from both
+egocentric and third-person viewpoints with no jump cuts.
+The resulting dataset includes a broad range of actions such
+as removal, insertion, opening, closing, cutting, assembly,
+breaking, attachment, unscrewing, capping, pouring, scoop-
+ing, peeling, connecting, splitting, and tearing. These actions
+are applied across diverse objects ranging from food items
+(e.g., oranges, pineapples, broccoli, peppers, eggs, pears)
+to household items (e.g., bottles, blenders, jars, sunglasses,
+toothbrushes, instruments), electronics (e.g., phones, ear-
+buds, remotes, calculators, keyboards), furniture parts (e.g.,
+chairs), and toys (e.g., LEGO bricks, train tracks, Play-Doh).
+Videos are sourced from: (1) recordings by the authors with
+an iPhone; (2) YouTube tutorials retrieved via action-object
+queries (e.g., “how to replace Swiffer mop pad”, “how to
+mount a car tire”); and (3) existing benchmarks including
+VOST [34], VSCOS [41], M3-VOS [5], and IKEA Video
+Manuals [21].
+Annotation Protocol. We annotate decomposition and
+assembly events only when all participating objects can be
+clearly identified before and after the transformation, so
+that every annotated event has pre- and post-transformation
+objects.
+Annotation Pipeline. We first identify all objects partic-
+ipating in transformations and provide per-frame segmen-
+tation masks throughout the video. Given the density of
+per-frame annotation, we provide sparse manual masks in
+our first pass on key frames, and use SAM2 [27] to automat-
+ically propagate the masks across the sequence. Then, we
+review the masks by SAM2 and correct them where neces-
+sary using a polygon-add and polygon-erase tool to finalize
+segmentation masks for each object oj. Finally, we annotate
+each transformation τi with its temporal boundaries (ts
+i, te
+i),
+a free-text action description (vi), and the pre- and post-
+object instances (Opre
+i , Opost
+i
+).
+Dataset Statistics. OMNIST contains 97 videos with an
+average length of 13.6 seconds, annotated at 15 fps for a
+total of 19,739 frames. It has 352 objects (3.6 per video
+on average) across 54,369 masks, and 302 transformations
+(144 assemblies and 158 decompositions, 3.1 per video on
+average). Of the 97 videos, 27 contain only decomposition
+events, 23 contain only assembly events, and 47 contain both
+transformation types. Qualitative examples are provided in
+Figure 5.
+A.3. Evaluation on Prompt-Based Benchmarks
+Incorporating Prompt Masks. VOST [34], VSCOS [41],
+M3-VOS [5], and VOST-TAS [31] provide a first-frame
+mask for each prompt object. For comparison with prompt-
+based methods on these benchmarks, we incorporate the
+prompt masks into the initial entity set of the forward parti-
+tion. Following TubeletGraph [31], we first resolve overlaps
+between the prompt masks and CropFormer [26] entities.
+For each CropFormer entity, we compute the fraction of its
+area overlapping with the union of prompt masks. We keep
+entities with overlap at most τcoverage = 0.25 unchanged,
+remove overlapping pixels for overlap between τcoverage and
+τremove = 0.75, and discard entities with overlap at least
+τremove. We then initialize a separate tubelet for each prompt
+mask, retaining its correspondence to the original prompt for
+evaluation. The reverse partition is constructed from the last
+frame as usual.
+Object Tracking Evaluation.
+For VOST [34], VS-
+COS [41], and M3-VOS [5], we derive the predicted masks
+for each prompt object as follows. Initially, the prompt object
+is represented by the tubelet initialized from its first-frame
+mask. Following a detected decomposition, we track the
+resulting objects and output the union of their masks. For
+assembly, if the prompt object merges into another object,
+its predicted track terminates at the detected transformation.
+If another object merges into the prompt object, we con-
+tinue tracking the resulting object, whose masks include
+both objects.
+For M3-VOS, we exclude 20 videos that continue annotat-
+ing the inserted object after assembly (e.g., tracking a puzzle
+piece separately after it has been inserted into a puzzle),
+whereas our formulation updates the larger object’s mask to
+include the inserted object and no longer tracks the inserted
+1
+
+
+Object Tracks
+frame 0
+frame 32
+frame 73
+frame 158
+frame 159
+Transformations
+action: pour 
+start: protein powder   + 
+bowl
+end: bowl
+Transformation 4
+frame=137 : 159
+action: scoop 
+start: protein powder tub
+end: protein powder tub + 
+measuring scoop
+Transformation 2
+frame=63 : 73
+action: pour 
+start: measuring scoop
+end: measuring scoop    + 
+protein powder
+Transformation 3
+frame=136 : 158
+State Graph
+protein powder
+lid
+protein powder tub
+bowl
+measuring scoop
+action: remove,uncap,open 
+start: protein powder tub
+end: protein powder        
+tub + lid
+Transformation 1
+frame=8 : 32
+State Graph
+Object Tracks
+frame 47
+frame 70
+frame 89
+frame 166
+keyboard tray
+keyboard
+keyboard box
+Transformations
+action: place,set,insert
+start: keyboard tray + 
+keyboard
+end: keyboard tray
+Transformation 2
+frame=79 : 89
+action: insert,pack
+start: keyboard box + 
+keyboard tray
+end: keyboard box
+Transformation 3
+frame=102 : 166
+action: separate,pull
+start: keyboard box
+end: keyboard box + 
+keyboard tray
+Transformation 1
+frame=16 : 47
+frame 0
+Figure 5. Examples of OMNIST. Annotated object tracks and transformations allow us to construct a state graph.
+object separately. All methods are evaluated on the same
+remaining videos.
+Transformation Detection Evaluation. VOST-TAS [31]
+annotates only transformations involving the prompt object.
+We therefore evaluate only predicted transformations involv-
+ing the prompt object’s track or its transformation products
+in the predicted state graph, discarding all other predictions.
+A.4. Additional Results
+Tables 5 and 6 provide a breakdown of transformation detec-
+tion performance by transformation type. Table 7 reports a
+paired bootstrap comparison between ATLAS and each base-
+line over the 97 videos of OMNIST, using 10,000 resamples,
+confirming that the improvements in Table 2 are statistically
+significant.
+A.5. System Analysis
+Hyperparameters. We set τcoverage = 0.25 as in Tubelet-
+Graph, and fix τdup = 0.9 for constructing the forward and re-
+verse spatiotemporal partitions, ωlong = 4 s and ωshort = 1 s
+for verification and realignment, and τmerge = 0.75 and
+τarea = 0.2 for finalizing the unified pool of tubelets, all
+without tuning.
+For detecting state changes, we select
+τcontain = 0.7, τIoU = 0.05, and ω = 1 s on a separate
+set of videos recorded by the authors, and use them for all
+datasets without further tuning.
+Robustness. Table 8 varies τcontain, τIoU and ω, which
+are used for transformation detection. ATLAS is insensi-
+tive to ω, with H changing by at most 0.7 points. ATLAS
+is also insensitive to τcontain for τIoU up to 0.1: across that
+range H stays within 2.0 points of the default and exceeds
+TubeletGraph-Bidir with the same VLM stage (H = 23.2)
+by at least 11.2 points. Intuitively, τIoU bounds the size of
+2
+
+
+Method
+Temp. Loc.
+Sem. Acc.
+Spatiotemp.
+Overall
+TP
+TR
+SV
+SO
+HST,P
+HST
+HP
+H
+GPT-4.1 + GDINO
+92.0
+72.2
+82.7
+95.2
+12.4
+9.7
+8.8
+6.9
+GPT-4.1 + SAM3
+92.0
+72.2
+82.7
+94.4
+21.2
+16.7
+10.6
+8.3
+TubeletGraph
+–
+–
+–
+–
+–
+–
+–
+–
+FluxGraph
+–
+–
+–
+–
+–
+–
+–
+–
+TubeletGraph-R
+30.2
+39.6
+52.6
+64.0
+13.2
+17.4
+5.8
+7.6
+TubeletGraph-Bidir
+30.2
+39.6
+52.6
+67.9
+13.8
+18.1
+6.9
+9.0
++ Verif. & Realign.
+66.0
+44.4
+81.2
+95.4
+29.9
+20.1
+25.8
+17.4
+ATLAS
+77.6
+52.8
+89.5
+97.1
+59.2
+40.3
+51.0
+34.7
+Table 5. Comparison with baselines on OMNIST for assembly transformations. TubeletGraph and FluxGraph only track forward and cannot
+detect assembly.
+Method
+Temp. Loc.
+Sem. Acc.
+Spatiotemp.
+Overall
+TP
+TR
+SV
+SO
+HST,P
+HST
+HP
+H
+GPT-4.1 + GDINO
+69.9
+58.9
+98.9
+96.7
+7.5
+6.3
+6.8
+5.7
+GPT-4.1 + SAM3
+69.9
+58.9
+98.9
+98.6
+17.3
+14.6
+16.5
+13.9
+TubeletGraph
+37.7
+50.6
+80.0
+91.0
+22.6
+30.4
+16.5
+22.2
+FluxGraph
+39.4
+31.6
+82.0
+88.9
+23.6
+19.0
+16.5
+13.3
+TubeletGraph-R
+–
+–
+–
+–
+–
+–
+–
+–
+TubeletGraph-Bidir
+37.7
+50.6
+78.8
+91.7
+22.6
+30.4
+17.0
+22.8
++ Verif. & Realign.
+62.7
+56.3
+92.1
+95.8
+38.7
+34.8
+31.7
+28.5
+ATLAS
+77.3
+62.7
+90.9
+96.7
+55.5
+44.9
+46.1
+37.3
+Table 6. Comparison with baselines on OMNIST for decomposition transformations. TubeletGraph-R only tracks in reverse and cannot
+detect decomposition.
+the matched tubelet relative to the emerging one, preventing
+a new object from being matched to a much larger tubelet
+that only coincidentally covers it, and the VLM does not
+always reject such candidates. Raising τIoU from 0 to 0.05
+thus improves HP at every τcontain. However, at τIoU = 0.2,
+it discards many transformations in which a small object
+separates from or merges into a larger one. H drops substan-
+tially, but HP drops too because the discarded candidates
+are now predominantly correct while false positives remain.
+Computational Efficiency. The main computational bot-
+tleneck of ATLAS is constructing the forward and reverse
+spatiotemporal partitions. On OMNIST, entity segmentation
+takes 1.25 seconds per frame while tracking takes 2.97 sec-
+onds per frame on a single NVIDIA RTX A6000 GPU, as
+ATLAS propagates all entities jointly in a single SAM2 [27]
+pass per direction. TubeletGraph [31] also segments every
+frame, but tracking in the forward direction takes 13.04 sec-
+onds per frame, as it tracks one prompted entity at a time,
+requiring a separate pass for each entity detected by Crop-
+Former [26] in the first frame. Tracking in reverse as well,
+as in TubeletGraph-Bidir, doubles this tracking cost. Flux-
+Graph [30], an efficient variant of TubeletGraph, reduces
+entity segmentation to 0.47 seconds per frame, but it also
+tracks one entity at a time, totaling 6.45 seconds per frame.
+A.6. Limitations
+ATLAS detects a transformation only when a tubelet newly
+emerges in the forward or reverse direction. Transformations
+that do not split or merge objects, such as gradual in-place
+state changes (e.g., melting or deformation), produce no
+new tubelets and are not detected. Moreover, like Tubelet-
+Graph [31], ATLAS relies on the tracker’s false negatives: the
+tracker must reliably fail to extend an existing mask over a
+transformation product for a new tubelet to emerge. Finally,
+constructing both a forward and a reverse spatiotemporal
+partition is costly. However, the two partitions are fully inde-
+pendent and can be computed in parallel, and improvements
+in efficiency [30] directly reduce the cost of both.
+3
+
+
+ATLAS −Method
+∆Jtubelet
+∆HST,P
+∆HST
+∆HP
+∆H
+GPT-4.1 + GDINO
+16.2 (10.7, 21.6)
+47.3 (38.2, 56.3)
+34.8 (26.6, 42.6)
+40.5 (31.2, 50.0)
+29.8 (21.9, 37.8)
+GPT-4.1 + SAM3
+15.0 (9.2, 20.9)
+38.0 (27.8, 47.9)
+27.2 (17.8, 35.9)
+34.4 (24.7, 44.2)
+24.8 (16.5, 33.2)
+TubeletGraph
+11.4 (7.1, 15.5)
+34.4 (25.0, 44.2)
+26.8 (19.7, 34.2)
+31.7 (22.3, 41.0)
+24.5 (17.0, 32.1)
+FluxGraph
+20.7 (15.9, 25.4)
+33.5 (21.8, 45.1)
+32.8 (25.4, 40.3)
+31.7 (20.9, 42.0)
+29.1 (21.6, 36.7)
+TubeletGraph-R
+15.9 (12.4, 19.4)
+43.9 (35.2, 52.9)
+34.4 (27.9, 41.1)
+42.4 (33.5, 51.6)
+32.5 (25.1, 39.9)
+TubeletGraph-Bidir
+12.6 (7.8, 17.7)
+38.6 (30.9, 46.8)
+18.2 (11.3, 25.3)
+36.0 (27.8, 44.5)
+19.9 (12.3, 27.4)
++ Verif. & Realign.
+12.7 (7.9, 17.7)
+21.9 (15.4, 28.8)
+14.9 (9.3, 20.8)
+18.9 (12.2, 25.6)
+12.9 (7.6, 18.3)
+Table 7. Paired bootstrap differences (ATLAS minus baseline) on OMNIST, with 95% confidence intervals in parentheses.
+τcontain = 0.6
+τcontain = 0.7
+τcontain = 0.8
+HP
+H
+HP
+H
+HP
+H
+τIoU = 0
+39.1
+35.8
+43.1
+38.1
+44.2
+36.4
+τIoU = 0.025
+46.0
+36.4
+46.8
+36.8
+47.3
+35.1
+τIoU = 0.05
+48.5
+36.8
+48.2
+36.1
+52.8
+37.4
+τIoU = 0.1
+52.5
+35.1
+53.8
+35.4
+53.3
+34.4
+τIoU = 0.2
+45.3
+22.2
+49.7
+23.8
+48.9
+22.5
+ω = 0.5 s
+ω = 1 s
+ω = 2 s
+HP
+H
+HP
+H
+HP
+H
+50.0
+36.1
+48.2
+36.1
+47.0
+36.8
+Table 8. We vary τcontain and τIoU used for transformation detec-
+tion with ω = 1 s (top), and the temporal search window ω with
+τcontain = 0.7 and τIoU = 0.05 (bottom). Shaded cells indicate the
+default configuration.
+4

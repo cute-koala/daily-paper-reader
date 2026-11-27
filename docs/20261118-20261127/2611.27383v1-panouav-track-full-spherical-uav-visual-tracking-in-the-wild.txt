@@ -1,0 +1,3196 @@
+PanoUAV-Track: Full-Spherical UAV Visual Tracking in the Wild
+Bingyu Li1 *
+Lichang Yang2
+Zhiyuan Zhao3
+Junyu Gao3,2
+Xuelong Li3 †
+1University of Science and Technology of China
+2Northwestern Polytechnical University
+3The Institute of Artificial Intelligence (TeleAI) of China Telecom
+Abstract
+Existing UAV tracking benchmarks predominantly rely on
+perspective cameras with limited fields of view. Omnidirec-
+tional cameras enable full-spherical observation, yet track-
+ing from moving UAV platforms remains largely unexplored.
+Unlike ground-level panoramic tracking, UAV-mounted omni-
+directional cameras observe targets across both azimuth and
+elevation, introducing geometric challenges under equirect-
+angular projection (ERP). To investigate this setting, we cap-
+ture approximately 40 hours of real-world 8K panoramic
+UAV video and construct PanoUAV-Track through temporal
+clip extraction, target annotation, and the integration of sim-
+ulated sequences. The resulting benchmark comprises 1,895
+sequences, 507,961 frames, and 2,872 annotated objects,
+covering real-world daytime and nighttime scenes alongside
+simulation, and supporting both visual and language-based
+target specification. Through extensive evaluations, we re-
+veal a clear perspective-to-spherical generalization gap
+and identify tracking degradation associated with latitude-
+dependent distortion and ERP seam discontinuity. To ad-
+dress these challenges, we propose PanoUAV-Tracker (PU-
+Track), a geometry-aware tracking framework combining
+latitude-adaptive search and seam-aware periodic sampling.
+PUTrack improves zero-shot and in-domain tracking, par-
+ticularly for seam-crossing targets. Code and benchmark
+resources will be available1.
+1. Introduction
+Visual object tracking from unmanned aerial vehicles (UAVs)
+has witnessed substantial progress in recent years, driven by
+advances in tracking algorithms and aerial tracking bench-
+marks [1, 17, 25, 29, 32, 34, 40]. However, existing bench-
+marks and tracking methods predominantly rely on perspec-
+tive cameras with limited fields of view[15–17, 40]. Under
+such observations, targets can easily disappear from the im-
+*Work done during an internship at TeleAI.
+†Corresponding Author
+1https://libingyu01.github.io/PanoUAV-Track/
+(a) View1: 
+Perspective UAV 
+Tracking
+(c) View3: 
+Spherical UAV 
+Tracking
+(b) View2:
+Ground-Level 
+Panoramic Tracking
+360°
+(e.3) Seam Split
+(e.1) Projection Distortion
+(e.2) Position Jump
+Target 
+Trajectory
+ERP Seam
+(d) Spherical Continuity 
+vs. ERP Discontinuity
+Top
+Bottom
+Front
+Left
+Right
+Ba
+ck
+Equirectangular Projection
+Figure 1. Observation settings and projection challenges. (a–c)
+Perspective UAV, ground-level panoramic, and full-spherical UAV
+tracking. (d) Spherical continuity versus ERP discontinuity. (e.1–
+e.3) Projection distortion, position jumps, and seam splitting.
+age due to UAV motion or changes in viewing direction,
+even when they remain within the surrounding environment
+(Figure 1(a)). This limitation raises a fundamental question:
+can visual trackers developed for perspective observations
+effectively generalize to omnidirectional UAV tracking?
+Omnidirectional cameras offer a promising solution by
+capturing the surrounding environment across a complete
+spherical field of view. Existing panoramic benchmarks,
+such as 360VOT [10], 360VOTS [33], and PanoVOS [37],
+have advanced object tracking and segmentation under om-
+nidirectional observations. However, these benchmarks pri-
+marily focus on general panoramic scenarios rather than dy-
+namic observations from aerial platforms (Figure 1(b)). Un-
+like ground-level panoramic tracking, UAV-mounted omni-
+directional cameras experience continuously changing aerial
+viewpoints, where targets may appear at arbitrary azimuths
+and elevations (Figure 1(c)). We refer to this challenging
+setting as full-spherical UAV object tracking.
+Beyond extending the field of view, full-spherical ob-
+servation introduces fundamentally different tracking chal-
+lenges. Omnidirectional videos are typically represented
+using equirectangular projection (ERP), which maps spheri-
+cal observations onto a rectangular image plane. However,
+this representation does not preserve the geometric prop-
+erties of the sphere. As illustrated in Figure 1(d, e.1–e.3),
+target appearance varies with latitude under ERP, while seam-
+1
+arXiv:2611.27383v1  [cs.CV]  20 Nov 2026
+
+
+crossing targets may appear on opposite sides of the image.
+Consequently, a target that moves continuously on the sphere
+may exhibit substantial appearance deformation or abrupt
+displacement in the projected image. These effects chal-
+lenge conventional tracking assumptions and raise concerns
+about the generalization of perspective-based trackers to
+full-spherical observations.
+To systematically investigate these challenges, we intro-
+duce PanoUAV-Track, a large-scale benchmark for full-
+spherical UAV visual tracking. The benchmark comprises
+1,895 sequences, 507,961 frames, and 2,872 annotated
+objects, covering 951 daytime, 606 nighttime, and 338 simu-
+lated sequences. It provides diverse aerial viewpoints, target
+trajectories, and observation conditions, together with vi-
+sual and language-based target specifications. Based on
+this benchmark, we investigate three fundamental research
+questions: (RQ1) How well do perspective trackers gen-
+eralize to full-spherical UAV observations? (RQ2) Does
+the generalization gap persist across different observation
+domains? (RQ3) How does spherical projection geometry
+affect tracking performance? Our comprehensive evalua-
+tions reveal a substantial perspective-to-spherical generaliza-
+tion gap, with tracking performance particularly affected by
+latitude-dependent distortion and ERP seam discontinuities.
+Motivated by these findings,
+we further propose
+PanoUAV-Tracker (PUTrack), a geometry-aware track-
+ing framework specifically designed for full-spherical UAV
+observations. PUTrack combines template-guided target
+localization with geometry-aware search construction. Its
+Geometry-Aware Search Adapter (GASA) incorporates
+Latitude-Adaptive Patch Sampling (LAPS) to compensate
+for latitude-dependent distortion and Seam-Aware Search
+Cropping (SASC) to preserve spatial continuity across
+panoramic boundaries. Thus, PUTrack maintains coherent
+target localization in ERP coordinates.
+Our main contributions are summarized as follows:
+• Full-spherical UAV tracking. We investigate visual track-
+ing using UAV-mounted omnidirectional cameras, extend-
+ing aerial tracking to full-spherical observations.
+• PanoUAV-Track benchmark and analysis. PanoUAV-
+Track supports visual and language-based tracking. Ex-
+tensive evaluations reveal the limitations of perspective
+trackers under full-spherical observations.
+• PanoUAV-Tracker (PUTrack). A geometry-aware track-
+ing framework is developed with latitude-adaptive search
+and periodic seam-aware sampling.
+2. Related Work
+2.1. Perspective Tracking
+Visual object tracking has progressed from Siamese
+architectures to Transformer- and sequence-based frame-
+works, supported by large-scale benchmarks such as Track-
+ 
+ 
+Real-world
+Simulation
+Data Collection
+Data Processing
+Cutting
+Key frame
+Raw Video
+Data Example
+Stage1
+Manual Target Selection
+Automatic Tracking
+Manual Correction (Per Frame)
+Too large
+Too small
+missing
+drifting
+Stage2
+Prompts
+360° ERP Frames
+Labels
+PanoUAV-Track
+A small excavator 
+near the intersection.
+filter
+Stage3
+Referring Expression Generation
+A gray sedan in the 
+left foreground.
+A silver sedan near 
+the center of the road.
+Figure 2. Construction pipeline of PanoUAV-Track. Tracking
+clips are constructed through manual initialization, automatic prop-
+agation, frame-level correction, and language annotation.
+ingNet [26], GOT-10k [11], and LaSOT [8]. Recent methods
+further strengthen target modeling and temporal reasoning
+[2, 4–6, 20, 36, 39]. UAV benchmarks extend this setting
+to aerial observation [17, 25, 40], while vision–language
+tracking introduces natural-language target specification
+[9, 19, 21, 23, 24, 30, 31, 42]. Despite differences in task
+formulation and model design, these benchmarks remain pre-
+dominantly based on perspective imagery. PanoUAV-Track
+complements them by evaluating both visual and language
+target specification under full-spherical UAV observation.
+2.2. Omnidirectional and Spherical Tracking
+Omnidirectional tracking extends visual observation be-
+yond perspective cameras while introducing spherical pro-
+jection challenges. 360VOT [10] establishes an omnidirec-
+tional single-object tracking benchmark with sphere-aware
+representations and evaluation. 360VOTS [33] extends this
+setting to tracking and segmentation, while PanoVOS [37]
+explores temporal consistency in panoramic video segmen-
+tation. Recent studies further investigate omnidirectional
+tracking on mobile robotic platforms. JRDB-PanoTrack [14]
+provides panoptic tracking annotations for robot-centered en-
+vironments, while OmniTrack [22] introduces QuadTrack for
+omnidirectional multi-object tracking on quadruped robots.
+However, these studies primarily focus on general panoramic
+videos or ground-level robotics. In contrast, PanoUAV-Track
+investigates full-spherical tracking from moving UAVs, char-
+acterized by varying aerial viewpoints and target motion
+across the spherical domain.
+3. Full-Spherical UAV Tracking
+3.1. Problem Formulation
+To maintain compatibility with conventional visual object
+tracking, we formulate omnidirectional UAV tracking in the
+2
+
+
+Table 1. Comparison of PanoUAV-Track with representative visual tracking benchmarks.
+Type
+Dataset
+Platform
+Observation
+Visual
+Language
+Sequences
+Frames
+Data
+Publication
+General-purpose
+Tracking
+TrackingNet [26]
+General
+Perspective
+✓
+✗
+30K+
+14M+
+Real
+ECCV’18
+GOT-10k [11]
+General
+Perspective
+✓
+✗
+10K+
+1.5M+
+Real
+TPAMI’21
+LaSOT [8]
+General
+Perspective
+✓
+✓
+1,400
+3.5M+
+Real
+CVPR’19
+TNL2K [31]
+General
+Perspective
+✓
+✓
+2,000
+1.24M
+Real+Sim.
+CVPR’21
+UAV
+Tracking
+UAV123 [25]
+UAV
+Perspective
+✓
+✗
+123
+112.6K
+Real+Sim.
+ECCV’16
+WebUAV-3M [40]
+UAV
+Perspective
+✓
+✓
+4,500
+3.3M+
+Real
+TPAMI’23
+Panoramic
+Tracking
+360VOT [10]
+Panorama
+360◦ERP
+✓
+✗
+120
+113K
+Real
+ICCV’23
+360VOS (360VOTS) [33]
+Panorama
+360◦ERP
+✓
+✗
+290
+242K
+Real+Sim.
+TPAMI’25
+PanoVOS [37]
+Panorama
+360◦ERP
+✓
+✗
+150
+14.0K
+Real
+ECCV’24
+QuadTrack [22]
+Quadruped
+360◦ERP
+✓
+✗
+32
+19.2K
+Real
+CVPR’25
+PanoUAV-Track
+UAV
+360◦× 180◦ERP
+✓
+✓
+1,895
+507.96K
+Real + Sim.
+Ours
+(a) Standard IoU
+(b) Circular IoU 
+ERP Seam
+Wo/
+Split
+W/
+Split
+GT1=
+(1610, 420,310, 240)
+GT=
+(1610, 420, 360, 240)
+Pred=
+(0, 410, 360, 240)
+Pred=
+(0, 410, 360, 240)
+GT2=
+(0,420,50,240)
+ERP Seam
+�����������= �. ����
+�����������= �. ����
+ERP plane
+ERP plane
+Figure 3. Overview of PanoUAV-Track dataset statistics and circular IoU. Left: Dataset statistics covering target diversity, trajectory
+characteristics, and spherical distributions. Right: Illustration of circular IoU, which handles seam-crossing bounding boxes.
+equirectangular projection (ERP) image. Let V = {𝐼𝑡}𝑇
+𝑡=1
+denote an omnidirectional UAV video sequence consisting
+of 𝑇ERP frames. Unlike conventional perspective tracking,
+which operates on a locally continuous image plane, ERP
+maps the spherical viewing domain S2 onto a rectangular
+image, introducing horizontal periodicity and projection dis-
+tortions. For a pixel location (𝑢, 𝑣) in an ERP frame of width
+𝑊and height 𝐻, the corresponding spherical longitude and
+latitude are defined as 𝜆= 2𝜋𝑢
+𝑊−𝜋, 𝜙= 𝜋
+2 −𝜋𝑣
+𝐻.
+At each time step 𝑡, the target is represented by an axis-
+aligned bounding box 𝐵𝑡= (𝑥𝑡, 𝑦𝑡, 𝑤𝑡, ℎ𝑡), where (𝑥𝑡, 𝑦𝑡)
+denotes the top-left corner and (𝑤𝑡, ℎ𝑡) specifies its width
+and height. The bounding-box center is further projected
+onto the sphere to obtain its corresponding spherical coordi-
+nates (𝜆𝑡, 𝜙𝑡).
+3.2. The PanoUAV-Track Benchmark
+Data Collection and Processing. As illustrated in Fig-
+ure 2, the construction of PanoUAV-Track follows a three-
+stage pipeline.
+We collect approximately 40 hours of
+real-world 8K omnidirectional videos using UAV-mounted
+panoramic cameras, supplemented with simulated aerial
+sequences. All videos are processed and converted into
+360◦× 180◦equirectangular projection (ERP) format. The
+resulting recordings are further segmented into tracking clips
+based on scene continuity and target visibility.
+Trajectory Annotation and Quality Control. We adopt
+a semi-automatic annotation pipeline combining manual ini-
+tialization, automatic tracking, and human verification. For
+each sequence, annotators first select the target and man-
+ually specify its initial bounding box. An existing tracker
+then propagates the target state across subsequent frames,
+followed by a filtering step to refine the initial trajectory. To
+ensure annotation quality, all generated trajectories undergo
+frame-level manual inspection and correction, particularly
+addressing inaccurate bounding-box sizes and missing anno-
+tations. Additional attention is paid to projection distortions
+and targets crossing the ERP seam. Automatic tracking
+serves only as an annotation aid, while the final ground-truth
+trajectories are determined through human verification and
+correction.
+Referring Expression Annotation. To support language-
+guided tracking, we further associate each target trajectory
+with a natural-language referring expression. Candidate
+descriptions are first generated with the assistance of Qwen3
+[38] based on the target and its surrounding visual context.
+These descriptions are subsequently reviewed and manually
+corrected at the sequence level to ensure target specificity
+and reduce ambiguity.
+The resulting benchmark provides aligned ERP video
+frames, frame-level bounding-box annotations, and language
+prompts. The same ground-truth trajectories are shared
+across visual-prompt, language-prompt, and joint visual–
+language tracking protocols, enabling consistent evaluation
+under different target-specification settings.
+3.3. Dataset Overview and Comparison
+Table 1 compares PanoUAV-Track with representative
+visual tracking benchmarks. Existing UAV tracking datasets
+primarily rely on perspective observations, while panoramic
+3
+
+
+PanoUAV-Tracker Blocks
+Unified Modeling
+Coordinate 
+Recovery
+Patch Embedding
+linear projection
+init_bbox：
+[990.0, 645.0,
+ 43.0, 75.0]
+Patch Embedding
+linear projection
+ERP Split Seam
+��
+��−1
+left edge
+right edge
+u=W
+u=0
+(b) Periodic bilinear
+Sampling (��� �)
+ERP frame ��−1 
+(360°✖180°)
+(a) Seam-crossing region 
+on ERP frame
+(b) SASC: Seam-aware Search Cropping
+(a) LAPS: Latitude-adaptive Patch Sampling
+Continuous 
+Search Crop
+North Pole
+�= 90°
+South Pole
+�=−90°
+Geometry
+-Aware 
+Search 
+Adapter
+(GASA)
+Adaptive 
+horizontal 
+expansion
+w/ LAPS
+wo/ LAPS
+��−1
+��
+ERP frame �� 
+(360°✖180°)
+Periodic bilinear
+Sampling
+from  �1
+getting expansion 
+factor ��
+Tracking 
+Head
+Figure 4. Overview of the proposed PanoUAV-Tracker. Left: The overall framework enables geometry-aware visual tracking in
+omnidirectional UAV imagery. Right: LAPS compensates for latitude-dependent ERP distortion, while SASC preserves spatial continuity.
+tracking benchmarks mainly focus on general omnidirec-
+tional scenarios. In contrast, PanoUAV-Track combines
+UAV-mounted full-spherical observations with both visual
+and language-based target specifications. The benchmark
+contains 1,895 sequences, 507,961 frames, and 2,872 an-
+notated objects across real-world daytime, nighttime, and
+simulated environments, exceeding the existing panoramic
+benchmarks in the table in both sequence and frame counts.
+Figure 3 presents the statistical characteristics of
+PanoUAV-Track. The dataset covers diverse target categories
+and trajectory durations across different domains. The spher-
+ical observation and motion distributions demonstrate di-
+verse viewing directions and target displacements, while the
+latitude-dependent variation in bounding-box area reflects
+the geometric distortions introduced by ERP projection. Fur-
+thermore, the presence of seam-crossing trajectories, partic-
+ularly in simulated environments, highlights the challenges
+of horizontal periodicity in omnidirectional tracking. These
+characteristics motivate seam-aware evaluation, as illustrated
+by the circular IoU comparison in Figure 3.
+3.4. Evaluation Protocol
+We adopt Success AUC and Normalized Precision (𝑃Norm)
+for image-space tracking evaluation, following the standard
+evaluation procedures used in classic visual object tracking.
+Specifically, Success AUC is computed using circular IoU,
+as illustrated in Figure 3 (right), which accounts for the
+horizontal periodicity of ERP images and properly handles
+bounding boxes crossing the projection seam.
+To further evaluate tracking performance in the spherical
+domain, we additionally report Angular Precision (𝑃Ang).
+The predicted and ground-truth target centers are mapped
+from ERP coordinates onto the unit sphere. Given spherical
+coordinates (𝜆, 𝜙), the corresponding unit vector is defined
+as
+s(𝜆, 𝜙) =
+
+cos 𝜙cos 𝜆
+cos 𝜙sin 𝜆
+sin 𝜙
+
+.
+(1)
+The angular localization error at frame 𝑡is computed as
+𝜃𝑡= arccos  clip  s𝑝
+𝑡· s𝑔
+𝑡, −1, 1 ,
+(2)
+where s𝑝
+𝑡and s𝑔
+𝑡denote the predicted and ground-truth unit
+vectors, respectively. Angular Precision is then defined as
+𝑃Ang = 1
+𝑁
+𝑁
+∑︁
+𝑡=1
+I
+
+𝜃𝑡≤𝜏Ang
+
+,
+(3)
+where 𝑁is the number of evaluated frames, I[·] is the indi-
+cator function, and 𝜏Ang = 3◦is the angular error threshold.
+This metric remains continuous across the ERP seam and
+directly measures spherical localization accuracy.
+4. PanoUAV-Tracker
+We propose PanoUAV-Tracker (PUTrack), a geometry-
+aware visual tracking framework for full-spherical UAV ob-
+servations. Unlike conventional perspective tracking, ERP
+introduces latitude-dependent geometric distortion and hor-
+izontal boundary discontinuities, leading to inconsistent
+search coverage, localization drift, and fragmented target
+observations, as shown in Figure 1. PUTrack addresses these
+challenges through a unified tracking pipeline that combines
+template-guided target localization, geometry-aware search
+construction, and consistent coordinate recovery. The overall
+framework is illustrated in Figure 4.
+4.1. Overall Framework
+Given an ERP video sequence V = {𝐼𝑡}𝑇
+𝑡=1 and an initial
+target bounding box 𝐵1, PUTrack aims to estimate the target
+bounding box b𝐵𝑡at each subsequent frame. PUTrack adopts
+4
+
+
+the one-stream template–search tracking paradigm of OS-
+Track [39], while explicitly modeling panoramic geometry
+during search construction and target localization.
+The initial target observation in 𝐼1 provides a fixed ap-
+pearance template 𝑍1. For each subsequent frame 𝑡≥2,
+PUTrack determines the search region from the previous pre-
+dicted bounding box b𝐵𝑡−1, with b𝐵1 = 𝐵1. The search center
+(𝑐𝑥, 𝑐𝑦) and the original search-region side length 𝐿𝑡are de-
+rived from b𝐵𝑡−1. PUTrack then constructs a geometry-aware
+search image 𝑆𝑡through Latitude-Adaptive Patch Sampling
+(Sec. 4.2) and Seam-Aware Search Cropping (Sec. 4.3).
+The template 𝑍1 and search image 𝑆𝑡are jointly processed
+by the tracking network:
+b𝐵𝑠
+𝑡=
+
+b𝑝𝑡, b𝑞𝑡, b𝑤𝑠
+𝑡,bℎ𝑠
+𝑡
+
+= F (𝑍1, 𝑆𝑡),
+(4)
+where F denotes the template–search tracking network,
+and b𝐵𝑠
+𝑡represents the predicted bounding box in normalized
+search coordinates.
+The prediction is subsequently transformed back into
+ERP coordinates through geometry-consistent coordinate
+recovery. The recovered bounding box b𝐵𝑡determines the
+search region for frame 𝑡+ 1, forming an autoregressive
+tracking process.
+4.2. Latitude-Adaptive Patch Sampling
+As illustrated in Figure 4(a), ERP introduces nonuniform
+geometric distortion across different latitudes. Consequently,
+conventional fixed-scale search regions provide inconsistent
+spherical coverage as target latitude varies. Given the pre-
+vious prediction b𝐵𝑡−1 = (b𝑥𝑡−1,b𝑦𝑡−1, b𝑤𝑡−1,bℎ𝑡−1), PUTrack
+obtains its center (𝑐𝑥, 𝑐𝑦) and the original search-region side
+length 𝐿𝑡. Following the ERP mapping defined in Sec. 3, the
+predicted target latitude is
+b𝜙𝑡−1 = 𝜋
+2 −𝜋𝑐𝑦
+𝐻.
+(5)
+Since the spherical metric satisfies 𝑑𝑠2 = cos2 𝜙𝑑𝜆2+𝑑𝜙2,
+horizontal geometric distortion increases toward the poles.
+To maintain latitude-adaptive search coverage, LAPS in-
+troduces a horizontal expansion factor:
+𝛼𝑡= clip
+
+1
+max(cos b𝜙𝑡−1, 𝜖)
+, 1, 𝛼max
+
+,
+(6)
+where 𝜖= 0.20 ensures numerical stability near the poles,
+and 𝛼max = 1.25 limits the maximum horizontal search
+expansion. The expansion factor is capped at 𝛼max = 1.25
+to avoid excessive search enlargement at high latitudes. This
+choice is supported by Table 4b.
+For normalized search-grid coordinates (𝑝, 𝑞) ∈[0, 1]2,
+the adapted ERP sampling coordinates are defined as
+𝑢𝑡(𝑝) = 𝑐𝑥+ 𝛼𝑡𝐿𝑡(𝑝−1
+2),
+𝑣𝑡(𝑞) = 𝑐𝑦+ 𝐿𝑡(𝑞−1
+2).
+(7)
+LAPS therefore expands horizontal search coverage ac-
+cording to target latitude while preserving the original verti-
+cal search extent and fixed network input resolution.
+4.3. Seam-Aware Search Cropping
+As shown in Figure 4(b), the left and right boundaries
+of ERP correspond to adjacent spherical directions. Con-
+ventional planar cropping ignores this periodic structure,
+potentially fragmenting targets crossing the ERP seam.
+SASC addresses this discontinuity through horizontal pe-
+riodic sampling. Using the adapted coordinates from Eq. (7),
+the search image is constructed as
+𝑆𝑡(𝑝, 𝑞) = Bper (𝐼𝑡, 𝑢𝑡(𝑝) mod 𝑊, 𝑣𝑡(𝑞)) ,
+(8)
+where Bper denotes bilinear interpolation with horizontal
+periodic boundary handling.
+When the sampling region extends beyond either hori-
+zontal boundary, pixels are sampled from the opposite side
+of the ERP image. This reconstructs a spatially continuous
+search observation for seam-crossing targets.
+4.4. Geometry-Consistent Coordinate Recovery
+Since PUTrack constructs search regions using latitude-
+adaptive sampling, network predictions must be mapped
+back into the original ERP coordinates to preserve geometric
+consistency.
+Let b𝐵𝑠
+𝑡= (b𝑝𝑡, b𝑞𝑡, b𝑤𝑠
+𝑡,bℎ𝑠
+𝑡) denote the predicted bound-
+ing box in normalized search coordinates, where (b𝑝𝑡, b𝑞𝑡)
+represents its top-left corner.
+The
+corresponding
+ERP
+bounding
+box
+b𝐵𝑡
+=
+(b𝑥𝑡,b𝑦𝑡, b𝑤𝑡,bℎ𝑡) is recovered through
+b𝑥𝑡= 𝑢𝑡(b𝑝𝑡) mod 𝑊,
+b𝑦𝑡= 𝑣𝑡(b𝑞𝑡),
+b𝑤𝑡= 𝛼𝑡𝐿𝑡b𝑤𝑠
+𝑡,
+bℎ𝑡= 𝐿𝑡bℎ𝑠
+𝑡.
+(9)
+The horizontal position is normalized periodically, while
+the predicted box width is preserved without truncation.
+Therefore, seam-crossing targets retain a geometrically con-
+sistent bounding-box representation across ERP boundaries.
+The recovered prediction b𝐵𝑡is subsequently used to con-
+struct the search region at frame 𝑡+ 1. Through the co-
+ordinated use of LAPS, SASC, and geometry-consistent
+recovery, PUTrack enables continuous full-spherical target
+tracking without ground-truth updates or additional network
+forward passes.
+5. Experiments
+5.1. Experimental Setup
+Data Split.
+We partition PanoUAV-Track into
+training, validation, and test sets following a scene-
+5
+
+
+Table 2. Zero-shot tracking on PanoUAV-Track. Models are evaluated using their originally released pretrained checkpoints without
+fine-tuning on PanoUAV-Track. AUCC and AUCS measure full-trajectory and seam-frame robustness, respectively. FPS reports the mean ±
+standard deviation over three repetitions on a single NVIDIA H100. Bold and underlined mean values indicate the best and second-best
+results, respectively. Red values denote the improvements over the second-best methods.
+Evaluation setup
+All targets (%)
+Seam robustness (%)
+Method
+Publication
+Inference Checkpoint
+Visual
+Language
+AUC ↑
+PNorm ↑
+PAng ↑
+AUCC ↑
+AUCS ↑
+FPS
+Foundation Models
+SAM 2.1 [28]
+ICLR’25
+sam2.1_hiera_large.pt
+✓
+✗
+76.81
+83.80
+87.00
+62.97
+57.70
+7.92 ± 0.11
+SAM2Long [7]
+ICCV’25
+sam2.1_hiera_large.pt
+✓
+✗
+76.77
+83.68
+86.91
+62.40
+57.83
+5.39 ± 0.01
+SAM 3.1 [3]
+ICLR’26
+sam3.1_multiplex.pt
+✓
+✗
+73.51
+81.53
+85.10
+65.70
+55.52
+9.79 ± 0.08
+Visual-only Trackers
+OSTrack [39]
+ECCV’22
+OSTrack_ep0300.pth.tar
+✓
+✗
+75.00
+79.80
+83.33
+63.81
+57.92
+143.74 ± 1.71
+ORTrack [32]
+CVPR’25
+ORTrack_ep0300.pth.tar
+✓
+✗
+72.74
+77.57
+81.69
+62.98
+57.19
+214.85 ± 12.21
+SGLATrack [34]
+CVPR’25
+sglatrack_ep0297.pth.tar
+✓
+✗
+73.33
+78.05
+82.30
+63.11
+57.21
+234.45 ± 6.15
+ODTrack [41]
+AAAI’24
+ODTrack_ep0300.pth.tar
+✓
+✗
+76.55
+81.64
+85.91
+63.56
+58.03
+63.23 ± 0.93
+MCITrack [12]
+AAAI’25
+MCITRACK_ep0300.pth.tar
+✓
+✗
+77.63
+81.23
+84.60
+66.37
+59.76
+44.38 ± 0.47
+MambaLCT [18]
+AAAI’25
+MambaLCT_ep0280.pth.tar
+✓
+✗
+75.25
+81.06
+85.68
+63.37
+57.23
+73.76 ± 2.25
+LETrack [35]
+CVPR’26
+LETrack_ep0298.pth.tar
+✓
+✗
+74.31
+79.01
+83.25
+63.35
+57.65
+122.66 ± 2.86
+Language-only Trackers
+JointNLT [42]
+CVPR’23
+JointNLT_ep0300.pth.tar
+✗
+✓
+16.06
+16.05
+14.37
+32.67
+29.76
+46.00 ± 2.31
+MVLM [27]
+CVPR’26
+MVLM_TF.pth.tar
+✗
+✓
+9.42
+9.26
+10.06
+9.98
+2.99
+83.98 ± 2.07
+Vision–Language Trackers
+DUTrack [19]
+CVPR’25
+DUTrack_ep0045.pth.tar
+✓
+✓
+75.75
+81.07
+85.99
+62.68
+56.72
+12.46 ± 0.26
+UVLTrack [24]
+AAAI’24
+UVLTrack_ep0300.pth.tar
+✓
+✓
+74.80
+79.23
+82.99
+64.26
+57.91
+65.60 ± 0.60
+UETrack [13]
+CVPR’26
+uetrack_base.tar
+✓
+✓
+62.75
+67.03
+71.44
+61.23
+54.66
+154.82 ± 9.51
+PUTrack
+Ours
+OSTrack_ep0300.pth.tar
+✓
+✗
+84.75+7.12
+89.26+5.46
+95.79+8.79
+86.52+20.15
+85.92+26.16
+112.73 ± 4.62
+Table 3. In-domain tracking on PanoUAV-Track. Trackers are trained on the PanoUAV-Track training split and evaluated on its test split.
+Pretrained encoders and auxiliary teacher models are retained where applicable, as detailed in the appendix.
+Evaluation setup
+All targets (%)
+Seam robustness (%)
+Method
+Publication
+Backbone
+Visual
+Language
+AUC ↑
+PNorm ↑
+PAng ↑
+AUCC ↑
+AUCS ↑
+FPS
+Visual-only Trackers
+OSTrack [39]
+ECCV’22
+ViT-B/16
+✓
+✗
+77.15
+81.54
+84.99
+62.28
+56.34
+143.74 ± 1.71
+ORTrack [32]
+CVPR’25
+DeiT-T/16
+✓
+✗
+74.06
+78.96
+82.81
+59.69
+54.04
+214.85 ± 12.21
+SGLATrack [34]
+CVPR’25
+DeiT-T/16-Distilled
+✓
+✗
+75.49
+80.24
+83.75
+60.48
+54.73
+234.45 ± 6.15
+Language-only Trackers
+JointNLT [42]
+CVPR’23
+Swin-B/4
+✗
+✓
+51.85
+55.07
+56.11
+48.35
+41.36
+46.00 ± 2.31
+MVLM [27]
+CVPR’26
+Fast-iTPN-B/16
+✗
+✓
+8.14
+7.30
+7.50
+11.67
+5.31
+83.98 ± 2.07
+Vision–Language Trackers
+DUTrack [19]
+CVPR’25
+Fast-iTPN-B/16
+✓
+✓
+76.61
+80.85
+85.16
+62.98
+56.94
+12.46 ± 0.26
+UVLTrack [24]
+AAAI’24
+ViT-B/16
+✓
+✓
+77.49
+81.73
+85.18
+63.37
+57.31
+65.60 ± 0.60
+UETrack [13]
+CVPR’26
+Fast-iTPN-T/16-6L
+✓
+✓
+76.23
+81.42
+84.73
+61.67
+55.98
+154.82 ± 9.51
+PUTrack
+Ours
+ViT-B/16
+✓
+✗
+86.57+9.08
+91.14+9.41
+97.70+12.52
+85.64+22.27
+84.48+27.17
+112.73 ± 4.62
+disjoint protocol. The resulting splits contain 1,160/166
+/569 sequences, 1,799/277/796 annotated targets, and
+327,091/47,100/133,770 frames for training, validation, and
+testing, respectively. Each subset includes daytime, night-
+time, and simulated sequences to ensure coverage of diverse
+observation conditions.
+Implementation Details. All experiments are conducted
+on a server equipped with eight NVIDIA H100 GPUs.
+For fair inference-speed comparisons, we benchmark each
+tracker separately on a single NVIDIA H100 GPU under a
+unified evaluation protocol. Each measurement is repeated
+three times, and we report the mean FPS and standard de-
+viation. FPS measurements include tracking inference and
+preprocessing but exclude image decoding and first-frame
+initialization.
+Evaluation Metrics. We evaluate visual-prompt and
+joint visual–language tracking using Success AUC, Normal-
+ized Precision (𝑃Norm), and Angular Precision (𝑃Ang). All
+tracking metrics follow the evaluation protocol described in
+Sec. 3.4, with further details provided in the appendix.
+5.2. Benchmarking Existing Trackers
+We evaluate representative foundation models, visual-
+only, language-only, and vision–language trackers on
+PanoUAV-Track under zero-shot and in-domain settings, as
+reported in Tables 2 and 3.
+Zero-shot Evaluation. Table 2 reports results using offi-
+cially released checkpoints without fine-tuning on PanoUAV-
+Track. Among visual-only trackers, MCITrack achieves
+the highest AUC (77.63%) and seam-frame AUC (59.76%).
+SAM 2.1 reaches 76.81% AUC, while DUTrack achieves
+75.75%, showing competitive performance from foundation
+and vision–language models. In contrast, language-only
+trackers perform poorly, with JointNLT and MVLM obtain-
+ing 16.06% and 9.42% AUC, respectively. Most visual and
+vision–language trackers show lower accuracy near ERP
+boundaries, indicating limited robustness to seam crossings.
+In-domain Evaluation. As shown in Table 3, training
+on PanoUAV-Track generally improves tracking accuracy.
+OSTrack increases from 75.00% to 77.15% AUC, while
+ORTrack and SGLATrack gain 1.32 and 2.16 points, respec-
+6
+
+
+Table 4. Zero-Shot Ablation Analysis of GASA. (a) Component
+ablation. (b) Horizontal search expansion. (c) Cropping strategies
+and complete framework adapters.
+(a) Component ablation.
+Method
+LAPS SASC AUC ↑AUCC ↑AUCS ↑
+FPS
+OSTrack
+×
+×
+75.00
+63.81
+57.92
+143.74
++ LAPS
+✓
+×
+75.63
+64.46
+58.20
+121.70
++ SASC
+×
+✓
+84.06
+86.35
+85.58
+120.91
++ Full GASA
+✓
+✓
+84.75
+86.52
+85.92
+112.73
+(b) Horizontal search expansion analysis.
+Strategy
+Parameter
+Overall ↑Equator ↑Middle ↑Polar ↑
+Fixed
+𝛼= 1.00
+84.06
+83.45
+85.75
+79.37
+Fixed
+𝛼= 1.10
+84.38
+83.14
+86.02
+80.28
+Fixed
+𝛼= 1.20
+84.57
+82.97
+86.31
+81.22
+Fixed
+𝛼= 1.25
+84.41
+82.77
+86.10
+80.65
+Fixed
+𝛼= 1.30
+84.38
+82.89
+86.13
+81.12
+Fixed
+𝛼= 1.40
+83.73
+79.72
+85.46
+81.54
+Fixed
+𝛼= 1.50
+82.93
+77.95
+84.95
+81.38
+Lat.-adaptive
+𝛼max = 1.25
+84.75
+83.82
+86.20
+80.77
+Lat.-adaptive
+𝛼max = 1.50
+84.41
+82.63
+85.63
+81.47
+Lat.-adaptive
+𝛼max = 1.75
+84.13
+82.44
+85.34
+80.64
+Lat.-adaptive
+𝛼max = 2.00
+83.43
+82.15
+84.64
+79.52
+(c) Cropping strategies and framework adapters.
+ID Strategy / Adapter
+Fwd. AUC ↑AUCC ↑
+AUCS ↑
+FPS
+All
+Real
+Sim.
+S0 Constant Padding
+1
+75.63
+64.46
+58.20 40.04 64.45 121.70
+S1 Border Replication
+1
+75.57
+64.05
+57.06 38.18 63.57 107.93
+S2 Reflection Padding
+1
+74.31
+61.18
+53.23 37.26 58.74 105.66
+S3 Periodic Nearest
+1
+83.41
+85.55
+85.35 74.97 88.93 113.84
+S4 Periodic Bilinear
+1
+84.75
+86.52
+85.92 75.28 89.58 112.73
+S5 BFoV/eBFoV
+1
+65.57
+75.22
+73.41 39.91 84.96
+83.22
+S6 Dual-view Search
+1–2
+84.55
+86.44
+85.42 74.48 89.19 103.09
+F0 360VOT adapter
+1
+77.38
+75.10
+74.58 68.62 76.63
+82.21
+F1 360VOTS adapter
+1
+66.85
+71.08
+68.05 48.64 74.74
+80.06
+Notes. AUCS is the overall seam accuracy; Real AUCS and Sim. AUCS are computed
+separately for real and simulated targets. S0–S6 share the same LAPS configuration;
+F0–F use independent spherical search policies. LAPS uses 𝜖= 0.20 and 𝛼max =
+1.25 in (a) and (c). SASC denotes periodic bilinear search sampling. All variants in
+(b) enable SASC.
+tively. UVLTrack achieves the highest baseline AUC of
+77.49%, and UETrack improves from 62.75% to 76.23%.
+Language-only trackers show mixed results:
+JointNLT
+reaches 51.85%, whereas MVLM remains below 10%. De-
+spite these improvements, seam-crossing targets remain chal-
+lenging. OSTrack achieves 77.15% overall AUC but only
+56.34% seam-frame AUC, with similar degradation observed
+for UVLTrack. This suggests that in-domain training alone
+is insufficient to handle ERP boundary crossings, motivating
+the geometry-aware design of PUTrack.
+5.3. Performance Comparison of PUTrack
+Zero-shot Evaluation. As shown in Table 2, PUTrack
+achieves the highest AUC of 84.75% among the methods
+evaluated in the main comparison, outperforming MCITrack
+by 7.12 percentage points. For seam-crossing targets, PU-
+Track achieves 86.52% AUCC and 85.92% AUCS, exceeding
+the best baselines by 20.15 and 26.16 points, respectively.
+Compared with OSTrack using the same pretrained check-
+point, PUTrack improves AUC by 9.75 points while main-
+taining 112.73 FPS.
+In-domain Evaluation. Table 3 shows that PUTrack
+Table 5. Zero-shot perspective-to-spherical generalization on
+PanoUAV-Track. Δgeo = AUCERP −AUCPER. Green values indi-
+cate performance degradation from perspective to spherical.
+Day
+Night
+Sim.
+Method
+AUCPER AUCERP Δgeo AUCPER AUCERP
+Δgeo
+AUCPER AUCERP
+Δgeo
+OSTrack [39]
+85.73
+78.13
+-7.60
+85.09
+72.62
+-12.47
+92.10
+71.75
+-20.35
+ORTrack [32]
+83.97
+76.66
+-7.31
+82.22
+66.38
+-15.84
+90.67
+70.65
+-20.02
+ODTrack [41]
+84.62
+78.25
+-6.37
+85.96
+81.48
+-4.48
+91.68
+71.14
+-20.54
+MCITrack [12]
+86.03
+79.76
+-6.27
+86.37
+78.13
+-8.24
+93.58
+74.18
+-19.40
+UVLTrack [24]
+84.57
+77.63
+-6.94
+83.02
+72.97
+-10.05
+92.11
+71.67
+-20.44
+DUTrack [19]
+83.42
+77.52
+-5.90
+84.94
+81.09
+-3.85
+89.61
+70.00
+-19.61
+PUTrack (Ours)
+85.60
+84.75
+-0.85
+85.30
+77.02
+-8.28
+92.01
+89.26
+-2.75
+Table 6. Zero-shot geometry-aware analysis on PanoUAV-Track.
+All scores are AUC (%) without fine-tuning. Equator, Middle,
+and Polar correspond to absolute latitudes < 30◦, [30◦, 60◦), and
+≥60◦. Seam denotes ±15-frame windows around GT-center jumps
+|𝑐𝑥,𝑡−𝑐𝑥,𝑡−1| > 𝑊/2 and differs from the metric AUCS.
+Latitude Distortion
+Seam Discontinuity
+Method
+Overall
+Equator
+Middle
+Polar
+M−E
+P−M
+Non-Seam
+Seam
+Drop
+Foundation Models
+SAM 2.1 [28]
+76.81
+72.52
+79.96
+79.87
++7.44
+-0.09
+77.91
+38.21
+-39.70
+SAM2Long [7]
+76.77
+70.46
+79.41
+80.41
++8.95
++1.00
+76.76
+38.74
+-38.02
+SAM 3.1 [3]
+73.51
+71.86
+76.91
+79.79
++5.05
++2.88
+75.98
+44.22
+-31.76
+Visual-only Trackers
+OSTrack [39]
+75.00
+72.04
+78.61
+73.28
++6.57
+-5.33
+76.47
+34.68
+-41.79
+ORTrack [32]
+72.74
+67.41
+76.44
+66.96
++9.03
+-9.48
+72.66
+34.63
+-38.03
+SGLATrack [34]
+73.33
+67.41
+76.64
+68.05
++9.23
+-8.59
+72.86
+34.89
+-37.97
+ODTrack [41]
+76.55
+71.81
+78.77
+77.94
++6.96
+-0.83
+76.90
+35.82
+-41.08
+MCITrack [12]
+77.63
+75.79
+80.50
+76.61
++4.71
+-3.89
+79.31
+37.86
+-41.45
+MambaLCT [18]
+75.25
+72.67
+78.41
+74.94
++5.74
+-3.47
+76.79
+36.10
+-40.69
+Language-only Trackers
+JointNLT [42]
+16.06
+22.27
+7.35
+6.43
+-14.92
+-0.92
+13.87
+12.62
+-1.25
+MVLM [27]
+9.42
+6.85
+11.06
+12.82
++4.21
++1.76
+9.58
+3.40
+-6.18
+Vision–Language Trackers
+DUTrack [19]
+75.75
+71.15
+78.12
+77.76
++6.97
+-0.36
+76.26
+36.00
+-40.26
+UVLTrack [24]
+74.80
+71.25
+78.18
+70.55
++6.93
+-7.63
+75.50
+37.99
+-37.51
+UETrack [13]
+62.75
+56.60
+66.16
+44.77
++9.56
+-21.39
+60.62
+31.91
+-28.71
+Average
+65.46
+62.15
+67.61
+63.58
++5.46
+-4.02
+65.82
+32.65
+-33.17
+PUTrack (Ours)
+84.75
+83.82
+86.20
+80.77
++2.38
+-5.43
+84.62
+83.43
+-1.19
+maintains its advantage after training on PanoUAV-Track. It
+achieves 86.57% AUC, surpassing the second-best UVL-
+Track by 9.08 points. The improvements are more pro-
+nounced for seam-crossing targets, with AUCC and AUCS
+exceeding UVLTrack by 22.27 and 27.17 points. Compared
+with the in-domain OSTrack baseline, PUTrack improves
+AUC by 9.42 points and operates at 112.73 FPS. These re-
+sults demonstrate the effectiveness of PUTrack, particularly
+near ERP boundaries.
+5.4. Further Analysis of GASA
+We show the contributions of LAPS and SASC, search
+expansion, and seam-aware cropping strategies in Table 4.
+Component Ablation. Table 4a shows that LAPS im-
+proves baseline AUC from 75.00% to 75.63%, while SASC
+provides a larger gain of 9.06 percentage points. Combin-
+ing both achieves the best AUC of 84.75%, exceeding the
+baseline by 9.75 points. Full GASA also improves AUCC
+and AUCS from 63.81% and 57.92% to 86.52% and 85.92%,
+respectively, highlighting the contribution of seam-aware
+sampling to full-spherical tracking.
+Search Expansion Analysis. Table 4b compares fixed
+and latitude-adaptive expansion. Among fixed strategies,
+𝛼= 1.20 achieves the highest overall AUC of 84.57%, while
+increasing 𝛼to 1.50 reduces it to 82.93%. Latitude-adaptive
+7
+
+
+wo/LAPS
+w/LAPS
+LAPS mitigates bounding-box drift caused by latitude-dependent ERP distortion
+wo/LAPS
+w/LAPS
+wo/SASC
+w/SASC
+wo/SASC
+w/SASC
+SASC enhances tracking robustness across the ERP split seam
+Figure 5. Qualitative visualization of LAPS and SASC on PanoUAV-Track. Comparisons with (w/) and without (w/o) each component
+are shown across successive frames. LAPS mitigates latitude-dependent drift, while SASC improves stability near the ERP split seam.
+expansion with 𝛼max = 1.25 achieves the best overall AUC
+of 84.75%. Although 𝛼= 1.40 yields the highest polar AUC
+of 81.54%, it degrades equatorial performance, suggesting
+that search context should vary with latitude.
+Seam-Aware Cropping and Framework Analysis. In
+Table 4c, S0–S6 share the same LAPS configuration,
+whereas F0–F1 are complete temporal adapters. Conven-
+tional padding achieves only 74.31–75.63% AUC and 53.23–
+58.20% AUCS. Periodic sampling improves seam handling,
+with S4 reaching 84.75% AUC and 85.92% AUCS. The F0
+360VOT and F1 360VOTS adapters obtain 77.38/74.58%
+and 66.85/68.05% in AUC/AUCS, respectively. Both remain
+below S4 in these metrics, extending the comparison beyond
+individual cropping operators.
+Qualitative Analysis. Figure 5 illustrates the complemen-
+tary effects of LAPS and SASC. LAPS mitigates bounding-
+box drift associated with latitude-dependent ERP distortion,
+improving localization under challenging spherical projec-
+tions. SASC preserves continuity across the ERP split seam,
+reducing abrupt localization errors and stabilizing tracking
+during seam crossings.
+Real versus Simulated Seam Robustness. Table 4c
+further separates real and simulated seam accuracy, with
+real data combining daytime and nighttime sequences. Us-
+ing the same full-GASA run with 84.75% overall AUC, S4
+achieves 75.28%/89.58% real/simulated AUCS, compared
+with 39.64%/64.22% for OSTrack. The gains of 35.64 and
+25.36 percentage points demonstrate improvements in both
+domains. S4 also exceeds F0 and F1.
+5.5. Perspective-to-Spherical Analysis
+RQ1. How Well Do Perspective Trackers Generalize to
+Full-Spherical UAV Observation? We evaluate generaliza-
+tion using matched ERP and perspective observations, defin-
+ing the gap as Δgeo = AUCERP −AUCPER. Table 5 shows
+that all six baselines degrade under ERP observations. PU-
+Track also exhibits negative gaps but substantially reduces
+daytime and simulation degradation, indicating improved
+generalization to full-spherical UAV tracking.
+RQ2. Does the Generalization Gap Persist across Day-
+time, Nighttime, and Simulated Domains? Table 5 reveals
+gaps across all three domains. Baseline AUC degradation
+ranges from 5.90–7.60 points during daytime, 3.85–15.84
+at night, and 19.40–20.54 in simulation. PUTrack reduces
+the corresponding gaps to 0.85, 8.28, and 2.75 points. It
+also achieves the highest daytime and simulation ERP AUC,
+exceeding the best baselines by 4.99 and 15.08 points, respec-
+tively. These results show daytime and simulation improve-
+ments, while nighttime generalization remains challenging.
+RQ3. Is Tracking Degradation Systematically Associated
+with Spherical Projection Geometry? Table 6 analyzes per-
+formance across latitude regions and ERP seam crossings.
+Baseline AUC increases by 5.46 points on average from
+Equator to Middle, then decreases by 4.02 points toward
+Polar. PUTrack achieves 84.75 overall AUC and reduces the
+Equator-to-Middle variation to 2.38 points, although its Po-
+lar AUC remains 5.43 points below Middle. It also reduces
+the seam drop from the baseline average of 33.17 points to
+1.19 points, achieving 83.43 AUC within seam-event win-
+dows. These findings indicate that PUTrack substantially
+alleviates ERP seam discontinuity, while latitude-dependent
+distortion remains challenging.
+6. Conclusion
+We introduce PanoUAV-Track, a large-scale benchmark for
+full-spherical UAV tracking across daytime, nighttime, and
+simulated scenarios. Extensive evaluations reveal a substan-
+tial perspective-to-spherical generalization gap, highlight-
+ing challenges from latitude-dependent distortion and ERP
+seam crossings. To address this gap, we propose PanoUAV-
+Tracker (PUTrack), a geometry-aware tracking framework
+incorporating the Geometry-Aware Search Adapter (GASA).
+By combining latitude-adaptive search and seam-aware sam-
+pling, PUTrack achieves robust full-spherical tracking with-
+out modifying the underlying network. Experiments demon-
+strate consistent improvements under both zero-shot and
+in-domain settings, particularly for seam-crossing targets.
+8
+
+
+Future Work.
+We plan to investigate ultra-long
+panoramic tracking sequences, focusing on long-term track-
+ing robustness under full-spherical observations, including
+accumulated drift and target re-acquisition.
+LLM Usage Statement
+Qwen3 was used to generate initial target descriptions for
+subsequent author review and correction. ChatGPT was used
+to assist with language polishing and manuscript formatting.
+GPT-6 was used to assist dataset integrity auditing. The
+authors reviewed and verified all resulting annotations and
+text and take full responsibility for the final dataset and
+manuscript.
+References
+[1] Hongjun An, Wenhan Hu, Sida Huang, Siqi Huang, Ruanjun
+Li, Yuanzhi Liang, Jiawei Shao, Yiliang Song, Zihan Wang,
+Cheng Yuan, et al. Ai flow: Perspectives, scenarios, and
+approaches. Vicinagearth, 3(1):1, 2026. 1
+[2] Wenrui Cai, Qingjie Liu, and Yunhong Wang. Hiptrack: Vi-
+sual tracking with historical prompts. In 2024 IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition (CVPR),
+pages 19258–19267. IEEE, 2024. 2
+[3] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. Sam 3: Segment anything with concepts. In
+International conference on learning representations, pages
+138846–138923, 2026. 6, 7
+[4] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang,
+and Huchuan Lu. Transformer tracking. In 2021 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 8122–8131. IEEE, 2021. 2
+[5] Xin Chen, Houwen Peng, Dong Wang, Huchuan Lu, and Han
+Hu. Seqtrack: Sequence to sequence learning for visual object
+tracking. In 2023 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 14572–14581. IEEE,
+2023.
+[6] Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu.
+Mixformer: End-to-end tracking with iterative mixed atten-
+tion. In Proceedings of the IEEE/CVF conference on com-
+puter vision and pattern recognition, pages 13608–13618,
+2022. 2
+[7] Shuangrui Ding, Rui Qian, Xiaoyi Dong, Pan Zhang, Yuhang
+Zang, Yuhang Cao, Yuwei Guo, Dahua Lin, and Jiaqi Wang.
+Sam2long: Enhancing sam 2 for long video segmentation
+with a training-free memory tree. In 2025 IEEE/CVF In-
+ternational Conference on Computer Vision (ICCV), pages
+13614–13624. IEEE, 2025. 6, 7
+[8] Heng Fan, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia
+Yu, Hexin Bai, Yong Xu, Chunyuan Liao, and Haibin Ling.
+Lasot: A high-quality benchmark for large-scale single object
+tracking. In 2019 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 5369–5378. IEEE,
+2019. 2, 3
+[9] Qi Feng, Vitaly Ablavsky, Qinxun Bai, and Stan Sclaroff.
+Siamese natural language tracker: Tracking by natural lan-
+guage descriptions with siamese trackers. In 2021 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 5847–5856. IEEE, 2021. 2
+[10] Huajian Huang, Yinzhe Xu, Yingshu Chen, and Sai-Kit Ye-
+ung. 360vot: A new benchmark dataset for omnidirectional
+visual object tracking. In 2023 IEEE/CVF International Con-
+ference on Computer Vision (ICCV), pages 20509–20519.
+IEEE, 2023. 1, 2, 3, 5
+[11] Lianghua Huang, Xin Zhao, and Kaiqi Huang. Got-10k: A
+large high-diversity benchmark for generic object tracking in
+the wild. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 43(5):1562–1577, 2021. 2, 3
+[12] Ben Kang, Xin Chen, Simiao Lai, Yang Liu, Yi Liu, and Dong
+Wang. Exploring enhanced contextual information for video-
+level object tracking. In Proceedings of the AAAI conference
+on artificial intelligence, pages 4194–4202, 2025. 6, 7, 8
+[13] Ben Kang, Jie Zhao, Xin Chen, Wanting Geng, Bin Zhang, Lu
+Zhang, Dong Wang, and Huchuan Lu. Uetrack: A unified and
+efficient framework for single object tracking. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 20890–20901, 2026. 6, 7
+[14] Duy Tho Le, Chenhui Gou, Stavya Datta, Hengcan Shi, Ian
+Reid, Jianfei Cai, and Hamid Rezatofighi. Jrdb-panotrack:
+An open-world panoptic segmentation and tracking robotic
+dataset in crowded human environments. In 2024 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 22325–22334. IEEE, 2024. 2
+[15] Bingyu Li, Da Zhang, Zhiyuan Zhao, Junyu Gao, and Xue-
+long Li.
+Stitchfusion: Weaving any visual modalities to
+enhance multimodal semantic segmentation. In Proceedings
+of the 33rd ACM International Conference on Multimedia,
+pages 1308–1317, 2025. 1
+[16] Bingyu Li, Haocheng Dong, Da Zhang, Zhiyuan Zhao, Hao
+Sun, and Junyu Gao. Exploring efficient open-vocabulary
+segmentation in the remote sensing. In Proceedings of the
+AAAI Conference on Artificial Intelligence, pages 5982–5991,
+2026.
+[17] Hengyou Li, Xinyan Liu, and Guorong Li. A benchmark for
+uav-view natural language-guided tracking. Electronics, 13
+(9):1706, 2024. 1, 2
+[18] Xiaohai Li, Bineng Zhong, Qihua Liang, Guorong Li, Zhiyi
+Mo, and Shuxiang Song. Mambalct: Boosting tracking via
+long-term context state space model. In Proceedings of the
+AAAI conference on artificial intelligence, pages 4986–4994,
+2025. 6, 7
+[19] Xiaohai Li, Bineng Zhong, Qihua Liang, Zhiyi Mo, Jian
+Nong, and Shuxiang Song. Dynamic updates for language
+adaptation in visual-language tracking. In 2025 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 19165–19174. IEEE, 2025. 2, 6, 7, 8
+[20] Shiyi Liang, Yifan Bai, Yihong Gong, and Xing Wei. Au-
+toregressive sequential pretraining for visual tracking. In
+2025 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 7254–7264. IEEE, 2025. 2
+[21] Xinqi Liu, Li Zhou, Zikun Zhou, Jianqiu Chen, and Zhenyu
+He. Mambavlt: Time-evolving multimodal state space model
+9
+
+
+for vision-language tracking. In 2025 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), pages
+8731–8741. IEEE, 2025. 2
+[22] Kai Luo, Hao Shi, Sheng Wu, Fei Teng, Mengfei Duan,
+Chang Huang, Yuhang Wang, Kaiwei Wang, and Kailun Yang.
+Omnidirectional multi-object tracking. In 2025 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 21959–21969. IEEE, 2025. 2, 3
+[23] Ding Ma and Xiangqian Wu. Tracking by natural language
+specification with long short-term context decoupling. In
+2023 IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), pages 13966–13975. IEEE, 2023. 2
+[24] Yinchao Ma, Yuyang Tang, Wenfei Yang, Tianzhu Zhang,
+Jinpeng Zhang, and Mengxue Kang. Unifying visual and
+vision-language tracking via contrastive learning. In Proceed-
+ings of the AAAI conference on artificial intelligence, pages
+4107–4116, 2024. 2, 6, 7
+[25] Matthias Mueller, Neil Smith, and Bernard Ghanem. A bench-
+mark and simulator for uav tracking. In Computer Vision –
+ECCV 2016, pages 445–461, Cham, 2016. Springer Interna-
+tional Publishing. 1, 2, 3
+[26] Matthias Muller, Adel Bibi, Silvio Giancola, Salman Alsub-
+aihi, and Bernard Ghanem. Trackingnet: A large-scale dataset
+and benchmark for object tracking in the wild. In Proceed-
+ings of the European conference on computer vision (ECCV),
+pages 300–317, 2018. 2, 3
+[27] Dae-Hyeon Park, Mina Baek, Jeong-Hun Ha, Chan-Seop
+Park, Jamshidjon Ganiev, and Seung-Hwan Bae. MVLM:
+Template-free tracking via vision-language margin confidence
+and memory-gated tracking. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+pages 35156–35165, 2026. 6, 7
+[28] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu,
+Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle,
+Chloe Rolland, Laura Gustafson, et al. Sam 2: Segment
+anything in images and videos. In International Conference
+on Learning Representations, pages 28085–28128, 2025. 6, 7
+[29] Jiawei Shao and Xuelong Li. Ai flow at the network edge.
+IEEE Network, 40(1):330–336, 2026. 1
+[30] Yanyan Shao, Shuting He, Qi Ye, Yuchao Feng, Wenhan
+Luo, and Jiming Chen. Context-aware integration of lan-
+guage and visual references for natural language tracking. In
+2024 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 19208–19217. IEEE, 2024. 2
+[31] Xiao Wang, Xiujun Shu, Zhipeng Zhang, Bo Jiang, Yaowei
+Wang, Yonghong Tian, and Feng Wu. Towards more flexible
+and accurate object tracking with natural language: Algo-
+rithms and benchmark. In 2021 IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+13758–13768. IEEE, 2021. 2, 3
+[32] You Wu, Xucheng Wang, Xiangyang Yang, Mengyuan Liu,
+Dan Zeng, Hengzhou Ye, and Shuiwang Li.
+Learning
+occlusion-robust vision transformers for real-time uav track-
+ing. In 2025 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 17103–17113. IEEE,
+2025. 1, 6, 7, 8
+[33] Yinzhe Xu, Huajian Huang, Yingshu Chen, and Sai-Kit Ye-
+ung. 360vots: Visual object tracking and segmentation in
+omnidirectional videos. IEEE Transactions on Pattern Analy-
+sis and Machine Intelligence, 47(11):9785–9797, 2025. 1, 2,
+3, 5
+[34] Chaocan Xue, Bineng Zhong, Qihua Liang, Yaozong Zheng,
+Ning Li, Yuanliang Xue, and Shuxiang Song. Similarity-
+guided layer-adaptive vision transformer for uav tracking. In
+2025 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 6730–6740. IEEE, 2025. 1, 6, 7
+[35] Chaocan Xue, Qihua Liang, Bineng Zhong, Yanting Zu, Yuan-
+liang Xue, Haiying Xia, and Shuxiang Song. Toward low-cost
+yet effective temporal learning for uav tracking. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 42538–42548, 2026. 6, 7
+[36] Bin Yan, Houwen Peng, Jianlong Fu, Dong Wang, and
+Huchuan Lu. Learning spatio-temporal transformer for visual
+tracking. In 2021 IEEE/CVF international conference on
+computer vision (ICCV), pages 10428–10437. IEEE, 2021. 2
+[37] Shilin Yan, Xiaohao Xu, Renrui Zhang, Lingyi Hong, Wen-
+chao Chen, Wenqiang Zhang, and Wei Zhang.
+Panovos:
+Bridging non-panoramic and panoramic views with trans-
+former for video segmentation. In European Conference on
+Computer Vision, pages 346–365. Springer, 2024. 1, 2, 3
+[38] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan
+Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang,
+Chenxu Lv, et al. Qwen3 technical report. arXiv preprint
+arXiv:2505.09388, 2025. 3
+[39] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and
+Xilin Chen. Joint feature learning and relation modeling for
+tracking: A one-stream framework. In European conference
+on computer vision, pages 341–357. Springer, 2022. 2, 5, 6, 7
+[40] Chunhui Zhang, Guanjie Huang, Li Liu, Shan Huang, Yinan
+Yang, Xiang Wan, Shiming Ge, and Dacheng Tao. Webuav-
+3m: A benchmark for unveiling the power of million-scale
+deep uav tracking. IEEE Transactions on Pattern Analysis
+and Machine Intelligence, 45(7):9186–9205, 2023. 1, 2, 3
+[41] Yaozong Zheng, Bineng Zhong, Qihua Liang, Zhiyi Mo,
+Shengping Zhang, and Xianxian Li. Odtrack: Online dense
+temporal token learning for visual tracking. In Proceedings
+of the AAAI conference on artificial intelligence, pages 7588–
+7596, 2024. 6, 7, 8
+[42] Li Zhou, Zikun Zhou, Kaige Mao, and Zhenyu He. Joint
+visual grounding and tracking with natural language specifi-
+cation. In 2023 IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 23151–23160. IEEE,
+2023. 2, 6, 7
+10
+
+
+PanoUAV-Track: Full-Spherical UAV Visual Tracking in the Wild
+Supplementary Material
+A. Cross-Dataset Generalization
+To assess cross-dataset generalization, we evaluate OSTrack
+and PUTrack on 360Tracking, comprising 21 sequences and
+9,909 annotated frames. Both methods share identical check-
+points and initialization conditions within each comparison,
+without dataset-specific training or hyperparameter tuning.
+Following our circular-IoU protocol, evaluation covers 9,725
+valid visible frames, including 383 seam frames from 13 se-
+quences. As shown in Table 7, PUTrack improves AUC and
+AUCS from 54.41% and 32.31% to 72.23% and 67.18%, re-
+spectively, using the released weights. With weights trained
+on our dataset, PUTrack achieves consistent improvements
+of 11.18 and 29.31 percentage points in AUC and AUCS,
+respectively. These results support the transferability of the
+proposed seam-aware search mechanism, particularly un-
+der seam-crossing conditions. However, the lower absolute
+performance of the checkpoints trained on our dataset and
+the limited benchmark scale warrant caution when drawing
+broader conclusions about cross-dataset generalization.
+B. Data Audit
+B.1. Data Acquisition and Scene-Disjoint Split
+The real-world videos were independently collected using
+Antigravity A1 and DJI Avata 360. All videos were exported
+at 30 fps. The original ERP frames were recorded at 8K
+resolution and subsequently resized to 1920 × 960 for an-
+notation and evaluation. Each recording session captured
+a different real-world scene. We therefore identify scenes
+using their recording timestamps and perform dataset
+splitting at the scene level. All clips and target trajectories
+collected at the same recording time are assigned to the same
+subset, ensuring that the training, validation, and test scenes
+are mutually disjoint.
+B.2. Core Data Audit and Conclusions
+How we checked the dataset split.
+We read every se-
+quence listed in the train, validation, and test files. For each
+sequence, we counted its image frames and annotated targets
+and checked that its image and annotation folders exist. The
+current release contains 1,895 sequences, 507,961 image
+frames, and 2,872 target trajectories.
+We then checked whether clips from the same record-
+ing had been placed in different splits. For real videos, clips
+with the same recording timestamp were treated as one group.
+Suffixes used for short clips and key-frame clips were re-
+moved before this comparison. If a full timestamp was not
+available, we used the original clip name. For simulation
+Table 7. Cross-dataset evaluation on 360Tracking (21 sequences).
+Each paired comparison uses identical OSTrack checkpoints with-
+out dataset-specific adaptation. All metrics are reported as percent-
+ages under our circular-box evaluation protocol.
+Weights
+Method
+AUC↑
+AUCC↑
+AUCS↑
+Released
+OSTrack
+54.41
+40.64
+32.31
+Released
+PUTrack
+72.23
+73.72
+67.18
+PanoUAV-trained
+OSTrack
+46.11
+34.51
+23.08
+PanoUAV-trained
+PUTrack
+57.29
+54.34
+52.39
+Table 8. Audited inventory of the current final_V2 split. Frames
+are counted once per sequence, whereas targets are independent
+annotated trajectories.
+Split
+Domain
+Groups
+Sequences
+Frames
+Targets
+Train
+Day
+199
+666
+207,071
+1,148
+Night
+154
+424
+78,827
+581
+Sim.
+21
+70
+41,193
+70
+Val.
+Day
+73
+95
+28,518
+181
+Night
+34
+61
+10,264
+86
+Sim.
+10
+10
+8,318
+10
+Test
+Day
+187
+190
+62,225
+384
+Night
+110
+121
+21,783
+154
+Sim.
+258
+258
+49,762
+258
+Total
+1,046
+1,895
+507,961
+2,872
+data, clips from the same source episode were treated as one
+group. This produced 1,046 groups: 459 day, 298 night, and
+289 simulation groups. We found no group in more than one
+split. Table 8 gives the full counts.
+The split check shows that clips from the same known
+recording or simulation episode do not appear in different
+splits. It also confirms that the day, night, and simulation test
+sets all contain seam cases. The domain-wise seam results
+are therefore calculated from actual test samples.
+Latitude and seam coverage.
+We divide visible post-
+initialization GT frames into equatorial (|𝜙| < 30◦), mid-
+latitude (30◦≤|𝜙| < 60◦), and polar (|𝜙| ≥60◦) strata. A
+seam frame contains two visible GT segments at the ERP
+boundary. Table 9 shows that all three domains contain
+seam cases, although their natural distributions differ sub-
+stantially. In particular, simulation contains many equatorial
+seam frames but relatively few polar frames; the balanced
+re-annotation audit must therefore be reported separately
+from the natural test distribution.
+C. Geometry-Aware Evaluation Details
+We provide additional details of the geometry-aware evalu-
+ation protocol used in PanoUAV-Track. Our analysis con-
+1
+
+
+Table 9. Valid test frames by GT-center latitude. Parentheses give
+the number of seam-split frames within each cell. Initialization and
+invisible-GT frames are excluded.
+Domain
+Equatorial
+Mid-latitude
+Polar
+Day
+36,135 (541)
+66,440 (815)
+14,907 (479)
+Night
+7,165 (82)
+13,885 (216)
+4,497 (195)
+Sim.
+41,458 (11,048)
+7,264 (2,601)
+583 (40)
+siders three complementary aspects: latitude-dependent per-
+formance variation, ERP seam crossings, and perspective-
+to-spherical generalization. The first two are evaluated by
+regrouping existing tracking predictions, while the last re-
+quires additional inference on matched perspective views.
+C.1. Latitude-Dependent Analysis
+We investigate how tracking accuracy varies with the spher-
+ical latitude of the target. Given an ERP frame of height
+𝐻and a ground-truth bounding box 𝐵𝑡= (𝑥𝑡, 𝑦𝑡, 𝑤𝑡, ℎ𝑡),
+where (𝑥𝑡, 𝑦𝑡) denotes its top-left corner, the target center is
+defined as
+𝑐𝑥,𝑡=
+
+𝑥𝑡+ 𝑤𝑡
+2
+
+mod 𝑊,
+𝑐𝑦,𝑡= 𝑦𝑡+ ℎ𝑡
+2 .
+(10)
+The modulo operation maps the horizontal center to the
+canonical ERP range [0, 𝑊).
+The corresponding spherical latitude is
+𝜙𝑡= 𝜋
+2 −𝜋𝑐𝑦,𝑡
+𝐻
+.
+(11)
+Target observations are divided into three regions:
+Equator :
+|𝜙𝑡| < 30◦,
+Middle :
+30◦≤|𝜙𝑡| < 60◦,
+Polar :
+|𝜙𝑡| ≥60◦.
+(12)
+We compute circular IoU for each valid target frame and
+independently evaluate Success AUC by pooling observa-
+tions within each latitude region. The resulting scores are
+denoted by 𝐴𝑈𝐶𝐸, 𝐴𝑈𝐶𝑀, and 𝐴𝑈𝐶𝑃.
+The latitude-dependent performance changes are
+Δ𝑀−𝐸= 𝐴𝑈𝐶𝑀−𝐴𝑈𝐶𝐸,
+Δ𝑃−𝑀= 𝐴𝑈𝐶𝑃−𝐴𝑈𝐶𝑀.
+(13)
+Negative values indicate lower performance in the higher-
+latitude region. All results are derived from the same track-
+ing predictions without additional inference. This analysis
+characterizes latitude-dependent performance differences
+without assuming that projection distortion is their sole
+cause.
+C.2. ERP Seam-Crossing Analysis
+We further evaluate tracking performance near the horizontal
+ERP boundary. A seam-crossing event is identified when the
+horizontal ground-truth target center exhibits a displacement
+exceeding half the image width between two consecutive
+visible frames:
+|𝑐𝑥,𝑡−𝑐𝑥,𝑡−1| > 𝑊
+2 ,
+(14)
+where 𝑐𝑥,𝑡denotes the horizontal coordinate of the
+ground-truth bounding-box center, and 𝑊denotes the ERP
+image width. The center coordinates are represented within
+the canonical ERP horizontal range [0, 𝑊).
+For each detected crossing at frame 𝑡𝑐, we consider a
+temporal neighborhood
+Wseam = [𝑡𝑐−15, 𝑡𝑐+ 15].
+(15)
+Valid observations within the union of these windows are
+assigned to the Seam subset, while the remaining observa-
+tions form the Non-Seam subset. Overlapping windows are
+counted only once.
+Circular-IoU-based Success AUC is independently com-
+puted for both subsets using frame-level pooling. The signed
+seam performance change is
+Δseam = 𝐴𝑈𝐶seam −𝐴𝑈𝐶non.
+(16)
+A negative value indicates lower tracking accuracy near
+seam crossings. This analysis uses existing ERP tracking
+predictions without additional network inference.
+D. Evaluation Metrics
+We summarize the evaluation metrics used in PanoUAV-
+Track. Let V denote the set of valid evaluation frames
+for a target trajectory, excluding initialization frames and
+observations with invisible ground-truth targets. The number
+of valid evaluation frames is 𝑇= |V|. Missing predictions
+on valid target frames are treated as tracking failures.
+Success AUC.
+Given a ground-truth bounding box 𝐵𝑡and
+a prediction b𝐵𝑡, let
+𝑞𝑡= cIoU(𝐵𝑡, b𝐵𝑡),
+(17)
+where cIoU accounts for horizontal ERP periodicity. For
+missing predictions, we set 𝑞𝑡= 0.
+To ensure consistent treatment of zero-overlap predic-
+tions, the success indicator is defined as
+I𝑡(𝜏) =
+(
+I[𝑞𝑡> 0],
+𝜏= 0,
+I[𝑞𝑡≥𝜏],
+0 < 𝜏≤1.
+(18)
+The success score at threshold 𝜏is
+2
+
+
+𝑆(𝜏) = 1
+𝑇
+∑︁
+𝑡∈V
+I𝑡(𝜏).
+(19)
+The success AUC is defined as
+AUC =
+∫1
+0
+𝑆(𝜏) 𝑑𝜏.
+(20)
+In implementation, the success curve is numerically inte-
+grated over uniformly spaced IoU thresholds. Overall AUC
+is computed independently for each target trajectory and
+then averaged across targets.
+Normalized Precision.
+Let (𝑐𝑥,𝑡, 𝑐𝑦,𝑡) and (b𝑐𝑥,𝑡, b𝑐𝑦,𝑡) de-
+note the ground-truth and predicted bounding-box centers,
+respectively.
+The horizontal center distance accounts for ERP period-
+icity:
+𝑑𝑥
+𝑡=
+(b𝑐𝑥,𝑡mod 𝑊) −(𝑐𝑥,𝑡mod 𝑊)
+ ,
+e𝑑𝑥
+𝑡= min(𝑑𝑥
+𝑡, 𝑊−𝑑𝑥
+𝑡).
+(21)
+The normalized center error is
+𝑒𝑡
+norm =
+v
+u
+t e𝑑𝑥
+𝑡
+𝑤𝑡
+!2
++
+b𝑐𝑦,𝑡−𝑐𝑦,𝑡
+ℎ𝑡
+2
+,
+(22)
+where 𝑤𝑡and ℎ𝑡denote the ground-truth bounding-box
+width and height, respectively. For missing predictions, the
+normalized center error is assigned +∞.
+The normalized precision curve is defined as
+𝑃(𝑟) = 1
+𝑇
+∑︁
+𝑡∈V
+I
+
+𝑒𝑡
+norm ≤𝑟
+
+.
+(23)
+Normalized Precision is obtained by integrating this curve
+over the threshold interval [0, 0.5] and normalizing by the
+interval length:
+𝑃Norm = 1
+0.5
+∫0.5
+0
+𝑃(𝑟) 𝑑𝑟.
+(24)
+Angular Precision.
+Angular localization error is com-
+puted from the spherical coordinates of predicted and ground-
+truth target centers.
+Let (𝜆𝑡, 𝜙𝑡) and (b𝜆𝑡, b𝜙𝑡) denote their respective spherical
+longitudes and latitudes, obtained from the corresponding
+ERP center coordinates.
+The great-circle angular error is
+𝑒𝑡
+ang = arccos
+
+clip   sin 𝜙𝑡sin b𝜙𝑡
++ cos 𝜙𝑡cos b𝜙𝑡cos(𝜆𝑡−b𝜆𝑡), −1, 1
+.
+(25)
+For missing predictions, the angular error is assigned +∞.
+Angular Precision is evaluated using a fixed threshold of
+3◦:
+𝑃Ang = 1
+𝑇
+∑︁
+𝑡∈V
+I
+
+𝑒𝑡
+ang ≤3◦
+.
+(26)
+This metric measures localization accuracy on the view-
+ing sphere and remains continuous across the ERP seam.
+Seam Robustness.
+We additionally report AUCC and
+AUCS for targets whose ground-truth boxes cross the ERP
+seam.
+The former evaluates their complete valid trajectories,
+while the latter considers only frames in which their ground-
+truth boxes intersect the seam. Both metrics are averaged
+across targets.
+Unlike these target-averaged metrics, the Seam/Non-
+Seam analysis in Sec. C.2 uses frame-pooled observations
+within temporal windows around seam crossings.
+Metric Computation Details.
+All reported metrics fol-
+low a unified evaluation protocol and exclude initialization
+frames and invisible ground-truth observations. Missing
+predictions on valid frames contribute failures to the corre-
+sponding metric.
+Success AUC. We evaluate circular-IoU-based success at 21
+uniformly spaced thresholds 𝜏𝑘= 0.05𝑘, 𝑘= 0, . . . , 20.
+At 𝜏0 = 0, success requires strictly positive overlap,
+whereas all remaining thresholds use 𝑞𝑡≥𝜏𝑘.
+The success curve is integrated using the trapezoidal rule:
+AUC =
+19
+∑︁
+𝑘=0
+0.05
+2
+[𝑆(𝜏𝑘) + 𝑆(𝜏𝑘+1)] .
+(27)
+The same numerical integration protocol is applied to
+AUCC and AUCS.
+Normalized Precision. Horizontal center displacement is
+computed using the shortest periodic distance e𝑑𝑡
+𝑥defined
+above.
+Horizontal and vertical errors are normalized by the width
+and height of the ground-truth circular bounding box, respec-
+tively.
+The resulting normalized precision curve is evaluated at
+thresholds 𝑟𝑘= 0.01𝑘, 𝑘= 0, . . . , 50.
+Normalized Precision is obtained as
+𝑃Norm = 1
+0.5
+49
+∑︁
+𝑘=0
+0.01
+2
+[𝑃(𝑟𝑘) + 𝑃(𝑟𝑘+1)] .
+(28)
+All reported scores are multiplied by 100 and expressed
+as percentages.
+3
+
+
+D.1. Target-Centric Perspective Evaluation
+We compare tracking performance on original ERP se-
+quences and target-centric perspective sequences generated
+from the same videos. Each pair preserves the target identity
+and source-frame correspondence, allowing performance to
+be examined under these two observation settings.
+Perspective sequence generation and annotation.
+For
+each source-visible frame, the virtual camera is oriented to-
+ward the target center while retaining temporal lag in camera
+orientation and residual target motion. A rectilinear view
+with horizontal and vertical fields of view of 90◦is rendered
+at 480 × 480 resolution by inverse ray mapping and bilinear
+interpolation. ERP sampling wraps horizontally and clamps
+vertical coordinates to the valid image range. Ground-truth
+bounding boxes are then annotated directly in the rendered
+perspective images; they are not obtained by projecting the
+ERP bounding boxes. Source annotations are used only to
+construct the offline perspective sequences. During tracking,
+each method receives the first-frame box annotated in its
+respective representation and the language or category input
+required by its protocol. No subsequent ground-truth boxes
+or virtual-camera parameters are supplied to the tracker.
+Fairness of Perspective-to-Spherical Evaluation.
+Our
+evaluation focuses on visual target tracking rather than ac-
+tive viewpoint planning. Therefore, using ground-truth target
+locations to guide virtual camera orientation during offline
+perspective sequence generation is a reasonable data con-
+struction strategy. This process primarily ensures target
+visibility within the limited perspective field of view while
+retaining temporal lag in camera orientation and residual
+target motion. Importantly, ground-truth information is used
+exclusively for offline data generation and is not provided
+to trackers during inference. All evaluated trackers receive
+identical perspective sequences under the same evaluation
+protocol, ensuring fairness across methods. The perspective
+𝐴𝑈𝐶𝑃𝐸𝑅serves as a reference for quantifying performance
+degradation when transferring from conventional perspective
+observations to full-spherical ERP observations, not as an
+independent benchmark for active camera tracking. Con-
+sequently, this comparison characterizes the generalization
+gap between the two observation settings while maintaining
+consistent evaluation conditions across trackers.
+Matched evaluation.
+For each paired trajectory, evalua-
+tion uses the intersection of source-frame indices with valid
+annotations in both representations, excluding initialization
+and invisible-target frames. Perspective predictions are eval-
+uated against the newly annotated perspective boxes using
+planar IoU, while ERP predictions are evaluated using cir-
+cular IoU. Both metrics use the same intersection-over-
+union definition; circular IoU accounts for horizontal
+periodicity when computing intersection and union areas.
+Their scores are therefore comparable under the same
+overlap-based scoring protocol. Success AUC is computed
+using trapezoidal integration over 21 thresholds from 0 to 1
+and averaged equally across valid targets.
+Interpretation.
+We report the performance difference
+Δgeo = 𝐴𝑈𝐶ERP −𝐴𝑈𝐶PER,
+(29)
+where negative values indicate higher AUC on the target-
+centric perspective sequences. This comparison measures
+performance under two specified observation settings. Target
+centering is an explicit property of the perspective dataset
+construction. It changes apparent motion, target position,
+field of view, and image sampling. Moreover, IoU-based
+evaluation in each representation is not generally projection-
+invariant. Accordingly, the difference characterizes these
+paired settings and is not attributed solely to ERP projection
+distortion.
+E. Search-Cropping Strategies with LAPS
+This section specifies the seven search-cropping strategies
+(S0–S6) compared in Table 4c.
+Shared setup.
+All variants use the same released OSTrack
+checkpoint, first-frame initialization, and constant-padded
+ERP template (128 × 128, template factor 2), without addi-
+tional training. The search factor is 4, and the search input is
+resized to 256 × 256. Each variant applies the same LAPS
+rule (𝜖= 0.20, 𝛼max = 1.25) to its previous prediction to
+determine the search center and extent. The variants run
+independently, so their predicted states may diverge over
+time. S0–S5 use one network forward per frame; S6 uses
+one or two. For the planar crops in S0–S4 and S6, vertical
+overflow is zero padded.
+S0: Constant padding.
+The LAPS-expanded search rect-
+angle is cropped directly from the ERP image. Samples
+outside the image are filled with zeros, and the resulting
+patch is resized using bilinear interpolation. S0 therefore
+serves as the LAPS-enabled planar-padding control; it does
+not connect content across the horizontal ERP seam.
+S1: Border replication.
+Horizontal out-of-bounds sam-
+ples are replaced by the nearest left or right boundary pixel,
+followed by bilinear resizing. This extends the boundary
+appearance into the missing region instead of introducing
+zeros, but does not recover scene content from the opposite
+ERP boundary.
+4
+
+
+S2: Reflection padding.
+Horizontal out-of-bounds sam-
+ples are obtained by reflecting image content at the corre-
+sponding boundary using BORDER_REFLECT_101, which
+does not repeat the boundary pixel. The patch is then resized
+bilinearly. Unlike periodic sampling, reflection creates mir-
+rored local content.
+S3: Periodic nearest.
+When the search rectangle crosses
+the horizontal seam, integer source columns are wrapped
+modulo the ERP width 𝑊and gathered into a contiguous
+patch. Otherwise, the original constant-padded crop is used.
+The entire patch is resized using nearest-neighbor interpo-
+lation on every frame. Thus, S3 changes the resizing policy
+globally, not only at seam pixels.
+S4: Periodic bilinear.
+S4 uses the same horizontal wrap-
+ping and patch assembly as S3, but applies bilinear resizing.
+For rectangles that do not cross the seam, it retains the orig-
+inal constant-padded bilinear crop. This strategy joins the
+actual scene content on both sides of the ERP seam within a
+single search input. It is the SASC configuration used in the
+selected GASA variant.
+S5:
+BFoV/eBFoV reprojection.
+S5 uses the official
+360VOT geometry implementation [10, 33] to construct a
+local view centered on the previous prediction, with zero
+roll. For an ERP image of size 𝑊× 𝐻and LAPS-expanded
+search dimensions (𝑤𝑐, ℎ𝑐), the angular extents are
+𝜃ℎ= min(360◦, 360◦𝑤𝑐/𝑊),
+𝜃𝑣= min(180◦, 180◦ℎ𝑐/𝐻).
+(30)
+The released automatic rule selects a tangent view when
+both extents are at most 90◦, and a spherical view other-
+wise. The view is sampled at 256 × 256 using the library’s
+nearest-neighbor remapping and boundary conventions. The
+predicted local box is clipped to the local image, inverse-
+projected through the stored sampling map, and converted
+to a circular ERP box for the next state update.
+The template remains in ERP, and the search extent fol-
+lows LAPS. S5 evaluates this reprojection operator within
+the host tracker, not the complete 360VOT/360VOTS tem-
+poral framework: it does not include their separate angular
+search policy, loss-state holding, progressive expansion, or
+full-frame recovery.
+S6: Dual-view search.
+S6 first evaluates the constant-
+padded view. If the predicted search rectangle crosses the
+seam, it additionally evaluates a periodic-bilinear view, pro-
+vided that this patch contains valid image content and differs
+from the first patch. Both views use the same pre-update
+state, template, and model weights.
+Each candidate is considered supported when at least 50%
+of its predicted box is covered by valid image pixels; padding
+and out-of-view area count as unsupported. If only one
+candidate is supported, it is selected. If both are supported,
+selection uses the peak-to-sidelobe ratio (PSR) of their Hann-
+windowed response maps, excluding a 5 × 5 neighborhood
+around each peak. The periodic candidate is selected only
+when its PSR is higher. Ties and cases with two unsupported
+candidates retain the constant-padded candidate. The tracker
+updates its state once from the selected prediction, without
+averaging candidates or using ground truth.
+F0–F1: Complete framework adapters.
+F0 (360VOT)
+and F1 (360VOTS) use exactly the same released OSTrack
+ViT-B/16 epoch-300 checkpoint as GASA, verified by SHA-
+256, without fine-tuning. Both project the template and
+search region to local BFoV/eBFoV views and inverse-
+project predictions to update the spherical state. F0 fixes the
+template/search factors to 2/4 without validation-set tuning
+and accepts every finite prediction. F1 fixes SR Ratio = 2
+and Max Loss = 4, and selects SR Min = 5◦and confidence
+threshold 𝜏= 0.25 from {5◦, 90◦} × {0, 0.25, 0.5, 0.75} us-
+ing target-averaged AUC on all 277 validation targets; these
+settings are frozen before testing. Rejected F1 predictions
+count as failures and trigger search-region holding, progres-
+sive expansion, and ultimately full-ERP recovery. Projected
+inputs may differ in appearance and target scale from OS-
+Track’s perspective training crops, but no controlled ablation
+isolates this effect. Since F0 and F1 share the same template
+projection, their performance gap cannot be attributed to
+that factor alone; their search and validity/recovery policies
+also differ. Projection-related domain mismatch therefore
+remains a possible, unverified contributor to F1’s lower per-
+formance.
+F. Implementation Details
+Dataset and Experimental Settings.
+All experiments fol-
+low the fixed PanoUAV-Track training, validation, and test
+splits, containing 1,160, 166, and 569 sequences, respec-
+tively.
+The test set contains 796 annotated target tasks,
+of which 792 provide valid post-initialization observations.
+Each target is evaluated independently. We consider two
+evaluation regimes. In the zero-shot setting, trackers are
+evaluated using their released pretrained checkpoints with-
+out fine-tuning on PanoUAV-Track. In the in-domain setting,
+trackers are trained using the PanoUAV-Track training split
+with their respective training objectives and architectures.
+Training Configuration.
+In-domain models use check-
+points selected according to their respective training pro-
+tocols, as detailed in Table 10. All models are trained for
+100 epochs using AdamW, while retaining their respective
+5
+
+
+Table 10. In-domain training configurations on PanoUAV-Track. All models are trained for 100 epochs using AdamW. LR denotes the
+base learning rate, and Batch/GPU denotes the per-GPU training batch size.
+Method
+Backbone Initialization
+Epochs
+Base LR
+Batch/GPU
+Global Batch
+LR Schedule
+Test Checkpoint
+Visual-only Trackers
+OSTrack
+MAE ViT-B/16
+100
+4 × 10−4
+64
+512
+×0.1 at epoch 80
+95
+ORTrack
+DeiT-T/16
+100
+4 × 10−4
+64
+512
+×0.1 at epoch 80
+90
+SGLATrack
+Distilled DeiT-T/16
+100
+4 × 10−4
+64
+512
+×0.1 at epoch 80
+100
+Language-Initialized Trackers
+JointNLT
+Swin-B + BERT
+100
+2 × 10−3
+8
+64
+Warm-up; drops at 67/83/97
+100
+MVLM
+Fast-iTPN-B + CLIP
+100
+5 × 10−4
+16
+128
+Warm-up; drop at 90
+100
+Vision–Language Trackers
+DUTrack
+Fast-iTPN-B/16
+100
+1 × 10−4
+16
+128
+×0.1 at epoch 89
+100
+UVLTrack
+MAE ViT-B/16 + BERT
+100
+4 × 10−4
+16
+128
+Cosine annealing
+100
+UETrack
+Fast-iTPN-T/16
+100
+1 × 10−4
+128
+1024
+×0.1 at epoch 80
+100
+training objectives and optimization schedules. Generic pre-
+trained visual and language encoders are used where applica-
+ble, and UETrack additionally employs a pretrained teacher
+for knowledge distillation. Model-specific batch sizes and
+learning-rate schedules are preserved to maintain compati-
+bility with their original implementations.
+Initialization and Inference.
+Visual-only trackers use
+first-frame bounding-box initialization. Vision–language
+trackers additionally receive a target referring expression.
+Language-initialized trackers do not receive a ground-truth
+initialization box but still process video observations.
+All baseline methods retain their native image preprocess-
+ing, search-region construction, and temporal update proce-
+dures. For segmentation-based methods, predicted masks
+are converted to bounding boxes for consistent evaluation.
+Geometry-Aware Adaptation.
+GASA is applied to the
+search-image branch of existing tracking architectures.
+LAPS adapts horizontal search coverage according to target
+latitude, while SASC performs periodic sampling across the
+horizontal ERP seam. The original template representation,
+tracking network, and prediction head remain unchanged.
+GASA requires no additional optimization and retains a sin-
+gle network forward pass per tracking frame.
+G. Model-Specific Implementation Details
+We summarize the implementation configurations of the eval-
+uated tracking methods. All models follow the common eval-
+uation protocol described in Sec. F. For zero-shot evaluation,
+we use released pretrained checkpoints without fine-tuning.
+For in-domain evaluation, we preserve the model-specific
+architectures and training objectives while adapting them to
+PanoUAV-Track.
+G.1. Foundation Models
+SAM 2.1 [28]. We use the Hiera-L variant with a 1024×1024
+input resolution. The first-frame bounding box is supplied
+as a visual prompt, followed by native video mask propaga-
+tion. Predicted masks are converted into bounding boxes for
+evaluation.
+SAM2Long [7]. We adopt the Hiera-L backbone and re-
+tain the original memory-tree inference strategy with three
+propagation pathways. The same initialization and mask-to-
+box conversion protocol as SAM 2.1 is used. No additional
+training is performed.
+SAM 3.1 [3]. We evaluate the multiplex video predictor us-
+ing a 1008 × 1008 input resolution. The initial bounding box
+is converted into the native instance-prompt representation,
+and subsequent masks are propagated through the video pre-
+dictor. We use the SAM 3.1 Object Multiplex release with
+the official 𝑠𝑎𝑚3.1𝑚𝑢𝑙𝑡𝑖𝑝𝑙𝑒𝑥.𝑝𝑡checkpoint.
+G.2. Visual-Only Trackers
+OSTrack [39]. We adopt the ViT-B/16 configuration with
+128 × 128 template and 256 × 256 search inputs. The cor-
+responding crop factors are 2 and 4. In-domain training
+initializes the backbone from generic MAE pretraining. The
+evaluation checkpoint is selected using validation AUC.
+ORTrack [32].
+We use the DeiT-T/16 backbone with
+128×128 template and 256×256 search inputs. The original
+occlusion-aware tracking mechanism is retained. In-domain
+training employs generic DeiT initialization, with the evalu-
+ation checkpoint selected on the validation split.
+SGLATrack [34]. We employ the distilled DeiT-T/16 back-
+bone with 128 × 128 template and 256 × 256 search inputs.
+The native similarity-guided layer-adaptive mechanism is
+preserved. In-domain training initializes the visual encoder
+from pretrained DeiT weights.
+ODTrack [41]. We adopt the ViT-B/16 configuration with
+192 × 192 templates and a 384 × 384 search image. The
+original temporal token modeling and memory-update mech-
+anisms are retained. Only zero-shot evaluation is reported.
+MCITrack [12]. We use the Fast-iTPN-B/16 backbone with
+five 112 × 112 template representations and a 224 × 224
+search input. The native contextual modeling and temporal
+update procedures are preserved. Only released pretrained
+6
+
+
+weights are evaluated.
+MambaLCT [18]. We adopt the HiViT-B backbone with
+two 128 × 128 templates and a 256 × 256 search image.
+The original long-term contextual modeling and memory-
+update procedures are retained. Evaluation uses the released
+checkpoint.
+LETrack [35]. We adopt the DeiT-Tiny/16 backbone with
+128 × 128 template and 256 × 256 search inputs. The corre-
+sponding crop factors are 2 and 4. The temporal representa-
+tion contains 16 historical tokens. The backbone is initial-
+ized from the distilled DeiT-Tiny pretrained weights. For
+evaluation, we directly use the official baseline_WOCE
+checkpoint from epoch 298, without further fine-tuning on
+PanoUAV-Track.
+G.3. Language-Initialized Trackers
+JointNLT [42]. We adopt the Swin-B visual encoder and
+BERT-based language encoder. The initial target is identified
+through full-image language grounding without ground-truth
+box initialization. Subsequent tracking follows the native
+template-based inference procedure. In-domain training uses
+pretrained visual and language encoders.
+MVLM [27]. We evaluate the template-free variant with a
+Fast-iTPN-B/16 visual backbone and a CLIP-based language
+encoder. The model performs language-guided localization
+on full-image observations resized to 224 × 224. No ground-
+truth target box is supplied during initialization.
+G.4. Vision–Language Trackers
+DUTrack [19]. We employ the Fast-iTPN-B/16 backbone
+with three 128×128 templates and a 256×256 search image.
+Both the target bounding box and referring expression are
+provided. The original dynamic language adaptation and
+temporal tracking mechanisms are retained. In-domain train-
+ing initializes the visual backbone from generic pretrained
+weights.
+UVLTrack [24]. We adopt a ViT-B/16 visual backbone and
+BERT-based language encoder. Template and search resolu-
+tions are 128 × 128 and 256 × 256. The native multimodal
+tracking and template-update procedures are preserved. In-
+domain training uses generic pretrained visual and language
+encoders.
+UETrack [13]. We employ the six-layer Fast-iTPN-T/16
+visual encoder with 112×112 template and 224×224 search
+inputs. Both visual and language prompts are provided. In-
+domain training retains the original teacher-based knowledge
+distillation protocol using a pretrained tracking teacher.
+G.5. GASA Integration
+MCITrack, ODTrack, ORTrack, and DUTrack with
+GASA. We integrate GASA into the search-image branch of
+MCITrack, ODTrack, ORTrack, and DUTrack while preserv-
+ing their original tracking networks and model-specific com-
+ponents. The proposed adapter combines latitude-adaptive
+horizontal search expansion with periodic seam-aware sam-
+pling. Predictions are mapped back into ERP coordinates
+using geometry-consistent coordinate recovery. For zero-
+shot evaluation, GASA is directly applied to the released
+pretrained models of MCITrack, ODTrack, ORTrack, and
+DUTrack. For in-domain evaluation, GASA is applied to
+the corresponding PanoUAV-Track-trained ORTrack and
+DUTrack models without additional optimization. Each
+baseline–GASA pair uses the same checkpoint. Both config-
+urations preserve a single tracking-network forward pass per
+frame.
+Effectiveness across trackers. Table 11 shows consistent
+improvements across all four trackers. Under zero-shot
+evaluation, GASA improves the overall AUC of MCITrack,
+ODTrack, ORTrack, and DUTrack by 9.04, 9.10, 8.74, and
+9.36 percentage points, respectively. The gains also persist
+under in-domain evaluation: GASA improves ORTrack from
+74.06 to 82.31 AUC and DUTrack from 76.61 to 82.84 AUC.
+Since each baseline–GASA pair uses the same checkpoint,
+these improvements demonstrate the benefit of the inference-
+time adapter without additional model optimization.
+Seam robustness. The largest improvements occur within
+seam-event windows. In the zero-shot setting, GASA in-
+creases Seam AUC by 48.84, 47.25, 46.07, and 47.44 per-
+centage points for MCITrack, ODTrack, ORTrack, and DU-
+Track, respectively. Meanwhile, the absolute gap between
+Seam and Non-Seam AUC decreases from 38.03–41.45 per-
+centage points to at most 1.48 percentage points. A similar
+trend holds for the in-domain models: Seam AUC improves
+by 43.59 percentage points for ORTrack and 42.42 percent-
+age points for DUTrack, while their seam deficits decrease
+from 38.99 and 41.83 to 1.40 and 3.18 percentage points,
+respectively. These results are consistent with improved
+robustness to ERP seam discontinuities.
+Performance across latitudes. GASA improves AUC in
+all three latitude groups for every evaluated tracker in both
+settings. For the zero-shot models, the gains range from
+9.80 to 11.61 percentage points in Equator, 6.68 to 7.30
+in Middle, and 7.04 to 8.57 in Polar. The Middle–Equator
+gap also decreases for all evaluated models in both settings.
+However, the gains are not confined to high latitudes, and
+performance differences across latitude groups remain. The
+results therefore support broad improvements across latitude
+conditions.
+H. Step-by-Step Illustration of GASA
+To provide an intuitive understanding of GASA, we present
+a numerical example illustrating latitude-adaptive search
+expansion, seam-aware periodic sampling, and geometry-
+consistent bounding-box recovery. As shown in Figure 6, the
+example considers a horizontally elongated target located
+near the bottom of an ERP image. The numerical values
+7
+
+
+are illustrative and demonstrate the complete processing
+pipeline.
+Step 1: Search Region Initialization.
+Consider an ERP
+frame with resolution 𝑊× 𝐻= 1920 × 960. The previous
+predicted bounding box is
+b𝐵𝑡−1 = (1000, 840, 920, 120),
+(31)
+where the four values denote the top-left corner and
+bounding-box dimensions.
+The corresponding target center is
+𝑐𝑥= 1000 + 920
+2
+= 1460,
+𝑐𝑦= 840 + 120
+2
+= 900.
+(32)
+Following the original tracker, we consider a square
+search region with side length 𝐿𝑡= 1300 pixels.
+The predicted target latitude is
+b𝜙𝑡−1 = 𝜋
+2 −𝜋𝑐𝑦
+𝐻
+= 90◦−180◦× 900
+960
+= −78.75◦.
+(33)
+The target is therefore located near the southern polar
+region of the ERP image, where horizontal projection distor-
+tion is relatively pronounced.
+Step 2: Latitude-Adaptive Expansion.
+Given 𝜖= 0.20
+and 𝛼max = 1.25, LAPS computes the horizontal expansion
+factor as
+𝛼𝑡= clip
+
+1
+max(cos b𝜙𝑡−1, 𝜖)
+, 1, 𝛼max
+
+= clip
+
+1
+max(0.19509, 0.20) , 1, 1.25
+
+= clip(5, 1, 1.25)
+= 1.25.
+(34)
+Accordingly, the horizontal search extent increases from
+1300 to
+𝛼𝑡𝐿𝑡= 1.25 × 1300 = 1625.
+(35)
+The vertical search extent remains unchanged at 1300
+pixels.
+Using Eq. (7), the adapted search boundaries are
+Table 11. Geometry-aware GASA comparison on PanoUAV-
+Track. All scores are AUC (%). Each pair uses the same check-
+point.
+Zero-shot models use official pretrained weights with-
+out fine-tuning; in-domain models use PanoUAV-Track-trained
+weights. Equator, Middle, and Polar correspond to absolute GT-
+center latitudes < 30◦, [30◦, 60◦), and ≥60◦.
+Seam denotes
+±15-frame windows around consecutive visible GT-center jumps
+|𝑐𝑥,𝑡−𝑐𝑥,𝑡−1| > 𝑊/2.
+Latitude Distortion
+Seam Discontinuity
+Method
+Overall
+Equator
+Middle
+Polar
+M−E
+P−M
+Non-Seam
+Seam
+Drop
+Zero-shot: official pretrained weights
+MCITrack [12]
+77.63
+75.79
+80.50
+76.61
++4.71
+-3.89
+79.31
+37.86
+-41.45
+MCITrack+GASA
+86.67
+(+9.04)
+85.59
+(+9.80)
+87.18
+(+6.68)
+83.65
+(+7.04)
++1.59
+(-3.12)
+-3.53
+(+0.36)
+86.09
+(+6.78)
+86.70
+(+48.84)
++0.61
+(+42.06)
+ODTrack [41]
+76.55
+71.81
+78.77
+77.94
++6.96
+-0.83
+76.90
+35.82
+-41.08
+ODTrack+GASA
+85.65
+(+9.10)
+82.61
+(+10.80)
+86.07
+(+7.30)
+85.66
+(+7.72)
++3.46
+(-3.50)
+-0.41
+(+0.42)
+84.55
+(+7.65)
+83.07
+(+47.25)
+-1.48
+(+39.60)
+ORTrack [32]
+72.74
+67.41
+76.44
+66.96
++9.03
+-9.48
+72.66
+34.63
+-38.03
+ORTrack+GASA
+81.48
+(+8.74)
+79.02
+(+11.61)
+83.38
+(+6.94)
+75.53
+(+8.57)
++4.36
+(-4.67)
+-7.85
+(+1.63)
+80.64
+(+7.98)
+80.70
+(+46.07)
++0.06
+(+38.09)
+DUTrack [19]
+75.75
+71.15
+78.12
+77.76
++6.97
+-0.36
+76.26
+36.00
+-40.26
+DUTrack+GASA†
+85.11
+(+9.36)
+82.49
+(+11.34)
+85.18
+(+7.06)
+85.07
+(+7.31)
++2.69
+(-4.28)
+-0.11
+(+0.25)
+84.00
+(+7.74)
+83.44
+(+47.44)
+-0.56
+(+39.70)
+In-domain: PanoUAV-Track-trained weights
+ORTrack [32]
+74.06
+61.90
+77.79
+77.35
++15.89
+-0.44
+71.96
+32.97
+-38.99
+ORTrack+GASA
+82.31
+(+8.25)
+70.69
+(+8.79)
+83.61
+(+5.82)
+83.57
+(+6.22)
++12.92
+(-2.97)
+-0.04
+(+0.40)
+77.96
+(+6.00)
+76.56
+(+43.59)
+-1.40
+(+37.59)
+DUTrack [19]
+76.61
+70.92
+80.17
+81.62
++9.25
++1.45
+77.55
+35.72
+-41.83
+DUTrack+GASA
+82.84
+(+6.23)
+77.06
+(+6.14)
+84.21
+(+4.04)
+85.75
+(+4.13)
++7.15
+(-2.10)
++1.54
+(+0.09)
+81.32
+(+3.77)
+78.14
+(+42.42)
+-3.18
+(+38.65)
+Notes. Overall averages targets equally; geometry columns pool valid target-frames,
+excluding initialization and invisible GT. M−E = Middle −Equator; P−M = Polar
+−Middle; Drop = Seam −Non-Seam. Parentheses show GASA minus its baseline
+in percentage points. Signed differences are computed from displayed two-decimal
+values; positive values are red and negative values are green. GASA uses latitude-
+adaptive LAPS (𝜖= 0.20, 𝛼max = 1.25) and periodic bilinear SASC. †The reused
+zero-shot DUTrack result uses 𝛼max = 1.5. The event-window Seam score is distinct
+from seam-frame AUCS.
+𝑥min = 1460 −1625
+2
+= 647.5,
+𝑥max = 1460 + 1625
+2
+= 2272.5,
+𝑦min = 900 −1300
+2
+= 250,
+𝑦max = 900 + 1300
+2
+= 1550.
+(36)
+Thus, LAPS constructs a search region with horizontal
+and vertical extents of 1625 and 1300 pixels, respectively.
+The search center remains unchanged, and the final network
+input resolution is preserved. Vertical coordinates outside
+the image are handled using the original tracker’s padding
+policy.
+Step 3: Seam-Aware Periodic Sampling.
+Since the hori-
+zontal search boundary satisfies
+𝑥max = 2272.5 > 𝑊= 1920,
+(37)
+the adapted search region extends beyond the right ERP
+boundary.
+Unlike conventional planar padding, SASC exploits the
+horizontal periodicity of ERP by mapping the sampling co-
+ordinates according to
+𝑥wrap = 𝑥mod 𝑊.
+(38)
+8
+
+
+��−1 = (1000,840,920,120)
+��= (950,840,1070,120)
+W = 1920,   H = 960
+(cₓ, cᵧ) = (1460, 900)
+Lₜ = 1300 px
+ε = 0.20,   αₘₐₓ = 1.25
+φ̂ₜ₋₁  =  π/2 − π·cᵧ/H
+= 90° − 180° × 900/960
+φ̂ₜ₋₁  =  −78.75°
+αₜ = clip( 1 / max(cos φ̂ₜ₋₁, ε), 1, αₘₐₓ )
+= clip( 1 / max(cos(−78.75°), 0.20), 1, 1.25 )
+= clip( 1 / max(0.19509, 0.20), 1, 1.25 )
+= clip( 1 / 0.20, 1, 1.25 )  =  clip(5, 1, 1.25)
+αₜ = 1.25
+1300 × 1300
+(1.25 × 1300) × 1300
+1625 × 1300 px
+xₘᵢₙ = 1460 − 1625/2 = 647.5
+xₘₐₓ = 1460 + 1625/2 = 2272.5
+2272.5 > W = 1920
+[647.5, 1920)  +
+[0, 352.5]
+SASC：When sampling extends beyond the right 
+boundary, it continues from the left boundary.
+Figure 6. Step-by-step illustration of GASA. Given the previous target prediction, LAPS determines the latitude-dependent horizontal
+search expansion. SASC constructs a continuous search region by periodically sampling pixels across the horizontal ERP boundary. The
+adapted search image is processed by the unchanged tracking network, followed by geometry-consistent coordinate recovery to preserve
+seam-crossing bounding boxes.
+Consequently, the original horizontal sampling interval
+[647.5, 2272.5] is reconstructed from two source regions:
+[647.5, 1920)
+|           {z           }
+right ERP region
+∪[0, 352.5]
+|      {z      }
+left ERP region
+.
+(39)
+The two intervals are spatially adjacent on the viewing
+sphere, despite appearing at opposite sides of the ERP image.
+Using periodic bilinear interpolation, SASC combines
+these regions into a single continuous search image. Frac-
+tional sampling coordinates near the ERP boundary are in-
+terpolated using neighboring pixels from both sides of the
+image.
+The adapted region is resampled to the original network
+input resolution and processed using a single forward pass
+of the pretrained tracker.
+Step 4: Geometry-Consistent Recovery.
+Suppose the
+tracking head predicts the following normalized bounding
+box in search-image coordinates:
+b𝐵𝑠
+𝑡≈(0.186154, 0.453846, 0.658462, 0.092308),
+(40)
+where the values represent the normalized top-left corner
+and box dimensions.
+These values correspond to the adapted search region de-
+termined by LAPS. Using Eq. (9), the prediction is mapped
+back to ERP coordinates as follows:
+b𝑥𝑡= [1460 + 1625(0.186154 −0.5)] mod 1920
+≈950.
+(41)
+b𝑦𝑡= 900 + 1300(0.453846 −0.5)
+≈840.
+(42)
+b𝑤𝑡= 1625 × 0.658462
+≈1070.
+(43)
+bℎ𝑡= 1300 × 0.092308
+≈120.
+(44)
+Therefore, the recovered ERP prediction is
+b𝐵𝑡= (950, 840, 1070, 120).
+(45)
+This example demonstrates that the inverse search trans-
+formation correctly recovers both the target position and its
+bounding-box dimensions.
+Step 5: Seam-Crossing Box Representation.
+The recov-
+ered bounding box satisfies
+b𝑥𝑡+ b𝑤𝑡= 950 + 1070 = 2020 > 1920.
+(46)
+Hence, the predicted target extends across the horizontal
+ERP seam.
+For visualization, its visible support is divided into two
+regions:
+𝐵right = (950, 840, 970, 120),
+𝐵left = (0, 840, 100, 120).
+(47)
+The right region contains 970 pixels of horizontal target
+extent, while the remaining 100 pixels appear at the left ERP
+boundary.
+These two visible regions represent a single continuous
+target. Importantly, the recovered bounding-box width re-
+mains 1070 pixels rather than being truncated at the image
+boundary.
+The predicted target center is
+9
+
+
+b𝑐𝑥=
+
+950 + 1070
+2
+
+mod 1920 = 1485,
+b𝑐𝑦= 840 + 120
+2
+= 900.
+(48)
+The recovered prediction is subsequently used to con-
+struct the search region for the next frame, without requiring
+additional ground-truth annotations.
+The example illustrates the complementary roles of LAPS
+and SASC. LAPS expands horizontal search coverage ac-
+cording to the predicted target latitude, while SASC pre-
+serves spatial continuity when the search region crosses the
+ERP seam. Geometry-consistent recovery then maps the
+predicted bounding box back to ERP coordinates without
+losing its cross-boundary representation. All operations are
+performed at the search-region construction and coordinate-
+recovery stages, preserving the original tracking architecture
+and requiring no additional network forward passes.
+10

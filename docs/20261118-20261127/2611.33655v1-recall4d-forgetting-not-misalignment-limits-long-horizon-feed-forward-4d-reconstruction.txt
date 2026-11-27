@@ -1,0 +1,3296 @@
+Recall4D: Forgetting, Not Misalignment,
+Limits Long-Horizon Feed-Forward 4D Reconstruction
+Tianle Lyu
+Carnegie Mellon University
+3D Point Trajectories
+Camera Poses
+First seen (Frames 0–59)
+Inference: 4.8 min
+. . .
+. . .
+. . .
+. . .
+(a) 4D Reconstruction
+Beyond 2,000 Frames
+2,366 Frames
+Out of View (Frames 690–749)
+Revisited (Frames 900–959)
+0 0.2k 0.5k
+1k
+1.5k
+2k
+Video length (frames)
+0.00
+0.05
+0.10
+0.15
+0.20
+Survival rate @ 0.1 m
+Baseline
+Recall4D (ours)
+12.2×
+3.3×
+6.1×
+(b) Survival rate
+0 0.2k 0.5k
+1k
+1.5k
+2k
+Video length (frames)
+0
+10
+20
+30
+40
+Runtime (min / video)
+33.6 min
+4.4 min
+Baseline
+Recall4D (ours)
+7.6×
+(c) Runtime
+Figure 1. (a) To the best of our knowledge, Recall4D is the first method to perform 4D tracking over 2,000 frames in under 5 minutes on
+average, using less than 25 GiB of peak GPU memory while maintaining high accuracy. (b) Tracking survival rate at a 0.1 m threshold
+across increasing video lengths on PointOdyssey. (c) Recall4D tracks 2,000 frames in 4.4 minutes, 7.6× faster than the chained baseline.
+Abstract
+Feed-forward 4D trackers recover camera motion, depth,
+and point trajectories from short video clips, but chaining
+windows over long videos degrades their accuracy. We find
+that replacing inter-window alignment with ground-truth
+transforms leaves tracking error essentially unchanged.
+Static-point error instead grows with time since last obser-
+vation: repeatedly predicting a static point from windows
+that no longer observe it corrupts previously recovered ge-
+ometry. We call this failure forgetting. Merely retaining the
+last observed positions of unseen points reduces error by
+26% on PointOdyssey without modifying the tracker. We in-
+troduce Recall4D, a training-free framework that augments
+a frozen tracker with a persistent world state and sparse
+motion anchors. Static points retain their world-space po-
+sitions outside the camera view and are refined by averag-
+ing observations decoded at sparse keyframes while in view.
+For dynamic objects, the tracker decodes sparse represen-
+tative anchors, while geometric skinning propagates their
+displacements to dense queries. Across two long-horizon
+benchmarks, Recall4D improves the accuracy of its back-
+bone while running 7.6–9.0× faster, and its accuracy gains
+carry over to five further backbones and three other long-
+sequence tasks, demonstrating its generality. Project page:
+https://kincin.github.io/Recall4D/.
+1. Introduction
+Feed-forward models have changed how we recover 3D mo-
+tion from video [35, 39, 46]. Given a short clip, a single
+network pass now predicts camera poses, depth, and the
+3D trajectories of query points, without per-video optimiza-
+tion [19, 23, 43]. Real videos, however, are long. To process
+them, these models slide a window over the video and chain
+the windows: each window is aligned to the previous one,
+and every tracked point is handed over as a 3D position and
+a local descriptor [11, 14, 17]. This works for a few hundred
+frames. Then it breaks down: as Fig. 1(b) shows, the sur-
+vival rate of Point4D drops sharply as videos grow longer.
+The natural explanation is accumulated drift across win-
+1
+arXiv:2611.33655v1  [cs.CV]  25 Nov 2026
+
+
+dow handovers, suggesting familiar remedies such as better
+alignment or loop closure [5, 26, 30]. However, our anal-
+ysis in Sec. 3 reveals a different dominant failure: forget-
+ting rather than registration drift. Replacing inter-window
+alignment with ground truth leaves the error unchanged. In-
+stead, the error grows with how long a point has been out of
+view. Once a point leaves the view, the stateless tracker
+repeatedly re-predicts its position from windows that no
+longer observe it, causing even static points to wander over
+time, as illustrated in Fig. 2. Simply retaining their last ob-
+served positions reduces this error by 26% without mod-
+ifying the model. These findings suggest that the key to
+long-range tracking is not better alignment, but a persis-
+tent memory of previously observed geometry [34, 38, 41].
+This failure also exposes a deeper inefficiency: the tracker
+spends much of its computation predicting what it has al-
+ready seen. Static points are decoded even after hundreds
+of frames out of view, although they never move.
+For moving objects, the redundancy is equally funda-
+mental: their points move, but not independently. Their
+trajectories are coupled by shared object motion [17, 37],
+yet the tracker predicts each point as if its motion were inde-
+pendent. If points on the same object move together, why de-
+code every one of them? A few representative anchors can
+capture the shared motion and propagate it to the rest. The
+problem is therefore twofold: re-predicting what should be
+remembered, and decoding what can be inferred.
+This diagnosis calls for a different fix: not a better align-
+ment, but a memory; not more queries, but fewer. We intro-
+duce Recall4D, which equips a frozen feed-forward tracker
+with a persistent world state and sparse motion anchors.
+Static background points are written into the state in world
+coordinates. Whether a stored point lies within the camera
+view is decided by projecting the state, not the latest pre-
+diction, into the predicted camera. The state is refined from
+sparse keyframe observations and preserved when a point is
+out of view. At every frame, the state, rather than a fresh
+prediction, is the output. Moving objects are handled dif-
+ferently. A small set of anchors is tracked by the decoder,
+while the remaining points follow their motion through ge-
+ometric skinning. The result is a stateful tracker that re-
+members static geometry and propagates dynamic motion
+without decoding every point at every frame.
+Our main contributions are summarized as follows:
+• We diagnose forgetting of previously observed geome-
+try, rather than inter-window registration drift, as a ma-
+jor cause of long-horizon degradation in feed-forward 4D
+reconstruction, supported by a fine-grained error analysis.
+• We propose Recall4D, a training-free framework that
+equips frozen feed-forward 4D trackers with a persis-
+tent world state for static geometry and sparse motion
+anchors for dynamic objects, avoiding redundant predic-
+tions through geometric skinning.
+0
+5
+10
+15
+20
+25
+30
+35
+40
+Time (s)
+0
+1
+2
+3
+4
+5
+6
+Error / car size
+Forget: raw error
+Forget: + best Sim(3)
+Remember (ours)
+Misalignment 
+(Hypothesized)
+Forget 
+(Baseline)
+Remember 
+(Ours)
+Figure 2. Forgetting, not misalignment. Static points on a parked
+car: misalignment (left) would be undone by one Sim(3), but un-
+seen points scatter independently (middle) and stay wrong after
+the best Sim(3) (top). Recall4D holds them in place (right).
+• We demonstrate that Recall4D consistently improves
+long-horizon tracking accuracy and computational effi-
+ciency across multiple datasets, backbones, and tasks.
+2. Related Work
+Long-range 2D and 3D point tracking.
+TAP-Vid [6]
+established point tracking as a benchmark task, followed
+by window-based 2D trackers [7, 8, 11, 17, 18].
+Spa-
+tialTracker [42], SpatialTrackerV2 [43], TAPIP3D [44],
+and DELTA [28] extend tracking to 3D with depth, cam-
+era motion, or persistent geometry, and long-range bench-
+marks [16, 20, 47] enable systematic evaluation. Concur-
+rently, TrackEverything [13] achieves long-horizon track-
+ing through voxel-based deduplication and classification of
+points as static or dynamic. We share this split but, instead
+of building a new tracker, diagnose why existing trackers
+fail over long videos and repair them without training.
+Feed-forward 3D and 4D reconstruction. Feed-forward
+reconstruction has advanced from pairwise pointmap pre-
+diction [21, 39] to multi-view geometry estimation [35, 40]
+and dynamic reconstruction [46]. Recent methods directly
+predict 4D geometry and point trajectories [9, 19, 23–
+25, 31, 45], including our backbone Point4D [14]. Extend-
+ing such models to long videos requires chaining overlap-
+ping windows through alignment, sometimes with loop clo-
+sure [5]. These pipelines treat alignment as the bottleneck;
+we show that, for point tracking, re-predicting previously
+observed geometry matters more.
+State and sparse control for long videos. Streaming re-
+construction models retain temporal information through
+spatial memory [34, 41], recurrent states [38], or cached
+tokens [49], with confidence-guided [4], adaptive [48],
+and ray-aware [22] state updates, while keyframe-based
+SLAM [26, 30] maintains persistent maps.
+Window-
+chained trackers, in contrast, keep no state at all; we at-
+tach an explicit, parameter-free world state to a frozen one,
+where simple averaging proves sufficient. For dynamic ob-
+jects, sparse control points have long supported non-rigid
+2
+
+
+Table 1. Where the long-video error comes from. EPE by point class on PointOdyssey [47] val (15 sequences, 1,000 frames); APD and
+SR are reported over all retained points. GT-pose alignment uses oracle inter-window transforms; hold unseen retains the last observed
+position after 40 unseen frames. Scene-exiting GT tracks are excluded for all methods.
+All points
+Static points
+Dynamic points
+EPE↓
+APD↑
+SR↑
+visible
+occluded
+out of frame
+visible
+occluded
+out of frame
+Share of (point, frame) pairs
+100%
+–
+–
+8.4%
+2.4%
+17.0%
+40.2%
+17.9%
+14.2%
+Chained baseline
+1.569
+0.281
+0.193
+1.246
+1.163
+1.799
+1.193
+1.280
+1.856
+(a)
++ GT-pose alignment (no registration drift)
+1.568 (0%)
+0.288 (+2%)
+0.199 (+3%)
+1.252 (+0%)
+1.190 (+2%)
+1.878 (+4%)
+1.163 (−3%)
+1.243 (−3%)
+1.876 (+1%)
+(b)
++ hold unseen points (predicted view)
+1.168 (−26%)
+0.384 (+37%) 0.260 (+35%) 1.029 (−17%) 1.024 (−12%)
+1.115 (−38%)
+1.112 (−7%)
+1.196 (−7%)
+1.629 (−12%)
+(c)
++ GT-pose alignment + hold unseen points
+1.173 (−25%)
+0.391 (+39%) 0.260 (+35%) 1.032 (−17%) 1.030 (−11%)
+1.133 (−37%)
+1.094 (−8%)
+1.172 (−8%)
+1.658 (−11%)
+(d)
++ hold unseen points (GT visibility)
+1.043 (−33%)
+0.436 (+55%) 0.282 (+46%) 0.971 (−22%) 0.897 (−23%)
+0.768 (−57%)
+1.060 (−11%)
+1.165 (−9%)
+1.576 (−15%)
+Recall4D (Ours)
+0.889 (−43%) 0.471 (+68%)
+0.359 (+86%)
+0.434 (−65%)
+0.497 (−57%)
+0.433 (−76%)
+0.948 (−21%)
+1.064 (−17%)
+1.534 (−17%)
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+EPE (all points)
+(a) Over the video
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+EPE (static points)
+(b) Since last seen
+0
+200
+400
+600
+800
+1000
+Frame
+Unseen
+0
+10
+40
+100
+200
+400
+Frames since last seen
+Pairs
+47.4%
+8.0%
+8.2%
+7.4%
+6.4%
+8.6%
+14.0%
+Baseline
+Baseline + GT-pose alignment
+Recall4D (ours)
+Baseline + hold unseen (GT vis.)
+Figure 3. Error grows with time since last seen. (a) EPE over
+time. (b) Static-point EPE versus frames since last seen. GT-pose
+alignment matches the baseline; holding unseen points prevents
+the rise. Bars show unseen fractions (a) and pair fractions (b).
+deformation [27, 32] and dynamic Gaussian representa-
+tions [12, 37] through per-scene optimization. Our anchors
+are instead decoded directly by the frozen tracker, with ge-
+ometric skinning propagating their motion to dense points.
+3. Diagnosing Long-Horizon Degradation
+Why do feed-forward 4D trackers fail as videos grow
+longer? The natural explanation is accumulated drift: small
+misalignments at each window handover compound and
+corrupt the reconstruction. We first pursued this hypothe-
+sis by improving cross-window alignment and smoothing
+predictions over the overlapping frames, but neither helped,
+as detailed in Supp. A. The problem therefore seems to lie
+not in how windows are connected, but in how point esti-
+mates are carried across them. To find out, we evaluate the
+chained baseline on the 1,000-frame PointOdyssey [47] val-
+idation set. Tab. 1 breaks the error down by point class, and
+Fig. 3 shows how it evolves over time.
+Is alignment drift really the culprit? At each window
+handover, the baseline estimates a Sim(3) from the pre-
+dicted depth of the overlapping frames.
+Relative to the
+ground-truth camera poses, these estimates are off by 1.2◦
+in rotation and 3.4% in scale on average. In Tab. 1(a), we
+replace every one of them with the transform implied by
+the ground-truth poses, so that the chain carries no registra-
+tion error. If accumulated misalignment drove the degrada-
+tion, this oracle would recover much of the lost accuracy. It
+does not. EPE stays at 1.568 against 1.569 for the baseline,
+and the error curve in Fig. 3(a) is indistinguishable from the
+original over the whole video. Whatever degrades Point4D
+over time, it is not how its windows are registered.
+A static point does not move. Its prediction does. In
+Fig. 3(b), we therefore plot the error against the time since
+a point was last observed.
+For static points, EPE rises
+from 1.25 while visible to 2.30 after more than 400 un-
+seen frames, and with perfect registration it still reaches
+2.45.
+The ground-truth position of a static point never
+changes; what changes is the tracker’s estimate. Once the
+point leaves the view, Point4D keeps decoding its position
+from windows that contain no observation of it. Each new
+estimate replaces the previous one and is handed to the
+next window, progressively corrupting geometry that was
+already recovered. The same holds, to a lesser degree, for
+points in view: every window re-derives a point from the
+single 3D position handed over to it, and nothing ties the
+new estimate to the earlier ones. The EPE of visible static
+points thus doubles from 0.83 in the first 200 frames to 1.71
+in the last 200, although the share of unseen points stays
+near 50% after the first window. The tracker is not losing
+the scene because the scene moves or because its windows
+drift apart, but because it keeps re-predicting what it should
+have remembered. We call this failure forgetting.
+What if we simply stop re-predicting? The diagnosis sug-
+gests a direct test. Without modifying the network, improv-
+ing alignment, or adding a learned memory, we change one
+rule: once a point has been unseen for a whole window,
+it keeps its last observed position until it is seen again. In
+Tab. 1(b), visibility is decided by Point4D’s own cameras,
+which detect points leaving the frame but not occlusions.
+This rule alone reduces EPE by 26% and raises SR from
+0.193 to 0.260. With ground-truth visibility in Tab. 1(d),
+the reduction reaches 33%. Adding GT-pose alignment on
+top of the hold in Tab. 1(c) changes nothing. Remembering
+observed positions thus removes a quarter to a third of the
+error, whereas perfect registration removes none. Forget-
+ting, not registration drift, drives long-horizon degradation.
+Not all points need to be treated alike. Tab. 1 reveals a
+second insight. With ground-truth visibility, holding cuts
+the out-of-frame EPE of static points by 57%, but the EPE
+3
+
+
+Long-range 4D 
+Trajectories {𝒚𝒊
+𝒕}𝒕#𝟏
+𝑻
+Frozen
+Decoder
+𝑨𝒐 Anchors Selection (FPS)
+4D Trajectory
+Composition
+Initialize (t = 1)
+Persistent World State
+Static: A Persistent World State
+Dynamic: Sparse Anchors with Skinning
+. . .
+𝒟
+State Updates
+. . .
+Visible Keyframes
+Transform to world
+𝒟
+Running Mean Fusion
+. . .
+Displacement-Based Skinning
+Dynamic Trajectory
+Stored position
+Query at time t
+Project Stored State      to Camera 
+!𝐱𝒊
+Anchors
+State Readout
+"𝑥𝒊,𝒙
+(𝒕)
+t
+𝒕𝒂
+T
+𝐲$
+% = (𝐱$
+…
+𝟏
+𝒕𝒃
+In 
+view
+Back in 
+view
+Out of 
+view
+Re-predicted
+𝒘𝒊𝒋
+farthest
+Figure 4. Overview of Recall4D. Recall4D maintains a persistent world state to preserve background geometry, refining stored positions
+through running-mean fusion at in-view keyframes. For moving objects, a frozen decoder D tracks only sparse anchors, whose displace-
+ments propagate to dense queries through geometric skinning. Both are composed into long-range 4D trajectories {yt
+i}T
+t=1.
+of dynamic points by only 9% to 15%: their positions must
+keep evolving, and a frozen position is only marginally bet-
+ter than a forgotten one. Static points are also as inaccurate
+as dynamic ones even while visible, with an EPE of 1.25
+against 1.19, despite having no true motion: decoding the
+same static point anew in every window injects fresh pre-
+diction noise. Static points should therefore be stored and
+refined over repeated observations rather than re-predicted.
+Dynamic points pose a different problem: their error de-
+pends on backbone motion prediction, which holding can-
+not improve, and decoding them independently is wasteful.
+4. Method
+Motivated by the findings in Sec. 3, we propose Recall4D,
+as illustrated in Fig. 4. Given a monocular video {It}T
+t=1
+and N query points with initial pixel coordinates {ui}N
+i=1 in
+the first frame, our goal is to estimate their long-horizon 3D
+trajectories {yt
+i}T
+t=1 in a common world coordinate system.
+4.1. Preliminaries
+Our framework targets window-chained feed-forward 4D
+trackers, which process long videos through overlapping
+temporal windows Ck, indexed by k, using an encoder E
+and a query decoder D. Each query i consists of a 3D posi-
+tion q(k)
+i
+in the window’s reference camera coordinates and
+an appearance descriptor ϕi extracted from the query frame.
+The decoder predicts its 3D position at each frame t ∈Ck:
+xt
+i,k = D
+
+E(Ck); q(k)
+i
+, ϕi
+
+t .
+(1)
+Here, xt
+i,k denotes the predicted 3D position of query i at
+frame t from window k, expressed in its reference coordi-
+nates, and D(·)t denotes the positional output at frame t.
+The backbone also predicts per-frame depth maps and
+camera parameters (Rt, ct, Kt), denoting camera-to-world
+rotation, camera center, and intrinsics, respectively. Over-
+lapping windows are aligned through similarity transfor-
+mations, where Gk ∈Sim(3) maps world coordinates
+to the reference coordinates of window k.
+Accordingly,
+G−1
+k
+transforms decoded positions back to the world frame.
+Camera parameters are expressed in the common world
+frame after alignment.
+Across windows, queries are initialized from previous
+predictions. Let tk denote the first frame of window Ck,
+which overlaps with the preceding window. The query is
+transferred into the new reference frame as
+q(k)
+i
+=
+ Gk ◦G−1
+k−1
+ 
+xtk
+i,k−1
+
+,
+ϕ(k)
+i
+= ϕi.
+(2)
+Here, xtk
+i,k−1 is the previous window’s prediction at frame
+tk, and ◦denotes transformation composition. Predictions
+are blended over overlapping frames, but no persistent his-
+tory of past 3D observations is maintained.
+As shown in Sec. 3, repeatedly predicting unseen static
+points corrupts recovered geometry, while improved inter-
+window alignment offers little benefit. This motivates pre-
+serving static geometry and refining it upon re-observation.
+Simultaneously, correlated motion among dynamic points
+makes independent decoding redundant. Accordingly, Re-
+call4D maintains a persistent world state for static geometry
+in Sec. 4.2 and propagates dynamic motion through sparse
+anchors with geometric skinning in Sec. 4.3.
+4.2. A Persistent World State
+We introduce a training-free persistent world state to main-
+tain temporally consistent 3D positions for background
+points. We obtain per-frame foreground masks Mt using
+an off-the-shelf segmentation model, where Mt = 1 indi-
+cates foreground. Queries outside the foreground mask in
+the first frame are treated as static:
+B = {i : M1(ui) = 0} .
+(3)
+4
+
+
+Each i ∈B maintains a persistent state si = (ˆxi, ni), con-
+sisting of its world-space position and the number of fused
+observations. The state is initialized by lifting the query to
+3D using predicted depth, with ni = 0, so the first observa-
+tion replaces this estimate.
+We determine whether a stored point lies within the cam-
+era view by projecting its world-space position into the pre-
+dicted camera at frame t:
+pt
+i = R⊤
+t (ˆxi −ct) ,
+vt
+i = I
+
+(pt
+i)z > 0 ∧π(Ktpt
+i) ∈Ω
+
+.
+(4)
+Here, π denotes perspective division, Ωis the image do-
+main, and I is the indicator function. The indicator vt
+i tests
+whether a point lies within the camera frustum, without re-
+solving occlusion. Crucially, this decision uses the persis-
+tent world state rather than the decoder’s latest prediction.
+In each window k, we update the persistent state at m
+uniformly sampled keyframes Kk from the newly intro-
+duced frames, excluding the query frame. At each keyframe
+τ ∈Kk, background points satisfying vτ
+i = 1 are decoded
+using their stored positions as 3D queries, yielding new ob-
+servations in world coordinates:
+xτ
+i = G−1
+k
+(D (E(Ck); Gk(ˆxi), ϕi)τ) .
+(5)
+Here, xτ
+i is the decoded observation expressed in the com-
+mon world coordinate system. These observations are fused
+into the persistent state via a running mean:
+ˆxi ←niˆxi + xτ
+i
+ni + 1
+,
+ni ←ni + 1.
+(6)
+Points outside the camera view retain their stored positions
+without further updates.
+At each frame, the output for each background query is
+directly retrieved from its current persistent state as yt
+i =
+ˆxi(t), for all i ∈B and t = 1, . . . , T. Here, ˆxi(t) de-
+notes the stored position used to produce the output at frame
+t. Rather than repeatedly predicting background geometry
+at every frame, our approach preserves out-of-view geom-
+etry and refines in-view estimates through sparse keyframe
+observations. This avoids redundant background decoding
+while maintaining temporally consistent positions.
+We adopt uniform averaging, as more elaborate fusion
+strategies provide no consistent improvement in our exper-
+iments, with residual errors primarily arising from system-
+atic bias along the viewing ray.
+4.3. Sparse Anchors with Skinning
+A key observation is that points belonging to the same
+moving object often exhibit correlated motion, rather than
+moving independently. This shared motion structure makes
+dense, independent trajectory decoding computationally re-
+dundant. We exploit this redundancy by tracking sparse rep-
+resentative anchors and propagating their motion to dense
+queries through geometric skinning.
+For each foreground instance o identified in the first-
+frame mask, we lift its mask pixels to 3D using predicted
+depth and transform them into world coordinates, forming
+a point set Xo. We select Ao representative anchors through
+farthest point sampling:
+n
+¯a(0)
+j
+oAo
+j=1 = FPS (Xo, Ao) .
+(7)
+Here, o indexes foreground instances, j indexes anchors,
+and Ao denotes the number of anchors per instance. Each
+anchor is tracked by the frozen decoder D, producing its
+world-space position at
+j at every frame t ∈Ck.
+Rather than decoding every foreground query indepen-
+dently, we approximate its motion from nearby anchors.
+Each query i, with initial world-space position ¯x(0)
+i , is as-
+sociated with its H nearest anchors N(i) from the same
+instance. We compute distance-based skinning weights:
+wij =
+exp
+
+−(dij/λi)2
+P
+ℓ∈N (i) exp [−(diℓ/λi)2],
+dij =
+¯x(0)
+i
+−¯a(0)
+j
+
+2 ,
+λi = 2 min
+ℓ∈N (i) diℓ.
+(8)
+Here, H is the number of nearest anchors, dij is the initial
+distance between query i and anchor j, and λi controls the
+spatial decay of the weights. Closer anchors receive larger
+weights. At each frame t ∈Ck, the output of each fore-
+ground query i /∈B blends the displacements of its neigh-
+boring anchors:
+yt
+i = ¯x(k)
+i
++
+X
+j∈N (i)
+wij
+
+at
+j −¯a(k)
+j
+
+.
+(9)
+Here, ¯x(k)
+i
+and ¯a(k)
+j
+denote the query and anchor rest posi-
+tions at the beginning of window k, respectively. At each
+window transition, these rest positions are updated from
+the previous predictions, while the anchor associations and
+skinning weights remain unchanged. Consequently, only
+Ao anchors per instance require trajectory decoding, while
+the remaining foreground queries are reconstructed through
+lightweight geometric skinning.
+5. Experimental Setup
+Implementation Details.
+We use Point4D [14] as both
+our backbone and our main baseline. All network weights
+are kept frozen, and Recall4D involves no training. Long
+videos are processed in windows of L = 48 frames with an
+overlap of 8 frames, i.e., Ck = {40k + 1, . . . , 40k + 48}.
+Consecutive windows are registered by a trimmed Sim(3) fit
+on the depth of the overlapping frames, excluding pixels in-
+side the foreground masks. Foreground masks are obtained
+with SAM 3.1 [2]. The persistent world state is updated at
+5
+
+
+Table 2. Cross-dataset comparison on PointOdyssey test [47] and Dynamic Replica test [16]. Results are reported for 200- and 500-frame
+sequences. Best and second-best results are highlighted accordingly.
+Method
+PointOdyssey (200 frames)
+PointOdyssey (500 frames)
+Dynamic Replica (200 frames)
+Dynamic Replica (500 frames)
+EPE↓
+APD↑
+SR↑
+Time↓
+EPE↓
+APD↑
+SR↑
+Time↓
+EPE↓
+APD↑
+SR↑
+Time↓
+EPE↓
+APD↑
+SR↑
+Time↓
+SpatialTrackV2 [43]
+0.492
+0.617
+0.504
+179.7
+1.037
+0.504
+0.347
+481.5
+0.236
+0.754
+0.686
+225.6
+0.263
+0.734
+0.613
+622.4
+TraceAnything [23]
+2.254
+0.220
+0.166
+31.4
+2.572
+0.137
+0.072
+84.3
+0.577
+0.571
+0.499
+36.8
+0.685
+0.508
+0.400
+92.5
+Any4D [19]
+0.857
+0.473
+0.391
+69.2
+1.473
+0.296
+0.209
+198.3
+0.329
+0.712
+0.657
+69.5
+0.433
+0.667
+0.578
+207.4
+V-DPM [31]
+0.627
+0.617
+0.512
+525.3
+1.281
+0.391
+0.320
+1377
+0.368
+0.648
+0.595
+524.2
+0.501
+0.576
+0.491
+1376
+4RC [25]
+0.780
+0.570
+0.508
+58.7
+1.626
+0.347
+0.283
+179.8
+0.295
+0.759
+0.712
+59.1
+0.444
+0.657
+0.580
+169.4
+Track4World [24]
+1.004
+0.436
+0.317
+322.7
+1.689
+0.303
+0.183
+912.5
+0.342
+0.666
+0.572
+319.8
+0.508
+0.554
+0.418
+919.2
+TrackEverythingd [13]
+0.862
+0.656
+0.582
+580.8
+OOM
+OOM
+OOM
+OOM
+0.277
+0.727
+0.695
+142.3
+0.287
+0.717
+0.665
+391.5
+Point4D [14]
+0.661
+0.564
+0.489
+226.4
+0.979
+0.466
+0.370
+582.1
+0.255
+0.751
+0.710
+291.2
+0.307
+0.700
+0.646
+753.2
+Recall4D (Ours)
+0.609
+0.620
+0.528
+28.8
+0.836
+0.521
+0.440
+74.9
+0.244
+0.757
+0.725
+32.8
+0.262
+0.736
+0.690
+84.1
+Table 3. Long-horizon comparison on PointOdyssey test [47], with Recall4D applied to TrackEverythings [13] and Point4D [14] at 1,000,
+1,500, and 2,000 frames. Best and second-best results are highlighted accordingly.
+Method
+1,000 frames
+1,500 frames
+2,000 frames
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+Time↓
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+Time↓
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+Time↓
+TrackEverythings [13]
+2.577
+2.812
+0.586
+0.475
+534
+4.924
+5.379
+0.534
+0.434
+748
+4.984
+5.352
+0.497
+0.395
+852
++ Ours
+2.569
+2.799
+0.594
+0.485
+454
+4.825
+5.281
+0.546
+0.449
+643
+4.861
+5.325
+0.519
+0.421
+718
+Point4D [14]
+2.750
+2.688
+0.378
+0.282
+1176
+5.211
+5.229
+0.304
+0.215
+1669
+5.334
+5.306
+0.266
+0.178
+2019
++ Ours (Recall4D)
+2.365
+2.615
+0.500
+0.408
+155
+4.595
+5.084
+0.466
+0.380
+218
+4.634
+5.138
+0.448
+0.362
+264
+m = 4 uniformly spaced keyframes per window. Each fore-
+ground instance receives up to Ao = 32 anchors (24 to 32
+in practice), and each query is skinned to its H = 6 nearest
+anchors. Unless stated otherwise, all methods are evaluated
+on up to 8,192 query points per sequence (6.2k on aver-
+age), sampled among the points visible in the first frame.
+For fairness, all methods are run on a single NVIDIA H100
+(80 GB) GPU with memory capped at 40 GB, and runs ex-
+ceeding this limit are reported as OOM. Runtime is mea-
+sured as tracker inference, excluding the warm-up run.
+Comparison Methods. We compare Recall4D with two
+methods designed for long videos, Point4D [14] and the
+concurrent TrackEverything [13] in its sparse (s) and dense
+(d) modes, and with short-horizon methods: the 3D tracker
+SpatialTrackerV2 [43] and the feed-forward 4D recon-
+struction methods V-DPM [31], 4RC [25], Any4D [19],
+TraceAnything [23], and Track4World [24].
+Following
+Point4D, SpatialTrackerV2 uses its sliding-window infer-
+ence, and the feed-forward methods are chained with its se-
+lection strategy, which projects each point into every over-
+lapping frame and re-queries it at the frame whose projected
+depth best matches the predicted depth.
+Datasets.
+We evaluate Recall4D on two long-sequence
+benchmarks: PointOdyssey [47], containing videos with an
+average length of 2,035 frames, and Dynamic Replica [16],
+featuring 900-frame test sequences. Both provide dynamic
+scenes with complex motion, occlusions, and long point tra-
+jectories. Diagnosis and ablations use the validation splits,
+and all comparisons use the test splits.
+Metrics. We report End-Point Error (EPE); the Average
+Percentage of points within Distance thresholds (APD), av-
+eraged over δ3D ∈{0.1, 0.3, 0.5, 1.0} m; Survival Rate
+(SR) [14], the average fraction of the video a point is tracked
+before its error first exceeds δ3D, averaged over the same
+thresholds; EPEdyn, the EPE of moving queries, whose
+ground truth departs by more than 0.05 from its first-frame
+position; and the average inference time per video in sec-
+onds (Time). Errors are computed in first-frame camera co-
+ordinates after one global median scale per video.
+6. Results and Discussion
+6.1. Long-Horizon 4D Tracking
+Quantitative comparison. Tab. 2 compares Recall4D with
+3D trackers and feed-forward 4D methods.
+Recall4D is
+fastest in all settings, running 7.8–9.0× faster than [14]. At
+500 frames, it achieves the best EPE, APD, and SR on both
+datasets. At 200 frames on PointOdyssey, [43] achieves
+lower EPE and [13] higher APD and SR, but both are 6–
+20× slower. From 200 to 500 frames, Recall4D’s EPE rises
+from 0.609 to 0.836, versus 0.492 to 1.037 for [43], showing
+better robustness as video length grows.
+Long-horizon scalability. As Tab. 3 shows, Recall4D low-
+ers the EPE of Point4D by 12–14%, doubles its SR at 2,000
+frames, and runs 7.6× faster. On TrackEverything, it im-
+proves every metric at every length with 14–16% less run-
+time, but by smaller margins, since the concurrent Track-
+Everything also keeps static points in place. This indepen-
+dent convergence supports our diagnosis that forgetting lim-
+its long-horizon reconstruction. Absolute errors neverthe-
+less remain high for every method beyond 1,500 frames, a
+residual shared by all backbones that a training-free plug-in
+cannot correct; Recall4D removes the forgetting component
+at a fraction of the cost. We further discuss TrackEverything
+in detail in Supp. D.1.
+Visualization comparison. Fig. 5 shows one PointOdyssey
+6
+
+
+0.8
+0.6
+0.4
+0.2
+0.0
+1.0
+Recall4D (Ours)
+Point4D
+4RC
+SpatialTrackerV2
+Visible
+(t=30)
+Out of view
+(t=430)
+Revisited
+(t=770)
+EPE: 0.061
+EPE: 0.094
+EPE: 0.102
+EPE: 0.072
+EPE: 0.411
+EPE: 0.580
+EPE: 0.159
+EPE: 0.544
+EPE: 0.674
+EPE: 0.053
+EPE: 0.395
+EPE: 0.288
+Figure 5. Qualitative comparison on PointOdyssey scene-d78-3rd at three moments: visible (t=30), out of view (t=430), and
+revisited (t=770). Points are colored by error; EPE is shown per panel.
+Table 4. Component ablation on PointOdyssey val (500 frames).
+Components are added to chained Point4D. EPEdyn is the EPE of
+moving queries.
+Setting
+EPE↓
+APD↑
+SR↑
+EPEdyn ↓
+Time↓
+Baseline (chained Point4D)
+1.813
+0.335
+0.232
+1.713
+581.2
++ Persistent state
+1.355
+0.493
+0.385
+1.613
+288.7
++ Sparse anchors
+1.798
+0.344
+0.234
+1.689
+347.6
++ Both (Recall4D)
+1.338
+0.499
+0.388
+1.596
+66.0
+Variants of Recall4D
++ Per-window rebinding
+1.348
+0.495
+0.388
+1.604
+66.1
++ Rebinding + retention gate
+1.390
+0.472
+0.372
+1.615
+237.1
+Gate instead of segmenter
+1.378
+0.474
+0.373
+1.560
+410.9
+sequence while a region is visible, out of view, and revisited.
+All methods are accurate while the points are visible. Out of
+view, Point4D [14] and 4RC [25] let static points drift, and
+re-observation does not repair them. SpatialTrackerV2 [43]
+partially recovers upon revisit, whereas Recall4D keeps the
+points in place throughout.
+6.2. Ablation Studies
+Component ablation.
+Tab. 4 adds each component to
+chained Point4D [14] on PointOdyssey val. The persistent
+state accounts for nearly all of the accuracy gain, lower-
+ing EPE by 25%. Sparse anchors alone leave accuracy un-
+changed, including on moving points, while decoding far
+fewer queries. The two components remove complemen-
+tary parts of the decoding: each alone saves 40–50% of the
+runtime, whereas together they cut it by 8.8×. Neither per-
+window rebinding nor the retention gate improves on Re-
+call4D, and the gate raises the cost by up to 3.6×. Used
+instead of the segmenter, the gate attains the lowest EPEdyn
+without any instance masks, but at 6× the runtime.
+Parameter ablation.
+Fig. 6(a, b) varies the number of
+keyframes per window m and of anchors per instance Ao.
+EPE drops from 1.368 at m=1 to 1.338 at m=4 and re-
+mains unchanged beyond, while runtime grows from 65.7 s
+to 205.7 s at m=40. With 4 anchors, SR falls to 0.357, be-
+Table 5. Decomposition analysis on 1,000-frame PointOdyssey
+val videos. Miss and FA are the rates of moving points labeled
+static and of static points labeled dynamic, per window against
+ground truth (τ=0.05 [13]). †Dynamic points decoded densely.
+Decomposition
+Miss↓FA↓EPE↓EPEdyn ↓
+SR↑
+Time↓
+No decomposition
+All dynamic (Point4D [14])
+0
+100
+1.569
+1.172
+0.193
+1178
+All static (motion discarded)
+100
+0
+0.942
+1.088
+0.288
+103
+First-frame instance masks
+SAM 3.1 [2] (default)
+39.5
+24.1 0.889
+1.046
+0.359
+149
+Per-window classification†
+SAM 3.1, first frame
+39.5
+24.1 0.916
+1.079
+0.355
+562
+SAM 3.1, video propagation
+65.5
+14.7 0.958
+1.107
+0.343
+387
+TrackEverything [13]
+31.7
+14.7 0.997
+1.148
+0.372
+559
+Displacement threshold
+21.3
+36.2 1.084
+1.137
+0.324
+715
+Retention gate
+7.0
+58.0 1.356
+1.517
+0.248
+471
+Oracle
+GT instance masks
+9.6
+50.7 0.964
+1.132
+0.366
+280
+GT per-window labels
+0
+0
+0.918
+1.055
+0.385
+646
+low the 0.385 of dense decoding. From 16 anchors onward
+it reaches 0.387 to 0.388, and at Ao=32, Recall4D runs
+4.4× faster than dense decoding, 66.0 s against 288.7 s. We
+therefore adopt m=4 and Ao=32 as our defaults.
+Decomposition analysis. Tab. 5 replaces Recall4D’s first-
+frame SAM 3.1 decomposition with alternatives. Holding
+every point discards all motion, yet already lowers EPE
+from 1.569 to 0.942: memory accounts for most of the gain.
+Its SR of 0.288, below our 0.359, reflects the frozen mov-
+ing points, so a decomposition is required. False alarms are
+the costlier error, since falsely dynamic static points are re-
+predicted and forget again, raising EPE and lowering SR;
+the retention gate, with the fewest misses but 58% false
+alarms, is the least accurate decomposition. More accurate
+per-window classification, by TrackEverything [13] or even
+ground truth, raises SR to at most 0.385 but never lowers
+EPE. Under the same decomposition, skinning beats dense
+decoding, 0.889 against 0.916 EPE, at a quarter of the run-
+time. Recall4D has the lowest EPE and EPEdyn overall.
+7
+
+
+1
+2
+4
+8
+16
+40
+Number of keyframes
+1.33
+1.34
+1.35
+1.36
+1.37
+1.38
+EPE (all points)
+m=4
+(a) Keyframe Ablation
+0
+4
+8
+16
+32
+64
+128
+Number of anchors
+0.35
+0.36
+0.37
+0.38
+0.39
+0.40
+Survival Rate
+Ao =32
+(b) Anchor Ablation
+200 500
+1,000
+1,500
+2,000
+Number of frames
+0.0
+1.0
+2.0
+3.0
+4.0
+5.0
+6.0
+EPE (all points)
+(c) Temporal Scalability
+256
+1,024
+4,096
+32,768
+Number of queries
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+3.5
+4.0
+4.5
+EPE (all points)
+(d) Query Scalability
+0
+10
+20
+30
+40
+Runtime (min / video)
+0
+20
+40
+60
+80
+100
+Runtime (min / video)
+0
+1
+2
+3
+4
+Runtime (min / video)
+0
+1
+2
+3
+4
+5
+Runtime (min / video)
+Baseline EPE
+Baseline Runtime
+Ours EPE
+Ours Runtime
+EPE
+Runtime
+Survival Rate
+Runtime
+Figure 6. Parameter ablation and scalability. (a, b) Accuracy and runtime versus the number of keyframes per window m and of anchors
+per instance Ao on PointOdyssey val (500 frames); Ao=0 is dense decoding, and dashed lines mark our defaults. (c, d) EPE and runtime
+of Point4D and Recall4D on PointOdyssey test versus video length (8,192 queries) and number of queries (1,000 frames).
+Table 6. Cross-backbone generalization on PointOdyssey [47]
+(500 frames). Each backbone is evaluated without (w/o) and with
+(w/) Recall4D. Green indicates improvement over the correspond-
+ing backbone without Recall4D.
+Method
+w/o Recall4D
+w/ Recall4D
+EPE↓APD↑
+SR↑
+Time↓EPE↓APD↑
+SR↑
+Time↓
+TraceAnything [23] 2.572 0.137 0.072
+84.3
+1.991 0.202 0.147
+75.7
+Any4D [19]
+1.473 0.296 0.209 198.3
+1.303 0.324 0.254 168.0
+V-DPM [31]
+1.281 0.391 0.320
+1377
+1.054 0.435 0.370
+1180
+4RC [25]
+1.626 0.347 0.283 179.8
+1.253 0.380 0.319 144.4
+Track4World [24]
+1.689 0.303 0.183 912.5
+1.517 0.348 0.272 733.3
+Recall4D (Ours)
+0.836 0.521 0.440
+74.9
+6.3. Accuracy-Efficiency Analysis
+Fig. 6(c, d) scales the video length and the number of
+queries. From 200 to 2,000 frames, Recall4D is 7.6–7.8×
+faster than Point4D, taking 264 s instead of 2,019 s at 2,000
+frames, and attains a lower EPE at every length. As the
+number of queries grows from 256 to 32,768, the runtime
+of Point4D increases 46.8×, whereas that of Recall4D in-
+creases only 3.4×, since added queries are either stored or
+skinned rather than decoded at every frame. The speed-up
+thus rises from 7.9× at 8,192 queries to 13.2× at 32,768,
+with a lower EPE at every query budget.
+6.4. Generalization Across Backbones and Tasks
+Cross-backbone generalization. To verify that Recall4D’s
+effectiveness is not tied to a specific backbone, we fur-
+ther evaluate its generalization across different feed-forward
+4D trackers. Recall4D requires no training and leaves the
+backbone unchanged, so it applies to other window-chained
+feed-forward models. Tab. 6 applies it to five further back-
+bones [19, 23–25, 31], each chained as in Point4D [14]. Re-
+call4D improves every metric on every backbone, reducing
+EPE by 10–23% and doubling SR on TraceAnything, while
+also reducing runtime.
+Cross-task generalization.
+Forgetting is not specific to
+4D tracking, so Tab. 7 applies Recall4D to three further
+tasks. Task A is 2D long-range point tracking with Co-
+Tracker3 [18], where static points are read from the per-
+sistent world state and projected into the predicted camera.
+Recall4D raises AJ from 35.2 to 39.3 and δavg from 53.7 to
+58.2 with 27% less runtime. Task B is long-sequence 3D
+Table 7. Cross-task generalization. Each model is run with-
+out and with Recall4D. Task A: PointOdyssey [47]; δre is δavg on
+re-entered points. Task B: Waymo Open Dataset [33]. Task C:
+KITTI [10]. Green / blue: better / worse than the backbone.
+Task A: 2D long-range point tracking
+Method
+AJ↑
+δavg ↑
+OA↑
+δre ↑
+Time↓
+CoTracker3 [18]
+35.2
+53.7
+69.6
+39.6
+99
++ Recall4D
+39.3
+58.2
+74.8
+40.3
+72
+Task B: Long-sequence 3D reconstruction
+Method
+Acc↓
+Comp↓
+CD↓
+ATE↓
+Time↓
+VGGT-Long [5]
+1.205
+2.913
+2.059
+2.097
+237
++ Recall4D
+1.116
+2.461
+1.789
+1.894
+185
+Task C: Video depth estimation
+Method
+AbsRel↓
+δ1 ↑
+Time↓
+Video Depth Anything [3]
+0.092
+0.929
+63
++ Recall4D
+0.084
+0.957
+79
+reconstruction with VGGT-Long [5], where it lowers the
+accuracy, completeness, and Chamfer errors by 7%, 16%,
+and 13% and ATE by 10%, with 22% less runtime. Task C
+is video depth estimation with Video Depth Anything [3],
+where it lowers AbsRel by 9% and raises δ1 from 0.929 to
+0.957 at 25% more runtime. Remembering what was ob-
+served thus helps beyond 4D tracking.
+7. Conclusion
+Feed-forward 4D trackers degrade on long videos, and
+we traced this degradation to forgetting rather than inter-
+window misalignment: ground-truth alignment leaves the
+error unchanged, whereas simply retaining unseen points
+reduces it by 26%. Building on this diagnosis, we intro-
+duced Recall4D, a training-free framework that equips a
+frozen tracker with a persistent world state for static ge-
+ometry and sparse motion anchors for dynamic objects.
+Recall4D improves long-horizon accuracy while tracking
+2,000 frames 7.6× faster, and the same principle carries
+over to other backbones, a concurrent long-video tracker,
+and three further tasks.
+Moving objects still depend on
+the backbone’s motion prediction, and extending memory
+to them is a natural next step. We hope these findings en-
+courage long-video 4D reconstruction to treat memory, and
+not only alignment, as a core design problem.
+8
+
+
+LLM Usage Statement
+ChatGPT (OpenAI) and Claude (Anthropic) were used
+to assist with English language editing,
+grammatical
+refinement, and improving the clarity, coherence, and
+organization of the manuscript.
+Generative AI tools
+were not used for synthetic data generation, research
+methodology development, experimental design, or the
+analysis and interpretation of experimental results.
+All
+AI-assisted revisions were carefully reviewed to ensure
+technical accuracy and consistency with the intended
+scientific meaning. The authors retain full responsibility for
+the scientific ideas, methodological contributions, experi-
+mental findings, and conclusions presented in this paper.
+References
+[1] Arjun Balasingam, Joseph Chandler, Chenning Li, Zhou-
+tong Zhang, and Hari Balakrishnan. Drivetrack: A bench-
+mark for long-range point tracking in real-world videos. In
+2024 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 22488–22497. IEEE, 2024.
+16
+[2] Nicolas Carion, Laura Gustafson, Yuan-Ting Hu, Shoubhik
+Debnath, Ronghang Hu, Didac Suris Coll-Vinent, Chaitanya
+Ryali, Kalyan Vasudev Alwala, Haitham Khedr, Andrew
+Huang, et al. Sam 3: Segment anything with concepts. In
+International conference on learning representations, pages
+138846–138923, 2026. 5, 7
+[3] Sili Chen, Hengkai Guo, Shengnan Zhu, Feihu Zhang, Zi-
+long Huang, Jiashi Feng, and Bingyi Kang.
+Video depth
+anything: Consistent depth estimation for super-long videos.
+In 2025 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 22831–22840. IEEE, 2025.
+8
+[4] Xingyu Chen, Yue Chen, Yuliang Xiu, Andreas Geiger, and
+Anpei Chen. Ttt3r: 3d reconstruction as test-time training.
+In International Conference on Learning Representations,
+pages 50694–50718, 2026. 2
+[5] Kai Deng, Zexin Ti, Jiawei Xu, Jian Yang, and Jin Xie.
+Vggt-long: Chunk it, loop it, align it–pushing vggt’s limits
+on kilometer-scale long rgb sequences. In 2026 IEEE In-
+ternational Conference on Robotics and Automation (ICRA),
+pages 5446–5453. IEEE, 2026. 2, 8, 15
+[6] Carl Doersch, Ankush Gupta, Larisa Markeeva, Adria Re-
+casens, Lucas Smaira, Yusuf Aytar, Joao Carreira, Andrew
+Zisserman, and Yi Yang. Tap-vid: A benchmark for track-
+ing any point in a video. Advances in Neural Information
+Processing Systems, 35:13610–13626, 2022. 2
+[7] Carl Doersch, Yi Yang, Mel Vecerik, Dilara Gokay, Ankush
+Gupta, Yusuf Aytar, Joao Carreira, and Andrew Zisserman.
+Tapir: Tracking any point with per-frame initialization and
+temporal refinement. In 2023 IEEE/CVF International Con-
+ference on Computer Vision (ICCV), pages 10027–10038.
+IEEE, 2023. 2
+[8] Carl Doersch, Pauline Luc, Yi Yang, Dilara Gokay, Skanda
+Koppula, Ankush Gupta, Joseph Heyward, Ignacio Rocco,
+Ross Goroshin, Joao Carreira, et al. Bootstap: Bootstrapped
+training for tracking-any-point.
+In Asian Conference on
+Computer Vision, pages 483–500. Springer, 2024. 2
+[9] Haiwen Feng, Junyi Zhang, Qianqian Wang, Yufei Ye,
+Pengcheng Yu, Michael J Black, Trevor Darrell, and Angjoo
+Kanazawa. St4rtrack: Simultaneous 4d reconstruction and
+tracking in the world.
+In 2025 IEEE/CVF International
+Conference on Computer Vision (ICCV), pages 8503–8513.
+IEEE, 2025. 2
+[10] Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel
+Urtasun. Vision meets robotics: The kitti dataset. The in-
+ternational journal of robotics research, 32(11):1231–1237,
+2013. 8
+[11] Adam W Harley, Zhaoyuan Fang, and Katerina Fragkiadaki.
+Particle video revisited: Tracking through occlusions using
+point trajectories. In European Conference on Computer Vi-
+sion, pages 59–75. Springer, 2022. 1, 2
+[12] Yi-Hua Huang, Yang-Tian Sun, Ziyi Yang, Xiaoyang Lyu,
+Yan-Pei Cao, and Xiaojuan Qi.
+Sc-gs: Sparse-controlled
+gaussian splatting for editable dynamic scenes.
+In 2024
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 4220–4230. IEEE, 2024. 3
+[13] Ayush Jain, Sreeharsha Paruchuri, Ishita Gupta, Fan Zhang,
+Tanner Schmidt, Jakob Engel, Katerina Fragkiadaki, and
+Adam W Harley.
+Trackeverything: Long horizon dense
+tracking via de-duplicating 3d scene representations. arXiv
+preprint arXiv:2609.30222, 2026. 2, 6, 7, 15, 16, 17
+[14] Minsik Jeon, Jay Karhade, Deva Ramanan, and Shubham
+Tulsiani.
+Point4d: Long-range 4d motion reconstruction.
+arXiv preprint arXiv:2609.09145, 2026. 1, 2, 5, 6, 7, 8, 15,
+16
+[15] Hanbyul Joo, Hao Liu, Lei Tan, Lin Gui, Bart Nabbe,
+Iain Matthews, Takeo Kanade, Shohei Nobuhara, and Yaser
+Sheikh. Panoptic studio: A massively multiview system for
+social motion capture.
+In Proceedings of the IEEE inter-
+national conference on computer vision, pages 3334–3342,
+2015. 16
+[16] Nikita Karaev, Ignacio Rocco, Benjamin Graham, Natalia
+Neverova, Andrea Vedaldi, and Christian Rupprecht. Dy-
+namicstereo: Consistent dynamic depth from stereo videos.
+In 2023 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 13229–13239. IEEE, 2023.
+2, 6, 16
+[17] Nikita Karaev, Ignacio Rocco, Benjamin Graham, Natalia
+Neverova, Andrea Vedaldi, and Christian Rupprecht. Co-
+tracker: It is better to track together. In European conference
+on computer vision, pages 18–35. Springer, 2024. 1, 2
+[18] Nikita Karaev, Yuri Makarov, Jianyuan Wang, Natalia
+Neverova, Andrea Vedaldi, and Christian Rupprecht. Co-
+tracker3:
+Simpler and better point tracking by pseudo-
+labeling real videos. In 2025 IEEE/CVF International Con-
+ference on Computer Vision (ICCV), pages 1–10. IEEE,
+2025. 2, 8
+[19] Jay Karhade, Nikhil Keetha, Yuchen Zhang, Tanisha Gupta,
+Akash Sharma, Sebastian Scherer, and Deva Ramanan.
+Any4d: Unified feed-forward metric 4d reconstruction. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+9
+
+
+sion and Pattern Recognition, pages 14578–14589, 2026. 1,
+2, 6, 8, 16
+[20] Skanda Koppula, Ignacio Rocco, Yi Yang, Joe Heyward,
+Joao Carreira, Andrew Zisserman, Gabriel Brostow, and Carl
+Doersch. Tapvid-3d: A benchmark for tracking any point in
+3d. Advances in Neural Information Processing Systems, 37:
+82149–82165, 2024. 2, 16
+[21] Vincent Leroy, Yohann Cabon, and J´erˆome Revaud. Ground-
+ing image matching in 3d with mast3r. In European confer-
+ence on computer vision, pages 71–91. Springer, 2024. 2
+[22] Feifei Li, Qi Song, Chi Zhang, and Rui Huang. Ray-aware
+pointer memory with adaptive updates for streaming 3d re-
+construction. arXiv preprint arXiv:2605.05749, 2026. 2
+[23] Xinhang Liu, Yuxi Xiao, Donny Y Chen, Jiashi Feng, Yu-
+Wing Tai, Chi-Keung Tang, and Bingyi Kang. Trace any-
+thing: Representing any video in 4d via trajectory fields.
+In International Conference on Learning Representations,
+pages 37738–37767, 2026. 1, 2, 6, 8, 16
+[24] Jiahao Lu, Jiayi Xu, Wenbo Hu, Ruijie Zhu, Chengfeng
+Zhao,
+Sai-Kit
+Yeung,
+Ying
+Shan,
+and
+Yuan
+Liu.
+Track4world: Feedforward world-centric dense 3d tracking
+of all pixels. In European Conference on Computer Vision,
+pages 184–204. Springer, 2026. 6, 8, 16
+[25] Yihang Luo, Shangchen Zhou, Yushi Lan, Xingang Pan,
+and Chen Change Loy.
+4rc: 4d reconstruction via con-
+ditional querying anytime and anywhere.
+arXiv preprint
+arXiv:2602.10094, 2026. 2, 6, 7, 8, 16
+[26] Dominic Maggio and Luca Carlone. Vggt-slam 2.0: Real-
+time dense feed-forward scene reconstruction. arXiv preprint
+arXiv:2601.19887, 2026. 2
+[27] Richard A Newcombe, Dieter Fox, and Steven M Seitz.
+Dynamicfusion: Reconstruction and tracking of non-rigid
+scenes in real-time. In Proceedings of the IEEE conference
+on computer vision and pattern recognition, pages 343–352,
+2015. 3
+[28] Tuan Ngo, Peiye Zhuang, Evangelos Kalogerakis, Chuang
+Gan, Sergey Tulyakov, Hsin-Ying Lee, and Chaoyang Wang.
+Delta: Dense efficient long-range 3d tracking for any video.
+In International Conference on Learning Representations,
+pages 44620–44641, 2025. 2
+[29] Xiaqing Pan, Nicholas Charron, Yongqian Yang, Scott Pe-
+ters, Thomas Whelan, Chen Kong, Omkar Parkhi, Richard
+Newcombe, and Yuheng Carl Ren. Aria digital twin: A new
+benchmark dataset for egocentric 3d machine perception. In
+2023 IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), pages 20076–20086. IEEE, 2023. 16
+[30] Erik Sandstr¨om, Ganlin Zhang, Keisuke Tateno, Michael
+Oechsle, Michael Niemeyer, Youmin Zhang, Manthan Patel,
+Luc Van Gool, Martin Oswald, and Federico Tombari. Splat-
+slam: Globally optimized rgb-only slam with 3d gaussians.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 1686–1697, 2025. 2
+[31] Edgar Sucar, Eldar Insafutdinov, Zihang Lai, and Andrea
+Vedaldi. V-dpm: 4d video reconstruction with dynamic point
+maps. arXiv preprint arXiv:2601.09499, 2026. 2, 6, 8, 16
+[32] Robert W Sumner, Johannes Schmid, and Mark Pauly. Em-
+bedded deformation for shape manipulation. In ACM sig-
+graph 2007 papers, pages 80–es. 2007. 3
+[33] Pei Sun, Henrik Kretzschmar, Xerxes Dotiwalla, Aurelien
+Chouard, Vijaysai Patnaik, Paul Tsui, James Guo, Yin Zhou,
+Yuning Chai, Benjamin Caine, et al.
+Scalability in per-
+ception for autonomous driving: Waymo open dataset. In
+2020 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 2443–2451. IEEE, 2020. 8
+[34] Hengyi Wang and Lourdes Agapito. 3d reconstruction with
+spatial memory. In 2025 International Conference on 3D
+Vision (3DV), pages 78–89. IEEE, 2025. 2
+[35] Jianyuan Wang, Minghao Chen, Nikita Karaev, Andrea
+Vedaldi, Christian Rupprecht, and David Novotny.
+Vggt:
+Visual geometry grounded transformer. In 2025 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 5294–5306. IEEE, 2025. 1, 2
+[36] Jianyuan Wang, Minghao Chen, Shangzhan Zhang, Nikita
+Karaev, Johannes Sch¨onberger, Patrick Labatut, Piotr Bo-
+janowski, David Novotny, Andrea Vedaldi, and Christian
+Rupprecht.
+VGGT-Ω.
+In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2026. 14
+[37] Qianqian Wang, Vickie Ye, Hang Gao, Weijia Zeng, Jake
+Austin, Zhengqi Li, and Angjoo Kanazawa.
+Shape of
+motion: 4d reconstruction from a single video.
+In 2025
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 9660–9672. IEEE, 2025. 2, 3
+[38] Qianqian
+Wang,
+Yifei
+Zhang,
+Aleksander
+Holynski,
+Alexei A Efros, and Angjoo Kanazawa. Continuous 3d per-
+ception model with persistent state.
+In 2025 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 10510–10522. IEEE, 2025. 2
+[39] Shuzhe Wang,
+Vincent Leroy,
+Yohann Cabon,
+Boris
+Chidlovskii, and Jerome Revaud. Dust3r: Geometric 3d vi-
+sion made easy. In 2024 IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 20697–
+20709. IEEE, 2024. 1, 2
+[40] Yifan Wang, Jianjun Zhou, Haoyi Zhu, Wenzheng Chang,
+Yang Zhou, Zizun Li, Junyi Chen, Jiangmiao Pang, Chun-
+hua Shen, and Tong He. π3: Permutation-equivariant visual
+geometry learning. In International Conference on Learning
+Representations, pages 10481–10497, 2026. 2
+[41] Yuqi Wu, Wenzhao Zheng, Jie Zhou, and Jiwen Lu. Point3r:
+Streaming 3d reconstruction with explicit spatial pointer
+memory. Advances in Neural Information Processing Sys-
+tems, 38:69675–69699, 2026. 2
+[42] Yuxi Xiao, Qianqian Wang, Shangzhan Zhang, Nan Xue,
+Sida Peng, Yujun Shen, and Xiaowei Zhou. Spatialtracker:
+Tracking any 2d pixels in 3d space.
+In 2024 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 20406–20417. IEEE, 2024. 2
+[43] Yuxi Xiao, Jianyuan Wang, Nan Xue, Nikita Karaev, Yuri
+Makarov, Bingyi Kang, Xing Zhu, Hujun Bao, Yujun Shen,
+and Xiaowei Zhou. Spatialtrackerv2: 3d point tracking made
+easy. arXiv preprint arXiv:2507.12462, 2025. 1, 2, 6, 7, 16
+[44] Bowei Zhang, Lei Ke, Adam Harley, and Katerina Fragki-
+adaki. Tapip3d: Tracking any point in persistent 3d geome-
+try. Advances in Neural Information Processing Systems, 38:
+135284–135303, 2026. 2
+10
+
+
+[45] Chuhan Zhang, Guillaume Le Moing, Skanda Koppula, Ig-
+nacio Rocco, Liliane Momeni, Junyu Xie, Shuyang Sun,
+Rahul Sukthankar, Jo¨elle K Barral, Raia Hadsell, et al. Ef-
+ficiently reconstructing dynamic scenes one d4rt at a time.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 7382–7392, 2026. 2
+[46] Junyi Zhang, Charles Herrmann, Junhwa Hur, Varun Jam-
+pani, Forrester Cole, Deqing Sun, Ming-Hsuan Yang, et al.
+Monst3r: A simple approach for estimating geometry in the
+presence of motion. In International Conference on Learn-
+ing Representations, pages 82863–82886, 2025. 1, 2
+[47] Yang Zheng, Adam W Harley, Bokui Shen, Gordon Wet-
+zstein, and Leonidas J Guibas.
+Pointodyssey: A large-
+scale synthetic dataset for long-term point tracking. In 2023
+IEEE/CVF International Conference on Computer Vision
+(ICCV), pages 19798–19808. IEEE, 2023. 2, 3, 6, 8, 16
+[48] Zhijie
+Zheng,
+Xinhao
+Xiang,
+and
+Jiawei
+Zhang.
+Ttsa3r:
+Training-free temporal-spatial adaptive persis-
+tent state for streaming 3d reconstruction.
+arXiv preprint
+arXiv:2601.22615, 2026. 2
+[49] Dong Zhuo, Wenzhao Zheng, Jiahe Guo, Yuqi Wu, Jie Zhou,
+and Jiwen Lu. Streaming visual geometry transformer. In In-
+ternational Conference on Learning Representations, pages
+88055–88072, 2026. 2
+11
+
+
+Recall4D: Forgetting, Not Misalignment,
+Limits Long-Horizon Feed-Forward 4D Reconstruction
+Supplementary Material
+Figure 7. Recall4D on a real-world video. The static scene is reconstructed once and kept in the persistent world state, while the moving
+robot is tracked through sparse anchors. It is drawn at several time steps, with its trajectories in color. More results are in Sec. E.
+Overview
+The supplementary material is structured as follows:
+• Section A. Additional Details on Error Analysis.
+• Section B. Implementation and Evaluation Details.
+• Section C. Additional Experiments.
+• Section D. Discussion and Limitations.
+• Section E. Extended Visualizations.
+A. Additional Details on Error Analysis
+This section details the analysis of Sec. 3: the point classes
+behind Tab. 1 and Fig. 3, the treatment of scene-exiting
+ground-truth tracks, and how each intervention is imple-
+mented. Every intervention is applied to Point4D’s own
+output, with the released weights unchanged.
+Point classes. The analysis uses the queries and metrics of
+Sec. 5. Each (query, frame) pair is assigned one of three
+ground-truth states: visible, occluded, meaning in front of
+the camera and inside the image but hidden, or out of frame.
+Together with the static or dynamic label of the query, this
+gives the six classes of Tab. 1. The EPE of a class is com-
+puted per video over the pairs of that class, then averaged
+over the videos with at least 100 such pairs. The EPE over
+all points is averaged over videos in the same way, so it is
+not the share-weighted mean of the class values.
+Scene-exiting ground-truth tracks. Some PointOdyssey
+tracks leave the scene: their ground-truth positions jump to
+hundreds or thousands of meters from the rest of the scene.
+Let r be the median distance of a video’s valid ground-
+truth positions to their median point. A track is marked as
+scene-exiting if a valid position lies farther than 25r from
+that point, or if it moves by more than 5r between two con-
+secutive valid frames. This removes 145 of 5,979 tracks in
+ani14 new f and 462 of 6,642 tracks in r1 new f, all on
+moving objects, and none elsewhere. The same tracks are
+removed for every method. They do not affect any conclu-
+sion but dominate the dynamic out-of-frame class: as Tab. 8
+shows, under the standard protocol its EPE exceeds 14 for
+every method, and the overall EPE of Point4D rises from
+1.569 to 3.831.
+GT-pose alignment. Chained Point4D expresses each win-
+dow k in the predicted camera frame of its first frame tk,
+in the window’s own predicted scale. At each handover it
+estimates a Sim(3) from the predicted depth of the overlap-
+ping frames, which both maps the carried queries into the
+next window and is accumulated into the world-to-window
+transform Gk of Sec. 4.1. The oracle replaces this estimate
+by the one implied by the ground-truth camera poses. With
+Wt the ground-truth world-to-camera transform and sk the
+scale of window k, measured as the median ratio between
+predicted and ground-truth camera distances of the tracks
+visible at tk, a point x in window k maps to
+x′ = sk+1
+sk
+RM x + sk+1 tM,
+[RM | tM] = Wtk+1W −1
+tk .
+(10)
+in window k+1. The chain then carries no registration error,
+while every prediction inside a window remains Point4D’s
+own.
+Over the 24 handovers of a 1,000-frame video,
+Point4D’s estimates differ from the oracle ones by 1.2◦in
+rotation, 3.4% in scale, and 0.10 m in translation per han-
+dover, on average.
+Holding unseen points. Given any tracker’s output, a point
+that has been unseen for more than 40 consecutive frames,
+the stride between windows, is output at its last seen posi-
+tion until it is seen again. Within a window, the decoder still
+observes the point in neighboring frames, so the hold starts
+only after the point has been absent for a full stride. We use
+two notions of seen:
+• Predicted view: the output projects in front of Point4D’s
+predicted camera and inside the image. Since the held
+output is frozen, the point is released once the held po-
+sition projects back into the view. This variant uses no
+ground truth, but cannot detect occlusions.
+12
+
+
+Table 8. Error analysis under the standard protocol. The experiment of Tab. 1 with all GT tracks retained. Only the dynamic out-of-
+frame class changes: it is dominated by the scene-exiting GT tracks of ani14 new f and r1 new f, which all methods inherit alike.
+All points
+Static points
+Dynamic points
+EPE↓
+APD↑
+SR↑
+visible
+occluded
+out of frame
+visible
+occluded
+out of frame
+Share of (point, frame) pairs
+100%
+–
+–
+8.3%
+2.4%
+17.0%
+40.1%
+17.8%
+14.5%
+Chained baseline
+3.831
+0.280
+0.186
+1.246
+1.162
+1.798
+1.196
+1.279
+14.607
+(a)
++ GT-pose alignment (no registration drift)
+3.832 (0%)
+0.287 (+2%)
+0.192 (+3%)
+1.252 (0%)
+1.189 (+2%)
+1.878 (+4%)
+1.168 (−2%)
+1.244 (−3%)
+14.626 (0%)
+(b)
++ hold unseen points (predicted view)
+3.430 (−10%)
+0.383 (+37%) 0.253 (+36%) 1.028 (−17%) 1.024 (−12%)
+1.115 (−38%)
+1.115 (−7%)
+1.195 (−7%)
+14.380 (−2%)
+(d)
++ hold unseen points (GT visibility)
+3.306 (−14%)
+0.435 (+55%) 0.275 (+48%) 0.971 (−22%) 0.897 (−23%)
+0.766 (−57%)
+1.063 (−11%)
+1.164 (−9%)
+14.333 (−2%)
+Recall4D (Ours)
+3.157 (−18%)
+0.469 (+67%)
+0.353 (+90%)
+0.435 (−65%)
+0.498 (−57%)
+0.434 (−76%)
+0.954 (−20%)
+1.066 (−17%)
+14.303 (−2%)
+Recall4D with GT masks and GT visibility
+3.231 (−16%) 0.454 (+62%) 0.361 (+94%)
+0.460 (−63%) 0.512 (−56%)
+0.377 (−79%)
+1.014 (−15%) 1.107 (−13%)
+14.466 (−1%)
+Table 9. Recall4D with oracle inputs on PointOdyssey val (1,000 frames), under the protocol of Tab. 1. Brackets give the change relative
+to Recall4D. Replacing the SAM 3.1 masks by GT masks of moving objects, or the projected visibility by the GT one, does not lower the
+overall EPE: the remaining error does not come from the perception inputs.
+All points
+Static points
+Dynamic points
+EPE↓
+APD↑
+SR↑
+visible
+occluded
+out of frame
+visible
+occluded
+out of frame
+Recall4D (Ours)
+0.889
+0.471
+0.359
+0.434
+0.497
+0.433
+0.948
+1.064
+1.534
+with GT masks
+0.964 (+8%)
+0.454 (−4%)
+0.366 (+2%)
+0.455 (+5%)
+0.508 (+2%)
+0.439 (+1%)
+1.010 (+7%)
+1.104 (+4%)
+1.692 (+10%)
+with GT visibility
+0.897 (+1%)
+0.470 (0%)
+0.361 (+1%)
+0.444 (+2%)
+0.504 (+2%)
+0.367 (−15%)
+0.951 (0%)
+1.075 (+1%)
+1.565 (+2%)
+with GT masks and GT visibility
+0.965 (+9%)
+0.455 (−3%)
+0.368 (+3%)
+0.460 (+6%)
+0.513 (+3%)
+0.377 (−13%)
+1.009 (+7%)
+1.107 (+4%)
+1.705 (+11%)
+• GT visibility: the ground-truth visibility flag, which also
+covers occlusions.
+This isolates the effect of the hold
+from that of the visibility decision.
+The hold is applied to all points, static and dynamic alike,
+without any segmentation.
+Row (c) of Tab. 1 combines
+the GT-pose alignment with the predicted-view hold. The
+attempts to repair alignment mentioned in Sec. 3 are de-
+scribed in Sec. D.2.
+Curves of Fig. 3. Both panels use the same retained points
+as Tab. 1. In (a), the EPE of all points is computed per video
+in each 40-frame window and averaged over the 15 videos;
+all of them have 1,000 frames, so every window averages
+the same videos. The bars give the fraction of retained pairs
+that are unseen in that window. In (b), each pair of a static
+point is binned by the number of frames since the point was
+last visible according to the ground truth (0 when visible); a
+bin enters a video’s mean with at least 50 pairs, and the bars
+give the share of static pairs per bin.
+Recall4D with oracle inputs. Tab. 9 replaces the two per-
+ception inputs of Recall4D by ground truth, one at a time
+and jointly. GT masks use the PointOdyssey instance masks,
+restricted in each window to objects that move within it: an
+object counts as moving when at least 10% of the ground-
+truth tracks projecting onto it move by more than 0.05 m
+in that window, and every other object is treated as back-
+ground, as SAM 3.1 does with its text prompts. This is the
+setting of the GT instance masks row of Tab. 5. GT visibility
+replaces the projection test of Eq. (4): at each keyframe, the
+persistent state of a point is updated only if the point is visi-
+ble according to the ground truth. In the first window every
+point is still updated, as in the method. Neither oracle low-
+ers the overall EPE, and SR changes by less than 0.01; the
+remaining error does not come from the perception inputs.
+B. Implementation and Evaluation Details
+Fig. 1. The video in (a) was recorded by the authors with
+a handheld iPhone and is not part of any dataset. In (b),
+we report the survival rate at 0.1 m, the strictest of our four
+thresholds, whereas the SR in our tables averages over all
+four. The baseline in (b) and (c) is chained Point4D.
+Fig. 2. The video was recorded by the authors with a hand-
+held iPhone. We track 64 points on a parked car and draw
+three of them. The car is static, so the reference for each
+point is its first-frame position from the same tracker. The
+raw error is the mean distance to this reference over the 64
+points. For the Sim(3) curve, we fit one transform per frame
+with the Umeyama algorithm and report the mean residual.
+This setting favors the misalignment hypothesis, since the
+transform may change at every frame. Errors are divided
+by the car size, the mean distance of the first-frame points
+to their centroid. The baseline error stays high even after
+the per-frame fit, so a similarity transform cannot explain
+it. The error of Recall4D stays near zero. The left panel
+is a schematic of misalignment: the points drift together
+and keep their relative positions. The middle panel shows
+the baseline tracks, which scatter independently. The right
+panel shows Recall4D, which keeps the points in place.
+Tab. 1 & Fig. 3. Their implementation is detailed in Sec. A.
+Fig. 4. The cat video used for illustration is an in-the-wild
+clip from the internet, about 30 seconds long. Fig. 8 details
+the persistent world state, showing the complete pipeline
+for static background points, and Alg. 1 summarizes the full
+inference procedure of Recall4D.
+Tab. 2. The 200- and 500-frame settings use the first 200
+and 500 frames of each test sequence. The Recall4D row is
+Point4D with Recall4D. TrackEverything runs in its dense
+mode. In all our experiments, its input pointmaps come
+13
+
+
+Initialize
+(t = 1)
+$𝑥𝒊,𝒙
+(𝒕)
+𝒕𝒂
+T
+…
+𝟏
+𝒕𝒃
+In 
+view
+Back in 
+view
+Out of 
+view
+𝑮𝒌→𝒟→𝑮𝒌
+)𝟏
+Yes
+(update)
+Decoded 
+Observation 𝐱𝒊
+𝝉
+Keyframe &
+Frustum Gate
+No (hold)
+Hold State
+Running Mean 
+Fusion
+State Readout
+𝝉∈𝓚𝒌?
+∧
+𝒗𝒊
+𝝉= 𝟏?
+Update 𝒔𝒊= ('𝒙𝒊, 𝒏𝒊) 
+Persistent World
+State
+Static: A Persistent World State
+Every frame
+Figure 8. Detailed pipeline of the persistent world state. At each keyframe, a stored point that lies inside the camera frustum is decoded
+and fused into the state by a running mean; otherwise the state is held. The output at every frame is read from the state.
+Algorithm 1 Recall4D inference
+Require: video {It}T
+t=1, queries {ui}N
+i=1, frozen encoder E and
+decoder D, first-frame instance masks M1
+Ensure: trajectories {yt
+i}
+1: B ←{i : M1(ui) = 0}
+▷background queries
+2: lift each i ∈B to ˆxi with predicted depth; ni ←0
+3: for each foreground instance o do
+4:
+{¯aj} ←FPS(Xo, Ao)
+▷anchors
+5:
+compute N(i) and wij for its queries
+▷once
+6: end for
+7: for each window Ck do
+8:
+encode E(Ck); estimate cameras and Gk
+9:
+for each keyframe τ ∈Kk do
+▷static: update
+10:
+for each i ∈B with vτ
+i = 1 do
+▷others are held
+11:
+decode xτ
+i from the stored ˆxi
+12:
+ˆxi ←(niˆxi + xτ
+i )/(ni + 1); ni ←ni + 1
+13:
+end for
+14:
+end for
+15:
+for each frame t ∈Ck do
+16:
+yt
+i ←ˆxi for i ∈B
+▷static: read out
+17:
+decode anchors at
+j
+▷dynamic: track
+18:
+yt
+i ←¯x(k)
+i
++ P
+j wij(at
+j −¯a(k)
+j
+) for i /∈B
+▷skin
+19:
+end for
+20:
+update rest positions ¯x(k+1)
+i
+, ¯a(k+1)
+j
+21: end for
+from VGGT-Ω[36].
+Tab. 3. At these lengths we use the sparse mode of Track-
+Everything, which fits within our memory cap. TrackEvery-
+thing already classifies each point as static or dynamic in ev-
+ery window. We keep this classification and apply Recall4D
+on top of it: points classified as static are written to the per-
+sistent world state and read out from it, and dynamic points
+are tracked through sparse anchors with skinning. Test se-
+quences shorter than the target length are evaluated on all
+their frames.
+Fig. 5. Each panel is a top-down view of the reconstructed
+scene, with the current camera drawn as a frustum. We draw
+the static queries in the region that leaves the view. Filled
+dots are the predictions, colored by their error at that frame,
+and open circles are the ground-truth positions, connected
+to their predictions by lines. The color scale saturates at 1.0.
+The EPE in each panel is the mean error over the points.
+Tab. 4. All rows use the first 500 frames of the validation
+videos, under the standard protocol with all tracks. Persis-
+tent state alone stores the static points and decodes every
+dynamic query; sparse anchors alone skins the dynamic
+queries and re-predicts the static points. Per-window re-
+binding recomputes the anchor associations and skinning
+weights at every window. The retention gate decides which
+points enter the state: a small MLP, trained on PointOdyssey
+training sequences, classifies each point once from nine
+depth-normalized features of its predicted trajectory in the
+first window. With SAM 3.1, a point enters the state only if
+it lies in the background and passes the gate; gate instead of
+segmenter uses the gate alone.
+Tab. 5. All rows use the 1,000-frame validation videos with
+scene-exiting tracks excluded, as in Tab. 1. A point is dy-
+namic in a window if the bounding box of its ground-truth
+positions there has a diagonal above 0.05 m; Miss and FA
+are measured against these labels. Runtimes exclude the
+segmentation or classification itself.
+All dynamic is chained Point4D, and All static holds ev-
+ery point at its stored position. The rows under per-window
+classification relabel the points in every window and decode
+all dynamic points, without anchors. SAM 3.1, first frame
+keeps the default labels, so it isolates the effect of skinning.
+Video propagation propagates the SAM 3.1 masks through
+the video and, at the start of each window, labels a point
+as dynamic if its current estimate projects into an instance
+mask; a point outside the image keeps its label. TrackEv-
+erything uses its predicted labels. Displacement threshold
+labels a point as dynamic if the bounding-box diagonal of
+its predicted positions in the previous window exceeds 2%
+of the median query depth, a threshold chosen on the Dy-
+namic Replica validation set. Retention gate uses the gate
+of Tab. 4 and, unlike the other rows of this group, labels
+the points once, from the first window. GT instance masks
+are described in Sec. A, and GT per-window labels use the
+ground-truth window labels defined above.
+Tab. 6 & Fig. 6. Their implementation is detailed in Sec. 6.
+14
+
+
+Table 10. Long-horizon comparison without scene-exiting tracks. Tab. 3 re-evaluated on PointOdyssey test with the track filter of
+Sec. A. Predictions are unchanged. Brackets give the change in EPE relative to the backbone.
+Method
+1,000 frames
+1,500 frames
+2,000 frames
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+EPE↓
+EPEdyn ↓
+APD↑
+SR↑
+Tracks removed
+2,940 of 80,799
+2,934 of 80,799
+2,934 of 80,799
+TrackEverythings [13]
+1.013
+1.154
+0.591
+0.478
+1.126
+1.301
+0.534
+0.435
+1.166
+1.358
+0.501
+0.398
++ Recall4D (Ours)
+1.006 (–0.7%)
+1.152
+0.597
+0.488
+1.114 (–1.1%)
+1.299
+0.549
+0.453
+1.150 (–1.4%)
+1.354
+0.522
+0.425
+Point4D [14]
+1.165
+0.969
+0.378
+0.282
+1.481
+1.137
+0.304
+0.215
+1.598
+1.194
+0.266
+0.178
++ Recall4D (Ours)
+0.805 (–31%)
+0.990
+0.502
+0.410
+0.886 (–40%)
+1.119
+0.468
+0.382
+0.924 (–42%)
+1.168
+0.451
+0.364
+Table 11. The all-static baseline across video lengths and datasets. All static holds every query, as in Tab. 5. SRdyn is the SR of dynamic
+queries, and the first row gives their share.
+Method
+PointOdyssey (200)
+PointOdyssey (500)
+PointOdyssey (1,000)
+Dynamic Replica (200)
+Dynamic Replica (500)
+ADT (300)
+EPE↓
+SR↑
+SRdyn ↑EPE↓
+SR↑
+SRdyn ↑
+EPE↓
+SR↑
+SRdyn ↑
+EPE↓
+SR↑
+SRdyn ↑
+EPE↓
+SR↑
+SRdyn ↑
+EPE↓
+SR↑
+SRdyn ↑
+Dynamic queries
+59.2%
+59.7%
+59.7%
+32.3%
+34.1%
+27.7%
+Chained baseline
+0.661
+0.489
+0.477
+0.979
+0.370
+0.377
+2.750
+0.282
+0.245
+0.255
+0.710
+0.653
+0.307
+0.646
+0.583
+0.870
+0.412
+0.381
+All static
+0.653
+0.483
+0.438
+0.838
+0.428
+0.351
+2.370
+0.378
+0.229
+0.250
+0.703
+0.557
+0.270
+0.660
+0.464
+0.638
+0.464
+0.351
+Recall4D (Ours)
+0.609
+0.528
+0.471
+0.836
+0.440
+0.379
+2.365
+0.408
+0.287
+0.244
+0.725
+0.639
+0.262
+0.690
+0.572
+0.629
+0.474
+0.386
+Tab. 7.
+Each task attaches the persistent world state of
+Sec. 4.2 to an existing model, with the adaptations below.
+Task A. CoTracker3 tracks in 2D, so the state is kept in
+3D and projected back into the image. Points outside the
+SAM 3.1 instances of the first frame are static, and are lifted
+to 3D and stored as in Sec. 4.2. In every frame, the camera
+is registered to the state by PnP with RANSAC on the 2D
+positions from the tracker, with a 4-pixel threshold; if too
+few inliers are found, the camera predicted by Point4D is
+used. The state supplies the position of a static point only
+while the tracker does not see it. A point that the registration
+repeatedly rejects as an outlier is treated as a moving point
+missed by the masks and returned to the tracker. Visibility
+always comes from the tracker.
+Task B. VGGT-Long [5] predicts a pointmap per chunk
+and stacks the Sim(3)-aligned chunks, so a region is pre-
+dicted again whenever a new chunk sees it.
+We keep a
+world-space state for static regions instead: observations
+are fused by a running mean at keyframes, and a region
+that leaves the view keeps its stored geometry. Vehicles and
+pedestrians are removed with SAM 3.1 masks, and no an-
+chors are needed since the benchmark evaluates the static
+scene.
+Task C. Video Depth Anything predicts depth indepen-
+dently in each window, so the depth of a static region
+changes between windows and upon revisits.
+We back-
+project static pixels into world coordinates with estimated
+camera poses, fuse them into the state by a running mean
+at keyframes, and read their depth back by projection. Dy-
+namic pixels, given by SAM 3.1 masks, keep the original
+prediction, so no anchors are needed.
+C. Additional Experiments
+This section reports three experiments: long-horizon results
+without scene-exiting tracks, a closer look at the all-static
+baseline, and an evaluation on real-world videos.
+C.1. Results without Scene-Exiting Tracks
+In Tab. 3, Recall4D lowers the EPE of Point4D by 12–14%
+on the test split, against 43% on the validation videos of
+Tab. 1. A large part of this difference comes from the eval-
+uation protocol. Tab. 1 excludes scene-exiting ground-truth
+tracks, whereas Tab. 3 follows the standard protocol and
+keeps them. These tracks carry an error that is large and
+nearly identical for every method, which dilutes any rela-
+tive gain: as Tab. 8 shows, keeping them reduces the gain
+on the validation videos from 43% to 18%.
+We therefore re-evaluate Tab. 3 with the filter of Sec. A,
+which removes 3.6% of the tracks. The predictions are un-
+changed; only the set of evaluated tracks differs. As Tab. 10
+shows, the EPE of Point4D at 2,000 frames falls from 5.334
+to 1.598 and that of Recall4D from 4.634 to 0.924, so the
+reduction brought by Recall4D rises from 13% to 42%. At
+1,000 and 1,500 frames it is 31% and 40%, in line with
+the 43% on the validation videos, and it grows with video
+length, as expected if forgetting accumulates. SR is almost
+unaffected by the filter: at 1,000 frames it is 0.282 and
+0.410, against 0.282 and 0.408 in Tab. 3. Fewer than 4%
+of the tracks thus account for most of the EPE under the
+standard protocol, which is why we report bounded metrics
+alongside it. With these tracks excluded, Point4D with Re-
+call4D reaches the lowest EPE at every length, while Track-
+Everything keeps the highest APD and SR. On TrackEvery-
+thing, the gain from Recall4D remains small, as explained
+in Sec. D.1.
+C.2. A Closer Look at the All-Static Baseline
+In Tab. 5, holding every point comes close to Recall4D in
+EPE. This baseline is the limiting case of Recall4D in which
+every query is labeled static: it keeps the persistent state and
+15
+
+
+Table 12. Quantitative comparison on TAPVid-3D ADT minival split. Each backbone is evaluated without and with Recall4D. ∆gives
+the change brought by Recall4D, in green when it is an improvement.
+Method
+EPE↓
+∆EPE
+APD↑
+∆APD
+SR↑
+∆SR
+Time (s)↓
+∆Time
+SpatialTrackerV2 [43]
+1.304
+–
+0.624
+–
+0.546
+–
+220.9
+–
+TraceAnything [23]
+0.851
+–
+0.523
+–
+0.476
+–
+78.2
+–
++ Recall4D (Ours)
+0.518
+−0.333
+0.682
++0.159
+0.660
++0.184
+66.6
+−11.6
+Any4D [19]
+0.817
+–
+0.408
+–
+0.364
+–
+199.0
+–
++ Recall4D (Ours)
+0.611
+−0.206
+0.512
++0.104
+0.495
++0.131
+54.5
+−144.5
+V-DPM [31]
+0.714
+–
+0.534
+–
+0.488
+–
+2325
+–
++ Recall4D (Ours)
+0.417
+−0.297
+0.731
++0.197
+0.714
++0.226
+2106
+−219
+4RC [25]
+0.724
+–
+0.545
+–
+0.492
+–
+155.8
+–
++ Recall4D (Ours)
+0.398
+−0.326
+0.721
++0.176
+0.705
++0.213
+75.8
+−80.0
+Track4World [24]
+0.909
+–
+0.383
+–
+0.320
+–
+478.8
+–
++ Recall4D (Ours)
+0.635
+−0.274
+0.497
++0.114
+0.483
++0.163
+124.0
+−354.8
+TrackEverythings [13]
+0.273
+–
+0.768
+–
+0.740
+–
+235.3
+–
++ Recall4D (Ours)
+0.270
+−0.003
+0.769
++0.001
+0.741
++0.001
+221.9
+−13.4
+Point4D [14]
+0.870
+–
+0.451
+–
+0.412
+–
+42.7
+–
++ Recall4D (Ours)
+0.629
+−0.241
+0.493
++0.042
+0.474
++0.062
+26.8
+−15.9
+discards all motion. Its strength confirms our diagnosis that
+remembering matters more than re-predicting. It is not a
+tracker, however, since each of its trajectories is constant,
+and its accuracy depends on how static the scene is.
+Tab. 11 compares it with Recall4D across video lengths
+and datasets. Besides EPE and SR over all queries, we re-
+port SRdyn, the SR of dynamic queries, which is bounded
+and therefore not dominated by scene-exiting tracks.
+In
+EPE the two are close in most settings, since both remove
+the forgetting of static points, which dominates this met-
+ric. The difference lies in the dynamic queries. Holding
+them lowers SRdyn below that of the chained baseline in all
+six settings, by up to 0.119 on Dynamic Replica, whereas
+Recall4D stays within 0.014 of the baseline and exceeds
+the all-static variant by 0.03 to 0.11. Recall4D also has
+the highest SR over all queries in every setting. The all-
+static baseline thus shows how much remembering alone
+achieves, and Recall4D obtains this gain without giving up
+the dynamic part of the scene.
+C.3. Evaluation on Real-World Videos
+Sec. 6.1 evaluates Recall4D on two synthetic datasets,
+PointOdyssey [47] and Dynamic Replica [16].
+The rea-
+son is simple: our focus is long-horizon tracking, and exist-
+ing real-world benchmarks with 3D track annotations con-
+tain only short clips. Synthetic data alone, however, cannot
+show whether our findings transfer to real videos. We there-
+fore add an evaluation on the minival split of the Aria Digi-
+tal Twin (ADT) [29] subset of TAPVid-3D [20]. Among the
+three TAPVid-3D subsets, ADT has the longest clips, at 300
+frames each, whereas DriveTrack [1] clips range from 25 to
+300 frames and Panoptic Studio [15] clips have about 150.
+ADT is also egocentric: frequent head motion moves scene
+content out of view and back, which is exactly the condi-
+tion under which forgetting occurs. At 300 frames, these
+clips remain far shorter than our long-horizon setting, so
+this experiment serves as a real-world validation rather than
+a long-horizon benchmark. As Tab. 12 shows, our findings
+transfer to real videos. Recall4D improves all six backbones
+that have no built-in scene memory, on every metric: EPE
+drops by 25% to 45%, SR rises by 0.06 to 0.23, and run-
+time falls in every case, by up to 3.9×. These gains appear
+on clips of only 300 frames, which suggests that forgetting
+already matters at moderate length when the camera moves
+as much as a head-mounted one.
+TrackEverything [13] is the most accurate method on
+this benchmark by a clear margin. On top of it, Recall4D
+leaves accuracy essentially unchanged and reduces runtime
+by 6%. This matches its behavior on PointOdyssey and has
+the same explanation, given in Sec. D.1: TrackEverything
+already keeps static points by design. The table thus tells
+one story from two sides. The tracker that was built to re-
+member is the most accurate, and the trackers that were not
+move much closer to it once Recall4D lets them remember.
+For 4RC, the gap to TrackEverything narrows by 72% in
+EPE, 79% in APD, and 86% in SR, without any training.
+D. Discussion and Limitations
+D.1. A Closer Look at TrackEverything
+Concurrent with our work, TrackEverything [13] made an
+impressive step for long-horizon 3D tracking: a learned
+tracker that follows every pixel through videos of more than
+a thousand frames, built on a persistent, de-duplicated 3D
+scene representation. As the work closest to ours, it de-
+serves a closer look, which we give here. Tab. 13 compares
+its design with ours. Both separate static from dynamic
+points and spare the static ones from repeated trajectory pre-
+diction. That an independently designed and trained tracker
+arrives at the same decomposition is, in our view, strong
+support for the diagnosis of Sec. 3. The two works are com-
+plementary: TrackEverything learns this behavior inside a
+new tracker, whereas Recall4D adds it to existing trackers
+without training.
+16
+
+
+Table 13. Design comparison with the concurrent TrackEverything [13], described in its default dense mode. The two methods share
+one idea, sparing static points from repeated trajectory prediction, and realize it by complementary routes.
+TrackEverything
+Recall4D (Ours)
+Type
+Trained tracker, 41M trainable parameters
+Training-free plug-in on a frozen tracker
+Geometry
+World-space pointmaps, sensed or predicted
+Depth and cameras predicted by the backbone
+Windows
+Non-overlapping, 16 frames
+48 frames with stride 40, chained by Sim(3)
+Scene state
+Voxel-deduplicated world-space feature cloud
+A position and a counter per static query
+Static/dynamic split
+Learned per-point classification in every window
+First-frame instance masks
+Static points
+Merged by voxel, skipping trajectory refinement
+Held when unseen, refined by a running mean
+Dynamic points
+Trajectory refined for every dynamic point
+Up to 32 anchors per instance, rest skinned
+Table 14. Per-sequence results of TrackEverything and Recall4D on PointOdyssey test (200 frames). TrackEverything is run in its
+dense mode, and its runtime varies with the extent of the scene. The OOM column gives the video length at which the dense mode exceeds
+our 40 GB memory budget.
+TrackEverything [13]
+Recall4D (Ours)
+Sequence
+#Q
+Time (s)
+EPE↓
+APD↑
+SR↑
+Geom. (s)
+OOM
+Time (s)
+EPE↓
+APD↑
+SR↑
+ani12 new f
+7318
+360.8
+1.415
+0.328
+0.193
+31.2
+≥1000
+35.0
+1.653
+0.229
+0.103
+ani14 new
+8192
+209.8
+1.459
+0.442
+0.219
+31.0
+≥1000
+28.7
+0.779
+0.483
+0.229
+ani2
+5216
+3031.4
+3.372
+0.371
+0.230
+31.1
+≥500
+23.8
+1.303
+0.159
+0.078
+anima5 s
+3857
+2509.8
+1.717
+0.095
+0.036
+31.0
+≥500
+26.6
+1.512
+0.137
+0.070
+cab e 3rd
+8192
+88.1
+0.233
+0.801
+0.678
+31.0
+–
+25.7
+0.260
+0.806
+0.685
+dancingroom1 3rd
+8192
+162.2
+0.761
+0.628
+0.606
+30.9
+–
+36.1
+0.498
+0.627
+0.562
+dancingroom1 3rd1
+4808
+324.2
+0.233
+0.854
+0.818
+30.8
+–
+27.8
+0.274
+0.842
+0.707
+dancingroom1 3rd2
+8192
+275.0
+0.867
+0.688
+0.660
+30.9
+–
+34.9
+0.313
+0.837
+0.755
+dancingroom3 3rd
+8192
+305.8
+0.734
+0.685
+0.629
+30.5
+–
+34.1
+0.479
+0.518
+0.394
+egobody egocentric
+4354
+62.2
+0.122
+0.882
+0.777
+31.2
+–
+19.4
+0.507
+0.596
+0.536
+seminar g110 0315 3rd
+8192
+88.6
+0.143
+0.836
+0.826
+30.6
+–
+36.4
+0.143
+0.920
+0.873
+seminar g110 0315 ego1
+2903
+69.0
+0.061
+0.976
+0.973
+31.0
+–
+24.8
+0.071
+0.972
+0.940
+seminar g110 0315 ego2
+3191
+63.0
+0.093
+0.946
+0.922
+31.1
+–
+21.4
+0.125
+0.934
+0.932
+Mean
+580.8
+0.862
+0.656
+0.582
+30.9
+28.8
+0.609
+0.620
+0.528
+Median
+209.8
+31.0
+27.8
+Choice of modes. We run the released code with its de-
+fault settings. It offers a dense mode, the default, which
+maintains the scene representation across windows, and a
+sparse mode, which tracks the query points without keep-
+ing the scene points of previous windows. Its authors rec-
+ommend the sparse mode when the scene memory grows
+large and note that it has little effect on the accuracy of
+query points. We use each where it is intended. Tab. 2 com-
+pares all methods in their default configuration, so it uses
+the dense mode. Tab. 3 targets 1,000 to 2,000 frames, where
+the dense mode exceeds our memory budget on four of the
+13 test sequences, so it uses the sparse mode. The 40 GB
+budget is our own constraint, applied to every method. At
+500 frames, two sequences exceed it in the dense mode, and
+Tab. 2 therefore reports OOM instead of an average over a
+subset. Tab. 14 gives the per-sequence results at 200 frames.
+Results. TrackEverything is the strongest method in our
+comparison on APD and SR: it leads both on 200-frame
+PointOdyssey in Tab. 2 and at every length in Tab. 3, where
+its EPE is also lower than that of chained Point4D. Two
+sequences, ani2 and anima5 s, account for most of its
+runtime and much of its error in Tab. 2: without them, its
+mean tracking time is 183 s and its mean EPE is 0.556. We
+stress that these two sequences are not a weakness specific
+to TrackEverything. Every method in our comparison, in-
+cluding ours, is clearly less accurate on them than on the re-
+maining sequences, although to different degrees: Recall4D
+reaches an EPE of 1.303 and 1.512 on them, against 0.464
+on the other eleven. The runtime of TrackEverything varies
+with the extent of the scene.
+Recall4D on TrackEverything.
+Applied on top of
+TrackEverythings, Recall4D brings consistent but small
+gains: at 1,000 frames, EPE moves from 2.577 to 2.569
+and SR from 0.475 to 0.485, with 15% less runtime. This is
+expected. TrackEverything already classifies points as static
+or dynamic and does not refine the trajectories of static ones,
+so little forgetting is left to remove.
+Independent evidence.
+Fig. 9 shows the sequence of
+Fig. 5. Static points tracked by TrackEverything stay accu-
+rate while they are out of view and after they are revisited,
+with an EPE of 0.082 and 0.142, against 0.411 and 0.580
+for chained Point4D in Fig. 5. A tracker that spares static
+points by design thus does not show the forgetting pattern,
+which is what our diagnosis predicts.
+17
+
+
+0.8
+0.6
+0.4
+0.2
+0.0
+1.0
+Recall4D (Ours)
+TrackEverything
+Visible
+(t=30)
+Out of view
+(t=430)
+Revisited
+(t=770)
+EPE: 0.061
+EPE: 0.094
+EPE: 0.102
+EPE: 0.052
+EPE: 0.082
+EPE: 0.142
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+fraction out of view
+0
+200
+400
+600
+800
+0.0
+0.1
+0.2
+EPES
+Visible
+Out of view
+Revisited
+TrackEverything
+Recall4D (Ours)
+Figure 9. Static points under Recall4D and TrackEverything
+on the sequence of Fig. 5. Both keep static points accurate while
+they are out of view and after they are revisited. Bottom: EPE of
+static points over time; shading shows the fraction of static points
+outside the camera view at each frame.
+D.2. Why Not Try to Learn Something?
+Recall4D involves no training. We reached this design only
+after trying a range of alternatives, many of them learned,
+and none brought a measurable gain. Tab. 15 lists them in
+three groups: attempts to repair inter-window drift, attempts
+to handle unseen points differently, and learned variants of
+our components. They were run during development under
+settings that differ from our final protocol, so each row is
+compared only with its own control, and absolute values
+are not comparable to the tables of the main paper.
+Repairing inter-window drift. Our first hypothesis was
+accumulated drift.
+Detecting revisited places with a re-
+identification head and correcting the chain upon a loop
+leaves EPE at 1.839 against 1.820. Training the tracker on
+chained windows, so that it sees its own handovers, changes
+EPE by at most 1.3%, and passing a latent state from one
+window to the next does not help either. Smoothing the
+predicted trajectories over the overlapping frames, by lin-
+ear interpolation across each overlap or by a 9-frame mov-
+ing average, has no effect either: EPE stays between 1.821
+and 1.823, and in the setting of Tab. 3 at 1,000 frames it
+stays within 0.001 of 2.750 for Point4D and at 2.365 for
+Recall4D. The windows already agree where they meet, so
+smoothing their junctions cannot recover what was forgot-
+ten. Together with the GT-pose alignment of Tab. 1, which
+bounds what any alignment method can achieve, these re-
+sults rule out registration as the main cause.
+Handling unseen points. Holding helps static points but
+not dynamic ones, so we tried to complete the motion of
+unseen dynamic points: propagating them rigidly with their
+object, interpolating between their last and next observa-
+tions, and damping their predicted motion. None improves
+on the control, and linear interpolation reaches only 1.349
+even when both endpoints are taken from the ground truth.
+Recall4D therefore leaves the motion of dynamic points to
+the backbone and only reduces its cost. Deciding when to
+hold also matters: gating the hold by the decoder’s predicted
+visibility lowers EPE by 6.9%, against 22.3% with ground-
+truth visibility. This gap led us to decide visibility by pro-
+jecting the stored state into the predicted camera.
+Learned variants. Fine-tuning the decoder jointly with our
+modules degraded the backbone itself, from 0.961 to 1.006
+on 200-frame videos, so we keep it frozen. A learned ro-
+tation head for the anchors did not converge, its error stay-
+ing at 14.4◦, which suggests that the frozen decoder fea-
+tures carry little orientation information; our skinning there-
+fore blends displacements only. Learned skinning weights
+with a residual are no better than distance-based ones, 0.743
+against 0.732. A learned retention gate separates static from
+dynamic points better than a rule, with an AUC of 0.92
+against 0.87, yet does not lower EPE. Finally, weighting ob-
+servations by predicted confidence or by depth matches the
+uniform mean, and confidence-guided updates raise EPE
+from 1.378 to 1.427, since the predicted confidence is un-
+correlated with the actual error. Even oracle weights would
+gain only 2.3%, which is why we use a plain running mean.
+D.3. Where the Speed-up Comes From
+We measure cost in decoder evaluations, where one evalua-
+tion decodes one query at one frame. The encoder runs once
+per window in both methods, so the saving lies entirely in
+the decoder. Let N be the number of queries, T the number
+of frames, and L and S the window length and stride, with
+L=48 and S=40. Chained Point4D decodes every query at
+every frame of each of its T/S windows, which costs
+Cbase = T
+S L N.
+(11)
+Recall4D decodes the anchors at every frame, and the back-
+ground only at in-view keyframes:
+Cours = T
+S
+
+L P
+o Ao
+|
+{z
+}
+anchors, every frame
++
+m ρ |B|
+| {z }
+background, keyframes
+
+,
+(12)
+where Ao is the number of anchors of instance o, m the
+number of keyframes per window, and ρ ≤1 the average
+fraction of background points inside the camera frustum at
+a keyframe. The ratio of the two costs is
+Cours
+Cbase
+=
+P
+o Ao
+N
++ m
+L ρ |B|
+N .
+(13)
+Static points. A background point is decoded at m of the L
+frames, and only while it is in view. With m=4 and L=48,
+18
+
+
+Table 15. Alternatives that brought no measurable gain. EPE on PointOdyssey val during development. Each variant is compared with
+its own control under identical settings. Settings differ across rows and from our final protocol, so values are not comparable to the tables
+of the main paper. A pair or a range gives the results of several variants of the same idea.
+Alternative
+Frames
+Control
+Variant
+Design choice it supports
+Repairing inter-window drift
+Loop closure with re-identification
+500
+1.820
+1.839
+Alignment is not the bottleneck
+Training on chained windows, last two decoder layers
+500
+1.821
+1.810
+Alignment is not the bottleneck
+Training on chained windows, head only
+500
+1.821
+1.797
+Alignment is not the bottleneck
+Latent state passed between windows
+500
+1.800
+1.810
+Explicit, parameter-free state
+Smoothing over overlapping frames
+500
+1.821
+1.821–1.823
+Alignment is not the bottleneck
+Handling unseen points
+Rigid propagation of unseen dynamic points
+500
+1.400
+1.399–1.401
+Dynamic motion is left to the backbone
+Offline interpolation, linear / Hermite
+500
+1.400
+1.405 / 1.431
+Dynamic motion is left to the backbone
+Damping of dynamic points, two strengths
+500
+1.399
+1.406 / 1.425
+Dynamic motion is left to the backbone
+Hold gated by decoder-predicted visibility
+500
+1.821
+1.695
+Visibility by projection; GT visibility reaches 1.415
+Learned variants
+Joint fine-tuning of the decoder
+200
+0.961
+1.006
+Frozen backbone
+Learned skinning weights with residual
+200
+0.732
+0.743
+Distance-based skinning
+Learned retention gate
+500
+1.397
+1.414
+First-frame instance masks
+Confidence-guided state update
+500
+1.378
+1.427
+Uniform running mean
+Fusion weighted by confidence or depth
+500
+1.398
+1.398
+Uniform running mean
+it costs at most one twelfth of dense decoding, and nothing
+once it leaves the view. Reading its position from the state
+at the remaining frames requires no network call, and the
+running-mean update is a closed-form operation.
+Dynamic points. The decoding cost of a moving object
+depends on its number of anchors, at most 32, and not on the
+number of queries that lie on it. The remaining foreground
+queries are skinned: their weights over the H=6 nearest
+anchors are computed once, and each frame then needs only
+a weighted sum of anchor displacements.
+Consistency with the ablation. The two terms act on dis-
+joint sets of queries, so their savings should add.
+This
+matches the component ablation in Tab. 4: of the 581.2 s of
+chained Point4D, the persistent state alone removes 292.5 s
+and the anchors alone 233.6 s.
+Exactly additive savings
+would leave 55.1 s, close to the measured 66.0 s.
+Scaling. Both costs are linear in T, so the speed-up is nearly
+constant in video length, in line with the 7.6–7.8× measured
+from 200 to 2,000 frames in Sec. 6.3. In the number of
+queries, the two methods differ. Every added query costs
+chained Point4D L evaluations per window. In Recall4D,
+an added background query costs at most m, and an added
+foreground query costs none, since it is skinned from the
+anchors of its instance. This is why, from 256 to 32,768
+queries, the runtime of Point4D grows 46.8× and that of
+Recall4D only 3.4×, and the speed-up reaches 13.2×.
+D.4. Limitations and Outlook
+Recall4D removes the forgetting of static geometry but in-
+herits the motion prediction of its backbone, so it does not
+improve how dynamic points themselves are tracked. Its
+decomposition relies on first-frame instance masks, and a
+moving object that these masks miss is treated as static. Ex-
+tending memory to dynamic objects and making the decom-
+position adaptive over time are natural next steps.
+More broadly, a feed-forward model is stateless: what-
+ever leaves its window must be inferred again. Our results
+suggest that much of the long-horizon error is the price of
+this statelessness and not of imperfect geometry, since a
+small explicit state recovers a large part of it without any
+training. The same observation holds across five further
+backbones and three other tasks, and a concurrent tracker
+arrives at it through learning. The open problem is mem-
+ory for moving objects, where a stored position no longer
+suffices and the state must also carry motion.
+We also believe accuracy should not be the only axis on
+which long-horizon 4D reconstruction is judged. A result
+that arrives long after the video has ended is of limited use,
+however accurate it is. Our experiments suggest that the
+two goals need not be traded against each other: removing
+repeated prediction lowers the error of Point4D on 1,000-
+frame videos while cutting its runtime from 1,176 s to 155 s.
+We see real-time long-horizon 4D reconstruction as the nat-
+ural goal for the field, and we hope that future long-video
+models will treat what they have already seen as something
+to keep, and no longer as something to predict again.
+E. Extended Visualizations
+Fig. 10 shows Recall4D on three in-the-wild videos with
+large camera and subject motion. Each video has more than
+2,000 frames, and tracking takes 4 min 27 s per video on
+average. In every example, the static scene is reconstructed
+once and kept in the persistent world state, while the moving
+subject is tracked through sparse anchors.
+19
+
+
+. . .
+. . .
+. . .
+Figure 10. Recall4D on in-the-wild videos of more than 2,000 frames. Left: two frames of the input video. Right: the reconstructed
+static scene, with the trajectories of the points on the moving subject in color.
+20
