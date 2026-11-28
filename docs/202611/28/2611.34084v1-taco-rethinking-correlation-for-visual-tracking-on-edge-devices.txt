@@ -1,0 +1,2598 @@
+TaCo: Rethinking Correlation for Visual Tracking on Edge Devices
+Qingmao Wei1,2
+Fagui Liu1,2,∗
+Quan Tang2,∗
+1South China University of Technology
+2Pengcheng Laboratory
+Abstract
+Lightweight trackers have replaced cross-correlation with
+attention, and on low-power edge hardware they pay for
+it, since memory-bound softmax, normalization and re-
+shaping operators of attention cost far more time than
+their arithmetic suggests.
+Benchmarking efficient track-
+ers on an edge Neural Processing Unit (NPU) and an
+Arm CPU under one numerically validated protocol, we
+find that correlation trackers are the fast ones, but they
+lag in accuracy unless they adopt a ViT backbone, which
+brings attention back. We revisit what correlation lacks.
+Template–search interaction serves two roles: condition-
+ing the search features on the target and matching them
+against it spatially. Attention does both, whereas correla-
+tion only matches, and does so on features extracted with-
+out knowledge of the target.
+We present TaCo (Target-
+aligned Correlation), which supplies the missing condition-
+ing without attention by letting the template enter the per-
+frame network only as operands computed once per video.
+A descriptor of the target scales and shifts the search fea-
+tures channel by channel inside the backbone, and kernels
+aligned with the target box, each with a weight predicted
+from the template, correlate with them in one matrix prod-
+uct. With the backbone fixed, our correlation remains es-
+sential while incurring negligible NPU overhead, offering
+a better speed-accuracy trade-off than the attention-based
+interactions we tested. TaCo-T achieves 62.3% LaSOT AUC
+at 184 FPS on the Rockchip RV1126B NPU and 96 FPS
+on a Raspberry Pi 5 CPU, 3.0× and 3.5× the NPU speed
+of HiT-Tiny and AsymTrack-T at higher accuracy. TaCo-B
+reaches 65.6% at 50 FPS on the NPU, more than twice the
+speed of HiT-Base, AsymTrack-B and LightFC-vit, again
+at higher accuracy.
+Code and models are available at
+https://github.com/TsingWei/TaCo-Tracker.
+1. Introduction
+Interaction between template and search features is cen-
+tral to visual tracking. Siamese correlation trackers com-
+pare template and search features explicitly after backbone
+*Corresponding authors: Quan Tang (tangq@pcl.ac.cn), Fagui Liu.
+5
+10
+20
+50 100 200
+NPU FPS
+50
+55
+60
+65
+70
+LaSOT precision (%)
+(a)
+5
+10
+20
+50
+100
+Arm FPS
+25
+28
+31
+34
+37
+VastTrack AUC (%)
+(b)
+TaCo (ours)
+Attention-based
+Correlation / CNN
+Figure 1. TaCo extends the accuracy and speed frontier on two
+edge devices. (a) LaSOT precision vs. per-frame graph FPS on
+the Rockchip RV1126B NPU. (b) VastTrack AUC vs. per-frame
+graph FPS on the Raspberry Pi 5 Arm CPU. Both FPS axes are
+logarithmic. Lines connect variants within a tracker family, and
+gray markers fail the NPU FP16 numerical check.
+extraction, keeping inference lightweight on convolutional
+architectures [1, 17, 19], though they lag behind on dis-
+tractors and appearance changes.
+Attention-based track-
+ers replaced explicit correlation with learned feature fu-
+sion [4, 37], and one-stream designs integrated interaction
+into feature extraction [6, 41].
+Efficient trackers follow
+this route via compact transformers, distillation, and token
+pruning [7, 10, 14, 15], or cache the template to skip re-
+encoding [31, 46].
+Multiply-accumulate operations (MACs) give only a the-
+oretical bound on execution speed. Prior efficient track-
+ers often report uncompiled PyTorch timings of desktop
+GPU or CPU latency.
+Under compiled edge runtimes,
+however, low MACs do not guarantee low latency.
+The
+cached-template tracker AsymTrack-T [46] requires fewer
+MACs than the CNN correlation tracker LightFC [19], yet
+runs substantially slower on both the Arm CPU and the
+edge NPU. Specifically, although caching removes tem-
+plate re-encoding, search-side softmax attention, normal-
+ization, and layout operators still execute every frame. On-
+device operator profiling confirms this (Fig. 2).
+Com-
+1
+arXiv:2611.34084v1  [cs.CV]  25 Nov 2026
+
+
+0
+10
+20
+30
+40
+Instrumented RKNN operator time (ms)
+ViT-Tiny
+(1.63 GMACs)
+TaCo-T
+(1.49 GMACs)
+9.1
+5.4
+4.0
+4.0
+11.1
+33.63 ms
+5.2
+6.19 ms
+Conv / linear
+Pointwise / other
+Layout / indexing
+LayerNorm
+Fused attention
+Figure 2.
+Operator profile comparing ViT-Tiny and TaCo-
+T. Matched warm RKNN operator profiles (RV1126B, FP16,
+950 MHz, librknnrt 2.3.2) comparing a ViT-Tiny tracker against
+our convolutional TaCo-T graph at a comparable MAC budget.
+pared with ViT-Tiny, convolutional backbones at a com-
+parable MAC budget sharply reduce RV1126B NPU la-
+tency, because most of the runtime falls outside convolu-
+tion and linear layers into fused attention, LayerNorm, lay-
+out ops (Transpose/Split/Reshape), and pointwise
+ops in the transformer.
+Since compiled edge graphs fa-
+vor dense convolutions and matrix products, edge trackers
+should avoid softmax attention, normalization, and heavy
+layout reshaping in both backbone and interaction.
+Be-
+yond latency, compiled FP16 graphs can also diverge nu-
+merically from FP32 references.
+We therefore evaluate
+RV1126B NPU (RKNN) and Raspberry Pi 5 Arm CPU
+(ncnn) graphs under one unified protocol with FP32 numer-
+ical checks alongside re-evaluated accuracy across multiple
+benchmarks.
+This motivates a closer look at why correlation track-
+ers lag behind attention trackers. Interaction between the
+template and search features serves two roles, conditioning
+search feature extraction on the target and supplying spa-
+tial matching evidence for localization. Siamese trackers
+extract search features without target knowledge and apply
+correlation only near the head [1, 17, 19], whereas rescuing
+accuracy with a ViT backbone [19] forfeits edge-friendly
+operators. Attention performs both roles in every layer and
+couples them inside costly ops, yet the two roles need not
+share an operator. We ask whether a correlation tracker can
+gain target-aware features while retaining inexpensive ex-
+plicit matching on edge devices.
+We answer this with TaCo (Target-aligned Correlation),
+which separates the two roles across edge-friendly opera-
+tors. Using a CNN backbone truncated at stride 16, TaCo
+computes all template-derived operands once per video.
+A box-weighted descriptor predicts channel-wise scales
+and shifts before the stride-16 search blocks, while box-
+aligned RoIAlign target kernels, pooled context kernels,
+and template-predicted kernel weights separate part-level
+foreground matching from background context and cal-
+ibrate correlation responses without per-frame overhead.
+Because search features are already target-aware, we drop
+post-correlation fusion blocks and share compact reparam-
+eterizable RepConv layers [8] across the head, folding train-
+ing branches into plain convolutions at deployment. Per
+frame, the template enters only as operands of channel-wise
+multiply-adds and a single matrix product, without softmax,
+token normalization, or attention reshapes.
+Instantiating TaCo across three CNN variants (TaCo-
+T with LowFormer-E1, TaCo-S with RepViT-M1.1, and
+TaCo-B with RepViT-M1.5) extends the accuracy and speed
+frontier on both devices (Fig. 1). On RV1126B and Rasp-
+berry Pi 5, the TaCo family consistently outperforms prior
+lightweight trackers across standard benchmarks while scal-
+ing smoothly from ultra-fast real-time inference to higher-
+capacity models. For instance, TaCo-T reaches 184 FPS on
+RV1126B (over 3× faster than HiT-Tiny and AsymTrack-T
+with higher accuracy), while TaCo-B attains 65.6% LaSOT
+AUC at 50 NPU FPS (2.3× faster than LightFC-vit at higher
+accuracy) alongside strong gains across TrackingNet, GOT-
+10k, and VastTrack. Controlled ablations confirm that both
+decoupled roles are essential, and transplanting this inter-
+action onto representative transformer, CNN, and hybrid
+backbones (HiT, LightFC, and AsymTrack-T) likewise pre-
+serves or improves accuracy at substantially lower edge la-
+tency.
+We make three contributions:
+• Rethinking correlation. A controlled study and trans-
+fer analysis across backbones separate target-conditioned
+feature extraction from explicit spatial matching, es-
+tablishing their complementary gains and measured
+NPU/CPU operator costs.
+• TaCo, an edge tracking family. We realize this division
+using template operands cached once per video (target-
+guided modulation, target-aligned kernels with cached
+kernel weighting, and a shared reparameterizable head)
+across three CNN backbones.
+• A unified edge benchmark. We pair compiled RV1126B
+NPU and Raspberry Pi 5 Arm CPU graph timings, veri-
+fied against FP32 numerical references, with re-evaluated
+accuracy across four tracking benchmarks.
+2. Related Work
+Correlation-based tracking. Siamese trackers match tem-
+plate and search representations through explicit cross-
+correlation after feature extraction [1, 16, 17]. Pixel-wise
+correlation treats template feature vectors as individual 1×1
+kernels, producing a similarity map for each template loca-
+tion [11, 21, 39]. Lightweight designs reduce the cost of this
+pipeline through architecture search [38], compact fusion
+modules [2], or streamlined pixel-wise matching [19, 20].
+LightFC combines pixel-wise matching with channel at-
+tention and convolutional fusion, and its ViT variant uses
+a stronger feature extractor while retaining the matching
+pipeline [19]. Target-aware feature extraction has also been
+2
+
+
+explored. InBN [12] injects target information into Siamese
+backbone stages, while SBT [35] interleaves cross-image
+interaction with feature extraction and removes the separate
+correlation step. These studies establish the relevance of
+where template information enters the tracking network.
+Attention-based and efficient tracking. TransT [4] and
+STARK [37] use attention to fuse features from convolu-
+tional backbones, while one-stream trackers such as OS-
+Track [41], MixFormer [6], and SimTrack [3] unify inter-
+action between template and search with feature extraction.
+To reduce the resulting quadratic cost, efficient variants ex-
+plore hierarchical or separable-attention transformers [10,
+14, 15, 44], alongside distillation, layer-adaptive or sparse
+inference, and fast autoregressive designs [7, 30, 32, 36].
+Template caching further avoids repeated encoding through
+asymmetric attention [6] or asynchronous feature extrac-
+tion [31]. Yet even when template encoding is cached or
+theoretical MACs are lowered, search-side softmax atten-
+tion, normalization, and heavy token reshapes still execute
+every frame. As a result, latency reductions reported on
+desktop GPUs or uncompiled PyTorch do not directly trans-
+fer to compiled edge runtimes, where non-convolutional op-
+erators dominate execution time and can introduce FP16 nu-
+merical divergence.
+Feature-wise modulation.
+FiLM [27] conditions neu-
+ral features on external context through per-channel affine
+transformations. For video segmentation, OSMN [40] pre-
+dicts object-specific channel scales from the first annotated
+frame, using a separate modulator to specialize the segmen-
+tation network to the object of interest. In tracking, Au-
+toMatch [43] evaluates FiLM as a matching operator after
+backbone feature extraction and retains it in both classifi-
+cation and regression branches. PromptVT [42] introduces
+target guidance through visual prompts. AsymTrack [46]
+caches template representations and injects them into the
+search branch through prototype-based modulation, retain-
+ing a later attention layer for interaction. TaCo uses feature-
+wise modulation within the search backbone and retains ex-
+plicit correlation for spatial matching, evaluating this divi-
+sion under the operator costs of edge inference.
+3. TaCo: Target-aligned Correlation
+3.1. Rethinking correlation
+An interaction between a template and search features X ∈
+RC×HW has two functions. It makes X target-aware and
+matches the positions of X against the target. Trackers have
+used three forms of interaction,
+R = KzX,
+(1)
+X ←X + Vz softmax
+ K′⊤
+z QX/
+√
+d
+
+,
+(2)
+X ←(1 + γz) ⊙X + βz,
+(3)
+where every quantity with subscript z is derived from the
+template and the softmax runs over template tokens. Cor-
+relation (Eq. (1)) performs matching, where each row of R
+is the similarity of one template kernel to every search po-
+sition, but X stays as the backbone extracted it. Modula-
+tion (Eq. (3)) makes X target-aware channel by channel and
+compares no positions. Attention (Eq. (2)) does both, and
+attention trackers repeat it through the network, whereas a
+correlation tracker applies Eq. (1) once, to the output of a
+backbone that never sees the target.
+The forms also differ in how the template enters the per-
+frame graph. In Eqs. (1) and (3) it is an operand, computed
+once per video, of a matrix product or of a channel-wise
+multiply-add. Eq. (2) runs, even with cached keys and val-
+ues, a softmax, a token normalization and the layout op-
+erators between attention heads in every frame, which an
+edge NPU executes far below the throughput of convolu-
+tions and matrix products (Sec. 4.3). We therefore treat cor-
+relation and modulation as complements, each covering the
+function the other lacks, under one design rule. We com-
+pute the template-derived parameters once per video and
+apply them to search features only through channel-wise
+multiply-adds and matrix products, without attention soft-
+max or token normalization.
+Overview. TaCo is a two-stream tracker whose two streams
+share one CNN backbone ϕ (Fig. 3). The template z is
+cropped around the target box b in the first frame, and the
+search region x in each new frame. We keep the first three
+stages s1, s2, s3 of ϕ, at strides 4, 8 and 16, and drop the
+stride-32 stage, so the search feature X keeps enough reso-
+lution for correlation. Only the search stream is modulated
+by the target, and the template stream never sees the search
+region. Let θz =
+ {γl, βl}L
+l=1, K, {wi, bi}Nk
+i=1
+
+collect the
+modulation parameters of Sec. 3.2 and the correlation ker-
+nels and kernel weights of Sec. 3.3, all computed from z
+and b. Tracking then splits into a once-per-video stage and
+a per-frame stage,
+θz = g(z, b),
+( ˆS, ˆO, ˆB) = f(x; θz),
+(4)
+where ˆS, ˆO and ˆB are the score, offset and size maps.
+Following the rule above, θz enters f only as operands
+of channel-wise multiply-adds and of one matrix prod-
+uct. TaCo-T, TaCo-S and TaCo-B use LowFormer-E1 [25],
+RepViT-M1.1 and RepViT-M1.5 [29] as ϕ. Everything else
+is shared, and the number of modulation sites follows the
+depth of s3 (see appendix).
+3.2. Target-guided modulation
+Modulation supplies the first function, target-aware features
+(Eq. (3)). From the template feature fz = ϕ(z) we pool
+a descriptor d inside the box, averaging the cells of fz
+weighted by the fraction of each cell that lies inside b. At
+3
+
+
+z
+128×128×3
+Stem
+s1 , s2 
+Block
+×L
+s3 
+fz 
+8×8×C
+Target-guided
+modulation
+Target-aligned
+kernels
+Lite kernel
+weighting
+shared
+weights
+x
+256×256×3
+Stem
+s1 , s2 
+Block
+×L
+s3 
+γl , βl 
+X
+16×16×C
+K
+w, b
+R̃
+16×16×32
+Conv 1×1
+C
+RepConv
+RepConv
+Head
+Conv
+Ŝ
+Conv
+Ô
+Conv
+B̂
+scale and shift
+matrix product
+C
+concatenation
+once per video
+per frame
+(a) Overall architecture
+fz 
+8×8×C
+BoxPool
+d
+C
+MLP
+Linear
+×L
+γl
+βl
+C
+C
+hl 
+16×16×C
+hl ← (1 + γl ) ⊙ hl + βl 
+(b) Target-guided modulation
+Target-aligned kernels
+fz 
+RoIAlign
+4×4 in box
+AvgPool
+4×4 full crop
+K 32×C
+Lite kernel weighting
+LN
+C
+a
+MLP
+w
+b
+X
+16×16×C
+R = KX
+BN
+R
+16×16×32
+R̃
+R̃i= wiRi+ bi
+(c) Target-aligned correlation
+Target-aligned correlation
+Template
+Search
+Figure 3. TaCo computes template-derived operands once per video and applies them in every frame. (a) Overview. In the top
+lane, the template z passes through the shared backbone ϕ and prepares three cached operands: the modulation parameters (γl, βl), the
+kernel bank K and the kernel weights (w, b). In the bottom lane, each search crop x passes through the same backbone, the target-aligned
+correlation and a shared 128-channel centre head. The outlined multiply-add nodes (scale, then shift) mark the two places where cached
+operands enter the per-frame graph, and ⊗is the matrix product with K. (b) Target-guided modulation pools a box-weighted descriptor d
+from the template feature fz and predicts a scale and a shift for each modulation site. (c) Target-aligned kernels sample 4×4 box-aligned
+RoIAlign cells and 4×4 context average-pooling cells into 32 kernels K. Lite kernel weighting predicts, from each kernel and its fractional
+in-box coverage ai, a gain wi and a bias bi that calibrate the normalized response R.
+each modulation site l of the search stream, d modulates the
+feature map hl channel by channel:
+hl ←
+ 1 + γl(d)
+
+⊙hl + βl(d),
+(5)
+where γl and βl are predicted from d by a shared MLP fol-
+lowed by a linear layer per site. This is FiLM [27] with the
+scale written as 1 + γl. The per-site layers are initialized to
+zero, so training starts from a plain two-stream tracker. We
+place a site before every block of s3, so the target shapes
+the search features inside the backbone, whereas in correla-
+tion trackers such as LightFC [19] it first appears after the
+last stage. The s3 placement achieves the best trade-off be-
+tween accuracy and latency among the modulated variants
+in Sec. 4.3.
+Per frame, a site is one element-wise multiply-add whose
+operands are graph inputs.
+3.3. Target-aligned correlation
+Modulation tells the backbone what to look for, but it acts
+on channels and never compares search positions with the
+template, which is what correlation does. Following pixel-
+wise correlation [39], we use template feature vectors as
+1×1 kernels and correlate them with the modulated search
+feature X ∈RC×HW , so the target enters the match from
+both sides. Since X already carries the target, we also revise
+what the correlation is given and what follows it.
+Target-aligned kernels. We sample P×P target cells on
+a grid aligned with the box using RoIAlign, and average-
+pool Q×Q context cells over the whole template, giving
+Nk = P 2 + Q2 = 32 kernels ki ∈RC (P = Q = 4),
+scaled by C−1/2. LightFC [19] takes its kernels from a
+fixed 8×8 grid over the template crop, so cells mix target
+and background wherever the box falls. Pairing box-aligned
+target kernels with global context kernels separates part-
+level foreground matching from surrounding background
+anchors, which is particularly helpful when small targets
+cover only a few cells on the stride-16 template grid. Be-
+cause the target box has continuous location and aspect ra-
+tio on this coarse 8×8 map, RoIAlign uses bilinear interpo-
+lation to avoid quantization misalignment and background
+leakage. It runs once per video in the template branch and
+never enters the per-frame NPU graph.
+Context instead
+spans the fixed full-template grid and needs no box align-
+ment, so 4×4 average pooling aggregates each 2×2 neigh-
+borhood into 16 smooth regional prototypes without resam-
+pling, avoiding single-peak dominance from max pooling
+4
+
+
+and halving the kernel count relative to all 64 template cells.
+Correlation. The response R = KX ∈RNk×HW is a
+single matrix product per frame with K as a per-video input,
+followed by batch normalization.
+Lite kernel weighting.
+LightFC reweights the response
+channels with a squeeze-and-excitation block, which is
+computed from the search response and therefore runs in
+every frame. We instead predict the weight of each kernel
+from the template, once per video. A shared MLP maps the
+normalized feature of ki and the fraction ai of its cell in-
+side the box to a scalar gain wi and bias bi, applied to the
+normalized response of that kernel:
+Ri ←wiRi + bi.
+(6)
+Target kernels have ai = 1, so the coverage separates target
+from context kernels. The last layer is initialized to wi = 1
+and bi = 0. The weighted response is reduced to 64 chan-
+nels by a 1×1 convolution and concatenated with X as the
+input of the head. We drop the fusion layers that LightFC
+places at this point (depth-wise convolutions and an inverted
+bottleneck), since they add no accuracy once X is target-
+aware (Sec. 4.3).
+3.4. Head and loss
+A centre head [41, 45] predicts the score map ˆS, a sub-
+cell offset ˆO and the box size ˆB on the stride-16 grid Ω.
+Its layers are RepConv blocks [8], which train with parallel
+branches and fold into single 3×3 convolutions for deploy-
+ment. Whereas LightFC [19] feeds a post-correlation fusion
+block into three separate 256-channel branches, we pass the
+concatenated search and correlation features directly into a
+narrower 128-channel head whose first two RepConv lay-
+ers are shared across all three outputs. Since X is already
+target-aware and the correlation projection provides spatial
+evidence, sharing a compact 128-channel stem eliminates
+redundant per-branch convolutions and saves NPU latency
+without losing accuracy, while separate final layers preserve
+task-specific score, offset and size predictions.
+We train the complete tracker with
+L = Lfocal + 2 LGIoU + 5 L1,
+(7)
+using focal loss [23] on the score map and GIoU [28] and
+L1 losses on the decoded box.
+4. Experiments
+4.1. Implementation details
+Model. TaCo-T, TaCo-S and TaCo-B use LowFormer-E1,
+RepViT-M1.1 and RepViT-M1.5, respectively. All three use
+128×128 templates, 256×256 search crops and stride-16
+output features. They share the correlation and head de-
+signs, with 4, 13 and 25 modulation sites in s3, respectively
+(see Tab. 7).
+Training. We initialize each backbone with ImageNet clas-
+sification weights and sample 60,000 image pairs per epoch,
+drawing equally from the training splits of LaSOT [9],
+GOT-10k [13], COCO [22] and VastTrack [26]. We train
+for 300 epochs on four V100 GPUs with AdamW, a global
+batch size of 128 and the tracking loss in Eq. (7). The initial
+learning rates are 8×10−5 for the backbone and 8×10−4 for
+the remaining parameters, both reduced by a factor of ten at
+epoch 240.
+Inference. We crop the template around the first-frame an-
+notation and cache the modulation parameters, correlation
+kernels and kernel weights for the sequence. At each subse-
+quent frame, we crop the search region around the previous
+prediction, weight the score map with a Hann window and
+decode the box from the offset and size at the peak. The
+template and search crop factors are 2 and 4, respectively.
+4.2. Benchmark results
+Evaluation protocol.
+Tab. 1 compares trackers up to
+5 GMACs per frame. We score LaSOT and VastTrack lo-
+cally and use the official GOT-10k and TrackingNet [24]
+servers. We report AUC and precision, plus normalized pre-
+cision on LaSOT and TrackingNet. GOT-10k uses AO and
+success rates at 0.50 and 0.75 IoU. All three TaCo variants
+use their mixed-training epoch-300 checkpoints.
+Tracking accuracy. Tab. 1 shows that TaCo delivers strong
+accuracy across all four benchmarks while keeping edge
+latency low. On the long-term LaSOT benchmark, AUC
+rises from 62.3 to 64.5 to 65.6 across TaCo-T, TaCo-S and
+TaCo-B, with each variant ahead of its counterpart in the
+HiT and AsymTrack families. Our lightest variant, TaCo-
+T, already outperforms the correlation tracker LightFC by
+2.0 AUC points (62.3 vs. 60.3) while running faster on
+both the NPU (183.6 vs. 135.4 FPS) and Arm CPU (96.3
+vs. 69.2 FPS), and also surpasses heavier attention track-
+ers such as MixFormerV2-S and FARTrack-Tiny. On Vast-
+Track, which tests generalization across a much wider set
+of object categories, TaCo-B leads the entire table with
+37.0 AUC and 35.1 precision, followed closely by TaCo-S
+at 36.5 AUC and 34.0 precision (ranking second in preci-
+sion ahead of UETrack-S). On the large-scale TrackingNet
+benchmark, TaCo-B ranks first across all three metrics (81.8
+AUC, 86.3 PNorm and 80.0 P), while TaCo-T (78.8 AUC)
+UETrack-T while being several times faster. On the GOT-
+10k, TaCo-B achieves 69.5 AO and ranks second in SR0.75
+(66.8), while TaCo-T (66.3 AO) again beats UETrack-T. For
+a per-attribute breakdown on LaSOT, please refer to the ap-
+pendix.
+Edge runtime evaluation. We measure per-frame network
+graph throughput on the Rockchip RV1126B NPU (RKNN
+2.3.2, FP16, 950 MHz) and the Raspberry Pi 5 Arm CPU
+(ncnn, four Cortex-A76 threads). Timed calls use cached
+5
+
+
+Table 1. Comparison with efficient trackers on LaSOT, GOT-10k, TrackingNet and VastTrack. We report per-frame MACs and graph
+FPS on the RV1126B NPU and the Raspberry Pi 5 Arm CPU. Competitor accuracy comes from local LaSOT/VastTrack retests and official
+GOT-10k/TrackingNet test-server returns. ∗: locally reproduced without released weights.
+LaSOT
+GOT-10k
+TrackingNet
+VastTrack
+MACs
+FPS
+Tracker
+Pub
+AUC
+PNorm
+P
+AO
+SR0.5
+SR0.75
+AUC
+PNorm
+P
+AUC
+P
+(G)
+NPU
+Arm
+Correlation / CNN fusion
+LightTrack-M [38]
+CVPR’21
+50.8
+57.4
+50.5
+50.5
+58.5
+32.3
+71.4
+77.9
+68.6
+27.9
+24.4
+0.51
+88.5
+47.9
+FEAR-XS [2]
+ECCV’22
+50.1
+59.4
+52.3
+57.5
+68.3
+45.7
+71.5
+80.6
+70.0
+29.6
+25.9
+0.46
+258.5
+91.6
+LightFC [19]
+KBS’24
+60.3
+69.8
+62.9
+64.9
+75.8
+57.1
+77.1
+83.2
+74.2
+30.3
+27.5
+0.95
+135.4
+69.2
+LightFC-vit [19]
+KBS’24
+63.5
+74.3
+68.0
+67.4
+79.2
+59.8
+77.8
+84.3
+75.5
+30.9
+28.6
+2.77
+21.5
+11.0
+Attention-based interaction
+STARK-Lightning [37]
+ICCV’21
+58.1
+66.5
+57.8
+59.9
+69.9
+48.3
+72.7
+77.9
+67.4
+28.0
+23.3
+1.54
+65.8
+38.9
+HCAT-R18 [5]
+ECCVW’22
+59.3
+68.7
+60.9
+65.3
+76.7
+56.9
+76.6
+82.6
+72.9
+29.5
+26.0
+2.96
+54.1
+27.9
+HiT-Tiny [14]
+ICCV’23
+55.1
+60.7
+53.0
+52.5
+59.3
+42.4
+74.6
+77.9
+68.8
+25.7
+19.2
+0.99
+61.9
+27.8
+HiT-Small [14]
+ICCV’23
+61.1
+68.7
+61.7
+62.5
+71.2
+54.3
+77.8
+81.8
+73.2
+28.1
+22.8
+1.13
+43.9
+20.1
+HiT-Base [14]
+ICCV’23
+65.3
+73.5
+68.0
+64.0
+72.2
+58.1
+80.1
+84.3
+77.3
+30.0
+25.6
+4.34
+20.6
+7.1
+Aba-ViTrack [18]
+ICCV’23
+64.5
+74.2
+68.0
+67.1
+77.1
+61.8
+79.8
+84.9
+76.8
+31.4
+27.7
+2.86
+16.8
+11.4
+MixFormerV2-S [7]
+NeurIPS’23
+60.9
+69.1
+60.7
+61.3
+70.4
+51.6
+76.4
+81.0
+71.1
+29.0
+24.9
+4.82
+9.5
+7.9
+SMAT [10]
+WACV’24
+61.8
+71.3
+64.7
+64.5
+74.8
+57.9
+78.6
+84.2
+75.7
+30.8
+27.4
+2.49
+20.6
+9.8
+AVTrack [33]
+ICML’24
+61.7
+71.0
+64.4
+64.6
+74.7
+57.8
+78.5
+83.6
+74.9
+30.5
+27.0
+2.39
+22.0
+12.1
+PromptVT [42]
+TCSVT’24
+64.0
+74.0
+67.1
+67.6
+78.7
+61.2
+78.0
+83.4
+74.4
+31.2
+28.1
+1.93
+30.4
+20.8
+FERMT∗[44]
+ECCV’24
+65.0
+74.0
+68.1
+68.8
+78.9
+64.1
+80.8
+85.6
+78.1
+31.9
+28.8
+2.64
+14.1
+10.9
+AsymTrack-T [46]
+AAAI’25
+61.0
+68.8
+61.3
+62.4
+71.5
+54.8
+76.2
+80.9
+71.6
+29.4
+24.6
+0.64
+52.4
+43.3
+AsymTrack-S [46]
+AAAI’25
+62.6
+71.0
+64.4
+65.5
+74.8
+58.9
+77.9
+82.6
+74.0
+30.2
+25.9
+0.72
+49.5
+36.6
+AsymTrack-B [46]
+AAAI’25
+64.7
+73.1
+67.9
+67.7
+76.6
+61.5
+79.9
+84.4
+77.3
+31.2
+27.3
+1.77
+19.6
+14.9
+ORTrack [34]
+CVPR’25
+62.9
+72.6
+65.9
+65.4
+75.3
+58.8
+79.2
+84.3
+75.9
+30.7
+27.2
+2.85
+22.1
+12.3
+ORTrack-D [34]
+CVPR’25
+61.3
+70.1
+63.3
+63.3
+73.2
+56.3
+78.4
+83.5
+74.6
+30.7
+26.9
+1.77
+31.7
+22.5
+SGLATrack [36]
+CVPR’25
+63.1
+72.4
+66.0
+66.3
+76.2
+60.3
+79.5
+84.9
+76.5
+31.2
+27.7
+1.95
+6.2
+19.4
+FARTrack-Pico [30]
+ICLR’26
+57.9
+66.6
+59.3
+62.6
+72.7
+51.0
+75.6
+81.4
+70.4
+30.4
+25.8
+1.43
+14.9
+18.0
+FARTrack-Nano [30]
+ICLR’26
+59.5
+67.8
+62.3
+69.3
+80.0
+60.3
+79.0
+84.3
+75.4
+34.0
+30.4
+2.34
+10.4
+9.7
+FARTrack-Tiny [30]
+ICLR’26
+61.7
+69.8
+64.7
+70.2
+80.6
+64.1
+80.3
+85.3
+77.2
+35.1
+32.3
+3.47
+7.5
+6.5
+UETrack-T [15]
+CVPR’26
+63.4
+72.5
+65.1
+65.3
+75.2
+58.6
+78.7
+83.4
+74.4
+33.2
+29.3
+2.50
+39.8
+14.3
+UETrack-S [15]
+CVPR’26
+66.5
+75.7
+70.3
+71.1
+81.3
+66.9
+81.4
+85.9
+78.6
+36.6
+33.7
+3.54
+28.9
+9.6
+MaST-Nano [32]
+ECCV’26
+59.2
+68.7
+60.3
+61.6
+72.0
+53.8
+77.2
+82.9
+72.9
+30.7
+26.3
+0.68
+22.2
+22.6
+MaST-Tiny [32]
+ECCV’26
+64.0
+73.1
+67.7
+68.0
+77.4
+64.2
+81.2
+86.1
+78.6
+33.2
+29.8
+0.96
+19.3
+16.6
+TaCo-T
+Ours
+62.3
+70.8
+64.8
+66.3
+76.2
+60.9
+78.8
+83.3
+75.3
+33.9
+29.9
+1.49
+183.6
+96.3
+TaCo-S
+Ours
+64.5
+73.3
+68.8
+67.0
+76.2
+63.1
+81.0
+85.5
+78.5
+36.5
+34.0
+1.69
+85.3
+44.4
+TaCo-B
+Ours
+65.6
+74.5
+70.5
+69.5
+78.5
+66.8
+81.8
+86.3
+80.0
+37.0
+35.1
+2.77
+50.4
+27.0
+template operands where supported, and gray NPU val-
+ues fail the numerical check (see appendix C for more de-
+tails).
+All three TaCo per-frame graphs run in FP16 on
+both devices, entirely on the NPU for RKNN. On the NPU,
+TaCo-T runs 3.0× as fast as HiT-Tiny and 3.5× as fast as
+AsymTrack-T, while TaCo-B runs 2.3× as fast as LightFC-
+vit at the same reported MAC count. On the Pi 5, TaCo-T is
+1.4× as fast as LightFC, and TaCo-B is the fastest tracker
+among those reaching at least 64 LaSOT AUC. One-time
+template-branch latencies are in Tab. 7.
+Nine attention-
+based competitor variants, but no correlation tracker, fail the
+FP16 check on at least one device, and the traceable failures
+arise in a softmax or token selection (see appendix C).
+Other benchmarks. Tab. 2 reports one-pass evaluation on
+four more benchmarks. TaCo-B leads on TNL2K and NfS
+with 54.0 and 66.4 AUC, respectively.
+Table 2.
+Results on LaSOText, TNL2K, NfS and UAV123.
+Competitor results are local retests of the released checkpoints.
+Red and blue mark the best and second-best value of each column.
+LaSOText
+TNL2K
+NfS
+UAV123
+Tracker
+AUC
+P
+AUC
+P
+AUC
+P
+AUC
+P
+LightFC [19]
+41.4
+45.4
+49.6
+48.1
+63.7
+76.7
+64.7
+85.1
+HiT-Tiny [14]
+35.7
+36.0
+41.3
+33.8
+53.4
+60.4
+59.7
+76.8
+MixFormerV2-S [7]
+43.1
+45.7
+45.9
+40.1
+62.6
+74.1
+65.5
+86.4
+SMAT [10]
+40.7
+43.9
+50.9
+48.7
+63.4
+75.8
+64.8
+84.7
+PromptVT [42]
+45.3
+49.4
+51.1
+49.2
+64.9
+78.2
+66.6
+87.5
+AsymTrack-T [46]
+42.7
+45.9
+48.6
+44.5
+63.3
+74.5
+64.4
+84.2
+ORTrack-D [34]
+42.5
+46.3
+49.5
+46.2
+64.3
+76.5
+65.7
+86.0
+FARTrack-Pico [30]
+39.8
+41.9
+48.2
+45.0
+62.3
+76.2
+63.0
+84.2
+UETrack-T [15]
+42.1
+46.2
+45.9
+40.8
+63.5
+75.9
+66.9
+86.2
+MaST-Nano [32]
+41.1
+43.3
+47.2
+42.3
+61.9
+72.8
+62.4
+81.0
+AVTrack [33]
+42.5
+46.6
+49.4
+46.5
+63.5
+75.1
+66.1
+86.4
+SGLATrack [36]
+42.5
+46.2
+51.4
+49.3
+64.7
+76.9
+66.8
+87.4
+TaCo-T
+41.3
+45.4
+50.8
+48.5
+65.7
+78.7
+64.3
+83.5
+TaCo-S
+43.2
+47.9
+53.1
+52.8
+65.7
+78.4
+65.0
+83.7
+TaCo-B
+44.5
+49.4
+54.0
+54.5
+66.4
+79.6
+64.8
+83.9
+6
+
+
+Table 3.
+Component ablation and attention alternatives on
+TaCo-T. The top block removes one component at a time from
+the final TaCo-T, and the bottom block replaces correlation with
+a cross-attention read or replaces both modulation and correlation
+with joint attention. Latency uses 256-pixel search crops.
+LaSOT
+VastTrack
+ms
+Variant
+AUC
+∆AUC
+∆NPU
+Arm
+TaCo-T
+61.55
+— 33.46
+— 5.44 10.34
+w/o modulation
+60.96 −0.59 32.69 −0.77
+5.32 10.23
+w/o correlation
+59.07 −2.48 32.28 −1.18
+5.24
+9.66
+w/o target alignment 60.82 −0.73 33.22 −0.24
+5.44 10.39
+w/o kernel weighting 60.93 −0.62 33.35 −0.11
+5.43 10.35
+corr. →cross attn.
+58.03 −3.52 26.85 −6.61
+7.85 23.96
+corr. →joint attn.
+58.61 −2.94 26.37 −7.09
+9.02 29.15
+Table 4. Modulation stages. We vary the stages that receive mod-
+ulation, with target-aligned correlation fixed.
+Stages
+LaSOT
+VastTrack
+ms
+s1
+s2
+s3
+AUC
+P
+AUC
+P
+NPU
+Arm
+✓
+✓
+✓
+61.67
+63.85
+33.35
+29.35
+5.92
+11.08
+✓
+61.20
+63.87
+33.51
+29.61
+5.73
+10.85
+✓
+60.49
+62.74
+32.56
+29.31
+5.42
+10.36
+✓
+61.55
+64.20
+33.46
+29.66
+5.44
+10.34
+Table 5. Correlation design. We report LaSOT accuracy along-
+side per-frame latency. Grid denote 64 fixed grid kernels. SE and
+–denote per-frame squeeze-and-excitationvand no weighting. Fu-
+sion indicates LightFC’s post-correlation fusion layers.
+LaSOT
+ms
+Kernels
+Weighting
+Fusion
+AUC
+P
+NPU
+Arm
+Grid
+SE
+✓
+61.50
+64.41
+6.01
+11.00
+Grid
+LKW
+✓
+61.11
+64.26
+5.68
+10.45
+TA
+SE
+✓
+60.83
+63.72
+5.72
+10.51
+TA
+LKW
+✓
+61.28
+63.26
+5.53
+10.39
+TA
+LKW
+✗
+61.55
+64.20
+5.44
+10.34
+4.3. Controlled study on rethinking correlation
+Tabs. 3 to 5 report averages over two seeds (200 epochs,
+128×128 template, 256×256 search) and latency over 256
+crops on RV1126B NPU and Pi 5 Arm CPU. Without target
+alignment, the 16 target kernels revert to a fixed template
+grid.
+Is correlation needed, and what does it cost? Explicit
+correlation is the largest single accuracy factor and nearly
+free on edge hardware (Tab. 3). Removing it costs 2.48
+LaSOT and 1.18 VastTrack AUC but saves only 0.20 ms
+on the NPU and 0.68 ms on Arm. Cross and joint atten-
+tion in its place lose 2.9–3.5 LaSOT and 6.6–7.1 VastTrack
+AUC at 1.4–1.7× the NPU and 2.3–2.8× the Arm latency.
+The VastTrack loss is about twice the LaSOT loss, suggest-
+ing that a learned attention readout generalizes worse than
+the built-in 2D correspondence of correlation to VastTrack’s
+wider range of classes.
+What does correlation lack, and where to modulate? Re-
+moving target-guided modulation costs 0.59 LaSOT and
+0.77 VastTrack AUC, while the modulation takes only
+0.12 ms on the NPU and 0.11 ms on Arm, under 2.3% of
+frame time (Tab. 3). Among placements (Tab. 4), modu-
+lating all three stages gains only 0.12 LaSOT AUC over
+s3 alone, trails it in LaSOT precision and on VastTrack,
+and adds 0.48 ms on the NPU and 0.74 ms on Arm on 16×
+and 4× larger early maps. Modulating only before the four
+stride-16 s3 blocks gives the best precision on both bench-
+marks at nearly the lowest latency. A channel-wise scale se-
+lects whole channels, which we expect to matter most where
+channels encode object parts rather than low-level edges.
+How should correlation adapt to target-aware features?
+Because its operands are cached once per video, the up-
+graded correlation costs almost nothing per frame (Tab. 3).
+Target alignment adds 0.73 LaSOT and 0.24 VastTrack
+AUC at the same NPU latency, and lite kernel weighting
+adds 0.62 and 0.11 for 0.01 ms.
+In Tab. 5, target align-
+ment helps only with lite kernel weighting and lowers AUC
+with SE (61.50 to 60.83), likely because SE, computed from
+the search response, cannot tell context kernels from target
+kernels, whereas lite kernel weighting receives each ker-
+nel’s box coverage ai.
+Dropping the fusion layers then
+gives the highest AUC in the table (61.55) at the lowest la-
+tency, 0.57 ms (9.5%) faster than LightFC’s correlation on
+the NPU and 0.66 ms faster on Arm.
+Visualizing correlation and modulation. Fig. 4 visual-
+izes both interactions from measured maps.
+In Fig. 4a,
+Rtarget activates tightly inside the predicted box and sup-
+presses background, whereas Rcontext responds comple-
+mentarily over the surround.
+The positive-response cen-
+troids of the four 4×4 grid rows preserve their top-to-
+bottom order on both elongated and upright targets.
+In
+Fig. 4b, the target’s operands (γz, βz) keep ˆS peaked on
+the target despite nearby distractors, whereas substituting
+the cross-video mean (¯γ, ¯β) with identical kernels shifts the
+peak onto a distractor and pulls the box off target, confirm-
+ing that modulation supplies instance selectivity while cor-
+relation supplies ordered localization (Sec. 3.1). Figure 5
+shows the same behavior on UAV scnarios where compet-
+ing trackers drift or lose scale, along with a failure case in
+which TaCo-T switches to a nearby bystander (with more in
+appendix).
+4.4. Same-backbone comparison across trackers
+To separate the gain of our interaction design from back-
+bone choice, we keep the published backbones of three dis-
+tinct tracking paradigms fixed and replace only their na-
+tive interaction with modulation and correlation(Tab. 6).
+Across all three families, the replacement improves accu-
+racy and reduces RV1126B NPU latency simultaneously
+with fewer training epochs. For HiT [14], which joins tem-
+7
+
+
+−2.5
+0.0
+2.5
+z
+x
+Rtarget
+Rcontext
+x
+^S(°z; ¯z)
+^S(¹°; ¹¯)
+(a) target-aligned correlation
+(b) target-guided modulation
+z-score
+Figure 4. Visualizing target-aligned correlation and target-guided modulation in TaCo-T. (a) We show the template z with a 4×4
+target-kernel grid, the search x with the blue prediction, the mean standardized responses of 16 target and 16 context kernels (red and blue
+denote above and below the spatial mean), and the positive-response centroids of kernel rows connected in matching colors from top to
+bottom. (b) Search x with white ground truth and template inset, followed by scores and predictions using target operands (γz, βz) (blue)
+or their cross-video mean (¯γ, ¯β) (gray), with all weights and correlation kernels fixed.
+Table 6. Transfer across backbones on LaSOT. We report train-
+ing epochs (Ep.), LaSOT AUC and RV1126B NPU latency in ms,
+with changes from the original tracker in parentheses.
+Original
+TaCo
+Source
+Ep. AUC↑
+ms↓Ep.
+AUC↑
+ms↓
+HiT-Tiny
+1500
+55.1 16.16 300 61.2 (+6.1) 13.49 (−2.68)
+HiT-Small
+1500
+61.1 22.79 300 63.1 (+2.0) 18.60 (−4.19)
+LightFC
+400
+60.3
+7.39 300 61.8 (+1.5)
+7.24 (−0.15)
+AsymTrack-T
+500
+61.0 19.08 300 61.1 (+0.1) 12.54 (−6.54)
+plate and search tokens inside its LeViT backbones, the re-
+placement gives the largest gains, but the attention and lay-
+out operators left in LeViT still keep the transferred tracker
+over 2.4× slower than our pure-CNN TaCo-T (13.49 vs.
+5.45 ms).
+For LightFC [19], a pure CNN tracker built
+around pixel-wise correlation and convolutional fusion, the
+1.5-point gain without added NPU cost shows that target-
+aware backbone features also benefit an external convolu-
+tional backbone. For AsymTrack-T [46], which already
+caches the template through prototype-based modulation,
+the final TaCo interaction matches its accuracy at 34% lower
+NPU latency, showing that how cached operands are applied
+per frame governs edge throughput.
+5. Conclusion
+We set out to rethink correlation for edge tracking, and
+on-device measurements change what should be asked of
+it. On edge NPUs and Arm CPUs, explicit correlation is
+nearly free and essential for accuracy, whereas attention’s
+softmax, normalization, and layout ops incur heavy latency
+concealed by MAC counts. What correlation lacked was a
+target-aware search backbone, supplied by cached channel-
+wise scale and shift at a fraction of attention’s cost. TaCo re-
+alizes this division via target-guided modulation and target-
+aligned correlation with cached per-video operands, trans-
+ferring across backbones and reaching 184 FPS at 62.3%
+TaCo-T
+LightFC
+HiT-Tiny
+AsymTrack-T
+GT
+Figure 5. Qualitative comparison. Frames are sampled at 15, 50
+and 90% of each sequence. In rows 1–3, TaCo-T stays on a target
+under 20 pixels wide, among similar vehicles and in breaking surf.
+LaSOT AUC and 50 FPS at 65.6% on RV1126B (96 and
+27 FPS on Arm). These findings target edge NPUs and Arm
+CPUs under a fixed template. Adapting the operands online
+remains future work.
+8
+
+
+LLM Usage Statement
+We used LLM-based coding agents (Deepseek Harness and Copi-
+lot in VS Code) throughout this work. Code and experiments.
+The agents are used for code review, debugging, training configu-
+rations checking and evaluation lauching on our GPU servers, and
+compiling the result tables from the run logs. Deployment and
+latency measurement. We use coding agents to export our and
+collected tracker models to ONNX, converted them with RKNN-
+Toolkit and ncnn runtime, and ran the on-device benchmarks under
+a unified protocol. Every reported accuracy and latency number
+comes from an actual run whose logs are kept. Before timing, the
+on-device outputs of every deployed graph were checked against
+a PyTorch Runtime FP32 reference. Writing. The agents helped
+polish the text, LaTeX tables, plotting scripts and checking bib-
+liography format. We revised all text and checked every citation
+against its original source in person.
+References
+[1] Luca Bertinetto, Jack Valmadre, Jo˜ao F. Henriques, Andrea
+Vedaldi, and Philip H. S. Torr. Fully-convolutional siamese
+networks for object tracking. In Computer Vision – ECCV
+2016 Workshops. Springer, 2016. 1, 2
+[2] Vasyl Borsuk, Roman Vei, Orest Kupyn, Tetiana Martyniuk,
+Igor Krashenyi, and Jiˇr´ı Matas. FEAR: Fast, efficient, accu-
+rate and robust visual tracker. In Computer Vision – ECCV
+2022, pages 644–663. Springer, 2022. 2, 6
+[3] Boyu Chen, Peixia Li, Lei Bai, Lei Qiao, Qiuhong Shen, Bo
+Li, Weihao Gan, Wei Wu, and Wanli Ouyang. Backbone
+is all your need: A simplified architecture for visual object
+tracking. In Computer Vision – ECCV 2022, pages 375–392.
+Springer, 2022. 3
+[4] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang,
+and Huchuan Lu. Transformer tracking. In 2021 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 8122–8131. IEEE, 2021. 1, 3
+[5] Xin Chen, Ben Kang, Dong Wang, Dongdong Li, and
+Huchuan Lu. Efficient visual tracking via hierarchical cross-
+attention transformer.
+In Computer Vision – ECCV 2022
+Workshops. Springer, 2023. 6
+[6] Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu.
+Mixformer: End-to-end tracking with iterative mixed atten-
+tion. 2022 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2022. 1, 3
+[7] Yutao Cui, Tianhui Song, Gangshan Wu, and Limin Wang.
+Mixformerv2: Efficient fully transformer tracking.
+arXiv
+(Cornell University), 2023. 1, 3, 6
+[8] Xiaohan Ding, Xiangyu Zhang, Ningning Ma, Jungong Han,
+Guiguang Ding, and Jian Sun. RepVGG: Making VGG-style
+ConvNets great again. In IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 13733–
+13742, 2021. 2, 5
+[9] Heng Fan, Liting Lin, Fan Yang, Peng Chu, Ge Deng, Sijia
+Yu, Hexin Bai, Yong Xu, Chunyuan Liao, and Haibin Ling.
+LaSOT: A high-quality benchmark for large-scale single ob-
+ject tracking. In IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 5374–5383, 2019. 5
+[10] Goutam Yelluru Gopal and Maria A. Amer. Separable self
+and mixed attention transformers for efficient object track-
+ing, 2024. 1, 3, 6
+[11] Dongyan Guo, Yanyan Shao, Ying Cui, Zhenhua Wang,
+Liyan Zhang, and Chunhua Shen. Graph attention tracking.
+In CVPR, 2021. 2
+[12] Mingzhe Guo, Zhipeng Zhang, Heng Fan, Liping Jing, Yilin
+Lyu, Bing Li, and Weiming Hu. Learning target-aware rep-
+resentation for visual tracking via informative interactions.
+In IJCAI, pages 927–934, 2022. 3
+[13] Lianghua Huang, Xin Zhao, and Kaiqi Huang. GOT-10k:
+A large high-diversity benchmark for generic object track-
+ing in the wild. IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 43(5):1562–1577, 2021. 5
+[14] Ben Kang, Xin Chen, Dong Wang, Houwen Peng, and
+Huchuan Lu.
+Exploring lightweight hierarchical vision
+transformers for efficient visual tracking, 2023. 1, 3, 6, 7
+[15] Ben Kang, Jie Zhao, Xin Chen, Wanting Geng, Bin Zhang,
+Lu Zhang, Dong Wang, and Huchuan Lu.
+Uetrack: A
+unified and efficient framework for single object tracking.
+In IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2026. arXiv:2603.01412. 1, 3, 6
+[16] Bo Li, Junjie Yan, Wei Wu, Zheng Zhu, and Xiaolin Hu.
+High performance visual tracking with siamese region pro-
+posal network, 2018. 2
+[17] Bo Li, Wei Wu, Qiang Wang, Fangyi Zhang, Junliang Xing,
+and Junjie Yan.
+Siamrpn++: Evolution of siamese visual
+tracking with very deep networks, 2019. 1, 2
+[18] Shuiwang Li, Yangxiang Yang, Dan Zeng, and Xucheng
+Wang. Adaptive and background-aware vision transformer
+for real-time uav tracking, 2023. 6
+[19] Yunfeng Li, Bo Wang, Xueyi Wu, Zhuoyan Liu, and Ye Li.
+Lightweight full-convolutional siamese tracker. Knowledge-
+Based Systems, 294:111439, 2024. 1, 2, 4, 5, 6, 8
+[20] Yunfeng Li, Bo Wang, and Ye Li. Lightfc-x: Lightweight
+convolutional tracker for rgb-x tracking.
+arXiv preprint
+arXiv:2502.18143, 2025. 2
+[21] Bingyan Liao, Chenye Wang, Yayun Wang, Yaonong Wang,
+and Jun Yin. PG-Net: Pixel to global matching network for
+visual tracking. In ECCV, 2020. 2
+[22] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays,
+Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C. Lawrence
+Zitnick. Microsoft COCO: Common objects in context. In
+European Conference on Computer Vision (ECCV), pages
+740–755, 2014. 5
+[23] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and
+Piotr Doll´ar. Focal loss for dense object detection. In IEEE
+International Conference on Computer Vision (ICCV), pages
+2980–2988, 2017. 5
+[24] Matthias M¨uller, Adel Bibi, Silvio Giancola, Salman Al-
+Subaihi, and Bernard Ghanem. TrackingNet: A large-scale
+dataset and benchmark for object tracking in the wild. In Eu-
+ropean Conference on Computer Vision (ECCV), pages 310–
+327, 2018. 5
+[25] Moritz Nottebaum, Matteo Dunnhofer, and Christian Mich-
+eloni. LowFormer: Hardware efficient design for convolu-
+tional transformer backbones. In IEEE/CVF Winter Confer-
+ence on Applications of Computer Vision (WACV), 2025. 3
+9
+
+
+[26] Liang Peng, Junyuan Gao, Xinran Liu, Weihong Li, Shaohua
+Dong, Zhipeng Zhang, Heng Fan, and Libo Zhang. Vast-
+Track: Vast category visual object tracking. arXiv preprint
+arXiv:2403.03493, 2024. 5
+[27] Ethan Perez, Florian Strub, Harm de Vries, Vincent Du-
+moulin, and Aaron Courville. FiLM: Visual reasoning with
+a general conditioning layer. In AAAI, 2018. 3, 4
+[28] Hamid Rezatofighi, Nathan Tsoi, JunYoung Gwak, Amir
+Sadeghian, Ian Reid, and Silvio Savarese. Generalized in-
+tersection over union: A metric and a loss for bounding box
+regression. In IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), pages 658–666, 2019. 5
+[29] Ao Wang, Hui Chen, Zijia Lin, Jungong Han, and Guiguang
+Ding. RepViT: Revisiting mobile CNN from ViT perspec-
+tive. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition, pages 15909–15920,
+2024. 300-epoch checkpoint catalogue accessed 2026-10-
+21. 3
+[30] Guijie Wang, Tong Lin, Yifan Bai, Anjia Cao, Shiyi Liang,
+Wangbo Zhao, and Xing Wei. FARTrack: Fast autoregres-
+sive visual tracking with high performance. In International
+Conference on Learning Representations (ICLR), 2026. 3, 6
+[31] Qingmao Wei, Bi Zeng, Jianqi Liu, Li He, and Guotian Zeng.
+Litetrack: Layer pruning with asynchronous feature extrac-
+tion for lightweight and efficient visual tracking, 2024. 1,
+3
+[32] Qingmao Wei, Fagui Liu, Dengke Zhang, Qingze He,
+and Quan Tang.
+Mast: Motion-aware sparse pipeline for
+lightweight object tracking.
+In European Conference on
+Computer Vision (ECCV), 2026. arXiv:2608.24365. Code:
+https://github.com/TsingWei/MaST. Through-
+put values for the three variants (Tiny/Nano/Small) are the
+survey team’s own measurements of the released source
+graphs under the timing protocol stated in the appendix. 3, 6
+[33] You Wu, Yongxin Li, Mengyuan Liu, Xucheng Wang, Xi-
+angyang Yang, Hengzhou Ye, Dan Zeng, Qijun Zhao, and
+Shuiwang Li. Learning an adaptive and view-invariant vision
+transformer for real-time uav tracking. IEEE Transactions on
+Circuits and Systems for Video Technology, 2025. 6
+[34] You Wu, Xucheng Wang, Xiangyang Yang, Mengyuan Liu,
+Dan Zeng, Hengzhou Ye, and Shuiwang Li.
+Learning
+occlusion-robust vision transformers for real-time uav track-
+ing. In 2025 IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), pages 17103–17113. IEEE,
+2025. 6
+[35] Fei Xie, Chunyu Wang, Guangting Wang, Yue Cao, Wankou
+Yang, and Wenjun Zeng. Correlation-aware deep tracking.
+In CVPR, 2022. 3
+[36] Chaocan Xue, Bineng Zhong, Qihua Liang, Yaozong Zheng,
+Ning Li, Yuanliang Xue, and Shuxiang Song. Similarity-
+guided layer-adaptive vision transformer for uav tracking. In
+2025 IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), pages 6730–6740. IEEE, 2025. 3,
+6
+[37] Bin Yan, Houwen Peng, Jianlong Fu, Dong Wang, and
+Huchuan Lu. Learning spatio-temporal transformer for vi-
+sual tracking. 2021 IEEE/CVF International Conference on
+Computer Vision (ICCV), 2021. 1, 3, 6
+[38] Bin Yan, Houwen Peng, Kan Wu, Dong Wang, Jianlong Fu,
+and Huchuan Lu. Lighttrack: Finding lightweight neural net-
+works for object tracking via one-shot architecture search,
+2021. 2, 6
+[39] Bin Yan, Xinyu Zhang, Dong Wang, Huchuan Lu, and Xi-
+aoyun Yang. Alpha-Refine: Boosting tracking performance
+by precise bounding box estimation. In CVPR, 2021. 2, 4
+[40] Linjie Yang, Yanran Wang, Xuehan Xiong, Jianchao Yang,
+and Aggelos K. Katsaggelos. Efficient video object segmen-
+tation via network modulation. In CVPR, pages 6499–6507,
+2018. 3
+[41] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and
+Xilin Chen.
+Joint feature learning and relation modeling
+for tracking: A one-stream framework. In Computer Vision
+– ECCV 2022. Springer, 2022. 1, 3, 5
+[42] Minghua Zhang, Q. Zhang, Wei Song, Dongmei Huang, and
+Qi He. Promptvt: Prompting for efficient and accurate vi-
+sual tracking. IEEE Transactions on Circuits and Systems
+for Video Technology, 2024. 3, 6
+[43] Zhipeng Zhang, Yihao Liu, Xiao Wang, Bing Li, and Weim-
+ing Hu. Learn to match: Automatic matching network design
+for visual tracking. In Proceedings of the IEEE/CVF Inter-
+national Conference on Computer Vision (ICCV), 2021. 3
+[44] Jikai Zheng, Mingjiang Liang, Shaoli Huang, and Jifeng
+Ning. Exploring the feature extraction and relation modeling
+for light-weight transformer tracking. In European Confer-
+ence on Computer Vision (ECCV) 2024, 2024. 3, 6
+[45] Xingyi Zhou, Dequan Wang, and Philipp Kr¨ahenb¨uhl. Ob-
+jects as points. arXiv preprint arXiv:1904.07850, 2019. 5
+[46] Jiawen Zhu, Huayi Tang, Xin Chen, Xinying Wang, Dong
+Wang, and Huchuan Lu.
+Two-stream beats one-stream:
+Asymmetric siamese network for efficient visual tracking.
+Proceedings of the AAAI Conference on Artificial Intelli-
+gence, 2025. 1, 3, 6, 8
+10
+
+
+TaCo: Rethinking Correlation for Visual Tracking on Edge Devices
+Supplementary Material
+A. Architecture details
+All three models use a shared template/search backbone and
+stride-16 output features. The template and search inputs
+are 128 × 128 and 256 × 256, producing 8 × 8 and 16 × 16
+terminal grids. The stride-32 stage is omitted in the three
+deployed CNN variants. A box-pooled template descriptor
+generates a channel-wise scale and shift before each block
+of s3. There are 4, 13 and 25 modulation sites in TaCo-T,
+TaCo-S and TaCo-B, respectively. The template branch is
+evaluated without these modulations.
+The correlation cache contains 16 kernels pooled inside
+the target box and 16 pooled over the template crop. Ker-
+nel weighting uses the feature of each kernel and the frac-
+tional overlap of its cell with the target box. The corre-
+lation response is normalized, weighted kernel by kernel
+and reduced to 64 channels by a 1×1 convolution before
+concatenation with the search feature. The fusion layers
+of LightFC are not used. The 128-channel RepConv cen-
+tre head shares its first two layers between the score, offset
+and size branches. Parameter counts, per-frame MACs, and
+both per-frame and one-time template-branch latencies are
+in Tab. 7.
+Batch normalization and kernel weighting. During infer-
+ence, the correlation branch uses the running mean and vari-
+ance accumulated during training, along with the learned
+BatchNorm affine parameters. For each response channel i,
+the order is
+eRi = wi BNeval
+i
+ (KX)i
+
++ bi.
+(8)
+The BatchNorm parameters are fixed across videos. The
+gain wi and bias bi are computed from the first-frame tem-
+Table 7. TaCo configurations and graph latency. Params count
+the deployed template and per-frame graphs. Raspberry Pi 5 uses
+four Cortex-A76 threads. On the RV1126B, the per-frame graph
+runs entirely on the NPU. Template initialization uses RKNN
+FP16 for the backbone and kernel generation. The CPU computes
+box geometry and FP32 modulation parameters.
+TaCo-T
+TaCo-S
+TaCo-B
+Body
+LowFormer-E1 RepViT-M1.1 RepViT-M1.5
+Params (M)
+5.53
+6.74
+11.89
+GMACs / frame
+1.49
+1.69
+2.77
+Modulation sites
+4
+13
+25
+Per-frame latency (ms)
+NPU, RKNN FP16
+5.45
+11.72
+19.86
+Pi 5, ncnn FP16
+10.38
+22.52
+37.00
+Template-branch latency (ms, once / video)
+RV1126B, NPU + CPU
+19.41
+24.31
+30.36
+Pi 5, ncnn FP16
+5.45
+7.27
+11.98
+Table 8. Training settings. All models use 300 epochs and track-
+ing supervision unless noted otherwise.
+Optimizer
+AdamW
+Learning rate / backbone multiplier
+8 × 10−4 / 0.1
+Weight decay / gradient clipping
+10−4 / 0.1
+Global batch size
+128
+Pairs per epoch (nominal)
+60,000
+Epochs
+300
+Learning-rate step
+epoch 240, factor 0.1
+Template / search crop
+1282 / 2562
+Template / search context factor
+2 / 4
+Precision
+FP16 AMP
+Dataset sampling
+Equal across the four datasets
+plate and adjust the normalized response for that target at
+every frame, without updating the running statistics.
+B. Training and evaluation details
+Backbones start from their classification initialization. All
+three models are trained on four V100 GPUs with 32 sam-
+ples per GPU and seed 42. The same global batch size and
+optimizer settings apply across the family (Tab. 8).
+The controlled study of Sec. 4.3 uses seeds 42 and 43
+and 200 epochs with the learning-rate step at epoch 160.
+The optimizer, sampling and global batch size of 128 follow
+Tab. 8. Evaluation in Sec. 4.3 uses the full 280-sequence La-
+SOT test split and the 3,500-sequence VastTrack test split.
+GOT-10k test and TrackingNet test contain 180 and 511
+sequences in our evaluation, with 22,834 and 225,589 pre-
+diction rows. Their reported scores come from the official
+servers, with complete coverage. VastTrack uses its 3,500-
+sequence test split. For the main comparison, we evaluate
+all three adopted checkpoints with native PyTorch FP16 au-
+tocast on a V100 across all four benchmarks.
+GOT-10k-only training. For Tab. 9, we train each vari-
+ant for 100 epochs on all 9,335 official GOT-10k training
+sequences, with the learning-rate drop after epoch 80, and
+compare against trackers reporting official GOT-10k-only
+scores.
+C. Deployment details
+The RV1126B measurements use RKNN Toolkit/runtime
+2.3.2 and a 950 MHz NPU clock. For per-frame latency,
+the C benchmark times rknn run with five warm-ups,
+1,000 calls per round, and five interleaved rounds with a
+fixed anchor. We report the median of the round means.
+CPU deep idle is disabled temporarily for the unified fam-
+ily and key-comparator measurements and restored after the
+session, and the board is locked against concurrent bench-
+S1
+
+
+Table 9. GOT-10k test with GOT-10k-only training. Official test
+scores (%) under the one-shot protocol (trained solely on the GOT-
+10k training split), alongside Raspberry Pi 5 four-thread ncnn FPS
+measured under the Tab. 1 protocol. Accuracy is from the respec-
+tive papers.
+Tracker
+Pub
+AO
+SR0.5
+SR0.75
+Arm FPS
+TransT [1]
+CVPR’21
+67.1
+76.8
+60.9
+0.8
+STARK-ST50 [4]
+ICCV’21
+68.0
+77.7
+62.3
+2.0
+OSTrack-256 [5]
+ECCV’22
+71.0
+80.4
+68.2
+1.7
+LiteTrack-B4 [3]
+ICRA’24
+65.2
+74.7
+57.7
+6.5
+FERMT [6]
+ECCV’24
+69.6
+80.1
+63.2
+10.9
+MST [2]
+MM’25
+69.6
+79.8
+64.1
+3.6
+TaCo-T
+Ours
+61.8
+70.9
+54.5
+96.3
+TaCo-S
+Ours
+65.6
+75.1
+61.1
+44.4
+TaCo-B
+Ours
+66.7
+76.5
+62.4
+27.0
+marks. Input upload, output retrieval, crop preprocessing,
+template initialization and host box decoding are outside
+the timed call.
+The per-frame CPU results use a Rasp-
+berry Pi 5 (four Cortex-A76 cores up to 2.4 GHz, kernel
+6.12 with NUMA interleaving) and ncnn 1.0.20261020 with
+four threads bound to cores 0–3 and a shared runner. Track-
+ers added after the main session, including the adopted
+TaCo models, were timed in later sessions of the same
+runner whose anchors reproduce the earlier values within
+2%. Each graph is first timed with its exported settings
+and then with the same six runtime settings (Winograd and
+SGEMM variants), and the fastest setting that passes the
+numerical check is kept. FP16 is preferred, and a graph
+whose FP16 outputs fail the check falls back to validated
+partial or full FP32 ncnn precision. The check requires rel-
+ative L2 error at most 0.02 and maximum absolute error
+at most max(0.005, 0.05× the reference peak) against the
+FP32 reference. Each timing takes three groups of about
+2.6 s (10–250 calls) and reports the median of the group
+means. The timed call covers host input to host output with
+each architecture’s template caching. Firmware throttling
+and under-voltage flags are sampled every second, and any
+flagged timing is repeated. The TaCo CPU graphs are con-
+verted from the adopted checkpoints and pass the check in
+FP16.
+The
+template
+graph
+runs
+once
+per
+sequence
+on
+the 128×128 template crop to produce the modulation
+operands, the box-aligned RoIAlign and context average-
+pooled kernels, and the lite kernel weights (Tab. 7). Tem-
+plate timing starts from the normalized crop and target box
+and ends when all cache tensors are available on the host.
+We report the median of five round means using eight La-
+SOT first-frame crops. The maximum relative L2 error of
+the template caches against ONNX Runtime FP32 is 0.011
+across both devices.
+RepConv branches and RepViT blocks are fused before
+RKNN conversion. The per-frame graph returns score log-
+its, offsets and sizes. The score sigmoid and final decoding
+run on the host. To avoid response overflow, the correlation
+input is scaled by an exact power of two and the compen-
+sating scale is folded into the following normalization. All
+adopted per-frame graphs execute entirely on the NPU.
+For each adopted checkpoint, eight real crop pairs are
+checked against ONNX Runtime FP32.
+The acceptance
+gate requires relative L2 error at most 0.02, identical score-
+peak cells, and decoded-box IoU at least 0.98. All three
+adopted checkpoints pass, with relative L2 error at most
+0.009 and decoded-box IoU at least 0.997.
+Numerical check outcomes.
+Before accepting an FP16
+graph in Tab. 1, we verify every exported output against
+its ONNX Runtime FP32 reference. On both devices, the
+predeclared numerical gate requires relative L2 ≤0.02 and
+maximum absolute error at most max(0.005, 0.05∥Yref∥∞)
+(with exact agreement on integer and boolean outputs). On
+the RV1126B NPU, passing graphs must also run with zero
+CPU compute operators; for TaCo, we additionally verify
+identical score-peak cells (after sigmoid and Hann weight-
+ing) and decoded-box IoU at least 0.98 across eight real
+crop pairs. Failed graphs on the RV1126B have their mea-
+sured FP16 FPS displayed in gray, while failed graphs on
+the Raspberry Pi 5 fall back to their validated partial or full
+FP32 ncnn deployment.
+Across the 31 models in Tab. 1, all 4/4 correlation/CNN-
+fusion baselines and all 3/3 TaCo per-frame graphs pass in
+FP16 on both devices (including LightFC-vit with its ViT
+backbone). Among the 24 attention-based variants, 19/24
+pass on the RV1126B and 16/24 pass on the Pi 5; nine at-
+tention variants fail on at least one device. On the RV1126B
+NPU, the three FARTrack and two MaST graphs fail and are
+shown in gray. In FARTrack, the top-1 score of the softmax
+over 605 coordinate bins is about 0.035 below the FP32 ref-
+erence, which we attribute to FP16 flooring of the many
+negligible exponentials, and the argsort that selects tem-
+plate tokens for later frames flips up to 6 of 49 tokens near
+the pruning boundary (the decoded box still agrees within
+0.006 of the search crop, so gray marks a failure under the
+predeclared rule rather than a demonstrated tracking fail-
+ure). In MaST-Nano and MaST-Tiny, FP16 rounding per-
+turbs the top-k token ordering, and in MaST-Nano also al-
+ters the selected token set on one test case. On the Pi 5, HiT-
+Tiny/Small/Base, SMAT, MaST-Nano/Tiny and FARTrack-
+Nano/Tiny pass only in ncnn FP32, and MaST also runs its
+top-k token selection on the CPU; their Arm FPS therefore
+includes FP32 arithmetic.
+Throughput, memory and power during steady infer-
+ence.
+Table 10 reports batch-one graph execution with
+fixed input tensors across the seven multi-variant fami-
+lies and FEAR-XS from Tab. 1.
+For models with tem-
+plate caching, the prepared operands are supplied to the
+per-frame graph, and the TaCo rows use the submitted
+epoch-300 weights.
+For RV1126B and Raspberry Pi 5,
+S2
+
+
+Tab. 10 carries over the graph FPS from Tab. 1, whereas
+Orin Nano FPS counts completed TensorRT graph calls per
+second with device-resident I/O. The Mem column reports
+the primary runtime memory footprint on each platform:
+TensorRT-managed GPU memory allocation after engine
+and context creation on Orin Nano, RKNN DMA alloca-
+tion reported by RKNN QUERY MEM SIZE after warm-up
+on the RV1126B, and inference-process peak resident set
+size (RSS, including the ncnn runner) on the Raspberry Pi 5.
+Orin Nano runs TensorRT 10.3.0 in MAXN SUPER
+mode with module input power (VDD IN) sampled over
+12-second inference trials (idle power 5.34 W). The three
+TensorRT TaCo engines pass verification on a real crop
+pair against ONNX Runtime FP32 (maximum relative L2
+of 0.0026, matching score peaks and decoded-box IoU
+≥0.998).
+Competitor rows reuse their archived veri-
+fied TensorRT engines; when an FP16 engine fails the
+FP32 numerical gate (HiT-Tiny, FARTrack-Nano/Tiny and
+MaST-Nano/Tiny), the verified FP32 engine is reported
+and marked with .
+Raspberry Pi 5 memory and power
+are measured with four ncnn threads on the same vali-
+dated FP16/FP32 graphs as Tab. 1 ( denotes FP32) under
+a 1.8 GHz CPU frequency cap so that the 12-second power
+trials remain free of undervoltage and throttling; power
+sums the monitored PMIC supply rails excluding HDMI
+(idle power 2.29 W). The RV1126B runs RKNN 2.3.2 at
+950 MHz, staging each model on eMMC and querying
+RKNN QUERY MEM SIZE across three 2-second steady-
+state trials; the board exposes no input-current sensor, so
+RV1126B power is omitted.
+Across devices, TaCo maintains a compact memory foot-
+print alongside high throughput. On the RV1126B, TaCo-T,
+TaCo-S and TaCo-B require 24.9, 25.2 and 40.9 MB of NPU
+DMA memory, compared with 53.6–80.5 MB for UETrack-
+T/S and 49.8–187.4 MB for HiT. On Orin Nano, TaCo allo-
+cates only 11–18 MB of TensorRT GPU memory (vs. 27–
+40 MB for UETrack and 25–91 MB for HiT) while sustain-
+ing 1203.9, 400.9 and 236.8 FPS.
+HiT backbones with our interaction.
+On LeViT-128S
+(Tab. 6), caching the template shrinks the first two atten-
+tion blocks from 320 to 256 tokens, which lowers fused-
+attention time from 5.94 to 4.15 ms and the convolution and
+linear projections by 1.55 ms. The 11 attention operators
+and 5.71 ms of layout and indexing overhead that remain in
+the LeViT backbone keep the per-frame graph at 13.49 ms,
+against 5.45 ms for TaCo-T.
+D. LaSOT attribute analysis
+Figure 6 compares the seven multi-variant tracker families
+(18 variants) from Tab. 1 on the 14 LaSOT attributes. TaCo-
+B has the highest precision on seven of them: partial oc-
+clusion, deformation, camera motion, rotation, background
+Illumination
+variation
+Partial
+occlusion
+Deformation
+Motion
+blur
+Camera
+motion
+Rotation
+Background
+clutter
+Viewpoint
+change
+Scale
+variation
+Full
+occlusion
+Fast
+motion
+Out of
+view
+Low
+resolution
+Aspect ratio
+change
+65
+70
+80
+90
+100%
+TaCo
+T
+S
+B
+HiT
+Tiny
+Small
+Base
+AsymTrack
+T
+S
+B
+FARTrack
+Pico
+Nano
+Tiny
+UETrack
+T
+S
+LightFC
+LightFC-vit
+MaST
+Nano
+Tiny
+Figure 6. LaSOT precision (P) by attribute. Each spoke uses
+the test sequences tagged with that attribute. We measure center
+precision at 20 pixels and divide each tracker’s score by the highest
+among the plotted trackers on that spoke. The radial scale spans
+65–100% of this maximum. Color identifies the tracker family and
+line style identifies variants within each family.
+clutter, scale variation and aspect-ratio change. Its margins
+over trackers of similar overall accuracy are largest on de-
+formation, by 5.4, 5.6 and 4.8 points over AsymTrack-B,
+HiT-Base and LightFC-vit, and on rotation, by 4.3, 3.7 and
+3.6 points. These attributes change the outline of the target
+while most of its parts stay visible. LightFC-vit also uses
+pixel-wise correlation but with kernels on a fixed grid, so
+the margin over it suggests that the box-aligned 4×4 target
+kernels help here, because each kernel can still match its
+own part when the shape changes. This is a hypothesis that
+the attribute split alone does not isolate.
+UETrack-S leads on six of the remaining attributes and
+HiT-Base on fast motion. TaCo-B trails UETrack-S by 0.9–
+2.6 points on out-of-view, full occlusion, low resolution,
+fast motion, viewpoint change, illumination variation and
+motion blur. In these cases the target either departs from
+its first-frame appearance or covers only a few cells of the
+stride-16 grid, and TaCo has neither a template update nor
+a finer correlation map with which to respond. At the fast
+end, TaCo-T exceeds both LightFC and AsymTrack-T on
+all 14 attributes, by 0.7–4.8 and 1.3–5.6 points.
+E. Visualization details
+The appendix maps of Fig. 7 and qualitative rollouts of
+Fig. 8 are measured on the adopted 300-epoch TaCo-T
+checkpoint (128×128 template, 256×256 search, four s3
+S3
+
+
+Table 10. Accuracy, throughput, memory and power on edge devices. AUC (%) as well as RV1126B and Raspberry Pi 5 FPS follow
+Tab. 1; Orin Nano FPS, Mem and Power are medians over three steady-state graph trials. Mem reports TensorRT GPU memory on Orin
+Nano, RKNN DMA memory on RV1126B, and process peak RSS on Raspberry Pi 5 (RV1126B has no on-board power sensor). Gray
+entries indicate that the RKNN FP16 graph failed the numerical check.
+AUC (%)
+Orin Nano (TensorRT)
+RV1126B (RKNN)
+Raspberry Pi 5 (ncnn)
+Tracker
+LaSOT
+VastTrack
+FPS
+Mem
+Power
+FPS
+Mem
+FPS
+Mem
+Power
+FEAR-XS
+50.1
+29.6
+561.7
+7 MB
+11.89 W
+258.5
+9.1 MB
+91.6
+51.4 MB
+5.33 W
+LightFC
+60.3
+30.3
+648.0
+10 MB
+12.44 W
+135.4
+18.0 MB
+69.2
+75.6 MB
+5.43 W
+LightFC-vit
+63.5
+30.9
+289.1
+20 MB
+16.55 W
+21.5
+55.7 MB
+11.0
+94.8 MB
+4.96 W
+HiT-Tiny
+55.1
+25.7
+272.0
+50 MB
+15.90 W
+61.9
+49.8 MB
+27.8
+116.5 MB
+5.57 W
+HiT-Small
+61.1
+28.1
+372.3
+25 MB
+11.47 W
+43.9
+60.0 MB
+20.1
+123.2 MB
+5.11 W
+HiT-Base
+65.3
+30.0
+216.7
+91 MB
+16.40 W
+20.6
+187.4 MB
+7.1
+258.6 MB
+6.46 W
+AsymTrack-T
+61.0
+29.4
+236.7
+12 MB
+10.73 W
+52.4
+26.7 MB
+43.3
+58.1 MB
+5.04 W
+AsymTrack-S
+62.6
+30.2
+219.1
+12 MB
+10.76 W
+49.5
+28.2 MB
+36.6
+74.6 MB
+5.06 W
+AsymTrack-B
+64.7
+31.2
+149.2
+19 MB
+12.55 W
+19.6
+45.1 MB
+14.9
+90.6 MB
+5.17 W
+FARTrack-Pico
+57.9
+30.4
+241.1
+15 MB
+11.96 W
+14.9
+38.0 MB
+18.0
+64.7 MB
+4.96 W
+FARTrack-Nano
+59.5
+34.0
+105.2
+48 MB
+15.33 W
+10.4
+46.0 MB
+9.7
+93.5 MB
+5.10 W
+FARTrack-Tiny
+61.7
+35.1
+71.5
+67 MB
+15.46 W
+7.5
+56.1 MB
+6.5
+112.1 MB
+4.86 W
+UETrack-T
+63.4
+33.2
+454.6
+27 MB
+17.19 W
+39.8
+53.6 MB
+14.3
+98.5 MB
+5.37 W
+UETrack-S
+66.5
+36.6
+363.5
+40 MB
+17.74 W
+28.9
+80.5 MB
+9.6
+132.2 MB
+5.30 W
+MaST-Nano
+59.2
+30.7
+276.0
+31 MB
+16.46 W
+22.2
+35.3 MB
+22.6
+82.6 MB
+5.18 W
+MaST-Tiny
+64.0
+33.2
+193.5
+38 MB
+14.70 W
+19.3
+44.1 MB
+16.6
+89.4 MB
+4.97 W
+TaCo-T
+62.3
+33.9
+1203.9
+11 MB
+16.36 W
+183.6
+24.9 MB
+96.3
+67.1 MB
+6.41 W
+TaCo-S
+64.5
+36.5
+400.9
+11 MB
+12.82 W
+85.3
+25.2 MB
+44.4
+58.6 MB
+6.02 W
+TaCo-B
+65.6
+37.0
+236.8
+18 MB
+12.81 W
+50.4
+40.9 MB
+27.0
+70.6 MB
+5.97 W
+modulation sites) across the 243 sequences of UAV123,
+UAVDT and DTB70, which are not used in training.
+Kernel responses. A response map is eRi after batch nor-
+malization and kernel weighting (Eqs. (6) and (8)) on the
+stride-16 search grid. Each of the 32 maps is standardized
+over its interior cells (excluding the outermost ring). The
+maps of the 16 target kernels, or of the 16 context kernels,
+are then averaged, and the signed mean is drawn after bi-
+linear upsampling using a shared symmetric scale for all
+target and context tiles in each figure. Red and blue denote
+positive and negative standardized responses, respectively,
+with zero corresponding to each kernel’s spatial mean. The
+outermost cells are not drawn, because the corner cell car-
+ries a padding artifact of the backbone that would set the
+scale. The centroid of a kernel row is the centroid of the
+positive part of the mean map of its four kernels, over the
+cells whose centre lies in the predicted box enlarged by half
+a cell.
+Mean modulation operands. The mean scale and shift of
+every modulation site are taken over the 243 sequences. To
+isolate per-frame selectivity without accumulating closed-
+loop drift, each search crop selected by the unmodified
+tracker is evaluated a second time with the mean operands,
+and both predictions are compared with the ground truth
+on the 162,444 annotated frames. Even in this open-loop
+single-frame re-evaluation, where errors cannot propagate
+across frames, mean IoU drops from 0.679 with the tar-
+get’s operands to 0.677 with the mean operands. We count
+a frame as losing the target when one prediction has IoU be-
+low 0.2 while the other is above 0.5: this happens with the
+mean operands on 175 frames versus 70 frames with the tar-
+get operands. The last two rows of Fig. 7b show examples
+of the second kind.
+Qualitative comparison. Figure 8 extends Fig. 5 to four
+frames per sequence, at 15, 40, 65 and 90% of its length.
+In the two failures, TaCo-T loses a person after 141 frames
+while the competing trackers keep it, and loses a car after
+about 800 frames that AsymTrack-T keeps.
+S4
+
+
+−2.5
+0.0
+2.5
+z
+x
+Rtarget
+Rcontext
+x
+^S(°z; ¯z)
+^S(¹°; ¹¯)
+(a) target-aligned correlation
+(b) target-guided modulation
+z-score
+Figure 7. Further measured maps of TaCo-T, in the layout of Fig. 4. In the last two rows of (b), the prediction with the target’s own
+operands is the one that loses the target.
+S5
+
+
+TaCo-T
+LightFC
+HiT-Tiny
+AsymTrack-T
+ground truth
+Figure 8. Qualitative comparison on UAV123, UAVDT and DTB70, with frames at 15, 40, 65 and 90% of each sequence. TaCo-T keeps
+the target in the top four rows and loses it in the bottom two.
+S6
+
+
+References
+[1] Xin Chen, Bin Yan, Jiawen Zhu, Dong Wang, Xiaoyun Yang,
+and Huchuan Lu. Transformer tracking. In 2021 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 8122–8131. IEEE, 2021. S2
+[2] Shilei Wang, Gong Cheng, Pujian Lai, Dong Gao, and Junwei
+Han.
+Multi-state tracker: Enhancing efficient object track-
+ing via multi-state specialization and interaction. In Proceed-
+ings of the 33rd ACM International Conference on Multime-
+dia, pages 4087–4096. ACM, 2025. S2
+[3] Qingmao Wei, Bi Zeng, Jianqi Liu, Li He, and Guotian Zeng.
+Litetrack: Layer pruning with asynchronous feature extraction
+for lightweight and efficient visual tracking, 2024. S2
+[4] Bin Yan, Houwen Peng, Jianlong Fu, Dong Wang, and
+Huchuan Lu.
+Learning spatio-temporal transformer for vi-
+sual tracking. 2021 IEEE/CVF International Conference on
+Computer Vision (ICCV), 2021. S2
+[5] Botao Ye, Hong Chang, Bingpeng Ma, Shiguang Shan, and
+Xilin Chen.
+Joint feature learning and relation modeling
+for tracking: A one-stream framework. In Computer Vision
+– ECCV 2022. Springer, 2022. S2
+[6] Jikai Zheng, Mingjiang Liang, Shaoli Huang, and Jifeng Ning.
+Exploring the feature extraction and relation modeling for
+light-weight transformer tracking. In European Conference
+on Computer Vision (ECCV) 2024, 2024. S2
+S7

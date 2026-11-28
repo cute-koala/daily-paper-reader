@@ -1,0 +1,4237 @@
+Towards 360° Embodied UAV Tracking Without Turning
+Bingyu Li1 *
+Wu Du2
+Zhiyuan Zhao3
+Junyu Gao3,2
+Xuelong Li3 †
+1University of Science and Technology of China
+2Northwestern Polytechnical University
+3The Institute of Artificial Intelligence (TeleAI) of China Telecom
+native front
+cubemap cross
+All in one (ours): ERP image
+A1_FrontTrack
+A2_FrontUnderpass
+A3_FrontApproach
+A4_FrontSelection
+B1_NonFrontTrack
+B2_DroneTrack
+B3_NonFrontApproach
+B4_NonFrontSelection
+sphere
+sphere
+360° Embodied UAV    
+Tracking Without Turning
+metric
+value
+Sequences
+2652
+ERP frames
+1.73M+
+Duration
+48.16h
+Task types
+8
+Weather
+13
+A1_FrontTrack, 
+657
+A2_FrontUnde
+rpass, 211
+A3_FrontAppro
+ach, 214
+A4_FrontSele
+ction, 59
+B1_NonFrontTra
+ck, 801
+B2_DroneTrack, 
+122
+B3_NonFrontAp
+proach, 370
+B4_NonFrontSelectio
+n, 218
+Tasks
+501
+442
+288
+248
+222
+205
+148
+136
+135
+103
+97
+65
+62
+ClearNoon
+CloudyNoon
+MidRainyNoon
+WetNoon
+FoggyNoon
+HardRainNoon
+WetCloudyNoon
+ClearNight
+SoftRainNoon
+SoftRainNight
+WetSunset
+FoggyNight
+CloudyNight
+Weather
+Metric Values
+Language & State 
+�1
+�2
+�ℎ
+�3
+Track the vehicle designated..... 
+Multimodal Tracking Input
+Target 
+Reference
+Panoramic Observation
+Tracking Instructions
+UAV State
+[��, ��, ��]
+[1.2,  0.0, −0.3] m/s
+Embodied Tracking Supervision
+Track the vehicle 
+designated in the 
+initial reference 
+frame. ....
+UAV 
+Velocity
+����
+��
+Action 
+Decoder
+Large Language Model
+noise
+h × 3 continuous 
+action chunk
+persistent visual referring 
+ 
+Compress
+visual encoder
+compressed 
+temporal memory
+geometry-aligned 
+trajectory supervision 
+Figure 1. Overview of 360UAV-ETrack and 360UAV-TVLA. The upper panel presents the benchmark scenarios, panoramic observations,
+and dataset statistics, while the lower panel illustrates our VLA framework for full-spherical embodied UAV tracking.
+Abstract
+Conventional embodied UAV tracking couples target observ-
+ability with heading control because targets may leave the
+field of view of forward-facing cameras. We investigate
+a complementary paradigm that uses full-spherical per-
+ception to follow designated targets without active head-
+ing adjustment.
+To support this setting, we introduce
+360UAV-ETrack, a simulation benchmark comprising 2,652
+sequences, over 1.73 million synchronized observations,
+eight tracking tasks, and 150 held-out closed-loop scenarios.
+*Work done during an internship at TeleAI.
+†Corresponding Author
+We propose 360UAV-TVLA, a panoramic vision–language–
+action (VLA) framework integrating persistent visual re-
+ferring (PVR), compressed temporal memory (CTM), and
+geometry-aligned trajectory supervision (GTS) for instance
+identification, motion reasoning, and three-dimensional con-
+trol. Experiments across two VLA backbones show consistent
+gains over standard fine-tuning, with normalized average
+tracking frames increasing from 22.56% to 35.28% for 𝜋0
+and from 25.68% to 33.64% for 𝜋0.5. Our benchmark further
+reveals a substantial gap between offline imitation accuracy
+and closed-loop tracking reliability, establishing a challeng-
+1
+arXiv:2611.33934v1  [cs.CV]  25 Nov 2026
+
+
+ing testbed for future research1.
+1. Introduction
+Embodied UAV tracking requires an agent to continuously
+observe and follow a designated moving target. Unlike vi-
+sual object tracking in prerecorded videos, embodied track-
+ing operates in a closed perception–action loop, where the
+agent’s actions influence subsequent observations and its
+spatial relationship with the target [20]. Existing approaches
+predominantly rely on forward-facing perspective cameras.
+Consequently, targets moving to the side or behind the UAV
+may leave the field of view (FoV), even when they remain
+nearby. Maintaining visual contact thus requires active head-
+ing adjustment, coupling target observability with heading.
+We investigate a complementary tracking paradigm that
+decouples angular target coverage from heading control
+through full-spherical perception. As illustrated in Fig. 2,
+equirectangular projection (ERP) extends visual coverage
+to lateral and rear directions without camera reorientation.
+This motivates tracking without turning, in which the UAV
+maintains its initial heading and follows the designated target
+exclusively through three-dimensional translational control.
+While physical occlusions remain unavoidable, full-spherical
+perception alleviates target loss caused by limited FoV.
+Despite its potential, full-spherical perception remains
+underexplored in embodied UAV tracking. Panoramic track-
+ing benchmarks such as 360VOT [9] and 360VOTS [25]
+focus on offline target localization, whereas embodied ap-
+proaches such as TrackVLA [20] and UAV-Track VLA [30]
+primarily rely on perspective observations. As summarized
+in Table 1, existing benchmarks provide limited support for
+full-spherical closed-loop UAV tracking.
+To support systematic research in this setting, we intro-
+duce 360UAV-ETrack, a large-scale simulation benchmark
+built in CARLA. As illustrated in Fig. 1, it provides syn-
+chronized panoramic and perspective observations, expert
+demonstrations, and diverse tracking scenarios spanning
+frontal and non-frontal target configurations. The training
+and validation collection comprises 2,652 sequences and
+1,733,766 synchronized observation steps, complemented by
+150 held-out scenarios for closed-loop evaluation.
+However, full-spherical perception introduces several
+challenges beyond expanded visual coverage. The wide FoV
+increases instance ambiguity, making target identity difficult
+to maintain across viewing directions. A single panoramic
+observation provides limited evidence of temporal motion,
+while ERP distortions and projection discontinuities com-
+plicate the translation of spatial relationships into metric
+control commands. To address these challenges, we propose
+1https : / / libingyu01 . github . io / 360UAV - ETrack _
+360UAV-TVLA/
+Figure 2. Motivation for full-spherical embodied tracking. ERP
+observations retain visual access to targets beyond the frontal FoV.
+360UAV-TVLA, a reference-conditioned VLA framework
+comprising three complementary components. Specifically,
+persistent visual referring (PVR) establishes an instance-
+specific anchor to preserve target identity across viewing di-
+rections. Meanwhile, compressed temporal memory (CTM)
+efficiently aggregates historical panoramic features to cap-
+ture target dynamics. Furthermore, geometry-aligned trajec-
+tory supervision (GTS) predicts future target positions in the
+fixed-heading control coordinate system, explicitly bridging
+panoramic perception and velocity control.
+Experiments across two VLA backbones demonstrate
+consistent improvements over standard fine-tuning, increas-
+ing normalized ATF from 22.56% to 35.28% with 𝜋0 and
+from 25.68% to 33.64% with 𝜋0.5. The results also reveal a
+substantial discrepancy between offline imitation accuracy
+and online tracking reliability, highlighting the challenges
+of panoramic embodied tracking and motivating further re-
+search in this direction.
+Our contributions are summarized as follows:
+• We investigate fixed-heading embodied UAV tracking, de-
+coupling angular target coverage from heading control
+through full-spherical perception.
+• To support this paradigm, we introduce 360UAV-ETrack,
+a large-scale benchmark featuring diverse tracking tasks,
+expert demonstrations, and closed-loop evaluation.
+• We develop 360UAV-TVLA, a reference-conditioned VLA
+framework with compressed panoramic memory and
+control-aligned trajectory supervision, demonstrating im-
+proved closed-loop tracking across two VLA backbones.
+2. Related Work
+2.1. Visual Perception and Tracking
+Panoramic vision expands scene coverage but introduces
+projection distortions that motivate geometry-aware rep-
+resentations [4]. 360VOT [9] and 360VOTS [25] bench-
+mark omnidirectional object tracking and segmentation,
+while PanoVOS [26] investigates temporal consistency in
+panoramic video segmentation.
+Recent efforts extend
+panoramic perception to multi-object tracking [5, 16], out-
+2
+
+
+Table 1. Comparison with representative visual tracking, embodied tracking, and aerial navigation benchmarks. Our benchmark supports
+full-spherical perception, expert action supervision, and closed-loop tracking under fixed-heading control.
+Dataset / Benchmark Platform
+Observation
+Visual Reference Language Degrees of Freedom Closed-Loop Fixed Heading Sequences
+Data Scale Data Source
+Visual Tracking Benchmarks
+WebUAV-3M [28]
+UAV
+Perspective
+✓
+✓
+–
+✗
+–
+4,500
+3,300,000
+Real-world
+360VOT [9]
+Various
+Panorama
+✓
+✗
+–
+✗
+–
+120
+113,000
+Real-world
+QuadTrack [16]
+Quadruped
+Panorama
+–
+✗
+–
+✗
+–
+32
+19,200
+Real-world
+Embodied Tracking Benchmarks
+EVT-Bench [20]
+Ground Robot Perspective
+✗
+✓
+3
+✓
+–
+25,986
+855,000
+Hybrid
+UAV-Track [30]
+UAV
+Perspective
+✗
+✓
+4
+✓
+–
+Not reported 892,800
+Simulation
+Aerial Navigation Benchmarks
+AVDN [7]
+UAV
+Top-down imagery
+✗
+✓
+4
+✓
+–
+3,064
+–
+Reconstructed
+AerialVLN [15]
+UAV
+Perspective
+✗
+✓
+4
+✓
+–
+8,446
+–
+Simulation
+CityNav [12]
+UAV
+Perspective
+✗
+✓
+4
+✓
+–
+32,637
+–
+Reconstructed
+OpenUAV [21]
+UAV
+Multiple perspective views
+✗
+✓
+6
+✓
+–
+12,149
+–
+Simulation
+OpenFly [8]
+UAV
+Perspective
+✗
+✓
+4
+✓
+–
+100,000
+–
+Hybrid
+Full-Spherical Embodied UAV Tracking
+360UAV-ETrack
+UAV
+Panorama + perspective
+✓
+✓
+3
+✓
+✓
+2,652
+1,733,766
+Simulation
+of-view point tracking [10], and spatial reasoning [13]. How-
+ever, these studies primarily address perception rather than
+action-conditioned target following, leaving full-spherical
+closed-loop tracking insufficiently explored.
+2.2. Embodied Visual Tracking
+Embodied visual tracking couples target perception with ac-
+tive motion control. Early methods improve robustness to
+distractors through adversarial learning [1, 17, 31, 32], while
+offline reinforcement learning and adaptive policies support
+robust tracking across settings [24, 33]. UAV-oriented meth-
+ods such as D-VAT [6], DAT [18], and OA-VAT [19] investi-
+gate autonomous following and occlusion recovery. Recent
+VLA approaches, including TrackVLA [20], UAV-Track
+VLA [30], and TrackVLA++ [14], unify target understand-
+ing and action prediction; VLM-assisted tracking further
+explores failure recovery [23]. CosFly-Track [22] provides
+large-scale demonstrations for aerial following. Neverthe-
+less, these approaches predominantly use perspective ob-
+servations, leaving the role of full-spherical perception in
+fixed-heading closed-loop UAV tracking underexplored.
+3. 360UAV-ETrack Benchmark
+3.1. Simulation and Data Collection
+We construct 360UAV-ETrack in CARLA to study full-
+spherical embodied UAV tracking under fixed-heading con-
+trol. As illustrated in Fig. 1, the UAV follows a designated
+moving target through three-dimensional translation without
+heading adjustments. The training and validation set con-
+tains 2,652 sequences with 1,733,766 ERP frames (48.16
+hours), covering eight tracking tasks and 13 weather con-
+ditions. Demonstrations are collected across five towns:
+Town02, Town05, Town06, Town07, and Town10HD.
+The UAV captures 1920 × 960 equirectangular projection
+(ERP) observations at 10 Hz, while simulation and low-level
+control operate at 30 Hz. Each demonstration provides syn-
+chronized panoramic and perspective observations, target
+references and annotations, UAV motion states, and expert
+velocity commands.
+3.2. Tracking Tasks
+As shown in Fig. 1, 360UAV-ETrack comprises eight tasks
+organized into two evaluation settings.
+Task I: Front-Initialized Tracking. Targets are initial-
+ized within the frontal 90◦field of view. The four tasks
+are (A1) FrontTrack, (A2) FrontUnderpass, (A3) FrontAp-
+proach, and (A4) FrontSelection. They evaluate persistent
+following, underpass navigation, target approach, and iden-
+tity preservation among distractors, respectively.
+Task II: Omnidirectional Acquisition and Track-
+ing. The four tasks are (B1) NonFrontTrack, (B2) Drone-
+Track, (B3) NonFrontApproach, and (B4) NonFrontSelec-
+tion. These tasks extend evaluation to non-frontal target
+configurations and aerial targets, testing target acquisition
+and subsequent tracking under full-spherical observations.
+Held-Out Evaluation Set. We construct 150 frozen eval-
+uation episodes across Town01, Town03, and Town04, which
+are disjoint from the training towns. Task I contains 51
+episodes, with 21/7/5/18 episodes for A1–A4. Task II con-
+tains 99 episodes, with 44/6/13/36 episodes for B1–B4. The
+set includes 72 pedestrian, 72 vehicle, and 6 UAV-target
+episodes. Recorded expert demonstrations support offline
+replay, while the corresponding frozen scenarios support
+online closed-loop evaluation.
+3.3. Evaluation Protocol
+All policies predict three-dimensional velocity commands
+in the same heading-aligned coordinate frame, using the
+first predicted command at each decision step. We evaluate
+offline prediction and online tracking separately.
+Offline Expert Replay. At each timestamp, the policy
+receives the recorded expert observation and motion-state
+inputs. Predicted velocities are integrated from the expert ini-
+tial position with Δ𝑡= 0.1 s, without feeding the integrated
+trajectory back into the recorded inputs. We report average
+displacement error (ADE) against the expert trajectory, aver-
+aging position errors over each complete sequence and then
+across episodes. Offline success rate, SRoff, evaluates the in-
+tegrated trajectory against the recorded target positions using
+3
+
+
+Compressed 
+Temporal Memory 
+(
+)
+Persistent Visual Referring 
+(
+) 
+Large Language Model
+Initial ERP  �0+ 
+designated target box 
+Reference �0: 
+224×224
+crop
+��−2
+��−1
+��
+��−1
+��−2
+. . .
+compression
+256 reference 
+tokens
+512 ERP 
+tokens
+128*T history tokens
+UAV 
+Velocity
+��
+��
+��
+Track the <class> designated in the initial 
+reference frame. Maintain the identity of 
+this same vehicle throughout the episode, 
+regardless of its current position, viewing 
+angle, or visibility. Ignore other similar 
+vehicles. Continue following the target 
+with fixed UAV heading, and reacquire it 
+after temporary occlusion or disappearance.
+Action Decoder
+Text prompt Encoder
+Text prompt tokens
+State Encoder
+Geometry-aligned Trajectory 
+Supervision (
+) 
+noise
+�1
+�2
+�ℎ
+. . .
+���������������
+Target 
+Position
+Action 
+Chunk
+state tokens
+History Memory Bank
+Figure 3. Overview of 360UAV-TVLA. A training-only auxiliary head predicts 10 future target positions relative to the current UAV. At
+inference, only the first predicted action is executed before replanning under fixed-heading control.
+the original distance constraints and a 15-consecutive-frame
+failure threshold. It measures distance compliance and does
+not evaluate visibility from the predicted positions.
+Online Closed-Loop Evaluation. Each policy receives
+simulator observations and executes velocity commands in
+closed loop. We compare three timing protocols by the delay
+included in simulated time:
+𝐷(i) = 0, 𝐷(ii) = 𝐿model + 𝐿ext, 𝐷(iii) = 𝐿model,
+(1)
+where 𝐿model is the measured policy latency, from policy
+entry to the complete action chunk being available as a syn-
+chronized CPU array, and 𝐿ext denotes external overhead,
+including observation preparation, communication, and ren-
+dering. These delays exclude physics-step quantization.
+(i) Synchronous closed loop. The simulator pauses during
+inference and then advances by 0.1 s (10Hz) under the new
+command, excluding inference latency from simulated time.
+(ii) End-to-end real-time closed loop. The simulator ad-
+vances continuously during asynchronous inference, expos-
+ing the policy to both model latency and external overhead.
+(iii) Model-compute-delay closed loop. Only measured
+model latency is injected into simulated time. For an obser-
+vation and UAV state captured at time 𝑡, the new command
+takes effect at the first 30 Hz physics boundary at or after
+𝑡+ 𝐿model. Observations and scoring run at 10 Hz, with at
+most one prediction pending.
+All reported online results use protocol (iii), which in-
+corporates measured model computation latency while ex-
+cluding simulator rendering and communication overhead.
+Detailed definitions of the three timing protocols are pro-
+vided in the appendix.
+4. Method
+4.1. Overall Framework
+Full-spherical perception decouples target observability from
+UAV heading control, yet poses three fundamental chal-
+lenges: (1) how to identify the designated instance within
+wide-FoV ERP observations, (2) how to reason about target
+dynamics from temporal observations for persistent track-
+ing, and (3) how to effectively translate spherical perception
+into three-dimensional control. To address these challenges,
+we propose 360UAV-TVLA, which integrates three comple-
+mentary components: persistent visual referring (PVR, R),
+compressed temporal memory (CTM, M), and geometry-
+aligned trajectory supervision (GTS, G). As illustrated in
+Fig. 3, these components are integrated with a 𝜋-series VLA
+backbone BΘ. At observation index 𝑡, the overall framework
+is formulated as
+𝑅= R(𝐼0, binit
+0 ),
+H 𝑡= M(H𝑡),
+(𝑍𝑡, bA𝑡) = BΘ
+
+𝐼𝑡, 𝑅, H 𝑡, ℓ, v𝑡; 𝝐
+
+,
+b
+𝑈𝑡= G(𝑍𝑡).
+(2)
+where 𝐼0 and binit
+0
+denote the initial panorama and the bound-
+ing box of the designated target in the initial observation,
+respectively. 𝐼𝑡, H𝑡, ℓ, and v𝑡denote the current panorama,
+historical observations, language instruction, and measured
+UAV velocity, respectively. 𝝐∼N (0, I) denotes the Gaus-
+sian noise used to initialize the action generation process. 𝑍𝑡
+is the shared multimodal representation, bA𝑡∈Rℎ×3 denotes
+the predicted velocity chunk, and b
+𝑈𝑡∈Rℎ×3 represents the
+predicted target trajectory in normalized control-aligned co-
+4
+
+
+ordinates. The prediction horizon is ℎ= 10, with actions
+sampled at 10 Hz in the initial-heading-aligned frame. The
+three components respectively address instance referring,
+temporal reasoning, and control-aligned motion learning. G
+is used exclusively during training to regularize the shared
+representation without additional inference cost.
+4.2. Persistent Visual Referring (PVR)
+Full-spherical perception expands target observability but
+also increases instance ambiguity, as visually similar objects
+may appear across different viewing directions. Language
+instructions typically describe target categories rather than
+uniquely distinguish individual instances. To maintain tar-
+get identity throughout closed-loop tracking, we introduce
+persistent visual referring R, which constructs an instance-
+specific visual reference from the initial observation:
+𝑅= R(𝐼0, binit
+0 ) = Cwrap(𝐼0, binit
+0 ; 𝛾),
+(3)
+where Cwrap extracts a context-expanded target region with
+periodic boundary handling and aspect-preserving padding
+to 224×224, using 𝛾= 2.5. The periodic cropping preserves
+target appearance across the panoramic seam.
+The reference remains fixed throughout the episode, pro-
+viding a consistent identity anchor despite changes in target
+location. Together with the language instruction, PVR as-
+sists the policy in distinguishing the designated target from
+similar distractors. Only the initial bounding box is provided;
+subsequent target coordinates are unavailable to the policy.
+4.3. Compressed Temporal Memory (CTM)
+While full-spherical perception provides comprehensive spa-
+tial coverage, a single observation offers limited evidence
+of target dynamics. Persistent tracking requires reasoning
+about changes in relative target position and motion direc-
+tion. However, directly incorporating historical panoramic
+observations substantially increases the visual token budget.
+We therefore introduce compressed temporal memory M to
+capture instance-specific motion efficiently.
+Let H𝑡= (𝐼𝑡−𝑇, . . . , 𝐼𝑡−1) denote the historical obser-
+vation window. CTM adopts an asymmetric temporal rep-
+resentation that compresses historical visual tokens while
+preserving the full spatial details of the current observation:
+H 𝑡= M(H𝑡) = Linear E𝜙(H𝑡),
+(4)
+where E𝜙is the shared SigLIP encoder. Each historical
+frame is independently encoded and compressed from 512
+to 128 tokens along the token dimension, without changing
+the feature dimension. The shared linear layer is initialized
+with 2×2 spatial averaging and zero bias, reducing historical
+token consumption by 75%. The compressed features are
+concatenated in order to form the temporal memory.
+To associate temporal motion with the designated in-
+stance, the fusion module F𝜃integrates compressed memory,
+current panorama, and persistent target reference:
+𝑍𝑡= F𝜃
+
+[H 𝑡; E𝜙(𝐼𝑡); E𝜙(𝑅); T (ℓ, v𝑡)]
+
+.
+(5)
+Temporal and source embeddings are added to visual to-
+kens before fusion to encode observation chronology and
+distinguish input sources. T encodes the language instruc-
+tion and UAV velocity. By combining historical motion
+cues with detailed current-frame observations and persistent
+identity information, the resulting representation 𝑍𝑡supports
+target-specific temporal reasoning using only 768 + 128𝑇
+visual tokens. Memory is updated at each observation step
+independently of policy inference, with unavailable history
+masked during attention.
+4.4.
+Geometry-Aligned
+Trajectory
+Supervision
+(GTS)
+Control-aligned motion representation.
+Full-spherical
+observations provide omnidirectional visual coverage, but
+their projected image coordinates do not directly describe the
+metric spatial relationships required for three-dimensional
+velocity control. Moreover, action imitation provides only
+indirect supervision of target motion through expert UAV
+responses. To bridge this perception-to-control gap, GTS
+represents future target trajectories in the same fixed-heading
+coordinate frame as UAV velocity commands:
+𝑈★
+𝑡= Norm
+
+[p𝑇
+𝑡+1; . . . ; p𝑇
+𝑡+ℎ] −p𝑈
+𝑡
+
+,
+(6)
+where p𝑇and p𝑈denote target and UAV positions in the
+initial-heading-aligned frame, respectively. The current UAV
+position is subtracted from each of the ℎfuture target posi-
+tions to establish a common spatial origin. Norm denotes
+per-axis normalization using training-set statistics.
+Unlike ERP-space forecasting, this representation avoids
+panoramic seam discontinuities in the supervision space.
+The common UAV origin further separates target displace-
+ment from future UAV motion, allowing target localization
+and motion to be represented consistently.
+Trajectory supervision.
+To encourage the policy to learn
+these geometric relationships, GTS extracts target motion
+features from the shared multimodal representation through
+learnable query-based attention and a two-layer GELU MLP:
+b
+𝑈𝑡= G(𝑍𝑡) ∈Rℎ×3,
+(7)
+where b
+𝑈𝑡denotes the predicted target trajectory in normal-
+ized control-aligned coordinates. We optimize the trajectory
+prediction using
+Ltraj = MaskedSmoothL1(b
+𝑈𝑡,𝑈★
+𝑡),
+(8)
+5
+
+
+Table 2. Online closed-loop tracking performance on 360UAV-ETrack. Task I evaluates front-initialized tracking, while Task II evaluates
+omnidirectional acquisition and tracking. ATF is reported in frames, normalized ATF and SR in %, and FPS in decisions/s. Normalized ATF
+averages each episode’s ATF divided by its prescribed horizon.
+Method
+Publication
+Type
+Task I Front-Initialized
+Task II Omnidirectional
+Overall Both Tasks
+FPS↑
+(decisions/s)
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+Direct Inference (Without Benchmark Fine-Tuning)
+Uni-NaVid [29]
+RSS’25
+VLA
+37.31
+3.09
+0.00
+39.00
+4.89
+0.00
+38.43
+4.28
+0.00
+3.08
+OmTrackVLA [11]
+GitHub’25
+VLA
+39.31
+3.30
+0.00
+40.90
+5.12
+0.00
+40.36
+4.50
+0.00
+1.31
+𝜋0 (w/o ft) [3]
+RSS’25
+VLA
+45.69
+3.79
+0.00
+36.57
+4.57
+0.00
+39.67
+4.30
+0.00
+21.36
+𝜋0.5 (w/o ft) [2]
+CoRL’25
+VLA
+76.53
+6.46
+0.00
+34.19
+4.18
+0.00
+48.59
+4.95
+0.00
+20.59
+Fine-Tuned Models
+Temporal BC
+Baseline
+BC
+149.10
+12.62
+0.00
+98.67
+11.80
+2.02
+115.81
+12.08
+1.33
+372.48
+D-VAT-BC [6]
+RA-L’24
+VAT
+171.33
+14.00
+1.96
+85.66
+10.90
+1.01
+114.79
+11.95
+1.33
+232.13
+Fast-WAM [27]
+NeurIPS’26
+WAM
+170.16
+14.54
+1.96
+178.66
+20.69
+3.03
+175.77
+18.60
+2.67
+3.16
+𝜋0 (w/ ft) [3]
+RSS’25
+VLA
+310.73
+23.90
+3.92
+188.30
+21.87
+6.06
+229.93
+22.56
+5.33
+20.65
+𝜋0.5 (w/ ft) [2]
+CoRL’25
+VLA
+305.55
+24.40
+5.88
+212.61
+26.34
+7.07
+244.21
+25.68
+6.67
+19.56
+360UAV-TVLA (𝜋0)
+–
+VLA
+537.84
+39.21
+7.84
+291.56
+33.25
+12.12
+375.29
+35.28
+10.67
+19.56
+360UAV-TVLA (𝜋0.5)
+–
+VLA
+393.14
+30.17
+9.80
+308.39
+35.42
+11.11
+337.21
+33.64
+10.67
+18.90
+Table 3. Offline expert-replay performance. All methods receive
+fixed expert observations. ADE is in (m) and SR in (%).
+Task I (51)
+Task II (99)
+Overall (150)
+Method
+ADE↓
+SRoff ↑
+ADE↓
+SRoff ↑
+ADE↓
+SRoff ↑
+𝜋0 (w/o ft)
+144.04
+0.00
+125.80
+0.00
+132.00
+0.00
+𝜋0 (w/ ft)
+4.21
+76.47
+3.15
+92.93
+3.51
+87.33
+Ours (𝜋0)
+5.17
+68.63
+3.02
+91.92
+3.75
+84.00
+𝜋0.5 (w/o ft)
+64.17
+0.00
+68.02
+0.00
+66.71
+0.00
+𝜋0.5 (w/ ft)
+14.61
+43.14
+11.57
+59.60
+12.61
+54.00
+Ours (𝜋0.5)
+15.55
+43.14
+12.81
+54.55
+13.74
+50.67
+Table 4. Progressive component ablation. All variants use the
+same 𝜋0.5 backbone and a 15-frame failure threshold.
+PVR
+CTM
+GTS
+Online
+ATF↑
+ATFnorm ↑
+SRon ↑
+✗
+✗
+✗
+183.52
+17.96
+2.00
+✓
+✗
+✗
+244.21
+25.68
+6.67
+✓
+✓
+✗
+265.73
+28.16
+10.67
+✓
+✗
+✓
+319.79
+31.61
+12.00
+✓
+✓
+✓
+337.21
+33.64
+10.67
+averaged over valid future positions and all three coordinate
+axes. By explicitly supervising future target motion, GTS
+encourages the shared representation to capture instance-
+specific spatial relationships and motion dynamics, including
+temporarily occluded targets when valid annotations are
+available. The trajectory prediction head is used exclusively
+during training and introduces no additional inference cost.
+4.5. Joint Learning and Closed-Loop Control
+Conditioned on the shared representation 𝑍𝑡, the action
+expert of BΘ generates velocity chunks through differen-
+tiable reverse-time Euler sampling from Gaussian noise. The
+predicted actions are mapped to physical velocities using
+training-set normalization statistics and directly supervised
+by a masked 𝐿1 imitation loss Lact. We jointly optimize
+action imitation and geometry-aligned target trajectory su-
+pervision:
+L = Lact + 𝜆trajLtraj,
+(9)
+where 𝜆traj balances velocity imitation and target-motion
+learning. Through joint optimization, PVR provides consis-
+tent instance conditioning, CTM captures temporal motion
+evidence, and GTS encourages control-aligned motion repre-
+sentation learning. These complementary components con-
+nect target identity, motion understanding, and continuous
+velocity control within a unified VLA framework.
+At inference, the GTS head is bypassed, and the policy
+directly generates velocity commands from the shared repre-
+sentation. The controller executes the first predicted veloc-
+ity before replanning with updated panoramic observations.
+During inference latency, the UAV retains its previous veloc-
+ity command while maintaining a fixed heading throughout
+tracking.
+5. Experiments
+5.1. Implementation Details
+We evaluate Uni-NaVid [29], OmTrackVLA [11], 𝜋0 [3],
+and 𝜋0.5 [2] without benchmark adaptation, alongside
+benchmark-trained Temporal BC, D-VAT-BC [6], Fast-
+WAM [27], both 𝜋baselines, and our method. VLA/WAM
+training uses scene-disjoint splits, one epoch, eight H100
+GPUs, AdamW, batch size 64, and peak learning rate
+2.5 × 10−5. Tables 4 and 5 use 𝜋0.5. Both 360UAV-TVLA
+variants use CTM with two preceding frames and 128 to-
+kens per past frame, and GTS with 𝜆traj = 2. Checkpoints
+are selected by validation velocity MAE. The GTS head is
+bypassed at deployment. Normalized ATF averages each
+episode’s valid tracking frames divided by its prescribed hori-
+zon. Detailed configurations and native-interface adaptations
+are provided in the appendix.
+6
+
+
+Table 5. Online ablation results. The left block compares history
+lengths, while the right block varies the target-auxiliary loss weight.
+(a) CTM history length
+(b) GTS loss weight
+𝑇
+𝑁vis
+ATF↑
+ATFnorm ↑
+SR↑
+FPS↑
+𝜆traj
+ATF↑
+ATFnorm ↑
+SR↑
+0
+768
+319.79
+31.61
+12.00 20.71
+0.01 261.44
+26.96
+6.67
+1
+896
+243.97
+24.80
+6.67
+19.17
+0.1
+321.47
+32.53
+8.67
+2 1024 337.21
+33.64
+10.67 18.90
+0.5
+270.44
+27.87
+7.33
+4 1280 280.04
+28.15
+6.67
+17.11
+2
+337.21
+33.64
+10.67
+8 1792 324.69
+32.91
+8.67
+13.79
+5
+325.75
+32.65
+6.67
+Table 6. Full-spherical observation vs. active steering. We com-
+pare (A) perspective observation with fixed-heading XYZ control,
+(B) ERP observation with fixed-heading XYZ control, and (C) per-
+spective observation with active XYZ–yaw control.
+Method
+Observation
+Action
+Task I
+Task II
+ATF↑SRon ↑ATF↑SRon ↑
+A: Limited FoV (𝜋0.5)
+PER 90◦
+(𝑣𝑥, 𝑣𝑦, 𝑣𝑧)
+265.08
+3.92
+181.54
+5.05
+B: Ours (𝜋0.5)
+ERP 360◦
+(𝑣𝑥, 𝑣𝑦, 𝑣𝑧)
+393.14
+9.80
+308.39 11.11
+B: Ours (𝜋0)
+ERP 360◦
+(𝑣𝑥, 𝑣𝑦, 𝑣𝑧)
+537.84
+7.84
+291.56 12.12
+C: Active steering (𝜋0.5)
+PER 90◦
+(𝑣𝑥, 𝑣𝑦, 𝑣𝑧, 𝜔yaw) 164.35
+0.00
+69.35
+1.01
+5.2. Overall Benchmark Performance
+Table 2 reports closed-loop performance across front-
+initialized and omnidirectional tracking tasks.
+Direct-
+inference
+policies
+exhibit
+limited
+transferability
+to
+panoramic UAV control, achieving zero episode-level
+success without benchmark adaptation.
+Relative to the
+fine-tuned baselines with PVR, introducing CTM and
+GTS improves overall ATF from 229.93 to 375.29 frames
+with 𝜋0 and from 244.21 to 337.21 frames with 𝜋0.5,
+corresponding to improvements of 63.2% and 38.1%,
+respectively.
+Normalized ATF also increases by 12.72
+and 7.96 percentage points, indicating improvements in
+effective tracking duration across variable episode horizons.
+Both variants achieve an online SR of 10.67%, compared
+with 5.33% and 6.67% for their fine-tuned counterparts.
+Although full-episode completion remains challenging, the
+consistent gains across both backbones demonstrate the
+effectiveness of 360UAV-TVLA in prolonging closed-loop
+target following.
+5.3. Offline Expert Replay
+Table 3 shows that offline imitation accuracy does not neces-
+sarily predict closed-loop tracking performance. Although
+360UAV-TVLA improves online tracking duration, its over-
+all offline UAV ADE and distance-based SR do not improve.
+Expert replay measures trajectory agreement under recorded
+observations, whereas closed-loop evaluation accounts for
+action-dependent observations, accumulated control errors,
+and inference delays. These results highlight the necessity
+of evaluating embodied tracking in closed loop alongside
+offline metrics.
+5.4. Ablation of the Proposed Components
+Table 4 evaluates the contributions of PVR, CTM, and GTS.
+PVR improves normalized ATF from 17.96% to 25.68%,
+Table 7. Task-wise online success rates (%). This table decom-
+poses the online tracking performance across the four subtasks of
+Task I (A1–A4) and Task II (B1–B4), with their overall SR.
+Task I
+Task II
+Overall
+Method
+A1
+A2
+A3
+A4
+B1
+B2
+B3
+B4
+(150)
+𝜋0 (w/ ft)
+9.52
+0.00
+0.00 0.00 6.82
+0.00 0.00
+8.33
+5.33
+𝜋0.5 (w/ ft)
+14.29 0.00
+0.00 0.00 9.09
+0.00 0.00
+8.33
+6.67
+Ours (𝜋0, 𝜆= 2)
+4.76
+28.57 0.00 5.56 13.64 0.00 15.38 11.11 10.67
+Ours (𝜋0.5, 𝜆= 2) 19.05 0.00
+0.00 5.56 9.09
+0.00 7.69
+16.67 10.67
+Table 8. Online tracking under different initial velocities. Re-
+sults use the model-compute-delay protocol. Groups are defined by
+the UAV’s initial velocity; ATF is reported in frames and SR in %.
+Zero Init. (75)
+Nonzero Init. (75)
+Overall (150)
+Method
+ATF↑
+SRon ↑
+ATF↑
+SRon ↑
+ATF↑
+SRon ↑
+𝜋0 (w/o ft)
+38.81
+0.00
+40.52
+0.00
+39.67
+0.00
+𝜋0.5 (w/o ft)
+49.00
+0.00
+48.17
+0.00
+48.59
+0.00
+𝜋0 (w/ ft)
+190.32
+1.33
+269.53
+9.33
+229.93
+5.33
+𝜋0.5 (w/ ft)
+219.23
+4.00
+269.19
+9.33
+244.21
+6.67
+Ours (𝜋0, 𝜆= 2)
+311.03
+5.33
+439.56
+16.00
+375.29
+10.67
+Ours (𝜋0.5, 𝜆= 2)
+307.40
+8.00
+367.01
+13.33
+337.21
+10.67
+t = 64.2 s
+(a) Vehicle
+GT crop
+−8
+−7
+−6
+Right offset (m)
+1.0
+1.5
+2.0
+2.5
+Forward offset (m)
+t = 55.6 s
+(b) Pedestrian
+GT crop
+−3.0
+−1.5
+0.0
+Right offset (m)
+3.6
+4.2
+4.8
+5.4
+Forward offset (m)
+(c) UAV
+GT crop
+9
+10
+11
+12
+Right offset (m)
+−5.4
+−4.8
+−4.2
+−3.6
+Forward offset (m)
+0 (low)
+1 (high)
+t = 83.4 s
+GT trajectory
+Predicted trajectory
+Outer ring: first point (+0.1 s)
+GT box
+Figure 4. GTS trajectory prediction. Horizontal projections of
+predicted and ground-truth target trajectories.
+highlighting the importance of instance-specific condition-
+ing. Adding CTM or GTS to PVR further increases nor-
+malized ATF to 28.16% and 31.61%, respectively. Com-
+bining all three components achieves the highest ATF of
+337.21 frames and normalized ATF of 33.64%. Although
+PVR+GTS achieves a higher SR, the full model provides the
+best tracking persistence.
+5.5. Analysis of Key Design Parameters
+CTM history length.
+Table 5(a) compares 𝑇
+∈
+{0, 1, 2, 4, 8} past frames with 128 tokens per frame. 𝑇= 2
+achieves the highest ATF and normalized ATF, 337.21
+frames and 33.64%, whereas 𝑇= 0 achieves the highest
+SR of 12.00%. 𝑇= 8 reaches 324.69 frames and 32.91%
+normalized ATF, but reduces inference throughput to 13.79
+decisions/s. These results reveal a trade-off among tempo-
+ral context, inference efficiency, and closed-loop tracking
+performance. Among the evaluated settings, 𝑇= 2 pro-
+vides the best tracking persistence while maintaining 18.90
+decisions/s.
+GTS loss weight.
+Table 5(b) evaluates different GTS loss
+weights with a fixed history length of 𝑇= 2. Increasing the
+7
+
+
+0                         20                        40
+Elapsed time (s)
+17.5
+15.0
+12.5
+10.0
+7.5
+UAV-target distance (m)
+Valid limit
+Expert
+π0.5 zero-shot
+π0.5 Adapt
+2
+0
+2
+0
+0.0
+-0.5
+0                        20                       40
+Expert replay time (s)
+vy (m/s)    vx (m/s)
+vz  m s
+Distance: 6.32 m
+Distance: 14.89 m
+Distance: 17.83 m
+Terminated
+★
+0.0 s  |  f0
+4.4 s  |  f44
+5.8 s  |  f58
+36.7 s  |  f367
+(b) Offline expert replay
+Ended at 5.8 s
+No recorded frame
+(a) Closed-loop
+   Target
+π0.5 zero-shot
+π0.5 Adapt
+   Expert replay
+π0.5 zero-shot
+π0.5 Adapt
+0            20           40           60
+World X offset (m)
+1 s error: 0.94 m
+1 s error: 0.78 m
+1 s error: 0.46 m
+1 s error: 0.19 m
+23.7 s  |  f237
+36.7 s  |  f367
+28.2 s  |  f282
+32.3 s  |  f323
+0            20           40           60
+_20
+0
+World X offset (m)
+_20
+0
+World Y offset (m)
+World Y offset (m)
+(   / )
+ Velocity
+Distance: 6.32 m          Distance: 7.98 m          Distance: 8.12 m           Distance: 7.75 m
+1 s error: 0.05 m
+1 s error: 0.12 m
+1 s error: 0.08 m
+1 s error: 0.07 m
+Executed flight paths
+Following distance
+Executed flight paths
+Figure 5. Effect of benchmark adaptation on 𝜋0.5. (a) Executed
+trajectories and target-following distances in closed loop. (b) Inte-
+grated trajectories and velocity predictions under expert replay.
+GTS loss weight does not consistently improve performance.
+Normalized ATF increases from 26.96% to 32.53% as the
+weight increases from 0.01 to 0.1, but drops to 27.87% at
+0.5. With 𝜆traj = 2, the model achieves the highest ATF,
+normalized ATF, and SR of 337.21 frames, 33.64%, and
+10.67%, respectively. Further increasing the weight to 5
+reduces SR to 6.67%. These results highlight the importance
+of balancing trajectory supervision with action imitation.
+5.6. Full-Spherical Observation vs. Active Steering
+Table 6 compares three observation–control configura-
+tions: fixed-heading perspective perception, fixed-heading
+panoramic perception, and perspective perception with active
+yaw control. With the 𝜋0.5 backbone, replacing perspective
+observations with ERP improves ATF by 128.06 and 126.85
+frames on Task I and Task II, respectively. These results high-
+light the benefits of expanded angular coverage for tracking
+persistence and non-frontal acquisition. The evaluated active-
+steering policy underperforms both fixed-heading configu-
+rations. However, its yaw supervision is synthesized along
+recorded translational trajectories rather than obtained from
+jointly optimized translation–yaw demonstrations. Thus, this
+comparison supports full-spherical perception under the eval-
+uated settings without establishing an inherent disadvantage
+of active steering.
+5.7. Task and Initialization Effects
+Table 7 reveals complementary task-wise strengths: 𝜋0 per-
+forms better on A2 and B3, whereas 𝜋0.5 leads on A1 and B4.
+Table 8 compares 75 stationary and 75 moving starts. Rela-
+tive to fine-tuned baselines, our 𝜋0 variant improves SR from
+1.33%/9.33% to 5.33%/16.00%, while 𝜋0.5 improves from
+4.00%/9.33% to 8.00%/13.33%. Both variants benefit from
+moving starts while consistently improving performance
+across initialization regimes. Failure analysis. Both vari-
+ants achieve 10.67% overall SR, with no successes on A3
+or B2. Test episodes average 1,166.7 frames, with a median
+of 1,200 frames (120 s). Success requires completing the en-
+tire horizon under visibility and distance constraints without
+✅
+✅
+✅
+✅
+✅
+❌
+❌
+❌
+✅
+✅
+✅
+✅
+✅
+✅
+✅
+❌
+❌
+❌
+✅
+✅
+ours
+baseline
+ours
+baseline
+time+
+....
+....
+....
+....
+Figure 6.
+Qualitative closed-loop tracking comparison.
+Panoramic observations at matched elapsed times for the fine-tuned
+baseline and 360UAV-TVLA under identical scenario initializations
+and the model-compute-delay protocol.
+triggering the 15-frame failure threshold, highlighting the
+difficulty of sustained long-horizon tracking.
+5.8. Qualitative Visualization
+Future Target Trajectory Prediction.
+Figure 4 visual-
+izes GTS predictions over a one-second horizon for vehicle,
+pedestrian, and UAV targets. Predicted and ground-truth
+trajectories share the current UAV origin and fixed-heading
+control axes, exposing both localization offsets and motion-
+direction differences in their horizontal projections. Exam-
+ples follow a fixed class-wise selection rule independent of
+prediction error. These predictions characterize learned tar-
+get dynamics, rather than the integrated UAV trajectory eval-
+uated in expert replay. The GTS predictions are inspected
+offline and are neither executed as commands nor supplied
+to the action decoder.
+Velocity Prediction under Expert Replay.
+Figure 5(b)
+compares zero-shot and fine-tuned 𝜋0.5 under identical ex-
+pert observations and motion states. In the illustrated se-
+quence, adaptation brings velocity predictions and their in-
+tegrated trajectory closer to the expert. Since observations
+remain fixed, this comparison measures action imitation
+without reflecting action-dependent distribution shifts. It
+demonstrates the effect of benchmark adaptation rather than
+isolating individual contributions of PVR, CTM, or GTS.
+Closed-Loop Tracking Behavior.
+Figure 5(a) shows the
+zero-shot policy terminating at 5.8 s, with a target distance
+of 17.83 m versus 8.12 m for the adapted policy. Figure 6
+compares matched panoramic sequences, where 360UAV-
+TVLA maintains tracking after the fine-tuned baseline loses
+it. These examples illustrate improved tracking persistence
+under action-dependent observations, complementing the
+aggregate ATF, normalized ATF, and SR results.
+6. Conclusion
+We introduce 360UAV-ETrack, a large-scale benchmark for
+full-spherical embodied UAV tracking under fixed-heading
+control, supporting both offline expert replay and online
+8
+
+
+closed-loop evaluation. To address the challenges of instance
+ambiguity, temporal motion reasoning, and perception-to-
+control alignment, we propose 360UAV-TVLA, a panoramic
+VLA framework integrating persistent visual referring, com-
+pressed temporal memory, and geometry-aligned trajec-
+tory supervision. Experiments across two VLA backbones
+demonstrate consistent improvements in closed-loop track-
+ing and reveal a gap between offline imitation and online
+tracking.
+These findings highlight the potential of full-
+spherical perception for embodied UAV tracking without
+active heading adjustment. Future work. We will explore
+lightweight models and real-world panoramic UAV deploy-
+ment to improve tracking efficiency and robustness.
+LLM Usage Statement
+Large language models were used to assist with language
+polishing and manuscript formatting. The authors reviewed
+and verified all resulting content and take full responsibility
+for the final manuscript.
+References
+[1] Hongjun An, Wenhan Hu, Sida Huang, Siqi Huang, Ruanjun
+Li, Yuanzhi Liang, Jiawei Shao, Yiliang Song, Zihan Wang,
+Cheng Yuan, et al. Ai flow: Perspectives, scenarios, and
+approaches. Vicinagearth, 3(1):1, 2026. 3
+[2] Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia,
+Danny Driess, Adnan Esmail, Michael Robert Equi, Chelsea
+Finn, Niccolo Fusai, Manuel Y. Galliker, Dibya Ghosh, Lachy
+Groom, Karol Hausman, Brian Ichter, Szymon Jakubczak,
+Tim Jones, Liyiming Ke, Devin LeBlanc, Sergey Levine,
+Adrian Li-Bell, Mohith Mothukuri, Suraj Nair, Karl Pertsch,
+Allen Z. Ren, Lucy Xiaoyang Shi, Laura Smith, Jost Tobias
+Springenberg, Kyle Stachowicz, James Tanner, Quan Vuong,
+Homer Walke, Anna Walling, Haohuan Wang, Lili Yu, and
+Ury Zhilinsky. 𝜋0.5: a vision-language-action model with
+open-world generalization. In Proceedings of the 9th Con-
+ference on Robot Learning, pages 17–40. PMLR, 2025. 6, 5,
+14
+[3] Kevin Black, Noah Brown, Danny Driess, Adnan Esmail,
+Michael Robert Equi, Chelsea Finn, Niccolo Fusai, Lachy
+Groom, Karol Hausman, Brian Ichter, Szymon Jakubczak,
+Tim Jones, Liyiming Ke, Sergey Levine, Adrian Li-Bell, Mo-
+hith Mothukuri, Suraj Nair, Karl Pertsch, Lucy Xiaoyang
+Shi, Laura Smith, James Tanner, Quan Vuong, Anna Walling,
+Haohuan Wang, and Ury Zhilinsky. 𝜋0: A vision-language-
+action flow model for general robot control. In Proceedings
+of Robotics: Science and Systems, 2025. 6, 4, 5, 14
+[4] Taco S. Cohen, Mario Geiger, Jonas Köhler, and Max Welling.
+Spherical CNNs. In International Conference on Learning
+Representations (ICLR), 2018. 2
+[5] Buyin Deng, Kai Luo, Lingxin Huang, Xinqi Liu, Fei Cheng,
+Hang Zheng, Liming Yin, and Kailun Yang. CylindTrack:
+Depth-aware cylindrical motion modeling for panoramic
+multi-object tracking. arXiv preprint arXiv:2606.30097, 2026.
+2
+[6] Alberto Dionigi, Simone Felicioni, Mirko Leomanni, and
+Gabriele Costante. D-VAT: End-to-end visual active tracking
+for micro aerial vehicles. IEEE Robotics and Automation
+Letters, 9(6):5046–5053, 2024. 3, 6, 5, 14
+[7] Yue Fan, Winson Chen, Tongzhou Jiang, Chun Zhou, Yi
+Zhang, and Xin Wang. Aerial vision-and-dialog navigation.
+In Findings of the Association for Computational Linguistics:
+ACL 2023, pages 3043–3061, 2023. 3
+[8] Yunpeng Gao, Chenhui Li, Zhongrui You, Junli Liu, Li Zhen,
+Pengan Chen, Qizhi Chen, Zhonghan Tang, Liansheng Wang,
+Yiwen Tang, et al. Openfly: A comprehensive platform for
+aerial vision-language navigation. In International Confer-
+ence on Learning Representations, pages 101858–101871,
+2026. 3
+9
+
+
+[9] Huajian Huang, Yinzhe Xu, Yingshu Chen, and Sai-Kit Ye-
+ung. 360vot: A new benchmark dataset for omnidirectional
+visual object tracking. In 2023 IEEE/CVF International Con-
+ference on Computer Vision (ICCV), pages 20509–20519.
+IEEE, 2023. 2, 3
+[10] Finlay Hudson, James Gardner, and William Smith. Tapvid-
+360: Tracking any point in 360 from narrow field of view
+video. 2026. 3
+[11] Heting Ying Kyusong Lee and Tiancheng Zhao.
+Om-
+trackvla: Open-source visual language action model for
+visual navigation and following. https://github.com/om-ai-
+lab/OmTrackVLA, 2025. 6, 4
+[12] Jungdae Lee, Taiki Miyanishi, Shuhei Kurita, Koya Sakamoto,
+Daichi Azuma, Yutaka Matsuo, and Nakamasa Inoue. City-
+nav: A large-scale dataset for real-world aerial navigation.
+In 2025 IEEE/CVF International Conference on Computer
+Vision (ICCV), pages 5912–5922. IEEE, 2025. 3
+[13] Zekai Lin and Xu Zheng. PanoEnv: Exploring 3d spatial
+intelligence in panoramic environments with reinforcement
+learning. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+9647–9657, 2026. 3
+[14] Jiahang Liu, Yunpeng Qi, Jiazhao Zhang, Minghan Li, Shaoan
+Wang, Kui Wu, Hanjing Ye, Hong Zhang, Zhibo Chen, Fang-
+wei Zhong, et al. Trackvla++: Unleashing reasoning and
+memory capabilities in vla models for embodied visual track-
+ing. In 2026 IEEE International Conference on Robotics and
+Automation (ICRA), pages 6494–6501. IEEE, 2026. 3
+[15] Shubo Liu, Hongsheng Zhang, Yuankai Qi, Peng Wang, Yan-
+ning Zhang, and Qi Wu. Aerialvln: Vision-and-language
+navigation for uavs. In 2023 IEEE/CVF International Confer-
+ence on Computer Vision (ICCV), pages 15338–15348. IEEE,
+2023. 3
+[16] Kai Luo, Hao Shi, Sheng Wu, Fei Teng, Mengfei Duan,
+Chang Huang, Yuhang Wang, Kaiwei Wang, and Kailun Yang.
+Omnidirectional multi-object tracking. In 2025 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), pages 21959–21969. IEEE, 2025. 2, 3
+[17] Jiawei Shao and Xuelong Li. Ai flow at the network edge.
+IEEE Network, 40(1):330–336, 2026. 3
+[18] Haowei Sun, Jinwu Hu, Zhirui Zhang, Haoyuan Tian, Xinze
+Xie, Yufeng Wang, Xiaohua Xie, Yun Lin, Zhuliang Yu, and
+Mingkui Tan. Open-world drone active tracking with goal-
+centered rewards. In Advances in Neural Information Pro-
+cessing Systems, 2025. 3
+[19] Haowei Sun, Kai Zhou, Hao Gao, Shiteng Zhang, Jinwu
+Hu, Xutao Wen, Qixiang Ye, and Mingkui Tan. Instance-
+level visual active tracking with occlusion-aware planning.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), pages 42494–42504,
+2026. 3
+[20] Shaoan Wang, Jiazhao Zhang, Minghan Li, Jiahang Liu, Anqi
+Li, Kui Wu, Fangwei Zhong, Junzhi Yu, Zhizheng Zhang, and
+He Wang. TrackVLA: Embodied visual tracking in the wild.
+In Proceedings of the Conference on Robot Learning, pages
+4139–4164. PMLR, 2025. 2, 3
+[21] Xiangyu Wang, Donglin Yang, Ziqin Wang, Hohin Kwan,
+Jinyu Chen, Hongsheng Li, Yue Liao, Si Liu, et al. Towards
+realistic uav vision-language navigation: Platform, bench-
+mark, and methodology.
+In International Conference on
+Learning Representations, pages 7292–7310, 2025. 3
+[22] Xiangyue Wang, Hanxuan Chen, Songsheng Cheng, Ruilong
+Ren, Jie Zheng, Shuai Yuan, Tianle Zeng, Hanzhong Guo,
+Kangli Wang, and Ji Pei. CosFly-Track: A large-scale multi-
+modal dataset for UAV visual tracking via multi-constraint
+trajectory optimization. arXiv preprint arXiv:2605.17776,
+2026. 3
+[23] Kui Wu, Shuhang Xu, Hao Chen, Churan Wang, Zhoujun
+Li, Yizhou Wang, and Fangwei Zhong. Vlm can be a good
+assistant: Enhancing embodied visual tracking with self-
+improving vision-language models. In 2025 IEEE/RSJ In-
+ternational Conference on Intelligent Robots and Systems
+(IROS), pages 13154–13161. IEEE, 2025. 3
+[24] Kui Wu, Hao Chen, Jinzhu Han, Haijun Liu, Churan Wang,
+Yizhou Wang, Zhoujun Li, Si Liu, and Fangwei Zhong.
+AdaTracker: Learning adaptive in-context policy for cross-
+embodiment active visual tracking. IEEE Robotics and Au-
+tomation Letters, 11(7):8308–8314, 2026. 3
+[25] Yinzhe Xu, Huajian Huang, Yingshu Chen, and Sai-Kit Ye-
+ung. 360vots: Visual object tracking and segmentation in
+omnidirectional videos. IEEE Transactions on Pattern Analy-
+sis and Machine Intelligence, 47(11):9785–9797, 2025. 2
+[26] Shilin Yan, Xiaohao Xu, Renrui Zhang, Lingyi Hong, Wen-
+chao Chen, Wenqiang Zhang, and Wei Zhang.
+Panovos:
+Bridging non-panoramic and panoramic views with trans-
+former for video segmentation. In European Conference on
+Computer Vision, pages 346–365. Springer, 2024. 2
+[27] Tianyuan Yuan, Zibin Dong, Yicheng Liu, and Hang Zhao.
+Fast-wam: Do world action models need test-time future
+imagination? arXiv preprint arXiv:2603.16666, 2026. 6, 5,
+14
+[28] Chunhui Zhang, Guanjie Huang, Li Liu, Shan Huang, Yinan
+Yang, Xiang Wan, Shiming Ge, and Dacheng Tao. Webuav-
+3m: A benchmark for unveiling the power of million-scale
+deep uav tracking. IEEE Transactions on Pattern Analysis
+and Machine Intelligence, 45(7):9186–9205, 2022. 3
+[29] Jiazhao Zhang, Kunyu Wang, Shaoan Wang, Minghan Li,
+Haoran Liu, Songlin Wei, Zhongyuan Wang, Zhizheng Zhang,
+and He Wang. Uni-navid: A video-based vision-language-
+action model for unifying embodied navigation tasks. In
+Proceedings of Robotics: Science and Systems, 2025. 6, 4
+[30] Qiyao Zhang, Shuhua Zheng, Jianli Sun, Chengxiang Li, Xi-
+anke Wu, Zihan Song, Zhiyong Cui, Yisheng Lv, and Yonglin
+Tian. UAV-Track VLA: Embodied aerial tracking via vision-
+language-action models. arXiv preprint arXiv:2604.02241,
+2026. 2, 3
+[31] Fangwei Zhong, Peng Sun, Wenhan Luo, Tingyun Yan, and
+Yizhou Wang. Ad-vat+: An asymmetric dueling mechanism
+for learning and understanding visual active tracking. IEEE
+transactions on pattern analysis and machine intelligence, 43
+(5):1467–1482, 2019. 3
+[32] Fangwei Zhong, Peng Sun, Wenhan Luo, Tingyun Yan, and
+Yizhou Wang. Towards distraction-robust active visual track-
+ing. In Proceedings of the International Conference on Ma-
+chine Learning (ICML), pages 12782–12792, 2021. 3
+10
+
+
+[33] Fangwei Zhong, Kui Wu, Hai Ci, Churan Wang, and Hao
+Chen. Empowering embodied visual tracking with visual
+foundation models and offline rl. In European Conference on
+Computer Vision, pages 139–155. Springer, 2024. 3
+11
+
+
+Towards 360° Embodied UAV Tracking Without Turning
+Supplementary Material
+A. Detailed Online Evaluation Protocols
+All policy outputs are mapped to three-dimensional ve-
+locity commands in the heading-aligned frame using fixed,
+model-specific adapters. Only the first command in each pre-
+dicted action chunk is executed. The three protocols differ in
+how inference and external overhead affect simulated time:
+𝐷(i) = 0, 𝐷(ii) = 𝐿model + 𝐿ext, 𝐷(iii) = 𝐿model,
+(10)
+where 𝐿model is the measured model computation latency and
+𝐿ext denotes external overhead, including image preparation,
+communication, rendering, and logging. These expressions
+exclude any additional waiting caused by physics-step quan-
+tization.
+Protocol (i): Synchronous Closed Loop.
+1. At simulation time 𝑡, capture the image and measured
+UAV velocity, and start policy inference.
+2. Pause the simulator during inference. Neither the UAV
+nor the target advances in simulated time.
+3. Once inference completes, apply the first predicted veloc-
+ity command and resume simulation.
+4. Hold this command for 0.1 s of simulated time, then cap-
+ture the next observation and repeat.
+Thus, inference and external overhead affect experiment wall
+time but introduce no delay in simulated time.
+Protocol (ii): End-to-End Real-Time Closed Loop.
+1. At simulation time 𝑡, capture the image and measured
+UAV velocity, and process the observation through the
+asynchronous inference pipeline.
+2. Keep the simulator running throughout observation prepa-
+ration, communication, and inference. The UAV contin-
+ues executing its previous velocity command while the
+target continues moving.
+3. When the prediction reaches the simulator, apply its first
+velocity command at the next available physics update.
+4. Hold the new command until the next prediction becomes
+effective, repeating the process with updated observa-
+tions.
+This protocol exposes the policy to the full runtime delay,
+including model computation and external overhead.
+Protocol (iii): Model-Compute-Delay Closed Loop.
+1. At simulation time 𝑡, capture the image and measured
+UAV velocity at the same timestamp, and start inference.
+Measure 𝐿model from policy entry until the complete ac-
+tion chunk is available as a synchronized CPU array,
+including visual encoding and action generation.
+2. Advance simulated time over the measured inference in-
+terval. The UAV continues executing its previous velocity
+command while the target continues moving.
+3. Apply the first predicted command at the first 30 Hz
+physics boundary at or after 𝑡+ 𝐿model:
+𝑡apply = Δphys
+𝑡+ 𝐿model
+Δphys
+
+,
+Δphys = 1
+30 s.
+(11)
+4. Hold the new command until the next prediction becomes
+effective. Only one prediction is logically pending at
+a time; subsequent predictions use the latest captured
+observation.
+Observations and scoring occur at 10 Hz. The causal his-
+tory buffer receives every capture, including frames acquired
+while a prediction is pending. Each request freezes its three-
+frame window; the buffer is reset between episodes. External
+image preparation, communication, rendering, and logging
+affect wall time but are excluded from the simulated delay.
+We use protocol (iii) to approximate onboard execution by
+retaining model computation latency while excluding exter-
+nal overhead, particularly communication and rendering. All
+online results in the main text follow protocol (iii). Results
+under protocols (i) and (ii) are presented in this appendix to
+assess performance without inference delay and under full
+end-to-end runtime delay, respectively.
+B. Evaluation Metrics
+We evaluate offline trajectory prediction, online closed-
+loop tracking, and policy inference efficiency. All methods
+use fixed-heading three-dimensional velocity control. The
+shared online evaluation setup is described in Section D,
+and the main-text online results use timing protocol (iii) in
+Section A. For episode 𝑖, let 𝐻𝑖denote the prescribed num-
+ber of observation timestamps, indexed by 𝑡= 1, . . . , 𝐻𝑖,
+with Δ𝑡= 0.1 s. Unless stated otherwise, episode-level met-
+rics are averaged with equal weight over the 𝑁evaluated
+episodes.
+B.1. Offline Average Displacement Error (ADE)
+Offline expert replay measures the trajectory implied by
+policy actions under a fixed sequence of recorded expert
+observations. At each timestamp, the policy receives the
+recorded expert observation and motion-state input. We re-
+tain only the first predicted velocity ˆv𝑖,𝑡∈R3 from its action
+1
+
+
+chunk. All subsequent inputs remain from the expert record-
+ing; reconstructed positions do not affect the observations
+supplied to the policy. The replay motion-state input is esti-
+mated by a causal backward difference of recorded expert
+positions, with zero velocity at the first timestamp. This is
+the offline replay input convention for the historical expert
+recording; it is separate from the mixed tracker initialization
+used in online Test episodes.
+Let p∗
+𝑖,𝑡be the actual recorded expert tracker position and
+𝑅𝑖the fixed rotation from the heading-aligned body frame
+to the world frame. Starting from the same initial position,
+we reconstruct the complete predicted trajectory as
+ˆp𝑖,1 = p∗
+𝑖,1,
+ˆp𝑖,𝑡= p∗
+𝑖,1 + Δ𝑡
+𝑡−1
+∑︁
+𝑘=1
+𝑅𝑖ˆv𝑖,𝑘,
+𝑡= 2, . . . , 𝐻𝑖.
+(12)
+The predicted velocity at timestamp 𝑡determines motion
+toward timestamp 𝑡+ 1. Thus, 𝐻𝑖recorded positions provide
+reference endpoints for 𝐻𝑖−1 actions; the last predicted
+action is not integrated because its next reference position is
+unavailable. We apply no post-hoc translation, rotation, scal-
+ing, or temporal alignment to the reconstructed trajectory.
+We define the full-trajectory ADE as
+ADE = 1
+𝑁
+𝑁
+∑︁
+𝑖=1
+1
+𝐻𝑖
+𝐻𝑖
+∑︁
+𝑡=1
+ˆp𝑖,𝑡−p∗
+𝑖,𝑡
+
+2 .
+(13)
+ADE is reported in meters (m), with lower values indicating
+better time-aligned trajectory agreement. Each episode is
+scored over its full recorded horizon, including timestamps
+after any offline distance-based failure. This metric measures
+accumulated position error rather than a single-step relative
+translation error. Because the reference consists of actual
+recorded positions, ADE also reflects discrepancies between
+command integration and simulated motion. Integrating the
+expert commands provides a diagnostic of this execution
+discrepancy; repeating the supplied current velocity provides
+a motion-state baseline.
+B.2. Online Success Rate (SR)
+Let pon
+𝑖,𝑡and gon
+𝑖,𝑡be the online tracker and designated target
+positions. Their three-dimensional distance is 𝑑on
+𝑖,𝑡= ∥pon
+𝑖,𝑡−
+gon
+𝑖,𝑡∥2. Let 𝑧𝑖,𝑡∈{0, 1} indicate target visibility as assessed
+by the evaluator. Using the scenario-specific lower bound
+𝑑min
+𝑖
+and the potentially frame-dependent upper bound 𝑑max
+𝑖,𝑡
+defined in Section C, a valid frame is
+𝑞on
+𝑖,𝑡= I
+
+𝑧𝑖,𝑡= 1 ∧𝑑min
+𝑖
+≤𝑑on
+𝑖,𝑡≤𝑑max
+𝑖,𝑡
+
+.
+(14)
+The consecutive-invalid-frame counter is
+𝑐on
+𝑖,𝑡=
+(
+0,
+𝑞on
+𝑖,𝑡= 1,
+𝑐on
+𝑖,𝑡−1 + 1,
+𝑞on
+𝑖,𝑡= 0,
+𝑐on
+𝑖,0 = 0.
+(15)
+An episode terminates at the first timestamp when 𝑐on
+𝑖,𝑡≥15.
+Invalid streaks shorter than 15 frames are tolerated, and a
+valid frame resets the counter. The online success indicator
+equals one only when the episode reaches all 𝐻𝑖prescribed
+timestamps without triggering this failure rule:
+𝑠on
+𝑖
+= I[episode reaches 𝐻𝑖without failure] ,
+SRon = 100
+𝑁
+𝑁
+∑︁
+𝑖=1
+𝑠on
+𝑖.
+(16)
+SR is reported as a percentage (%), with higher values indi-
+cating more reliable completion of the prescribed tracking
+horizons. SR and ATF evaluate target-following performance
+under visibility and distance constraints.
+B.3. Online Average Tracking Frames (ATF)
+Let 𝜏𝑖be the first failure timestamp, or 𝐻𝑖if the episode
+completes without failure. The number of valid tracking
+frames and its episode average are
+𝐿𝑖=
+𝜏𝑖
+∑︁
+𝑡=1
+𝑞on
+𝑖,𝑡,
+ATF = 1
+𝑁
+𝑁
+∑︁
+𝑖=1
+𝐿𝑖.
+(17)
+ATF is reported in observation frames, with higher values
+indicating longer effective tracking duration. It counts valid
+frames rather than all elapsed frames or simulator ticks,
+and therefore reflects partial tracking performance even for
+unsuccessful episodes. Prescribed horizons differ across
+episodes as summarized in Table 10.
+B.4. Offline Distance Success Rate
+For the reconstructed trajectory in Eq. (12), let g∗
+𝑖,𝑡denote
+the recorded target position at the same timestamp. Define
+𝑑off
+𝑖,𝑡=
+ˆp𝑖,𝑡−g∗
+𝑖,𝑡
+
+2 ,
+𝑞off
+𝑖,𝑡= I
+
+𝑑min
+𝑖
+≤𝑑off
+𝑖,𝑡≤𝑑max
+𝑖,𝑡
+
+.
+(18)
+Using the same counter recurrence as Eq. (15), with 𝑞off
+𝑖,𝑡
+replacing 𝑞on
+𝑖,𝑡and 𝑐off
+𝑖,0 = 0, we define
+𝑠off,dist
+𝑖
+= I
+
+max
+1≤𝑡≤𝐻𝑖𝑐off
+𝑖,𝑡< 15
+
+,
+SRoff,dist = 100
+𝑁
+𝑁
+∑︁
+𝑖=1
+𝑠off,dist
+𝑖
+.
+(19)
+The original distance bounds and 15-frame threshold are
+shared with online evaluation. However, this offline met-
+ric does not assess visibility, occlusion, or collision at re-
+constructed positions, and recorded expert visibility is not
+treated as visibility from the predicted trajectory. It is re-
+ported separately from online SR. Replay and full-horizon
+ADE calculation continue after an offline failure, while that
+episode’s offline success indicator remains zero.
+2
+
+
+Table 9. Base distance constraints for online tracking and offline
+distance SR. Some ground-target episodes use precomputed per-
+frame upper bounds as described in the text.
+Target Type
+No. of Episodes
+Base Interval (m)
+Pedestrian
+72
+1.75–12.5
+Vehicle
+72
+2.8–20
+UAV (B2)
+6
+2.5–15
+B.5. Inference Speed (FPS)
+Policy inference throughput is defined as
+FPS =
+𝑁dec
+Í𝑁dec
+𝑗=1 𝑇𝑗
+,
+(20)
+where 𝑁dec is the number of evaluated decisions and 𝑇𝑗is
+the model inference time for decision 𝑗. The timing bound-
+ary includes visual encoding, multimodal processing, and
+action generation, but excludes simulator execution and ren-
+dering. GPU execution must complete before a timing in-
+terval is closed. Cross-method throughput comparisons re-
+quire matched hardware, batch size, warm-up treatment, and
+timing boundaries. The 10 Hz observation and scoring fre-
+quency and the throughput of concurrently running replay
+jobs are not standalone policy FPS measurements. Higher
+FPS indicates faster inference.
+C. Tracking Distance Constraints
+Table 9 lists the base intervals used in the distance-validity
+tests of Eqs. (14) and (18). The lower bound 𝑑min
+𝑖
+is fixed by
+target type. The upper bound 𝑑max
+𝑖,𝑡
+is the precomputed per-
+frame value when a distance profile is specified; otherwise,
+it equals the base upper bound. Both endpoints are inclu-
+sive. These are evaluation thresholds rather than measured
+trajectory distance coverage or maximum tracker operating
+distances.
+Some ground-target scenarios use precomputed upper-
+bound profiles to accommodate terrain-clearance adjust-
+ments to the reference flight trajectory. Across the com-
+plete set, 96 episodes contain such profiles; the upper bound
+exceeds its base value at some timestamps in 29 of the 72
+pedestrian episodes and 10 of the 72 vehicle episodes. The
+largest individual upper bounds are 28.13 m and 24.54 m, re-
+spectively. These values are not constant limits applied to all
+frames or episodes. Lower bounds remain unchanged, and
+all six UAV/B2 episodes retain the fixed interval 2.5–15 m.
+All bounds are fixed before policy evaluation and shared
+across methods. The six UAV/B2 episodes provide more
+limited coverage for this target category than the pedestrian
+and vehicle episodes.
+Table 10. Composition and prescribed horizons of all evaluation
+tasks. Horizon ranges summarize assigned episode durations. Each
+individual episode has a fixed horizon.
+Task
+Category
+Total
+Pedestrian
+Vehicle
+UAV
+Horizon (s)
+A1
+Front tracking
+21
+9
+12
+0
+40–200
+A2
+Front underpass
+7
+2
+5
+0
+120–180
+A3
+Front approach
+5
+3
+2
+0
+160–200
+A4
+Front target selection
+18
+8
+10
+0
+40–200
+Task I
+Subtotal
+51
+22
+29
+0
+40–200
+B1
+Non-front tracking
+44
+25
+19
+0
+40–200
+B2
+UAV tracking
+6
+0
+0
+6
+100
+B3
+Non-front approach
+13
+7
+6
+0
+40–200
+B4
+Non-front target selection
+36
+18
+18
+0
+40–200
+Task II
+Subtotal
+99
+50
+43
+6
+40–200
+All
+Total
+150
+72
+72
+6
+40–200
+D. Online Evaluation Protocol
+D.1. Task Composition
+The evaluation contains 150 episodes: 51 in Task I (front-
+initialized persistent tracking; A1–A4) and 99 in Task II
+(omnidirectional acquisition and tracking; B1–B4). The set
+includes 72 pedestrian, 72 vehicle, and six UAV episodes,
+with 50 episodes in each of Town01, Town03, and Town04.
+Table 10 gives the task composition and prescribed horizons.
+Canonical task categories are used for aggregation; retained
+legacy scenario identifiers do not determine the reported
+category. Each episode has its own fixed horizon, and every
+method is evaluated using the same episode definitions and
+thresholds.
+D.2. Observations and Target Initialization
+All methods receive full-spherical equirectangular observa-
+tions from 1920×960 source images; internal preprocessing
+follows each method’s specified adapter. The designated tar-
+get is identified once in the actual first observation through
+a bounding-box annotation, a language instruction, and a
+persistent reference image where supported by the adapter.
+This initialization remains fixed throughout the episode; sub-
+sequent target ground truth is not supplied as per-frame
+annotations. The online motion-state input contains the
+measured tracker velocity. The Test protocol assigns 75
+episodes to zero-speed tracker initialization and 75 episodes
+to nonzero-speed initialization. For each nonzero initializa-
+tion, the prescribed world-coordinate tracker velocity equals
+the target motion reference vector specified by the scenario
+controller. This reference vector need not equal the target’s
+measured velocity at frame zero during settling or accelera-
+tion. The policy receives the tracker velocity measured at its
+actual first observation, which may differ slightly from the
+prescribed value after the physical initialization steps.
+The nominal scenario initialization specifies target bear-
+ings of −45◦, 0◦, or 45◦for front-initialized episodes, relative
+to the fixed tracker heading. Ground-target Task II scenar-
+3
+
+
+ios specify −135◦, −90◦, 90◦, 135◦, or 180◦; B2 scenarios
+specify −155◦or 115◦. These are scenario initialization pa-
+rameters; azimuths measured from recorded observations
+are computed from the realized tracker and target poses.
+A4 and B4 contain one or two explicitly added distractors,
+whereas the other categories do not. Distance and visibility
+are evaluated against the designated target, not the nearest
+distractor.
+D.3. Control and Synchronization
+Policies output three-dimensional velocities in the fixed
+heading-aligned body frame, with zero yaw rate. Obser-
+vations and scoring occur at 10 Hz, while the simulator ad-
+vances at 30 Hz. Only the first action of each predicted chunk
+is executed. Commands whose three-dimensional speed ex-
+ceeds 6 m/s are rescaled to this norm while preserving their
+direction.
+Command timing follows the protocol in Section A. Un-
+der synchronous protocol (i), the simulator pauses during
+inference, and each new command is held for three physics
+ticks (0.1 s). Under protocol (ii), the previous command re-
+mains active during the full end-to-end runtime delay. Main-
+text online results use protocol (iii): simulated time advances
+over the measured model computation interval, while exter-
+nal overhead is excluded from simulated delay. The previous
+command remains active until the new prediction takes effect
+at the first eligible physics boundary. Thus, protocols (ii)
+and (iii) do not generally have a fixed three-tick command
+hold.
+D.4. Visibility, Termination, and Reporting
+Target visibility is assessed using simulator occlusion queries
+toward multiple points on the target. At least one unob-
+structed probe is sufficient for visibility. This geometric
+evaluator signal is used only for scoring and is not a model
+detection-confidence threshold. Together with the original
+distance bounds in Section C, it determines online frame
+validity under Eq. (14).
+Online episodes stop at the first 15-frame invalid streak
+or at their prescribed horizon, as defined in Section B.2. At
+10 Hz, the failure tolerance is a nominal 1.5 s window. Runs
+interrupted by infrastructure errors are rerun to complete the
+evaluation; such interruptions are not reported as completed
+successful episodes. SR and ATF are aggregated separately
+for A1–A4, B1–B4, Task I, Task II, and the full set. The
+complete evaluation uses denominators of 51, 99, and 150
+episodes for Task I, Task II, and overall SR, respectively.
+Offline expert replay is evaluated separately using ADE
+and offline distance SR from Sections B.1 and B.4. Its fixed
+observations are not generated by the reconstructed policy
+trajectory, so offline distance success does not establish on-
+line closed-loop tracking success.
+E. Implementation Details of Compared Meth-
+ods
+All methods are evaluated on the same 150 episodes under
+the model-compute-delay protocol. At each decision, the
+evaluator executes the first predicted action and holds the
+previous velocity while model computation advances the sim-
+ulation clock. Translational commands are expressed in the
+original initial-heading coordinate frame and are bounded
+by a maximum speed of 6 m/s. FPS is computed as the
+number of completed inference requests divided by their
+total synchronized model-computation time, including re-
+quests whose outputs are discarded upon episode termina-
+tion. Model loading, warm-up, external image preparation,
+communication, rendering, and logging are excluded. For
+benchmark-trained models, checkpoint selection uses the
+held-out validation split rather than online test performance.
+No method receives current ground-truth target states during
+deployment.
+Uni-NaVid.
+We use the released Uni-NaVid-7B check-
+point [29] without benchmark fine-tuning or additional train-
+able modules. The complete ERP image is letterboxed to the
+native 224 × 224 input resolution. Its causal video context is
+sampled at 1 Hz and contains at most 32 frames, combining
+recent observations with uniformly sampled earlier frames.
+The native language interface predicts discrete navigation
+commands using deterministic decoding. A fixed adapter
+maps forward motion to a longitudinal velocity of 0.5 m/s.
+Left, right, and stop commands produce zero translation
+because the shared evaluation protocol fixes the UAV head-
+ing. These commands are not reinterpreted as lateral motion.
+Consequently, this baseline evaluates the released navigation
+policy through a fixed interface with restricted UAV control
+expressiveness.
+OmTrackVLA.
+We deploy the released OmTrackVLA-
+0.6B checkpoint [11] without benchmark fine-tuning. The
+policy receives the language instruction and the latest 32
+causal ERP observations, each letterboxed to 384 × 384.
+Missing initial history is padded by repeating the earliest
+available observation. The native planner predicts eight
+planar waypoints with associated yaw values. We convert
+successive planar waypoint displacements into horizontal
+velocities using a 0.1 s interval, set vertical velocity to zero,
+and discard yaw commands under the fixed-heading protocol.
+The resulting commands are passed through the common
+action executor. No learned UAV action head, target-state
+input, or benchmark adaptation is introduced.
+𝜋0 without fine-tuning.
+We evaluate the published OpenPI
+𝜋0 base checkpoint [3] using a parameter-free mapping to
+its existing observation and action interfaces. The current
+4
+
+
+ERP image is letterboxed to 224 × 224 and assigned to the
+main camera slot. A static target-context crop from the first
+ERP observation occupies an existing secondary camera slot,
+while the unused camera slot is masked. The normalized
+UAV velocity fills the first three native state coordinates,
+with the remaining coordinates set to zero. The first three
+continuous action channels are interpreted as XYZ velocities
+and converted to physical units using the benchmark training-
+set normalization. Native ten-step flow sampling is retained,
+and only the first predicted velocity is executed. No policy
+parameters are updated.
+𝜋0.5 without fine-tuning.
+The direct-inference 𝜋0.5 base-
+line uses the published OpenPI checkpoint [2] and the same
+fixed camera-slot and velocity-channel mapping as the direct
+𝜋0 baseline. The current ERP image, initial target-context
+reference, and language instruction are supplied through
+existing input interfaces. The UAV velocity is represented
+using the native 𝜋0.5 state-conditioning procedure. We retain
+the original ten-step flow sampler and map the first three
+predicted action channels to physical XYZ velocities using
+the shared training-set statistics. No benchmark fine-tuning,
+CTM, GTS, or learned action calibration is applied.
+Temporal BC.
+Temporal BC is trained from scratch on the
+benchmark demonstrations. A shared convolutional encoder
+processes the current ERP observation, two preceding obser-
+vations at [𝑡−0.2, 𝑡−0.1], and the static target reference. A
+256-dimensional gated recurrent unit aggregates the causal
+image history, with invalid historical observations masked.
+The temporal representation is concatenated with reference
+features, encoded UAV velocity, and a target-category code
+derived from the instruction. A feed-forward decoder pre-
+dicts ten future XYZ velocities. Training minimizes masked
+velocity MAE in physical units using AdamW with learning
+rate 3 × 10−4, weight decay 0.01, global batch size 64, and
+seed 42 for 21,091 updates. The checkpoint with the lowest
+held-out validation error is used for closed-loop evaluation.
+D-VAT-BC.
+D-VAT-BC is a supervised adaptation of the
+D-VAT actor architecture [6], rather than an evaluation of
+its original reinforcement-learning policy. An ImageNet-
+pretrained ResNet-18 encodes the three causal ERP obser-
+vations and the static target reference. Historical features
+are concatenated and projected before fusion with reference
+features, UAV velocity, and the instruction-derived target-
+category code. The actor-style multilayer perceptron is re-
+tained, while the original control output is replaced with a
+decoder for ten future XYZ velocities. The model is trained
+with the same masked physical-velocity MAE, optimizer set-
+tings, sample budget, and validation selection procedure as
+Temporal BC. No reinforcement-learning reward, additional
+environment interaction, or online target-state supervision is
+used.
+Fast-WAM.
+We initialize Fast-WAM [27] from its re-
+leased two-camera LIBERO checkpoint and fine-tune it on
+the benchmark demonstrations. The current ERP observation
+and static target reference are encoded through its image-
+latent pathway, while the language instruction and normal-
+ized UAV velocity provide additional conditioning. The
+action branch predicts a ten-step XYZ velocity chunk using
+its native iterative sampler with ten sampling steps. Bench-
+mark adaptation minimizes the masked physical-velocity
+MAE of the sampled actions; it does not introduce future
+images as policy inputs or an additional benchmark video
+prediction objective. Training uses one epoch, global batch
+size 64, peak learning rate 2.5 × 10−5, and seed 42. The
+selected policy executes only its first predicted action.
+𝜋0 with fine-tuning.
+The fine-tuned 𝜋0 baseline is ini-
+tialized independently from the published pretrained back-
+bone [3]. It receives the current 448 × 224 ERP observation,
+a 224 × 224 persistent target reference as in PVR, the lan-
+guage instruction, and normalized UAV velocity. The ERP
+aspect ratio is preserved by interpolating the visual positional
+embeddings to the rectangular token grid. The action inter-
+face predicts ten future three-dimensional velocities. We
+optimize the masked physical-velocity MAE through the
+ten-step action sampler for one epoch, using AdamW, global
+batch size 64, peak learning rate 2.5 × 10−5, and seed 42.
+This baseline retains PVR but incorporates neither CTM nor
+GTS.
+𝜋0.5 with fine-tuning.
+We fine-tune the published 𝜋0.5
+backbone [2] using the same current ERP, persistent target
+reference, instruction, and motion-state inputs as the fine-
+tuned 𝜋0 baseline. The rectangular ERP representation and
+ten-step XYZ prediction interface are shared, while the na-
+tive 𝜋0.5 conditioning mechanism is retained. Training uses
+the same scene-disjoint data split, normalization, masked
+physical-velocity objective, one-epoch update budget, and
+optimizer schedule. This baseline retains PVR without CTM
+or GTS. The validation-selected checkpoint is evaluated with
+native ten-step flow sampling, executing only the first pre-
+dicted velocity.
+360UAV-TVLA with 𝜋0.
+Our 𝜋0 variant is initialized inde-
+pendently from the pretrained backbone and integrates per-
+sistent visual referring (PVR), compressed temporal memory
+(CTM), and geometry-aligned trajectory supervision (GTS).
+PVR retains an instance-specific visual reference throughout
+the episode. CTM compresses each of the two preceding
+ERP observations to 128 tokens, while preserving the full
+5
+
+
+representations of the current panorama and target reference.
+Temporal offsets and observation-source embeddings dis-
+tinguish the visual inputs. GTS predicts ten future target
+positions in the current-origin, fixed-heading control frame
+during training. The normalized trajectory loss is jointly
+optimized with the velocity imitation objective under the
+common one-epoch VLA training schedule. During deploy-
+ment, the GTS head is bypassed, introducing no additional
+inference cost.
+360UAV-TVLA with 𝜋0.5.
+Our 𝜋0.5 variant integrates the
+same PVR, CTM, and GTS components into the pretrained
+𝜋0.5 backbone. The current ERP observation contributes 512
+visual tokens, PVR contributes 256 reference tokens, and
+CTM contributes 128 tokens per historical frame, yielding
+1,024 visual tokens with two preceding frames. Training
+jointly optimizes masked XYZ velocity MAE and the GTS
+trajectory loss under the configured loss weight, using the
+same data split, training budget, and validation-based check-
+point selection. During deployment, CTM maintains a causal
+10 Hz history cache, including during simulated computation
+delays. The policy executes only the first velocity gener-
+ated by native ten-step flow sampling, with the GTS head
+bypassed.
+F. Expert Demonstration Generation
+F.1. Reference Trajectory Generation
+Expert demonstrations are generated using task-specific
+controllers in CARLA. Pedestrians and vehicles follow
+navigable routes, while aerial targets use dedicated three-
+dimensional motion controllers. The UAV reference position
+is constructed from the target’s bounding-box center, its
+observed motion, and the desired following geometry. Track-
+ing sequences use target-relative offsets or distance-based
+interpolation along the recorded target trail. Where required,
+a smooth transition connects the initial offset to the trail-
+ing reference. Approach and acquisition tasks additionally
+include task-specific initialization phases before entering
+sustained following. In multi-target scenes, the reference
+remains associated with the designated target.
+F.2. Velocity Control
+Controllers operate at 30 Hz. Let p★
+𝑡denote the reference
+position and p𝑡the measured UAV position. A feedforward–
+feedback controller produces
+ev𝑡= bv★
+𝑡+ 𝑘𝑝(p★
+𝑡−p𝑡),
+(21)
+where bv★
+𝑡is the filtered reference velocity and 𝑘𝑝is a task-
+specific position gain. The command is constrained by speed
+and acceleration limits:
+v𝑡= sat𝑣max(ev𝑡),
+v𝑡= v𝑡−1 + sat𝑎maxΔ𝑡(v𝑡−v𝑡−1),
+(22)
+with Δ𝑡= 1/30 s and sat𝑏(x) = x min(1, 𝑏/∥x∥2), defined as
+zero when x = 0. Gains and limits follow the corresponding
+task controller. Commands are applied through CARLA’s
+velocity-control interface. Recorded action labels use the
+initial-heading coordinate frame with an upward-positive
+vertical axis.
+F.3. Terrain Clearance and Obstacle Handling
+Initialization checks exclude UAV poses embedded in scene
+geometry and select task-appropriate vertical offsets. During
+motion, local geometry queries inspect the commanded flight
+corridor, including lateral or vertical clearance margins. Ob-
+stacle handling depends on the task: controllers may brake,
+try locally checked climbing or lateral commands, or reject
+the trial when the prescribed following geometry cannot be
+maintained safely. Collision callbacks and additional scene-
+specific geometry checks identify invalid segments. Only
+segments satisfying the corresponding collection and quality-
+control checks are retained. These procedures provide local
+safeguards rather than a globally optimal collision-avoidance
+planner.
+F.4. Demonstration Recording
+The simulator advances synchronously at 30 Hz, with
+panoramic observations, UAV motion states, target anno-
+tations, and expert velocity commands recorded every three
+physics ticks at 10 Hz. Sensor frames and actor states are
+matched by simulator frame identifiers and timestamps. Is-
+sued commands are stored separately from measured UAV
+velocities. The UAV maintains its initial heading throughout
+each demonstration, with zero commanded yaw rate. Simu-
+lator target states support expert generation and annotation;
+target trajectories are not supplied to the deployed velocity
+policy.
+G. Quantitative Analysis of the Dataset
+Unless stated otherwise, trajectory-based statistics in this
+section are computed from recorded expert sequences. Test
+tracker initialization speeds are instead taken from the mixed
+zero/nonzero online evaluation protocol. Historical expert
+states and protocol-prescribed online initialization values are
+therefore distinguished throughout the analysis.
+G.1. Speed Distribution
+For each actor, let p𝑖denote the 3D position at timestamp 𝑡𝑖.
+The frame-wise speed is computed as
+𝑣𝑖= ∥p𝑖+1 −p𝑖∥2
+𝑡𝑖+1 −𝑡𝑖
+.
+(23)
+The average speed of one sequence is defined as its total
+traveled distance divided by its duration:
+6
+
+
+¯𝑣=
+Í𝑇−2
+𝑖=0 ∥p𝑖+1 −p𝑖∥2
+𝑡𝑇−1 −𝑡0
+.
+(24)
+This definition uses the synchronized 3D trajectory posi-
+tions and actual timestamps. It includes stops and turning
+motion, and each sequence contributes one equally weighted
+average-speed sample.
+Figure 7 shows three distinct target-speed regimes. Ve-
+hicle targets have average speeds of 2.795 and 2.800 m/s
+on Train and Val, respectively, while pedestrian targets are
+slower at 1.866 and 1.833 m/s.
+UAV targets are faster
+and more variable, with averages of 3.689 and 3.887 m/s.
+Tracker speeds follow the same class-dependent ordering,
+although they are slightly higher than the target speeds for
+pedestrian sequences. The matched Target–Tracker distribu-
+tions therefore indicate that the tracker motion is broadly con-
+sistent with the target-speed regime, while UAV sequences
+provide the largest speed variation.
+G.2. Initial target azimuth coverage.
+Figure 8 characterizes the target direction in the first recorded
+expert observation of each episode. Train and Val exhibit
+a similar concentration around the forward direction, while
+also covering lateral and rear configurations. Test is less
+concentrated near 0◦, with initial target directions distributed
+broadly across the full azimuth range. These non-frontal
+initializations require the tracker to acquire the designated
+target beyond a forward-facing camera’s horizontal 90◦field
+of view. The distributions therefore motivate panoramic
+perception for target acquisition under fixed-heading control,
+in addition to maintaining observation as the target moves
+during tracking.
+G.3. Target trajectory length.
+Figure 9 summarizes the cumulative 3D travel distance of
+the designated target in each sequence,
+𝐿=
+𝑁−2
+∑︁
+𝑡=0
+∥p𝑡+1 −p𝑡∥2 .
+(25)
+Train and Val have similar median lengths of 132.1 m and
+132.5 m, respectively, while Val has a larger upper tail (P95:
+430.8 m versus 341.6 m for Train). Test contains longer
+target trajectories, with a mean of 336.6 m and a median
+of 274.2 m, compared with mean lengths of 163.1 m and
+176.3 m for Train and Val. Thus, although all splits contain a
+range of travel distances, their trajectory-length distributions
+differ, with Test emphasizing longer target travel distances.
+G.4. Sequence length in frames.
+Figure 10 summarizes the number of recorded ERP frames
+per sequence. Train and Val have median lengths of 550
+and 568.5 frames, respectively, with mean lengths of 640.7
+and 704.6 frames. Both splits contain longer sequences,
+reaching 6,000 frames in Train and 6,286 frames in Val.
+Test has a higher median of 1,200 frames and a mean of
+1,166.7 frames, with sequence lengths ranging from 400 to
+2,000 frames. Thus, typical Test sequences contain more
+observations, whereas Train and Val cover a wider range that
+extends to substantially longer recordings.
+Initial motion and tracker states.
+Figure 11 separates
+target motion at the start of a recorded expert sequence
+from tracker initialization speeds, using recorded first-frame
+tracker velocities for Train and Val and protocol-prescribed
+initial velocities for Test.
+Since simulator-reported tar-
+get velocities can be zero for actors whose recorded po-
+sitions change, target initial motion is estimated as 𝑠T,0 =
+∥p1 −p0∥2/(𝑡1 −𝑡0). This is the mean motion speed over the
+first recorded interval, not an instantaneous measurement at
+𝑡0. Tracker initial speed is the norm of its recorded first-frame
+velocity for Train and Val, and the norm of the protocol-
+prescribed world-coordinate velocity vector for Test. Mean
+target initial motion speeds are 2.553, 2.478, and 2.876 m/s
+for Train, Val, and Test, respectively. Mean tracker initial-
+ization speeds are 0.645, 0.802, 1.485 m/s, respectively. The
+fractions of tracker initial speeds below 0.01 m/s are 46.4%,
+39.3%, and 50.0%, respectively. The Test protocol explicitly
+balances stationary and moving initializations (75 sequences
+each). For each moving initialization, the prescribed tracker
+velocity equals the target motion reference vector used by its
+controller; it need not equal the target’s measured velocity at
+frame zero during settling or acceleration. Tracker motion
+estimated from historical expert positions over the first inter-
+val is a separate quantity and does not represent the updated
+mixed online initialization.
+H. Additional Qualitative Analysis
+H.1. Additional closed-loop tracking comparisons.
+Figure 12 presents three additional closed-loop tracking se-
+quences under different urban driving conditions. Both the
+baseline and our method initially maintain valid tracking, but
+their behaviors gradually diverge as the relative target config-
+uration changes. The baseline exhibits tracking failures and
+premature termination, whereas 360UAV-TVLA continues
+to maintain valid following. Since both methods operate with
+full-spherical observations and fixed-heading control, these
+comparisons further illustrate the importance of effectively
+translating panoramic perception into continuous transla-
+tional actions. The evolving panoramic observations also
+demonstrate the substantial viewpoint changes encountered
+during closed-loop UAV motion.
+7
+
+
+1
+1.25 1.5 1.75
+2
+2.25 2.5 2.75
+3
+3.25 3.5 3.75
+Sequence mean speed (m/s)
+0
+200
+400
+600
+Number of sequences
+Train mean = 2.795 m/s
+Val mean = 2.800 m/s
+(a) Vehicle
+Train (N = 1,299)
+Val (N = 309)
+1.25
+1.5
+1.75
+2
+2.25
+2.5
+2.75
+3
+Sequence mean speed (m/s)
+0
+200
+400
+600
+Number of sequences
+Train mean = 1.866 m/s
+Val mean = 1.833 m/s
+(b) Pedestrian
+Train (N = 710)
+Val (N = 212)
+2.5
+3
+3.5
+4
+4.5
+5
+5.5
+Sequence mean speed (m/s)
+0
+4
+8
+12
+16
+Number of sequences
+Train mean = 3.689 m/s
+Val mean = 3.887 m/s
+(c) UAV
+Train (N = 101)
+Val (N = 21)
+1
+1.25 1.5 1.75
+2
+2.25 2.5 2.75
+3
+3.25 3.5 3.75
+Sequence mean speed (m/s)
+0
+200
+400
+600
+Number of sequences
+Train mean = 2.800 m/s
+Val mean = 2.784 m/s
+(d) Tracker | Vehicle sequences
+Train (N = 1,299)
+Val (N = 309)
+1.25
+1.5
+1.75
+2
+2.25
+2.5
+2.75
+3
+Sequence mean speed (m/s)
+0
+200
+400
+600
+Number of sequences
+Train mean = 1.961 m/s
+Val mean = 1.900 m/s
+(e) Tracker | Pedestrian sequences
+Train (N = 710)
+Val (N = 212)
+2.5
+3
+3.5
+4
+4.5
+5
+5.5
+Sequence mean speed (m/s)
+0
+4
+8
+12
+16
+Number of sequences
+Train mean = 3.648 m/s
+Val mean = 3.830 m/s
+(f) Tracker | UAV sequences
+Train (N = 101)
+Val (N = 21)
+Figure 7. Sequence-average speed distributions for matched Target and Tracker sequences. The top row shows Target speeds and the
+bottom row shows the Tracker speeds for the same episodes. Columns correspond to Vehicle, Pedestrian, and UAV targets. Each sequence
+contributes exactly one observation, computed as cumulative three-dimensional displacement divided by sequence duration. Blue and orange
+dashed lines and labels denote the Train and Val means, respectively; the vertical axis reports the number of sequences.
+−180
+−90
+0
+90
+180
+Initial target azimuth (deg)
+0
+150
+300
+450
+Number of sequences
+Train (N = 2,110)
+−180
+−90
+0
+90
+180
+Initial target azimuth (deg)
+0
+25
+50
+75
+100
+Number of sequences
+Val (N = 542)
+−180
+−90
+0
+90
+180
+Initial target azimuth (deg)
+0
+4
+8
+12
+16
+Number of sequences
+Test (N = 150)
+Figure 8. Initial target azimuth distributions across the Train, Val,
+and Test splits. Each sequence contributes one observation at its
+first recorded expert frame, with azimuth measured relative to the
+fixed tracker heading. Here, 0◦denotes the forward direction and
+±180◦denotes the rear direction. All panels use 15◦bins, and the
+shaded region indicates the frontal horizontal 90◦field of view.
+0
+500
+1000
+1500
+Target trajectory length (m)
+0
+150
+300
+450
+600
+Number of sequences
+Mean = 163.1 m
+Median = 132.1 m
+Train (N = 2,110)
+0
+500
+1000
+1500
+Target trajectory length (m)
+0
+40
+80
+120
+160
+Number of sequences
+Mean = 176.3 m
+Median = 132.5 m
+Val (N = 542)
+0
+500
+1000
+1500
+Target trajectory length (m)
+0
+8
+16
+24
+32
+Number of sequences
+Mean = 336.6 m
+Median = 274.2 m
+Test (N = 150)
+Figure 9. Target trajectory length distributions across the Train,
+Val, and Test splits. Each sequence contributes one path-length
+measurement, computed as the sum of Euclidean distances between
+consecutive recorded 3D target positions. All panels use the same
+50-m bins and horizontal range; vertical axes show sequence counts
+with independently scaled limits. Mean and median lengths are
+annotated for each split.
+H.2. Future-target prediction and evaluation.
+Figure 13 visualizes outputs of the training-only trajectory
+head at the checkpoint selected by velocity MAE. The ex-
+amples follow the fixed sample order and are not selected
+by forecast error. Dashed ground-truth and solid predicted
+paths use the same current-UAV coordinate frame; connect-
+ing future points does not depict a planned UAV path. The
+plots show horizontal projections, while numerical errors
+include height.
+For normalized head output bu𝑛, 𝑗, the physical prediction
+isbq𝑛, 𝑗= 𝝁𝑞+𝝈𝑞⊙bu𝑛, 𝑗. Target ADE averages ∥bq𝑛, 𝑗−q★
+𝑛, 𝑗∥2
+over valid future points. Target FDE@1s uses 𝑗= 10 only
+for samples with the complete ten-step horizon. Occluded
+targets retain labels when simulator positions are available.
+These metrics describe short-horizon target prediction, dis-
+tinct from the integrated UAV trajectory ADE in Section B.1.
+The head is bypassed during action-only inference and does
+not provide coordinates to the controller.
+H.3. Expert trajectory replay on Task I.
+Figure 15 compares zero-shot 𝜋0.5 with its adapted counter-
+part across four front-initialized tracking scenarios. Both
+policies receive the same recorded expert observations,
+allowing their predicted actions to be compared without
+changes in the observation distribution induced by policy
+execution. The zero-shot policy frequently produces veloc-
+8
+
+
+0
+2000
+4000
+6000
+Frames per sequence
+0
+200
+400
+600
+Number of sequences
+Mean = 640.7
+Median = 550.0
+Train (N = 2,110)
+0
+2000
+4000
+6000
+Frames per sequence
+0
+40
+80
+120
+160
+Number of sequences
+Mean = 704.6
+Median = 568.5
+Val (N = 542)
+0
+2000
+4000
+6000
+Frames per sequence
+0
+6
+12
+18
+24
+Number of sequences
+Mean = 1,166.7
+Median = 1,200.0
+Test (N = 150)
+Figure 10. Distributions of recorded frame counts per sequence across the Train, Val, and Test splits. Each sequence contributes one
+observation. All panels use the same 200-frame bins and horizontal range, while vertical axes show sequence counts with independently
+scaled limits. Mean and median frame counts are annotated. Frames refer to synchronized ERP observations recorded at 10 Hz.
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+400
+800
+1200
+1600
+Number of sequences
+3
+1
+1
+2
+2
+7
+47
+47
+610
+1
+22
+94
+1182
+14
+5
+14
+10
+11
+12
+8
+3
+5
+1
+1
+6
+1
+Mean = 2.553 m/s
+Median = 2.859 m/s
+Train (N = 2,110)
+Target: first 0.1 s motion
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+100
+200
+300
+400
+Number of sequences
+1
+1
+1
+5
+29
+12
+164
+8
+21
+281
+3
+3
+1
+2
+4
+2
+1
+2
+1
+Mean = 2.478 m/s
+Median = 2.853 m/s
+Val (N = 542)
+Target: first 0.1 s motion
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+20
+40
+60
+Number of sequences
+6 2
+1
+3
+52
+12 4
+1
+1
+2
+2
+1
+7
+1
+2
+1
+52
+Mean = 2.876 m/s
+Median = 1.644 m/s
+Test (N = 150)
+Target: first 0.1 s motion
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+300
+600
+900
+1200
+Number of sequences
+980
+660
+1
+7
+22
+42
+116
+4
+2 55
+66
+153
+2
+Mean = 0.645 m/s
+Median = 0.297 m/s
+Below 0.01 m/s: 46.4%
+Train (N = 2,110)
+Tracker: first-frame state
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+80
+160
+240
+Number of sequences
+213
+173
+1
+3
+5 13
+37
+1
+32
+14
+46
+4
+Mean = 0.802 m/s
+Median = 0.364 m/s
+Below 0.01 m/s: 39.3%
+Val (N = 542)
+Tracker: first-frame state
+0
+1
+2
+3
+4
+5
+6
+Speed (m/s)
+0
+25
+50
+75
+100
+Number of sequences
+78
+1
+2
+5
+28
+1
+1
+1
+1
+1
+1
+5
+25
+Mean = 1.485 m/s
+Median = 0.030 m/s
+Below 0.01 m/s: 50.0%
+Test (N = 150)
+Tracker: prescribed initial speed
+Figure 11. Initial motion and tracker initialization speed distributions across Train, Val, and Test. Top: target speed estimated from the first
+two historical expert 3D positions over a 0.1-s interval. Bottom: recorded first-frame tracker speed for Train and Val, and protocol-prescribed
+tracker initial speed for Test. Test contains 75 stationary and 75 moving initializations. Each sequence contributes one observation per actor.
+Numbers above nonempty bars indicate sequence counts in each bin. All panels use 0.2-m/s bins and a common horizontal range; vertical
+axes are independently scaled. Test initialization settings are distinguished from historical expert trajectory measurements.
+ity commands that deviate from expert behavior, leading
+to substantial differences in integrated motion trajectories.
+In comparison, the adapted policy generally reproduces the
+direction and temporal variation of expert commands more
+closely, particularly during changes in translational veloc-
+ity. Nevertheless, noticeable trajectory deviations remain
+in several scenarios, indicating that action prediction errors
+may still accumulate over extended sequences. These re-
+sults highlight the challenge of transferring generalist action
+policies to full-spherical UAV tracking.
+H.4. Expert trajectory replay on Task II.
+Figure 16 further examines action prediction under omnidi-
+rectional target initialization. Unlike Task I, these scenarios
+require the policy to reason about target directions that are
+not restricted to the frontal viewing region. The zero-shot
+policy often exhibits limited responses to changes in expert
+translational commands, resulting in inaccurate integrated
+trajectories. After adaptation, the predicted velocity profiles
+more closely follow the expert commands in the illustrated
+cases, especially during changes in lateral and longitudinal
+motion. However, the remaining discrepancies indicate that
+accurate action prediction under arbitrary target bearings
+remains challenging. Together with Task I, these observa-
+9
+
+
+stop
+stop
+stop
+✅
+✅
+✅
+✅
+✅
+✅
+✅
+✅
+✅
+❌
+✅
+❌
+✅
+❌
+✅
+❌
+✅
+✅
+✅
+stop
+stop
+✅
+❌
+✅
+✅
+❌
+❌
+✅
+✅
+✅
+✅
+✅
+✅
+ours
+baseline
+ours
+baseline
+ours
+baseline
+Figure 12. Additional closed-loop tracking comparisons. Three representative vehicle-following scenarios are shown over successive
+time steps. Each pair of rows compares the baseline and our 360UAV-TVLA under full-spherical observation and fixed-heading control.
+Green checkmarks indicate valid tracking, red crosses indicate tracking failures, and “stop” denotes terminated rollouts. While the baseline
+progressively loses effective tracking and terminates early, our method maintains valid following throughout the illustrated sequences.
+t = 64.2 s
+(a) Vehicle
+GT crop
+−8
+−7
+−6
+Right offset (m)
+1.2
+1.6
+2.0
+Forward offset (m)
+t = 55.6 s
+(b) Pedestrian
+GT crop
+−4
+−2
+0
+2
+Right offset (m)
+3.6
+4.2
+4.8
+5.4
+Forward offset (m)
+t = 83.4 s
+(c) UAV
+GT crop
+9.0
+10.5
+12.0
+Right offset (m)
+−5.0
+−4.5
+−4.0
+Forward offset (m)
+t = 28.4 s
+(d) Vehicle
+GT crop
+6
+7
+8
+Right offset (m)
+−0.6
+−0.3
+0.0
+0.3
+Forward offset (m)
+t = 43.7 s
+(e) Pedestrian
+GT crop
+−8.0
+−7.2
+−6.4
+Right offset (m)
+−0.25
+0.00
+0.25
+Forward offset (m)
+t = 27.5 s
+(f) UAV
+GT crop
+8
+10
+12
+Right offset (m)
+−6.4
+−5.6
+−4.8
+Forward offset (m)
+0 (low)
+1 (high)
+GT trajectory
+Predicted trajectory
+Outer ring: first point (+0.1 s)
+GT box
+Figure 13. Additional future-target predictions. Horizontal
+projections over the next second for the first two complete-horizon
+Val samples in each target class. All points use the current UAV
+origin and initial-heading axes. Reported ADE/FDE use all three
+coordinates.
+tions motivate the need for geometry-aware perception and
+temporally informed action prediction.
+Importantly, the replay experiments in Figures 15 and 16
+measure action predictions along fixed expert observation
+sequences. They therefore provide diagnostics of offline
+action imitation rather than direct evidence of closed-loop
+tracking success.
+t = 0.7 s
+(a) Vehicle
+GT crop
+−8
+−4
+0
+4
+Right offset (m)
+6.0
+7.5
+9.0
+10.5
+Forward offset (m)
+t = 0.3 s
+(b) Pedestrian
+GT crop
+−5
+0
+5
+10
+Right offset (m)
+−14
+−12
+−10
+Forward offset (m)
+t = 3.3 s
+(c) UAV
+GT crop
+−20
+−10
+0
+Right offset (m)
+−4
+0
+4
+8
+Forward offset (m)
+t = 1.6 s
+(d) Vehicle
+GT crop
+−6
+0
+6
+12
+Right offset (m)
+15.0
+17.5
+20.0
+22.5
+Forward offset (m)
+t = 0.5 s
+(e) Pedestrian
+GT crop
+−10
+0
+10
+Right offset (m)
+8
+12
+16
+Forward offset (m)
+t = 5.9 s
+(f) UAV
+GT crop
+5
+10
+15
+20
+Right offset (m)
+4
+6
+8
+Forward offset (m)
+0 (low)
+1 (high)
+GT trajectory
+Predicted trajectory
+Outer ring: first point (+0.1 s)
+GT box
+Figure 14. Additional future-target predictions. Horizontal
+projections over the next second for the first two complete-horizon
+Val samples in each target class. All points use the current UAV
+origin and initial-heading axes. Reported ADE/FDE use all three
+coordinates.
+H.5. Actual closed-loop behavior.
+To complement offline expert replay, Figure 17 compares the
+actual closed-loop behavior of zero-shot and adapted 𝜋0.5
+policies. Unlike the preceding replay experiments, each pol-
+icy executes its own predicted commands and subsequently
+observes the resulting simulation states.
+In the pedestrian-following example, the target distance
+under zero-shot 𝜋0.5 increases from 6.32 m to 17.83 m within
+5.8 s. By contrast, the adapted policy maintains a distance of
+10
+
+
+A1
+Same expert replay observation
+f = 736   t = 73.6 s
+π0.5 zero-shot
+XYZ: -1.36, +1.92, -0.21 m/s
+π0.5 Adapt
+XYZ: -3.14, +3.51, +0.01 m/s
+f = 746   t = 74.6 s
+π0.5 zero-shot
+XYZ: -0.94, +1.68, -0.16 m/s
+π0.5 Adapt
+XYZ: -2.81, +2.86, -0.00 m/s
+f = 756   t = 75.6 s
+π0.5 zero-shot
+XYZ: -0.81, +1.42, -0.14 m/s
+π0.5 Adapt
+XYZ: -2.38, +2.38, -0.00 m/s
+f = 776   t = 77.6 s
+π0.5 zero-shot
+XYZ: -0.00, +0.66, -0.14 m/s
+π0.5 Adapt
+XYZ: -1.58, +1.48, -0.00 m/s
+A2
+Same expert replay observation
+f = 310   t = 31.0 s
+π0.5 zero-shot
+XYZ: +1.41, +0.25, -0.10 m/s
+π0.5 Adapt
+XYZ: +2.24, +0.39, -0.00 m/s
+f = 320   t = 32.0 s
+π0.5 zero-shot
+XYZ: +1.45, +0.70, -0.12 m/s
+π0.5 Adapt
+XYZ: +2.23, +1.13, +0.00 m/s
+f = 330   t = 33.0 s
+π0.5 zero-shot
+XYZ: +1.01, +1.39, -0.15 m/s
+π0.5 Adapt
+XYZ: +1.66, +2.86, +0.00 m/s
+f = 350   t = 35.0 s
+π0.5 zero-shot
+XYZ: +0.06, +1.75, -0.17 m/s
+π0.5 Adapt
+XYZ: +0.02, +3.42, +0.00 m/s
+A3
+Same expert replay observation
+f = 133   t = 13.3 s
+π0.5 zero-shot
+XYZ: -0.19, +1.51, -0.15 m/s
+π0.5 Adapt
+XYZ: -1.12, +2.62, -0.00 m/s
+f = 143   t = 14.3 s
+π0.5 zero-shot
+XYZ: -0.64, +1.32, -0.13 m/s
+π0.5 Adapt
+XYZ: -2.00, +2.15, -0.00 m/s
+f = 153   t = 15.3 s
+π0.5 zero-shot
+XYZ: -0.86, +1.01, -0.10 m/s
+π0.5 Adapt
+XYZ: -3.72, +1.29, -0.01 m/s
+f = 173   t = 17.3 s
+π0.5 zero-shot
+XYZ: -0.43, +0.02, -0.05 m/s
+π0.5 Adapt
+XYZ: -3.62, -0.14, -0.01 m/s
+A4
+Same expert replay observation
+f = 1173   t = 117.3 s
+π0.5 zero-shot
+XYZ: -0.01, +0.57, -0.11 m/s
+π0.5 Adapt
+XYZ: -0.66, +1.19, -0.00 m/s
+f = 1183   t = 118.3 s
+π0.5 zero-shot
+XYZ: -0.01, +0.47, -0.11 m/s
+π0.5 Adapt
+XYZ: -0.86, +1.05, -0.00 m/s
+f = 1193   t = 119.3 s
+π0.5 zero-shot
+XYZ: +0.02, +0.38, -0.10 m/s
+π0.5 Adapt
+XYZ: -1.11, +0.92, +0.00 m/s
+f = 1213   t = 121.3 s
+π0.5 zero-shot
+XYZ: +0.05, +0.22, -0.07 m/s
+π0.5 Adapt
+XYZ: -1.37, +0.54, +0.01 m/s
+−200
+−100
+0
+World X offset (m)
+−100
+−50
+0
+50
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−2.5
+0.0
+2.5
+vx (m/s)
+−2.5
+0.0
+2.5
+vy (m/s)
+0
+20
+40
+60
+80
+100
+120
+140
+160
+Observation time (s)
+−0.2
+0.0
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−100
+0
+100
+World X offset (m)
+0
+50
+100
+150
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−5
+0
+5
+vx (m/s)
+−5
+0
+5
+vy (m/s)
+0
+20
+40
+60
+80
+100
+120
+140
+160
+Observation time (s)
+−0.2
+0.0
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−50 0
+50
+World X offset (m)
+−400
+−300
+−200
+−100
+0
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−5
+0
+5
+vx (m/s)
+−5
+0
+5
+vy (m/s)
+0
+25
+50
+75
+100
+125
+150
+175
+Observation time (s)
+−0.2
+0.0
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−50
+0
+World X offset (m)
+−150
+−125
+−100
+−75
+−50
+−25
+0
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−1
+0
+1
+vx (m/s)
+0
+1
+vy (m/s)
+0
+20
+40
+60
+80
+100
+120
+140
+160
+Observation time (s)
+−0.1
+0.0
+0.1
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+Figure 15. Expert trajectory replay comparison on Task I. Four front-initialized scenarios (A1–A4) compare zero-shot 𝜋0.5 and its
+benchmark-adapted variant under identical recorded expert observations. The upper panels show sampled panoramic inputs and predicted
+XYZ velocity commands. The lower panels compare trajectories obtained by integrating the predicted commands with expert trajectories
+(left), together with the corresponding velocity components (right). Black, orange, and blue denote expert, zero-shot, and adapted predictions,
+respectively. All predicted trajectories are offline integrations, rather than actual closed-loop rollouts.
+8.12 m at the same timestamp. A similar trend is observed in
+the vehicle-following example, where the zero-shot distance
+increases from 8.73 m to 25.63 m within 4.6 s, compared
+with 15.02 m for the adapted policy. These examples show
+that benchmark adaptation can substantially improve short-
+term target following under closed-loop execution. They
+also demonstrate why expert-replay accuracy alone is insuf-
+ficient to characterize embodied tracking performance, since
+policies must continually react to the observations generated
+by their own actions.
+I. Data Construction for the Observation–
+Control Ablation
+The three variants in Table 6 share the same expert demon-
+strations, episode splits, target identities, instructions, and
+timestamps. The training and validation sets contain 2,110
+and 542 episodes, respectively, sampled at 10 Hz. Trans-
+lational labels are identical across variants and expressed
+in the original initial-heading coordinate frame, including
+when C rotates.
+Shared settings.
+All variants use the same static target-
+context reference from the first ERP frame and three-frame
+history at [𝑡−0.2, 𝑡−0.1, 𝑡], with missing history masked.
+Each observation supervises the next ten actions starting at
+𝑡+ 1, with unavailable labels masked. The training-only
+target-trajectory auxiliary loss has weight 2.0; target ground
+truth is never supplied as policy input. For each backbone
+setting, all variants are independently initialized from the
+same pretrained 𝜋0 or 𝜋0.5 checkpoint, using seed 42 and a
+11
+
+
+B1
+Same expert replay observation
+f = 662   t = 66.2 s
+π0.5 zero-shot
+XYZ: +0.02, -0.21, +0.04 m/s
+π0.5 Adapt
+XYZ: -1.79, -0.54, +0.00 m/s
+f = 672   t = 67.2 s
+π0.5 zero-shot
+XYZ: -0.11, -0.10, +0.03 m/s
+π0.5 Adapt
+XYZ: -1.87, -0.44, -0.00 m/s
+f = 682   t = 68.2 s
+π0.5 zero-shot
+XYZ: +0.02, -0.73, +0.05 m/s
+π0.5 Adapt
+XYZ: -1.14, -1.19, -0.00 m/s
+f = 702   t = 70.2 s
+π0.5 zero-shot
+XYZ: +0.64, -0.92, +0.03 m/s
+π0.5 Adapt
+XYZ: -0.09, -1.92, +0.00 m/s
+B2
+Same expert replay observation
+f = 31   t = 3.1 s
+π0.5 zero-shot
+XYZ: +0.55, +0.01, +0.01 m/s
+π0.5 Adapt
+XYZ: +0.50, -0.23, +0.23 m/s
+f = 41   t = 4.1 s
+π0.5 zero-shot
+XYZ: +0.64, +0.16, +0.01 m/s
+π0.5 Adapt
+XYZ: +0.74, -0.01, +0.25 m/s
+f = 51   t = 5.1 s
+π0.5 zero-shot
+XYZ: +0.75, +0.26, +0.01 m/s
+π0.5 Adapt
+XYZ: +0.91, +0.26, +0.27 m/s
+f = 71   t = 7.1 s
+π0.5 zero-shot
+XYZ: +0.97, +0.40, -0.02 m/s
+π0.5 Adapt
+XYZ: +1.39, +0.49, +0.21 m/s
+B3
+Same expert replay observation
+f = 539   t = 53.9 s
+π0.5 zero-shot
+XYZ: -0.05, -0.22, +0.05 m/s
+π0.5 Adapt
+XYZ: -1.77, -0.59, +0.00 m/s
+f = 549   t = 54.9 s
+π0.5 zero-shot
+XYZ: -0.08, -0.13, +0.04 m/s
+π0.5 Adapt
+XYZ: -1.90, -0.45, +0.00 m/s
+f = 559   t = 55.9 s
+π0.5 zero-shot
+XYZ: +0.22, -0.45, +0.03 m/s
+π0.5 Adapt
+XYZ: -1.17, -1.16, +0.00 m/s
+f = 579   t = 57.9 s
+π0.5 zero-shot
+XYZ: +0.76, -1.14, +0.01 m/s
+π0.5 Adapt
+XYZ: -0.06, -1.97, +0.00 m/s
+B4
+Same expert replay observation
+f = 296   t = 29.6 s
+π0.5 zero-shot
+XYZ: -0.56, +0.09, -0.05 m/s
+π0.5 Adapt
+XYZ: -3.61, -0.00, -0.00 m/s
+f = 306   t = 30.6 s
+π0.5 zero-shot
+XYZ: -0.42, +0.08, -0.07 m/s
+π0.5 Adapt
+XYZ: -3.67, -0.01, -0.00 m/s
+f = 316   t = 31.6 s
+π0.5 zero-shot
+XYZ: -1.31, +0.18, -0.04 m/s
+π0.5 Adapt
+XYZ: -3.20, -0.02, -0.00 m/s
+f = 336   t = 33.6 s
+π0.5 zero-shot
+XYZ: -0.42, +0.16, +0.01 m/s
+π0.5 Adapt
+XYZ: -2.06, -0.05, +0.00 m/s
+−50
+−25
+0
+25
+World X offset (m)
+−60
+−40
+−20
+0
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−2
+0
+vx (m/s)
+−2
+0
+vy (m/s)
+0
+20
+40
+60
+80
+100
+Observation time (s)
+−0.1
+0.0
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−40
+−20
+0
+20
+World X offset (m)
+−40
+−20
+0
+20
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−2.5
+0.0
+2.5
+vx (m/s)
+−2
+0
+2
+vy (m/s)
+0
+20
+40
+60
+80
+100
+Observation time (s)
+−0.25
+0.00
+0.25
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−50
+−25
+0
+25
+World X offset (m)
+−40
+−20
+0
+20
+40
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−2
+0
+2
+vx (m/s)
+−2
+0
+2
+vy (m/s)
+0
+20
+40
+60
+80
+100
+Observation time (s)
+−0.1
+0.0
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+−300
+−200
+−100
+0
+World X offset (m)
+0
+50
+100
+150
+World Y offset (m)
+Expert actual replay
+Expert command integration
+π0.5 zero-shot integration
+π0.5 Adapt integration
+−5
+0
+vx (m/s)
+−5
+0
+vy (m/s)
+0
+20
+40
+60
+80
+100
+Observation time (s)
+−0.05
+0.00
+0.05
+vz (m/s)
+Expert next command
+π0.5 zero-shot
+π0.5 Adapt
+Figure 16. Expert trajectory replay comparison on Task II. Representative omnidirectional-initialization scenarios B1-B4 are evaluated
+using the same recorded expert observations. We compare zero-shot 𝜋0.5 with its benchmark-adapted counterpart through predicted XYZ
+velocity commands and their integrated trajectories. The adapted policy exhibits closer agreement with expert motion in the illustrated
+examples, while residual prediction and trajectory errors remain in challenging cases.
+fresh optimizer. Training uses global batch size 64, 21,091
+updates, learning rate 2.5 × 10−5, and XYZ normalization
+computed from the shared training set. Online evaluation
+uses identical episodes, original distance bounds, a common
+ERP visibility criterion, and a 15-consecutive-invalid-frame
+failure threshold. Leaving the perspective FoV alone does
+not terminate an episode.
+I.1. A: Limited FoV
+I.1.1. Data Construction
+Perspective images are geometrically reprojected from the
+same ERP frames used by B, preserving timestamps and
+optical centers. The virtual camera retains the original initial
+heading, with a 90◦horizontal FoV, zero pitch, and 960×540
+resolution. Projection uses bilinear interpolation and hori-
+zontal wrapping at the ERP seam, followed by letterboxing
+to 448 × 224. The original XYZ labels are retained.
+I.1.2. Training
+A predicts (𝑣𝑥, 𝑣𝑦, 𝑣𝑧) under the shared training settings. It
+uses the same reference, history configuration, and target-
+trajectory supervision as B, allowing the comparison to focus
+on live observation coverage. Checkpoint selection uses
+validation XYZ MAE.
+I.1.3. Closed-Loop Evaluation
+A executes its predicted XYZ velocities while maintaining
+the original heading; the camera never automatically faces
+the target. An unseen target can enter the perspective FoV
+only through relative motion. All scoring and termination
+rules remain identical to B.
+12
+
+
+Actual closed-loop camera views: target recedes vs sustained following
+π0.5 zero-shot   t = 0.0 s
+Distance: 6.32 m
+π0.5 Adapt   t = 0.0 s
+Distance: 6.32 m
+π0.5 zero-shot   t = 3.4 s
+Distance: 12.82 m
+π0.5 Adapt   t = 3.4 s
+Distance: 7.88 m
+π0.5 zero-shot   t = 4.4 s
+Distance: 14.89 m
+π0.5 Adapt   t = 4.4 s
+Distance: 7.98 m
+π0.5 zero-shot   t = 5.8 s
+Distance: 17.83 m
+π0.5 Adapt   t = 5.8 s
+Distance: 8.12 m
+Actual closed-loop camera views: target recedes vs sustained following
+π0.5 zero-shot   t = 0.0 s
+Distance: 8.73 m
+π0.5 Adapt   t = 0.0 s
+Distance: 8.73 m
+π0.5 zero-shot   t = 2.2 s
+Distance: 16.54 m
+π0.5 Adapt   t = 2.2 s
+Distance: 16.55 m
+π0.5 zero-shot   t = 3.2 s
+Distance: 20.23 m
+π0.5 Adapt   t = 3.2 s
+Distance: 16.33 m
+π0.5 zero-shot   t = 4.6 s
+Distance: 25.63 m
+π0.5 Adapt   t = 4.6 s
+Distance: 15.02 m
+Figure 17. Actual closed-loop comparison of zero-shot and
+adapted 𝜋0.5. Two representative episodes involving pedestrian
+following (top) and vehicle following (bottom) are shown at
+matched timestamps. For each policy, panoramic observations
+and corresponding perspective views illustrate the evolving tar-
+get configuration. Target–UAV distances are annotated above the
+panoramic frames. Zero-shot 𝜋0.5 exhibits increasing target sep-
+aration, whereas the adapted policy maintains a smaller relative
+distance throughout the illustrated intervals.
+I.2. B: Fixed-Heading ERP
+I.2.1. Data Construction
+B uses the original ERP frames resized to 448 × 224, with
+the same translational labels as A and C.
+I.2.2. Training
+B follows the shared training settings and selects its check-
+point by validation XYZ MAE.
+I.2.3. Closed-Loop Evaluation
+B predicts (𝑣𝑥, 𝑣𝑦, 𝑣𝑧) with a fixed heading and receives
+360◦ERP observations. It serves as the panoramic counter-
+part to A under the same demonstration budget and evalua-
+tion protocol.
+I.3. C: Active Steering
+I.3.1. Data Construction
+C uses the same perspective projection as A, but with a
+time-varying heading. XYZ labels remain unchanged; yaw-
+rate labels are generated by a causal, visibility-constrained
+expert along the recorded translational trajectory. The expert
+accesses the target bearing only when the target is annotated
+as visible in ERP and lies within the current perspective
+frustum. For a visible target,
+𝜔des
+𝑡
+= 4 s−1 wrap(𝛽𝑡−𝜓𝑡),
+(26)
+where 𝛽𝑡and 𝜓𝑡denote target bearing and camera head-
+ing, respectively, and angular differences are wrapped to
+[−𝜋, 𝜋). When the target is unseen, the expert turns toward
+its last observed bearing, then sweeps at 120◦/s once within
+5◦. Without a previous observation, it starts a positive-yaw
+sweep. Neither current hidden target bearings nor future
+target positions are used to select yaw commands.
+Yaw rate and acceleration are limited to 180◦/s and
+720◦/s2. Starting from the original heading and zero yaw
+rate, the heading is updated as
+𝜓𝑡+1 = 𝜓𝑡+ Δ𝑡𝜔𝑡+1,
+Δ𝑡= 0.1 s.
+(27)
+Each historical frame is projected using its own heading.
+This construction adds steering supervision without collect-
+ing additional demonstrations or changing the translational
+labels.
+I.3.2. Training
+C predicts (𝑣𝑥, 𝑣𝑦, 𝑣𝑧, 𝜔yaw) and additionally receives
+relative-heading sine/cosine and measured yaw rate. It re-
+ceives no target positions, visibility labels, or expert search
+modes. The backbone, training budget, reference, history
+configuration, and target-trajectory supervision match A and
+B. The action loss additionally includes normalized yaw
+error:
+L𝐶
+act = MAE𝑋𝑌𝑍+MAE𝜔
+𝜋rad/s .
+(28)
+Checkpoint selection uses the corresponding combined val-
+idation score. Optional yaw-recovery augmentation is ex-
+cluded to preserve the shared sample budget.
+I.3.3. Closed-Loop Evaluation
+C executes both predicted translation and yaw commands.
+Perspective observations are generated from the actual simu-
+lated heading, while XYZ commands remain in the original
+initial-heading frame. Episodes and scoring rules match
+A and B. The training views synthesize camera rotations
+along recorded translational trajectories, rather than using
+additional joint translation–yaw demonstrations; thus, the
+comparison holds the source demonstration budget fixed.
+I.3.4. Fairness of Active-Steering Supervision
+To ensure a fair comparison, we explicitly account for non-
+frontal target initialization in both training and closed-loop
+evaluation. When the target is initially outside the perspec-
+tive FoV, the steering expert performs a causal yaw search
+13
+
+
+Table 11. Online closed-loop tracking under Protocol (i). The simulator is paused during the complete observation, transport, and
+model-inference pipeline. ATF is reported in frames, normalized ATF and SR in %.
+Method
+Publication
+Type
+Task I Front-Initialized
+Task II Omnidirectional
+Overall Both Tasks
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+Temporal BC
+Baseline
+BC
+149.10
+12.62
+0.00
+98.67
+11.80
+2.02
+115.62
+12.12
+0.67
+D-VAT-BC [6]
+RA-L’24
+VAT
+171.33
+14.00
+1.96
+85.66
+10.90
+1.01
+114.66
+11.92
+1.33
+Fast-WAM [27]
+NeurIPS’26
+WAM
+170.16
+14.54
+1.96
+178.66
+20.69
+3.03
+175.77
+18.60
+2.67
+𝜋0 (w/ ft) [3]
+RSS’25
+VLA
+310.73
+23.90
+3.92
+188.30
+21.87
+6.06
+224.24
+22.48
+6.00
+𝜋0.5 (w/ ft) [2]
+CoRL’25
+VLA
+305.55
+24.40
+5.88
+212.61
+26.34
+7.07
+247.92
+26.30
+6.00
+360UAV-TVLA (𝜋0)
+–
+VLA
+568.10
+40.74
+9.80
+304.54
+34.26
+13.13
+394.15
+36.46
+12.00
+360UAV-TVLA (𝜋0.5)
+–
+VLA
+429.69
+32.68
+9.80
+290.69
+33.95
+13.13
+337.95
+33.52
+12.00
+Table 12. Online closed-loop tracking under Protocol (ii). The simulator continues running during model inference, while the UAV holds
+its previous command until the returned action is applied at the next physical boundary. ATF is reported in frames, normalized ATF and SR
+in %.
+Method
+Publication
+Type
+Task I Front-Initialized
+Task II Omnidirectional
+Overall Both Tasks
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+ATF↑
+ATFnorm ↑
+SRon ↑
+Temporal BC
+Baseline
+BC
+184.96
+15.28
+1.96
+218.33
+24.79
+6.06
+206.99
+21.56
+4.67
+D-VAT-BC [6]
+RA-L’24
+VAT
+188.35
+14.96
+1.96
+174.21
+19.90
+2.02
+179.02
+18.22
+2.00
+Fast-WAM [27]
+NeurIPS’26
+WAM
+177.16
+14.90
+1.96
+182.21
+21.17
+3.03
+180.49
+19.04
+2.67
+𝜋0 (w/ ft) [3]
+RSS’25
+VLA
+195.31
+16.10
+1.96
+169.04
+19.57
+3.03
+177.97
+18.39
+2.67
+𝜋0.5 (w/ ft) [2]
+CoRL’25
+VLA
+177.39
+15.41
+3.92
+177.11
+20.50
+2.02
+177.21
+19.43
+2.67
+360UAV-TVLA (𝜋0)
+–
+VLA
+160.27
+13.84
+1.96
+220.45
+24.81
+4.04
+199.99
+21.08
+3.33
+360UAV-TVLA (𝜋0.5)
+–
+VLA
+152.88
+13.40
+1.96
+201.60
+22.06
+4.04
+185.03
+19.12
+3.33
+until the target becomes visible, after which it adjusts the
+heading to maintain visual contact. This behavior is incorpo-
+rated into the 4-DoF training data generated from the origi-
+nal expert trajectories. Although we do not recollect jointly
+optimized 4-DoF expert demonstrations, the generated su-
+pervision provides meaningful target-search and following
+behaviors while preserving the original translational trajecto-
+ries and demonstration budget. During online evaluation, the
+policy independently predicts and executes yaw commands
+without access to privileged target information.
+I.4. Timing-protocol sensitivity.
+Protocol (i) evaluates synchronized action application by
+pausing the simulator during inference. Under this setting,
+360UAV-TVLA achieves the strongest overall performance
+among the evaluated VLA models. The 𝜋0 variant reaches
+394.15 frames, 36.46% normalized ATF, and 12.00% SR,
+while the 𝜋0.5 variant reaches 337.95 frames, 33.52% nor-
+malized ATF, and 12.00% SR. Both variants outperform their
+corresponding fine-tuned baselines in ATF, normalized ATF,
+and success rate. Protocol (ii) removes the synchronization
+barrier: the simulator continues to evolve during inference
+and the UAV holds its previous command until a new ac-
+tion is returned. Overall performance decreases to 199.99
+frames, 21.08% normalized ATF, and 3.33% SR for the 𝜋0
+variant, and to 185.03 frames, 19.12% normalized ATF, and
+3.33% SR for the 𝜋0.5 variant. This reduction is attributed to
+observation–action staleness caused by continued target and
+UAV motion during inference. Nevertheless, both variants
+remain above their corresponding fine-tuned 𝜋baselines in
+overall ATF and SR.
+The two protocols therefore measure complementary
+properties. Protocol (i) isolates policy quality under syn-
+chronized action application, whereas Protocol (ii) evaluates
+robustness to temporal misalignment and delayed action up-
+dates. Protocol (ii) follows the continued-world definition
+specified for this study; its clock diagnostics are retained
+separately and are not used as an additional score-eligibility
+criterion.
+14

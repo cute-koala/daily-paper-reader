@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-11-18 ~ 2026-11-27</span>
+      <span class="dpr-home-dashboard-kicker">2026-11-28</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 16 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 4 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>7</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>9</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>3</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-11-27 02:15:22 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-11-28 02:35:01 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,7 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>本期共筛读 16 篇论文（精读 7 篇、速读 9 篇），聚焦视频跟踪与分割，以及对抗鲁棒性方向。</p>
-<p>最值得看的是两篇 9.0 分工作：PanoUAV-Track 将跟踪扩展到野外全球形无人机视角，以及指出“干扰物才是真敌人”的 SAM2 视频跟踪与分割对抗扰动研究；另有多篇速读文章都涉及对抗攻击这一主线。</p>
-<p>普通读者可先读这两篇 9.0 分文章的引言与实验图，再按“干扰物、对抗扰动如何影响跟踪稳定性”这一线索串读其余速读文章。</p>
+<p>今日精选4篇追踪论文，精读TaCo（9.0/10），另速读多相机行人追踪、无人机追踪和3D点追踪3篇。最值得看的是TaCo针对边缘设备的视觉追踪相关性重思，以及CalibTrack用学习异方差协方差提升多相机行人追踪鲁棒性。建议普通读者先读TaCo，并关注追踪模型在边缘设备和多相机场景下的落地表现。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -80,12 +78,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">7 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="PanoUAV-Track: Full-Spherical UAV Visual Tracking in the Wild">PanoUAV-Track: Full-Spherical UAV Visual Tracking in the Wild</span></li><li><span class="dpr-home-dashboard-paper-title" title="Distractors are the Real Enemy: Visual Distraction Adversarial Perturbations on SAM2-Based Video Tracking and Segmentation">Distractors are the Real Enemy: Visual Distraction Adversarial Perturbations on SAM2-Based Video Tracking and Segmentation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Multiple-Camera Tracking of Rigid Objects">Multiple-Camera Tracking of Rigid Objects</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="TaCo: Rethinking Correlation for Visual Tracking on Edge Devices">TaCo: Rethinking Correlation for Visual Tracking on Edge Devices</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vot <strong>4</strong></span><span class="dpr-home-dashboard-tag">video-seg <strong>3</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vot <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -93,12 +91,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">速读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">9 篇</strong>
+    <strong class="dpr-home-dashboard-count">3 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="MoCA4D: Monocular 3D Bounding Box Lifting and Tracking with Camera and Object Motion">MoCA4D: Monocular 3D Bounding Box Lifting and Tracking with Camera and Object Motion</span></li><li><span class="dpr-home-dashboard-paper-title" title="Towards Deep Learning-Based Linear Assignment Problem Solvers for Multi-Object Tracking">Towards Deep Learning-Based Linear Assignment Problem Solvers for Multi-Object Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="Attack-Inference Aligned Universal Adversarial Attacks on Video Object Segmentation">Attack-Inference Aligned Universal Adversarial Attacks on Video Object Segmentation</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="CalibTrack: Exploring Learned Heteroscedastic Covariance for Robust Multi-Camera Pedestrian Tracking">CalibTrack: Exploring Learned Heteroscedastic Covariance for Robust Multi-Camera Pedestrian Tracking</span></li><li><span class="dpr-home-dashboard-paper-title" title="Towards 360$^\circ$ Embodied UAV Tracking Without Turning">Towards 360$^\circ$ Embodied UAV Tracking Without Turning</span></li><li><span class="dpr-home-dashboard-paper-title" title="Tracktail: Multi-View 3D Point Tracking without Depth Input">Tracktail: Multi-View 3D Point Tracking without Depth Input</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vot <strong>7</strong></span><span class="dpr-home-dashboard-tag">video-seg <strong>2</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">vot <strong>3</strong></span></div>
 </section>
 </div>
 
